@@ -1,0 +1,139 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────
+   CSS Design Tokens — Agendo
+   ───────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* ── MODO CLARO ─────────────────────────────── */
+    --background: 28 100% 99%; /* #FFFBF7 — blanco cálido */
+    --foreground: 16 100% 8%; /* #1C0A00 — casi negro cálido */
+    --surface: 30 100% 97%; /* #FFF7ED */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 16 100% 8%;
+    --border: 30 97% 87%; /* #FED7AA */
+    --muted: 30 60% 96%;
+    --muted-foreground: 25 80% 28%; /* #78350F */
+    --primary: 20 90% 49%; /* #EA580C */
+    --primary-foreground: 0 0% 100%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    /* ── MODO OSCURO ────────────────────────────── */
+    --background: 20 100% 6%; /* #150A00 — negro cálido profundo */
+    --foreground: 30 100% 98%; /* #FFF7ED */
+    --surface: 20 100% 8%; /* #1C0D00 */
+    --card: 20 100% 10%; /* #241100 */
+    --card-foreground: 30 100% 98%;
+    --border: 20 90% 18%; /* #3D1F00 */
+    --muted: 20 70% 14%;
+    --muted-foreground: 25 55% 51%; /* #C2763D */
+    --primary: 20 90% 49%; /* #EA580C — mismo en ambos modos */
+    --primary-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  /* Scrollbar personalizado */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-brand-200 dark:bg-brand-800 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-brand-400 dark:bg-brand-600;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Componentes utilitarios
+   ───────────────────────────────────────────── */
+@layer components {
+  /* Tarjeta base */
+  .card-base {
+    @apply bg-card text-card-foreground rounded-2xl border border-border shadow-card dark:shadow-card-dark p-6 transition-all duration-200;
+  }
+
+  /* Botón primario */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 
+           bg-brand-600 hover:bg-brand-700 active:bg-brand-800
+           text-white font-semibold rounded-xl px-5 py-2.5
+           shadow-brand-sm hover:shadow-brand-md
+           transition-all duration-150 
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+
+  /* Botón secundario */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-surface hover:bg-brand-50 dark:hover:bg-brand-900/20
+           text-foreground font-medium rounded-xl px-5 py-2.5
+           border border-border hover:border-brand-300
+           transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Botón ghost */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-muted-foreground hover:text-foreground
+           hover:bg-muted rounded-lg px-3 py-2
+           transition-all duration-150;
+  }
+
+  /* Input base */
+  .input-base {
+    @apply w-full rounded-xl border border-border bg-card
+           px-4 py-2.5 text-sm text-foreground
+           placeholder:text-muted-foreground
+           outline-none
+           focus:ring-2 focus:ring-brand-600/30 focus:border-brand-600
+           transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Badge de estado */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full text-xs font-semibold px-2.5 py-0.5;
+  }
+
+  /* NavLink activo del sidebar */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5
+           text-sm font-medium transition-all duration-150 cursor-pointer;
+  }
+  .nav-item-active {
+    @apply bg-brand-50 dark:bg-brand-900/25 
+           text-brand-700 dark:text-brand-400
+           border-l-2 border-brand-600;
+  }
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted;
+  }
+}
