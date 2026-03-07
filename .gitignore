@@ -1,7 +1,43 @@
+# Dependencias (¡Pesadísimas!)
 node_modules/
+jspm_packages/
+
+# Next.js (Archivos de compilación)
 .next/
-.env*
-.env.local
-.DS_Store
-dist/
+out/
 build/
+dist/
+
+# Variables de entorno y Secretos (Seguridad Crítica)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+.env*.local
+
+# Logs (Errores y depuración)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+typecheck.log
+*.log
+
+# Editor y Sistema
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Testing
+coverage/
+.nyc_output
+
+# Herramientas de IA y temporales
+.agent/
+.cache/
