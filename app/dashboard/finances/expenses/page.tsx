@@ -11,10 +11,14 @@ import { formatCurrency, formatDate, expenseCategoryLabels } from '@/lib/utils'
 export default function ExpensesPage() {
   const [query, setQuery] = useState('')
 
-  const filtered = mockExpenses.filter((e) => 
-    e.description.toLowerCase().includes(query.toLowerCase()) ||
-    e.category.toLowerCase().includes(query.toLowerCase())
-  )
+  // REESCRITURA TOTAL DEL FILTRO: Blindaje de nivel industrial para Vercel
+  const filtered = mockExpenses.filter((e) => {
+    const searchTerm = (query || '').toLowerCase();
+    const description = String(e?.description || '').toLowerCase();
+    const category = String(e?.category || '').toLowerCase();
+    
+    return description.includes(searchTerm) || category.includes(searchTerm);
+  })
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -61,14 +65,14 @@ export default function ExpensesPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-foreground">
-                    {expenseCategoryLabels[exp.category]}
+                    {(expenseCategoryLabels as any)[exp.category] ?? exp.category ?? 'Gasto General'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatDate(exp.paidAt, 'd MMM yyyy')} · {exp.description}
+                    {formatDate(exp.expense_date, 'd MMM yyyy')} · {exp.description || 'Sin descripción'}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-base font-bold text-red-600">-{formatCurrency(exp.amount)}</p>
+                  <p className="text-base font-bold text-red-600">-{formatCurrency(exp.amount || 0)}</p>
                 </div>
               </div>
             ))}
