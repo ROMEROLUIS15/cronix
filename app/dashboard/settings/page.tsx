@@ -3,6 +3,7 @@ import { Settings, Store, Clock, Bell, Users } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { mockBusiness } from '@/lib/mock/data'
+import type { BusinessSettings } from '@/types'
 
 export const metadata: Metadata = { title: 'Ajustes' }
 
@@ -18,6 +19,11 @@ const DAYS = [
 
 export default function SettingsPage() {
   const biz = mockBusiness
+  const settings = (biz.settings as unknown as BusinessSettings) || {
+    notifications: { whatsapp: false, email: false, reminderHours: [] },
+    workingHours: {},
+    maxDailyBookingsPerClient: 0
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl">
@@ -78,7 +84,7 @@ export default function SettingsPage() {
 
         <div className="space-y-3">
           {DAYS.map(({ key, label }) => {
-            const hours = biz.settings.workingHours[key] as [string, string] | null
+            const hours = settings.workingHours?.[key] as [string, string] | null
             return (
               <div key={key} className="flex items-center gap-4">
                 <span className="text-sm font-medium text-foreground w-24 flex-shrink-0">{label}</span>
