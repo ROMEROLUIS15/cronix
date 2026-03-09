@@ -5,16 +5,37 @@ import { Card } from '@/components/ui/card'
 import { Badge, AppointmentStatusBadge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { mockClients, mockAppointments } from '@/lib/mock/data'
+import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/get-session'
 import { formatCurrency, formatDate, formatRelative } from '@/lib/utils'
+import type { AppointmentStatus } from '@/types'
 
 interface Props { params: { id: string } }
 
-export default function ClientDetailPage({ params }: Props) {
-  const client = mockClients.find((c) => c.id === params.id)
+export default async function ClientDetailPage({ params }: Props) {
+  const session = await getSession()
+  if (!session?.business_id) return notFound()
+
+  const supabase = await createClient()
+
+  const { data: client } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('id', params.id)
+    .eq('business_id', session.business_id)
+    .single()
+
   if (!client) return notFound()
 
-  const clientAppointments = mockAppointments.filter((a) => a.client_id === client.id)
+  const { data: appointments } = await supabase
+    .from('appointments')
+    .select('*, service:services(id, name, color, price, duration_min)')
+    .eq('client_id', client.id)
+    .eq('business_id', session.business_id)
+    .order('start_at', { ascending: false })
+    .limit(20)
+
+  const clientAppointments = appointments ?? []
   const isVIP = (client.tags ?? []).includes('VIP')
 
   return (
@@ -48,7 +69,7 @@ export default function ClientDetailPage({ params }: Props) {
               )}
             </div>
             {(client.tags ?? []).length > 0 && (
-              <div className="flex items-center gap-1.5 mt-3">
+              <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                 <Tag size={12} className="text-muted-foreground" />
                 {(client.tags ?? []).map((tag) => (
                   <Badge key={tag} variant="brand">{tag}</Badge>
@@ -56,7 +77,9 @@ export default function ClientDetailPage({ params }: Props) {
               </div>
             )}
           </div>
-          <Button variant="secondary" size="sm">Editar</Button>
+          <Link href={`/dashboard/clients/${client.id}/edit`}>
+            <Button variant="secondary" size="sm">Editar</Button>
+          </Link>
         </div>
       </Card>
 
@@ -74,9 +97,11 @@ export default function ClientDetailPage({ params }: Props) {
         <Card className="text-center p-4">
           <DollarSign size={20} className="text-brand-600 mx-auto mb-2" />
           <p className="text-2xl font-bold text-foreground">
-            {formatCurrency((client.total_appointments ?? 0) > 0
-              ? (client.total_spent ?? 0) / (client.total_appointments ?? 1)
-              : 0)}
+            {formatCurrency(
+              (client.total_appointments ?? 0) > 0
+                ? (client.total_spent ?? 0) / (client.total_appointments ?? 1)
+                : 0
+            )}
           </p>
           <p className="text-xs text-muted-foreground">Ticket promedio</p>
         </Card>
@@ -86,7 +111,9 @@ export default function ClientDetailPage({ params }: Props) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Historial de Citas</h2>
           {client.last_visit_at && (
-            <span className="text-xs text-muted-foreground">Última: {formatRelative(client.last_visit_at)}</span>
+            <span className="text-xs text-muted-foreground">
+              Última: {formatRelative(client.last_visit_at)}
+            </span>
           )}
         </div>
         {clientAppointments.length === 0 ? (
@@ -98,15 +125,21 @@ export default function ClientDetailPage({ params }: Props) {
           <div className="space-y-3">
             {clientAppointments.map((apt) => (
               <div key={apt.id} className="flex items-center gap-4 p-3 rounded-xl bg-surface">
-                <div className="w-1 h-10 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: apt.service?.color ?? '#ccc' }} />
+                <div
+                  className="w-1 h-10 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: (apt.service as any)?.color ?? '#ccc' }}
+                />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{apt.service?.name ?? '—'}</p>
-                  <p className="text-xs text-muted-foreground">{formatDate(apt.start_at, 'd MMM yyyy, HH:mm')}</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {(apt.service as any)?.name ?? '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(apt.start_at, 'd MMM yyyy, HH:mm')}
+                  </p>
                 </div>
-                <AppointmentStatusBadge status={(apt.status ?? 'pending')} />
+                <AppointmentStatusBadge status={(apt.status ?? 'pending') as AppointmentStatus} />
                 <p className="text-sm font-semibold text-foreground">
-                  {formatCurrency(apt.service?.price ?? 0)}
+                  {formatCurrency((apt.service as any)?.price ?? 0)}
                 </p>
               </div>
             ))}

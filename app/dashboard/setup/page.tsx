@@ -6,6 +6,21 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Store, ArrowRight, Scissors, Sparkles, AlertCircle } from 'lucide-react'
 
+const CATEGORIES = [
+  'Barbería',
+  'Estética / Belleza',
+  'Salón de belleza',
+  'Clínica',
+  'Consultorio médico',
+  'Spa',
+  'Entrenador personal',
+  'Restaurante',
+  'Consultoría',
+  'Salud / Medicina',
+  'Deportes / Gimnasio',
+  'Otros',
+]
+
 export default function SetupPage() {
   const [state, formAction] = useFormState(createBusiness, null)
 
@@ -61,12 +76,9 @@ export default function SetupPage() {
                   className="input-base text-lg py-3 focus:ring-brand-600 appearance-none bg-surface"
                 >
                   <option value="">Selecciona una opción</option>
-                  <option value="Barbería">Barbería</option>
-                  <option value="Estética / Belleza">Estética / Belleza</option>
-                  <option value="Salud / Medicina">Salud / Medicina</option>
-                  <option value="Consultoría">Consultoría</option>
-                  <option value="Deportes / Gimnasio">Deportes / Gimnasio</option>
-                  <option value="Otros">Otros</option>
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
             </div>

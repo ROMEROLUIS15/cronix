@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { AppointmentStatusBadge, DualBookingBadge } from '@/components/ui/badge'
 import { formatTime, formatCurrency } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'  // ✅ browser client
+import { createClient } from '@/lib/supabase/client'
 import type { Appointment } from '@/types'
 import { format } from 'date-fns'
 
@@ -18,41 +18,25 @@ export default function AppointmentsPage() {
   const [view, setView] = useState<'day' | 'week'>('day')
   const [date, setDate] = useState(new Date())
   const [query, setQuery] = useState('')
-
-  // ✅ Client created once, stable reference
   const supabase = createClient()
 
-  // ✅ Step 1: get business_id from session
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
       const { data: dbUser } = await supabase
-        .from('users')
-        .select('business_id')
-        .eq('id', user.id)
-        .single()
-
-      if (dbUser?.business_id) {
-        setBusinessId(dbUser.business_id)
-      } else {
-        setLoading(false)
-      }
+        .from('users').select('business_id').eq('id', user.id).single()
+      if (dbUser?.business_id) setBusinessId(dbUser.business_id)
+      else setLoading(false)
     }
     init()
   }, [])
 
-  // ✅ Step 2: fetch appointments when businessId or date changes
   const fetchAppointments = useCallback(async () => {
     if (!businessId) return
     setLoading(true)
-
     const startOfDay = format(date, 'yyyy-MM-dd')
-    const endOfDay = format(
-      new Date(date.getTime() + 24 * 60 * 60 * 1000 - 1),
-      'yyyy-MM-dd HH:mm:ss'
-    )
+    const endOfDay = format(new Date(date.getTime() + 24 * 60 * 60 * 1000 - 1), 'yyyy-MM-dd HH:mm:ss')
 
     const { data, error } = await supabase
       .from('appointments')
@@ -67,24 +51,22 @@ export default function AppointmentsPage() {
       .lt('start_at', endOfDay)
       .order('start_at', { ascending: true })
 
-    if (!error && data) {
-      setAppointments(data as Appointment[])
-    } else {
-      console.error('Error fetching appointments:', error)
-    }
+    if (!error && data) setAppointments(data as Appointment[])
     setLoading(false)
-  }, [businessId, date]) // ✅ correct dependencies
+  }, [businessId, date])
 
-  useEffect(() => {
-    fetchAppointments()
-  }, [fetchAppointments])
+  useEffect(() => { fetchAppointments() }, [fetchAppointments])
 
   if (loading && !businessId) {
     return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="animate-spin" /></div>
   }
 
   if (!businessId) {
-    return <div>No autorizado. Por favor inicie sesión.</div>
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground">No autorizado. Por favor inicia sesión.</p>
+      </div>
+    )
   }
 
   const filteredApts = appointments.filter(
@@ -98,7 +80,6 @@ export default function AppointmentsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Agenda</h1>
@@ -109,7 +90,6 @@ export default function AppointmentsPage() {
         </Link>
       </div>
 
-      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-surface p-2 rounded-2xl border border-border">
         <div className="flex items-center gap-1 w-full sm:w-auto">
           <button onClick={handlePrevDay} className="btn-ghost p-2 rounded-xl">
@@ -127,35 +107,24 @@ export default function AppointmentsPage() {
           <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
-              type="text"
-              placeholder="Buscar cita..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              type="text" placeholder="Buscar cita..."
+              value={query} onChange={(e) => setQuery(e.target.value)}
               className="input-base pl-9 h-9 text-sm"
             />
           </div>
           <div className="flex bg-muted p-1 rounded-xl">
-            <button
-              onClick={() => setView('day')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                view === 'day' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Día
-            </button>
-            <button
-              onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                view === 'week' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Semana
-            </button>
+            {(['day', 'week'] as const).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  view === v ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                {v === 'day' ? 'Día' : 'Semana'}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Agenda list */}
       <Card className="p-0 overflow-hidden min-h-[400px]">
         {loading ? (
           <div className="flex flex-col justify-center items-center h-[400px] text-muted-foreground">
@@ -163,7 +132,7 @@ export default function AppointmentsPage() {
             <p>Cargando agenda...</p>
           </div>
         ) : filteredApts.length === 0 ? (
-          <div className="text-center py-20 animate-in fade-in zoom-in-95 duration-300">
+          <div className="text-center py-20">
             <CalendarDays size={48} className="text-muted-foreground mx-auto mb-4 opacity-30" />
             <p className="text-base font-medium text-foreground">No hay citas registradas</p>
             <p className="text-sm text-muted-foreground mt-1">Para el día seleccionado no hay actividad.</p>
@@ -172,20 +141,15 @@ export default function AppointmentsPage() {
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-border animate-in fade-in duration-300">
+          <div className="divide-y divide-border">
             {filteredApts.map((apt) => (
-              <div
-                key={apt.id}
-                className="flex items-start sm:items-center gap-4 p-4 hover:bg-surface transition-colors group"
-              >
+              <div key={apt.id} className="flex items-start sm:items-center gap-4 p-4 hover:bg-surface transition-colors group">
                 <div className="text-center w-14 flex-shrink-0 pt-1 sm:pt-0">
                   <p className="text-sm font-bold text-foreground">{formatTime(apt.start_at)}</p>
                   <p className="text-xs text-muted-foreground">{formatTime(apt.end_at)}</p>
                 </div>
-                <div
-                  className="w-1 h-12 sm:h-10 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: (apt.service as any)?.color ?? '#ccc' }}
-                />
+                <div className="w-1 h-12 sm:h-10 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: (apt.service as any)?.color ?? '#ccc' }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-0.5">
                     <p className="text-sm font-semibold text-foreground group-hover:text-brand-600 transition-colors">
@@ -195,7 +159,7 @@ export default function AppointmentsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                     <span>{(apt.service as any)?.name} ({(apt.service as any)?.duration_min} min)</span>
-                    <span className="hidden sm:inline text-border">•</span>
+                    <span className="hidden sm:inline">·</span>
                     <span className="flex items-center gap-1">
                       <Clock size={11} /> {(apt.assigned_user as any)?.name ?? 'Sin asignar'}
                     </span>

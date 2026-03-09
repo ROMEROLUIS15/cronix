@@ -14,6 +14,11 @@ const nextConfig = {
       { protocol: "https", hostname: "ui-avatars.com" },
     ],
   },
+  experimental: {
+    turbo: {
+      rules: {},
+    },
+  },
 };
 
 module.exports = withPWA(nextConfig);

@@ -1,59 +1,60 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, UserPlus, Tag } from 'lucide-react'
+import { ArrowLeft, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 
+const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo']
+
 export default function NewClientPage() {
   const router = useRouter()
   const supabase = createClient()
   const [businessId, setBusinessId] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    name:  '',
-    phone: '',
-    email: '',
-    notes: '',
-    tags:  '',
-  })
+  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function getBusinessId() {
+    async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data: dbUser } = await supabase
         .from('users').select('business_id').eq('id', user.id).single()
       if (dbUser?.business_id) setBusinessId(dbUser.business_id)
     }
-    getBusinessId()
+    init()
   }, [])
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!businessId) return
+    if (!businessId) { setError('No se pudo obtener la sesión. Recarga la página.'); return }
     setSaving(true)
+    setError(null)
 
-    const tags = form.tags
-      ? form.tags.split(',').map((t) => t.trim()).filter(Boolean)
-      : []
-
-    const { error } = await supabase.from('clients').insert({
+    const { error: insertError } = await supabase.from('clients').insert({
       business_id: businessId,
-      name:        form.name,
-      phone:       form.phone || null,
-      email:       form.email || null,
-      notes:       form.notes || null,
-      tags,
+      name:        form.name.trim(),
+      phone:       form.phone.trim() || null,
+      email:       form.email.trim() || null,
+      notes:       form.notes.trim() || null,
+      tags:        selectedTags.length > 0 ? selectedTags : null,
     })
 
     setSaving(false)
 
-    if (error) {
-      alert('Error al crear el cliente: ' + error.message)
+    if (insertError) {
+      setError('Error al crear el cliente: ' + insertError.message)
     } else {
       router.push('/dashboard/clients')
       router.refresh()
@@ -72,6 +73,12 @@ export default function NewClientPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100">
+            {error}
+          </div>
+        )}
+
         <Card>
           <div className="flex items-center gap-3 mb-5">
             <div className="h-9 w-9 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
@@ -86,12 +93,9 @@ export default function NewClientPage() {
                 Nombre completo *
               </label>
               <input
-                id="client-name"
-                required
-                value={form.name}
+                id="client-name" required value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="input-base"
-                placeholder="Ej. Juan Pérez"
+                className="input-base" placeholder="Ej. Juan Pérez"
               />
             </div>
 
@@ -101,12 +105,9 @@ export default function NewClientPage() {
                   Teléfono
                 </label>
                 <input
-                  id="client-phone"
-                  type="tel"
-                  value={form.phone}
+                  id="client-phone" type="tel" value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="input-base"
-                  placeholder="+57 300 123 4567"
+                  className="input-base" placeholder="+57 300 123 4567"
                 />
               </div>
               <div>
@@ -114,30 +115,39 @@ export default function NewClientPage() {
                   Email
                 </label>
                 <input
-                  id="client-email"
-                  type="email"
-                  value={form.email}
+                  id="client-email" type="email" value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="input-base"
-                  placeholder="juan@ejemplo.com"
+                  className="input-base" placeholder="juan@ejemplo.com"
                 />
               </div>
             </div>
 
+            {/* Tags — multiselect buttons */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="client-tags">
-                Etiquetas (separadas por coma)
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Etiquetas
               </label>
-              <div className="relative">
-                <Tag size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  id="client-tags"
-                  value={form.tags}
-                  onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                  className="input-base pl-9"
-                  placeholder="VIP, Frecuente, Nuevo..."
-                />
+              <div className="flex gap-2 flex-wrap">
+                {TAG_OPTIONS.map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                      selectedTags.includes(tag)
+                        ? 'bg-brand-600 text-white border-brand-600'
+                        : 'border-border text-muted-foreground hover:border-brand-400'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
+              {selectedTags.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Seleccionadas: {selectedTags.join(', ')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -145,12 +155,10 @@ export default function NewClientPage() {
                 Notas internas
               </label>
               <textarea
-                id="client-notes"
-                rows={3}
-                value={form.notes}
+                id="client-notes" rows={3} value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="input-base resize-none"
-                placeholder="Preferencias, historial relevante..."
+                placeholder="Preferencias, alergias, historial relevante..."
               />
             </div>
           </div>
