@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { User, Mail, Phone, Camera, Save, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react'
+import { User, Mail, Phone, Camera, Save, AlertCircle, CheckCircle2, Trash2, Lock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [changePassword, setChangePassword] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
@@ -26,8 +27,7 @@ export default function ProfilePage() {
       if (authUser) {
         const { data: dbUser } = await supabase
           .from('users').select('*').eq('id', authUser.id).single()
-        const merged = { ...authUser, ...dbUser }
-        setUser(merged)
+        setUser({ ...authUser, ...dbUser })
         setAvatarUrl(dbUser?.avatar_url ?? null)
       }
       setLoading(false)
@@ -38,14 +38,12 @@ export default function ProfilePage() {
   const showMsg = (type: 'error' | 'success', text: string) => {
     if (type === 'error') { setError(text); setSuccess(null) }
     else { setSuccess(text); setError(null) }
-    setTimeout(() => { setError(null); setSuccess(null) }, 4000)
+    setTimeout(() => { setError(null); setSuccess(null) }, 5000)
   }
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user?.id) return
-
-    // Validate
     if (!file.type.startsWith('image/')) return showMsg('error', 'Solo se permiten imágenes.')
     if (file.size > 2 * 1024 * 1024) return showMsg('error', 'La imagen no puede superar 2MB.')
 
@@ -54,8 +52,7 @@ export default function ProfilePage() {
     const path = `avatars/${user.id}.${ext}`
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true })
+      .from('avatars').upload(path, file, { upsert: true })
 
     if (uploadError) {
       setUploadingPhoto(false)
@@ -63,13 +60,9 @@ export default function ProfilePage() {
     }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-
-    const { error: updateError } = await supabase
-      .from('users').update({ avatar_url: publicUrl }).eq('id', user.id)
+    await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', user.id)
 
     setUploadingPhoto(false)
-    if (updateError) return showMsg('error', 'Error al guardar foto: ' + updateError.message)
-
     setAvatarUrl(publicUrl + '?t=' + Date.now())
     showMsg('success', 'Foto actualizada correctamente')
   }
@@ -77,19 +70,14 @@ export default function ProfilePage() {
   const handleDeletePhoto = async () => {
     if (!user?.id || !avatarUrl) return
     setUploadingPhoto(true)
-
-    // Try to remove from storage (best effort)
     const pathMatch = avatarUrl.match(/avatars\/([^?]+)/)
     if (pathMatch?.[1]) {
       await supabase.storage.from('avatars').remove([`avatars/${pathMatch[1]}`])
     }
-
     const { error: updateError } = await supabase
       .from('users').update({ avatar_url: null }).eq('id', user.id)
-
     setUploadingPhoto(false)
     if (updateError) return showMsg('error', 'Error al eliminar foto.')
-
     setAvatarUrl(null)
     showMsg('success', 'Foto eliminada correctamente')
   }
@@ -99,10 +87,18 @@ export default function ProfilePage() {
     setError(null)
     setSuccess(null)
     const formData = new FormData(e.currentTarget)
+    // Si no quiere cambiar contraseña, vaciar los campos para que el action los ignore
+    if (!changePassword) {
+      formData.set('password', '')
+      formData.set('confirmPassword', '')
+    }
     startTransition(async () => {
       const res = await updateProfile(formData)
       if (res?.error) showMsg('error', res.error)
-      else if (res?.success) showMsg('success', res.success)
+      else if (res?.success) {
+        showMsg('success', res.success)
+        if (changePassword) setChangePassword(false)
+      }
     })
   }
 
@@ -125,18 +121,18 @@ export default function ProfilePage() {
 
       {error && (
         <div className="p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-3 border border-red-100">
-          <AlertCircle size={18} />
+          <AlertCircle size={18} className="shrink-0" />
           <p className="text-sm font-medium">{error}</p>
         </div>
       )}
       {success && (
         <div className="p-4 bg-green-50 text-green-700 rounded-xl flex items-center gap-3 border border-green-100">
-          <CheckCircle2 size={18} />
+          <CheckCircle2 size={18} className="shrink-0" />
           <p className="text-sm font-medium">{success}</p>
         </div>
       )}
 
-      {/* Avatar section — outside form so it saves independently */}
+      {/* Foto — independiente del form */}
       <Card>
         <div className="flex flex-col items-center sm:flex-row sm:items-center gap-6">
           <div className="relative">
@@ -150,49 +146,30 @@ export default function ProfilePage() {
             </div>
             {uploadingPhoto && (
               <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
-                <div className="animate-spin h-6 w-6 border-3 border-white border-t-transparent rounded-full" />
+                <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full" />
               </div>
             )}
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+              className="hidden" onChange={handlePhotoChange} />
+            <button type="button" onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto}
-              className="absolute bottom-0 right-0 p-1.5 bg-brand-600 text-white rounded-full border-2 border-background shadow-sm hover:bg-brand-700 transition-colors disabled:opacity-50"
-              title="Cambiar foto"
-            >
+              className="absolute bottom-0 right-0 p-1.5 bg-brand-600 text-white rounded-full border-2 border-background shadow-sm hover:bg-brand-700 transition-colors disabled:opacity-50">
               <Camera size={14} />
             </button>
           </div>
-
           <div className="flex flex-col gap-2 items-start">
             <p className="text-sm font-semibold text-foreground">{user?.name}</p>
             <p className="text-xs text-muted-foreground">{user?.email}</p>
             <div className="flex gap-2 mt-1">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingPhoto}
-                className="text-xs text-brand-600 hover:underline disabled:opacity-50"
-              >
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto} className="text-xs text-brand-600 hover:underline disabled:opacity-50">
                 {avatarUrl ? 'Cambiar foto' : 'Subir foto'}
               </button>
               {avatarUrl && (
                 <>
                   <span className="text-muted-foreground text-xs">·</span>
-                  <button
-                    type="button"
-                    onClick={handleDeletePhoto}
-                    disabled={uploadingPhoto}
-                    className="text-xs text-red-500 hover:underline flex items-center gap-1 disabled:opacity-50"
-                  >
+                  <button type="button" onClick={handleDeletePhoto} disabled={uploadingPhoto}
+                    className="text-xs text-red-500 hover:underline flex items-center gap-1 disabled:opacity-50">
                     <Trash2 size={11} /> Eliminar foto
                   </button>
                 </>
@@ -204,6 +181,7 @@ export default function ProfilePage() {
       </Card>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Información personal */}
         <Card>
           <h2 className="text-base font-semibold text-foreground mb-4">Información personal</h2>
           <div className="space-y-4">
@@ -229,7 +207,6 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
                 Correo electrónico
@@ -246,15 +223,49 @@ export default function ProfilePage() {
           </div>
         </Card>
 
+        {/* Seguridad */}
         <Card>
-          <h2 className="text-base font-semibold text-foreground mb-1">Seguridad</h2>
-          <p className="text-sm text-muted-foreground mb-4">Deja en blanco si no deseas cambiar tu contraseña.</p>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
-              Nueva Contraseña
-            </label>
-            <PasswordInput name="password" placeholder="••••••••" />
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Seguridad</h2>
+              <p className="text-sm text-muted-foreground">Cambia tu contraseña cuando lo necesites</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setChangePassword(v => !v)}
+              className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                changePassword
+                  ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'
+                  : 'bg-brand-50 text-brand-600 border-brand-100 hover:bg-brand-100'
+              }`}
+            >
+              <Lock size={13} />
+              {changePassword ? 'Cancelar' : 'Cambiar contraseña'}
+            </button>
           </div>
+
+          {changePassword && (
+            <div className="mt-4 space-y-4 pt-4 border-t border-border">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
+                  Nueva contraseña
+                </label>
+                <PasswordInput name="password" placeholder="Mínimo 6 caracteres" required={changePassword} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
+                  Confirmar nueva contraseña
+                </label>
+                <PasswordInput name="confirmPassword" placeholder="Repite la nueva contraseña" required={changePassword} />
+              </div>
+            </div>
+          )}
+
+          {!changePassword && (
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+              <Lock size={12} /> Contraseña establecida — haz clic en "Cambiar contraseña" para modificarla
+            </p>
+          )}
         </Card>
 
         <div className="flex justify-end pt-2">

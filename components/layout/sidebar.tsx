@@ -1,20 +1,22 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   CalendarDays, Users, DollarSign, BarChart3,
-  Settings, ChevronRight, Scissors, X, LogOut,
+  Settings, ChevronRight, Scissors, X, LogOut, Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signout } from '@/app/login/actions'
 
 const navItems = [
-  { href: '/dashboard',          label: 'Agenda',   icon: CalendarDays },
-  { href: '/dashboard/clients',  label: 'Clientes', icon: Users },
-  { href: '/dashboard/finances', label: 'Finanzas', icon: DollarSign },
-  { href: '/dashboard/reports',  label: 'Reportes', icon: BarChart3 },
-  { href: '/dashboard/settings', label: 'Ajustes',  icon: Settings },
+  { href: '/dashboard',          label: 'Agenda',    icon: CalendarDays },
+  { href: '/dashboard/clients',  label: 'Clientes',  icon: Users },
+  { href: '/dashboard/services', label: 'Servicios', icon: Wrench },
+  { href: '/dashboard/finances', label: 'Finanzas',  icon: DollarSign },
+  { href: '/dashboard/reports',  label: 'Reportes',  icon: BarChart3 },
+  { href: '/dashboard/settings', label: 'Ajustes',   icon: Settings },
 ]
 
 interface SidebarProps {
@@ -27,20 +29,18 @@ interface SidebarProps {
 export function Sidebar({ open = true, onClose, user, business }: SidebarProps) {
   const pathname = usePathname()
 
+  const initials = user?.name
+    ?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U'
+
   return (
     <>
-      {/* Mobile overlay */}
       {onClose && open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden" onClick={onClose} />
       )}
 
       <aside className={cn(
         'fixed top-0 left-0 z-40 h-full w-64 bg-card border-r border-border',
-        'transition-transform duration-300 ease-in-out',
-        'flex flex-col',
+        'transition-transform duration-300 ease-in-out flex flex-col',
         open ? 'translate-x-0' : '-translate-x-full',
         'lg:translate-x-0 lg:static lg:z-auto',
       )}>
@@ -56,11 +56,8 @@ export function Sidebar({ open = true, onClose, user, business }: SidebarProps) 
             </div>
           </Link>
           {onClose && (
-            <button
-              className="btn-ghost p-1.5 lg:hidden text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-              aria-label="Cerrar menú"
-            >
+            <button className="btn-ghost p-1.5 lg:hidden text-muted-foreground hover:text-foreground"
+              onClick={onClose} aria-label="Cerrar menú">
               <X size={20} />
             </button>
           )}
@@ -89,11 +86,8 @@ export function Sidebar({ open = true, onClose, user, business }: SidebarProps) 
             const isActive = pathname === item.href ||
               (item.href !== '/dashboard' && pathname.startsWith(item.href))
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn('nav-item group', isActive ? 'nav-item-active' : 'nav-item-inactive')}
-              >
+              <Link key={item.href} href={item.href}
+                className={cn('nav-item group', isActive ? 'nav-item-active' : 'nav-item-inactive')}>
                 <Icon size={18} className={cn(
                   'flex-shrink-0 transition-colors',
                   isActive ? 'text-brand-600' : 'text-muted-foreground group-hover:text-foreground'
@@ -105,42 +99,42 @@ export function Sidebar({ open = true, onClose, user, business }: SidebarProps) 
           })}
         </nav>
 
-        {/* User + Logout at bottom */}
+        {/* User + Logout */}
         {user && (
           <div className="px-3 py-4 border-t border-border mt-auto space-y-2">
-            {/* Profile link */}
-            <Link
-              href="/dashboard/profile"
+            <Link href="/dashboard/profile"
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface hover:bg-brand-50/50 dark:hover:bg-brand-900/10 transition-colors group',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface hover:bg-brand-50/50 transition-colors group',
                 pathname === '/dashboard/profile' && 'ring-1 ring-brand-600 bg-brand-50'
-              )}
-            >
-              <div
-                className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 border border-border"
-                style={{
-                  backgroundColor: user.color || '#F0FDF4',
-                  color: user.color ? '#FFF' : '#16a34a'
-                }}
-              >
-                {user.name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U'}
+              )}>
+              {/* Avatar — foto si existe, iniciales si no */}
+              <div className="h-9 w-9 rounded-full flex-shrink-0 overflow-hidden border border-border">
+                {user.avatar_url ? (
+                  <Image
+                    src={user.avatar_url}
+                    alt={user.name ?? 'Avatar'}
+                    width={36} height={36}
+                    className="h-full w-full object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-xs font-bold"
+                    style={{ backgroundColor: user.color || '#F0FDF4', color: user.color ? '#FFF' : '#16a34a' }}>
+                    {initials}
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate group-hover:text-brand-600">
                   {user.name}
                 </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {user.role}
-                </p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{user.role}</p>
               </div>
             </Link>
 
-            {/* Logout button */}
             <form action={signout}>
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl transition-all active:scale-[0.98]"
-              >
+              <button type="submit"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl transition-all active:scale-[0.98]">
                 <LogOut size={14} />
                 Cerrar sesión
               </button>
