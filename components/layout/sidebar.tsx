@@ -1,141 +1,253 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
 import {
-  CalendarDays, Users, DollarSign, BarChart3,
-  Settings, ChevronRight, Scissors, X, LogOut, Wrench,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { signout } from '@/app/login/actions'
+  CalendarDays,
+  Users,
+  DollarSign,
+  BarChart3,
+  Settings,
+  ChevronRight,
+  X,
+  LogOut,
+  Wrench,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { signout } from "@/app/login/actions";
 
 const navItems = [
-  { href: '/dashboard',          label: 'Agenda',    icon: CalendarDays },
-  { href: '/dashboard/clients',  label: 'Clientes',  icon: Users },
-  { href: '/dashboard/services', label: 'Servicios', icon: Wrench },
-  { href: '/dashboard/finances', label: 'Finanzas',  icon: DollarSign },
-  { href: '/dashboard/reports',  label: 'Reportes',  icon: BarChart3 },
-  { href: '/dashboard/settings', label: 'Ajustes',   icon: Settings },
-]
+  { href: "/dashboard", label: "Agenda", icon: CalendarDays },
+  { href: "/dashboard/clients", label: "Clientes", icon: Users },
+  { href: "/dashboard/services", label: "Servicios", icon: Wrench },
+  { href: "/dashboard/finances", label: "Finanzas", icon: DollarSign },
+  { href: "/dashboard/reports", label: "Reportes", icon: BarChart3 },
+  { href: "/dashboard/settings", label: "Ajustes", icon: Settings },
+];
 
 interface SidebarProps {
-  open?: boolean
-  onClose?: () => void
-  user?: any
-  business?: any
+  open?: boolean;
+  onClose?: () => void;
+  user?: any;
+  business?: any;
 }
 
-export function Sidebar({ open = true, onClose, user, business }: SidebarProps) {
-  const pathname = usePathname()
-
-  const initials = user?.name
-    ?.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'U'
+export function Sidebar({
+  open = true,
+  onClose,
+  user,
+  business,
+}: SidebarProps) {
+  const pathname = usePathname();
+  const initials =
+    user?.name
+      ?.split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase() || "U";
 
   return (
     <>
+      {/* Mobile backdrop */}
       {onClose && open && (
-        <div className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+        />
       )}
 
-      <aside className={cn(
-        'fixed top-0 left-0 z-40 h-full w-64 bg-card border-r border-border',
-        'transition-transform duration-300 ease-in-out flex flex-col',
-        open ? 'translate-x-0' : '-translate-x-full',
-        'lg:translate-x-0 lg:static lg:z-auto',
-      )}>
+      <aside
+        className={cn(
+          "flex flex-col h-full w-64 flex-shrink-0",
+          // Mobile: fixed overlay
+          "fixed top-0 left-0 z-40 lg:static lg:z-auto",
+          "transition-transform duration-300 ease-in-out",
+          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        )}
+        style={{ backgroundColor: "#0C0C0F", borderRight: "1px solid #262629" }}
+      >
         {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-6 border-b border-border/50">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-600 shadow-brand-lg transition-transform hover:scale-105 active:scale-95">
-              <Scissors size={20} className="text-white rotate-45" />
+        <div
+          className="flex items-center justify-between px-4 py-5 flex-shrink-0"
+          style={{ borderBottom: "1px solid #262629" }}
+        >
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-3 group min-w-0"
+          >
+            <div className="h-9 w-9 flex-shrink-0 rounded-xl overflow-hidden">
+              <Image
+                src="/cronix-logo.jpg"
+                alt="Cronix"
+                width={36}
+                height={36}
+                className="h-full w-full object-cover"
+                unoptimized
+              />
             </div>
-            <div>
-              <span className="text-xl font-extrabold text-foreground tracking-tight">Agendo</span>
-              <p className="text-[10px] text-brand-600 font-bold tracking-wider uppercase -mt-1">Premium</p>
+            <div className="relative h-6 w-24 flex-shrink-0">
+              <Image
+                src="/cronix-letras.jpg"
+                alt="Cronix"
+                fill
+                className="object-contain object-left"
+                unoptimized
+              />
             </div>
           </Link>
+
+          {/* Close button — mobile only */}
           {onClose && (
-            <button className="btn-ghost p-1.5 lg:hidden text-muted-foreground hover:text-foreground"
-              onClick={onClose} aria-label="Cerrar menú">
+            <button
+              className="p-1.5 rounded-lg lg:hidden transition-colors hover:bg-white/5 flex-shrink-0"
+              style={{ color: "#8A8A90" }}
+              onClick={onClose}
+              aria-label="Cerrar menú"
+            >
               <X size={20} />
             </button>
           )}
         </div>
 
-        {/* Business info */}
+        {/* Business chip */}
         {business && (
-          <div className="px-4 py-4 mx-4 mt-6 rounded-2xl bg-brand-50/50 dark:bg-brand-900/10 border border-brand-100/50 dark:border-brand-800/10">
-            <p className="text-[10px] text-brand-600 font-extrabold uppercase tracking-widest mb-1.5 opacity-80">
+          <div
+            className="mx-3 mt-4 px-3 py-2.5 rounded-xl flex-shrink-0"
+            style={{
+              backgroundColor: "rgba(0,98,255,0.08)",
+              border: "1px solid rgba(0,98,255,0.15)",
+            }}
+          >
+            <p
+              className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
+              style={{ color: "#0062FF" }}
+            >
               Negocio activo
             </p>
-            <p className="text-sm font-bold text-foreground leading-tight">{business.name}</p>
-            <p className="text-xs text-muted-foreground font-medium mt-0.5">
-              {business.category || 'Servicios'}
+            <p
+              className="text-sm font-bold truncate"
+              style={{ color: "#F5F5F5" }}
+            >
+              {business.name}
+            </p>
+            <p className="text-xs truncate" style={{ color: "#8A8A90" }}>
+              {business.category || "Servicios"}
             </p>
           </div>
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <p className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          <p
+            className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: "#8A8A90" }}
+          >
             Principal
           </p>
           {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href ||
-              (item.href !== '/dashboard' && pathname.startsWith(item.href))
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/dashboard" && pathname.startsWith(item.href));
             return (
-              <Link key={item.href} href={item.href}
-                className={cn('nav-item group', isActive ? 'nav-item-active' : 'nav-item-inactive')}>
-                <Icon size={18} className={cn(
-                  'flex-shrink-0 transition-colors',
-                  isActive ? 'text-brand-600' : 'text-muted-foreground group-hover:text-foreground'
-                )} />
-                <span className="flex-1">{item.label}</span>
-                {isActive && <ChevronRight size={14} className="text-brand-600 opacity-60" />}
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => onClose?.()}
+                className={cn(
+                  "nav-item",
+                  isActive ? "nav-item-active" : "nav-item-inactive",
+                )}
+              >
+                <Icon size={18} className="flex-shrink-0" />
+                <span className="flex-1 truncate">{item.label}</span>
+                {isActive && (
+                  <ChevronRight
+                    size={14}
+                    style={{ color: "#0062FF" }}
+                    className="flex-shrink-0"
+                  />
+                )}
               </Link>
-            )
+            );
           })}
         </nav>
 
-        {/* User + Logout */}
+        {/* User profile + logout */}
         {user && (
-          <div className="px-3 py-4 border-t border-border mt-auto space-y-2">
-            <Link href="/dashboard/profile"
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface hover:bg-brand-50/50 transition-colors group',
-                pathname === '/dashboard/profile' && 'ring-1 ring-brand-600 bg-brand-50'
-              )}>
-              {/* Avatar — foto si existe, iniciales si no */}
-              <div className="h-9 w-9 rounded-full flex-shrink-0 overflow-hidden border border-border">
+          <div
+            className="px-3 py-3 space-y-2 flex-shrink-0"
+            style={{ borderTop: "1px solid #262629" }}
+          >
+            <Link
+              href="/dashboard/profile"
+              onClick={() => onClose?.()}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200"
+              style={{
+                backgroundColor:
+                  pathname === "/dashboard/profile"
+                    ? "rgba(0,98,255,0.1)"
+                    : "#1E1E21",
+                border:
+                  pathname === "/dashboard/profile"
+                    ? "1px solid rgba(0,98,255,0.2)"
+                    : "1px solid #262629",
+              }}
+            >
+              <div
+                className="h-8 w-8 rounded-full flex-shrink-0 overflow-hidden"
+                style={{ border: "2px solid #262629" }}
+              >
                 {user.avatar_url ? (
                   <Image
                     src={user.avatar_url}
-                    alt={user.name ?? 'Avatar'}
-                    width={36} height={36}
+                    alt={user.name ?? "Avatar"}
+                    width={32}
+                    height={32}
                     className="h-full w-full object-cover"
                     unoptimized
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-xs font-bold"
-                    style={{ backgroundColor: user.color || '#F0FDF4', color: user.color ? '#FFF' : '#16a34a' }}>
+                  <div
+                    className="h-full w-full flex items-center justify-center text-xs font-bold"
+                    style={{
+                      backgroundColor: "rgba(0,98,255,0.15)",
+                      color: "#4D83FF",
+                    }}
+                  >
                     {initials}
                   </div>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate group-hover:text-brand-600">
+                <p
+                  className="text-sm font-semibold truncate"
+                  style={{ color: "#F5F5F5" }}
+                >
                   {user.name}
                 </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{user.role}</p>
+                <p
+                  className="text-[10px] uppercase tracking-wider"
+                  style={{ color: "#8A8A90" }}
+                >
+                  {user.role}
+                </p>
               </div>
             </Link>
 
             <form action={signout}>
-              <button type="submit"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl transition-all active:scale-[0.98]">
-                <LogOut size={14} />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-[0.98] hover:brightness-125"
+                style={{
+                  backgroundColor: "rgba(255,59,48,0.08)",
+                  color: "#FF3B30",
+                  border: "1px solid rgba(255,59,48,0.2)",
+                }}
+              >
+                <LogOut size={13} />
                 Cerrar sesión
               </button>
             </form>
@@ -143,5 +255,5 @@ export function Sidebar({ open = true, onClose, user, business }: SidebarProps) 
         )}
       </aside>
     </>
-  )
+  );
 }
