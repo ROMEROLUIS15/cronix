@@ -383,52 +383,77 @@ export default function DashboardPage() {
           <div className="space-y-4">
             {/* Month navigator */}
             <div
-              className="flex items-center justify-between px-4 py-3 rounded-2xl"
-              style={{ background: "#141417", border: "1px solid #262629" }}
+              className="flex items-center justify-between px-5 py-4 rounded-2xl"
+              style={{
+                background: "linear-gradient(135deg, #1A1A22 0%, #16161E 100%)",
+                border: "1px solid #2E2E3E",
+                boxShadow:
+                  "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
+              }}
             >
               <button
                 onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
-                className="p-2 rounded-xl transition-colors hover:bg-white/5"
-                style={{ color: "#8A8A90" }}
+                className="p-2.5 rounded-xl transition-all duration-150 hover:scale-105 active:scale-95"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#8A8A90",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                }}
               >
                 <ChevronLeft size={18} />
               </button>
               <div className="text-center">
                 <p
-                  className="text-sm sm:text-base font-black capitalize"
-                  style={{ color: "#F5F5F5", letterSpacing: "-0.02em" }}
+                  className="text-base sm:text-lg font-black capitalize"
+                  style={{ color: "#F0F0F5", letterSpacing: "-0.03em" }}
                 >
                   {format(currentMonth, "MMMM", { locale: es })}
                 </p>
-                <p className="text-xs font-bold" style={{ color: "#0062FF" }}>
+                <p
+                  className="text-xs font-bold tracking-widest"
+                  style={{ color: "#3884FF", opacity: 0.9 }}
+                >
                   {format(currentMonth, "yyyy")}
                 </p>
               </div>
               <button
                 onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
-                className="p-2 rounded-xl transition-colors hover:bg-white/5"
-                style={{ color: "#8A8A90" }}
+                className="p-2.5 rounded-xl transition-all duration-150 hover:scale-105 active:scale-95"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#8A8A90",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                }}
               >
                 <ChevronRight size={18} />
               </button>
             </div>
 
             {/* Legend */}
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4 px-1">
+            <div
+              className="flex flex-wrap items-center gap-3 sm:gap-5 px-4 py-2.5 rounded-xl"
+              style={{
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.05)",
+              }}
+            >
               {[
                 { color: "#FFD60A", label: "Pendiente" },
-                { color: "#0062FF", label: "Confirmada" },
+                { color: "#3884FF", label: "Confirmada" },
                 { color: "#30D158", label: "Completada" },
                 { color: "#FF3B30", label: "Cancelada" },
               ].map((l) => (
                 <div key={l.label} className="flex items-center gap-1.5">
                   <span
                     className="h-2 w-2 rounded-full flex-shrink-0"
-                    style={{ background: l.color }}
+                    style={{
+                      background: l.color,
+                      boxShadow: `0 0 5px ${l.color}80`,
+                    }}
                   />
                   <span
-                    className="text-[10px] font-medium"
-                    style={{ color: "#8A8A90" }}
+                    className="text-[11px] font-semibold"
+                    style={{ color: "#9A9AAA" }}
                   >
                     {l.label}
                   </span>
@@ -439,21 +464,27 @@ export default function DashboardPage() {
             {/* Calendar grid */}
             <div
               className="rounded-2xl overflow-hidden"
-              style={{ background: "#161619", border: "1px solid #2E2E33" }}
+              style={{
+                background: "#18181F",
+                border: "1px solid #2A2A38",
+                boxShadow:
+                  "0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(56,132,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)",
+              }}
             >
               {/* Week headers */}
               <div
                 className="grid grid-cols-7"
                 style={{
-                  borderBottom: "1px solid #2E2E33",
-                  background: "#1E1E24",
+                  borderBottom: "1px solid #2A2A38",
+                  background:
+                    "linear-gradient(180deg, #22222E 0%, #1C1C28 100%)",
                 }}
               >
                 {WEEK_HEADERS.map((d) => (
-                  <div key={d} className="py-3 text-center">
+                  <div key={d} className="py-3.5 text-center">
                     <span
-                      className="text-[11px] font-bold uppercase tracking-wider"
-                      style={{ color: "#6A6A72" }}
+                      className="text-[11px] font-black uppercase tracking-widest"
+                      style={{ color: "#5A5A72" }}
                     >
                       {d}
                     </span>
@@ -488,50 +519,54 @@ export default function DashboardPage() {
                         className="relative min-h-[64px] sm:min-h-[80px] md:min-h-[88px] p-1.5 sm:p-2 text-left transition-all duration-150 group"
                         style={{
                           borderRight:
-                            colIdx < 6 ? "1px solid #2E2E33" : "none",
+                            colIdx < 6 ? "1px solid #242430" : "none",
                           borderBottom:
                             idx < calendarDays.length - 7
-                              ? "1px solid #2E2E33"
+                              ? "1px solid #242430"
                               : "none",
                           background: isSelected
-                            ? "rgba(0,98,255,0.16)"
+                            ? "rgba(56,132,255,0.14)"
                             : isToday
-                              ? "rgba(0,98,255,0.08)"
+                              ? "rgba(56,132,255,0.07)"
                               : isThisMonth
-                                ? "#1C1C21"
-                                : "#161619",
+                                ? "#1E1E28"
+                                : "#16161C",
                         }}
                         onMouseEnter={(e) => {
                           if (!isSelected)
                             (e.currentTarget as HTMLElement).style.background =
-                              isToday ? "rgba(0,98,255,0.14)" : "#222228";
+                              isToday
+                                ? "rgba(56,132,255,0.14)"
+                                : isThisMonth
+                                  ? "#262634"
+                                  : "#1C1C24";
                         }}
                         onMouseLeave={(e) => {
                           if (!isSelected)
                             (e.currentTarget as HTMLElement).style.background =
                               isToday
-                                ? "rgba(0,98,255,0.08)"
+                                ? "rgba(56,132,255,0.07)"
                                 : isThisMonth
-                                  ? "#1C1C21"
-                                  : "#161619";
+                                  ? "#1E1E28"
+                                  : "#16161C";
                         }}
                       >
                         {/* Day number */}
                         <div
-                          className={`h-7 w-7 rounded-full flex items-center justify-center text-sm font-bold mb-1.5`}
+                          className="h-7 w-7 rounded-full flex items-center justify-center text-sm font-bold mb-1.5"
                           style={
                             isToday
                               ? {
-                                  background: "#0062FF",
+                                  background: "#3884FF",
                                   color: "#fff",
-                                  boxShadow: "0 0 10px rgba(0,98,255,0.5)",
+                                  boxShadow: "0 0 12px rgba(56,132,255,0.6)",
                                 }
                               : isSelected
                                 ? {
-                                    color: "#4D83FF",
-                                    background: "rgba(0,98,255,0.15)",
+                                    color: "#63B3FF",
+                                    background: "rgba(56,132,255,0.18)",
                                   }
-                                : { color: isThisMonth ? "#E8E8EC" : "#44444A" }
+                                : { color: isThisMonth ? "#D8D8E8" : "#3A3A4A" }
                           }
                         >
                           {format(day, "d")}
@@ -545,11 +580,12 @@ export default function DashboardPage() {
                                 key={apt.id}
                                 className="w-full rounded-md px-1.5 py-1 text-[10px] font-bold truncate leading-tight"
                                 style={{
-                                  background: `${STATUS_COLORS[apt.status] ?? "#0062FF"}30`,
-                                  color: STATUS_COLORS[apt.status] ?? "#4D83FF",
-                                  borderLeft: `2px solid ${STATUS_COLORS[apt.status] ?? "#0062FF"}`,
-                                  border: `1px solid ${STATUS_COLORS[apt.status] ?? "#0062FF"}35`,
+                                  background: `${STATUS_COLORS[apt.status] ?? "#3884FF"}28`,
+                                  color: STATUS_COLORS[apt.status] ?? "#63B3FF",
+                                  border: `1px solid ${STATUS_COLORS[apt.status] ?? "#3884FF"}50`,
                                   borderLeftWidth: "2px",
+                                  borderLeftColor:
+                                    STATUS_COLORS[apt.status] ?? "#3884FF",
                                 }}
                               >
                                 {apt.client?.name?.split(" ")[0]}
@@ -583,58 +619,72 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Monthly summary pill */}
-            <div
-              className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 py-3 px-4 sm:px-6 rounded-2xl"
-              style={{ background: "#141417", border: "1px solid #262629" }}
-            >
-              <div className="text-center">
-                <p className="text-lg font-black" style={{ color: "#F5F5F5" }}>
-                  {monthApts.filter((a) => a.status !== "cancelled").length}
-                </p>
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "#8A8A90" }}
+            {/* Monthly summary stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                {
+                  value: monthApts.filter((a) => a.status !== "cancelled")
+                    .length,
+                  label: "Citas activas",
+                  color: "#F0F0F5",
+                  glow: "rgba(255,255,255,0.05)",
+                  border: "#2A2A38",
+                  icon: "📅",
+                },
+                {
+                  value: monthApts.filter((a) => a.status === "pending").length,
+                  label: "Pendientes",
+                  color: "#FFD60A",
+                  glow: "rgba(255,214,10,0.08)",
+                  border: "rgba(255,214,10,0.2)",
+                  icon: "⏳",
+                },
+                {
+                  value: monthApts.filter((a) => a.status === "completed")
+                    .length,
+                  label: "Completadas",
+                  color: "#30D158",
+                  glow: "rgba(48,209,88,0.08)",
+                  border: "rgba(48,209,88,0.2)",
+                  icon: "✅",
+                },
+                {
+                  value: monthApts.filter((a) => a.status === "confirmed")
+                    .length,
+                  label: "Confirmadas",
+                  color: "#3884FF",
+                  glow: "rgba(56,132,255,0.08)",
+                  border: "rgba(56,132,255,0.2)",
+                  icon: "🔵",
+                },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  className="flex flex-col items-center justify-center py-4 px-3 rounded-2xl"
+                  style={{
+                    background: `linear-gradient(135deg, #1A1A22 0%, #16161E 100%)`,
+                    border: `1px solid ${s.border}`,
+                    boxShadow: `0 4px 20px ${s.glow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
+                  }}
                 >
-                  Citas activas
-                </p>
-              </div>
-              <div className="h-8 w-px" style={{ background: "#262629" }} />
-              <div className="text-center">
-                <p className="text-lg font-black" style={{ color: "#FFD60A" }}>
-                  {monthApts.filter((a) => a.status === "pending").length}
-                </p>
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "#8A8A90" }}
-                >
-                  Pendientes
-                </p>
-              </div>
-              <div className="h-8 w-px" style={{ background: "#262629" }} />
-              <div className="text-center">
-                <p className="text-lg font-black" style={{ color: "#30D158" }}>
-                  {monthApts.filter((a) => a.status === "completed").length}
-                </p>
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "#8A8A90" }}
-                >
-                  Completadas
-                </p>
-              </div>
-              <div className="h-8 w-px" style={{ background: "#262629" }} />
-              <div className="text-center">
-                <p className="text-lg font-black" style={{ color: "#0062FF" }}>
-                  {monthApts.filter((a) => a.status === "confirmed").length}
-                </p>
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "#8A8A90" }}
-                >
-                  Confirmadas
-                </p>
-              </div>
+                  <p
+                    className="text-2xl font-black"
+                    style={{
+                      color: s.color,
+                      letterSpacing: "-0.03em",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {s.value}
+                  </p>
+                  <p
+                    className="text-[10px] font-bold uppercase tracking-widest mt-1.5"
+                    style={{ color: "#5A5A6A" }}
+                  >
+                    {s.label}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         )}
