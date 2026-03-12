@@ -241,7 +241,7 @@ export default function ReportsPage() {
           <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
             <Calendar size={18} className="text-brand-600" /> Citas del mes
           </h2>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             {[
               { label: 'Total', value: data.totalAppointments, color: 'text-foreground' },
               { label: 'Completadas', value: data.completedAppointments, color: 'text-green-600' },

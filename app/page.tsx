@@ -8,7 +8,7 @@ export default function RootPage() {
         minHeight: "100vh",
         backgroundColor: "#0F0F12",
         fontFamily: "'Inter', system-ui, sans-serif",
-        overflow: "hidden",
+        overflowX: "hidden", // FIXED: changed from hidden to overflowX: hidden
         position: "relative",
       }}
     >
@@ -27,8 +27,8 @@ export default function RootPage() {
             position: "absolute",
             top: "-20%",
             right: "-10%",
-            width: "600px",
-            height: "600px",
+            width: "min(600px, 150vw)", // FIXED: responsive width
+            height: "min(600px, 150vw)", // FIXED: responsive height
             borderRadius: "50%",
             background:
               "radial-gradient(circle, rgba(0,98,255,0.12) 0%, transparent 70%)",
@@ -41,8 +41,8 @@ export default function RootPage() {
             position: "absolute",
             bottom: "-10%",
             left: "-5%",
-            width: "500px",
-            height: "500px",
+            width: "min(500px, 120vw)", // FIXED: responsive width
+            height: "min(500px, 120vw)", // FIXED: responsive height
             borderRadius: "50%",
             background:
               "radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%)",
@@ -77,13 +77,13 @@ export default function RootPage() {
 
       {/* ── Top nav ── */}
       <nav
+        className="px-5 sm:px-8 md:px-12 py-5 sm:py-6" // FIXED: responsive padding
         style={{
           position: "relative",
           zIndex: 10,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "24px 48px",
           borderBottom: "1px solid rgba(255,255,255,0.04)",
         }}
       >
@@ -161,6 +161,7 @@ export default function RootPage() {
 
       {/* ── Hero ── */}
       <main
+        className="px-5 sm:px-8 py-16 sm:py-20" // FIXED: responsive padding
         style={{
           position: "relative",
           zIndex: 10,
@@ -169,7 +170,6 @@ export default function RootPage() {
           alignItems: "center",
           justifyContent: "center",
           textAlign: "center",
-          padding: "80px 24px 60px",
           minHeight: "calc(100vh - 89px)",
         }}
       >
@@ -235,9 +235,8 @@ export default function RootPage() {
 
         {/* Wordmark */}
         <div
+          className="w-[200px] h-[40px] sm:w-[260px] sm:h-[54px]" // FIXED: responsive size
           style={{
-            width: "260px",
-            height: "54px",
             position: "relative",
             marginBottom: "24px",
           }}
@@ -367,11 +366,9 @@ export default function RootPage() {
 
         {/* Dashboard preview mockup */}
         <div
+          className="w-full max-w-[860px] rounded-[20px]" // FIXED: responsive max-width
           style={{
-            width: "100%",
-            maxWidth: "860px",
-            borderRadius: "20px",
-            overflow: "hidden",
+            overflow: "hidden", // this is fine since it's the mockup container
             border: "1px solid rgba(0,98,255,0.15)",
             boxShadow:
               "0 0 80px rgba(0,98,255,0.1), 0 40px 100px rgba(0,0,0,0.6)",
@@ -431,7 +428,7 @@ export default function RootPage() {
           </div>
 
           {/* Dashboard UI mockup */}
-          <div style={{ padding: "24px", display: "flex", gap: "16px" }}>
+          <div className="p-3 sm:p-5 flex gap-4 overflow-x-auto"> {/* FIXED: Responsive padding and horizontal scroll */}
             {/* Sidebar mock */}
             <div
               style={{
@@ -477,11 +474,7 @@ export default function RootPage() {
             >
               {/* Stats row */}
               <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4,1fr)",
-                  gap: "8px",
-                }}
+                className="grid grid-cols-2 sm:grid-cols-4 gap-2" // FIXED: Responsive grid for stats mockup
               >
                 {[
                   { label: "Citas hoy", val: "8", color: "#0062FF" },

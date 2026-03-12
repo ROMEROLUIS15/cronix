@@ -338,45 +338,47 @@ export default function DashboardPage() {
               {format(today, "EEEE d 'de' MMMM yyyy", { locale: es })}
             </p>
           </div>
-          <Link href="/dashboard/appointments/new">
-            <button className="btn-primary flex items-center gap-2 text-sm px-4 py-2 sm:px-5 sm:py-2.5">
-              <Plus size={15} />{" "}
-              <span className="hidden xs:inline sm:inline">Nueva Cita</span>
-              <span className="sm:hidden">Nueva</span>
-            </button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Tabs */}
+            <div
+              className="flex items-center gap-1 p-1 rounded-xl w-fit"
+              style={{ background: "#1E1E21" }}
+            >
+              {(["agenda", "resumen"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 flex items-center gap-1.5 sm:gap-2"
+                  style={
+                    tab === t
+                      ? { background: "#0062FF", color: "#fff" }
+                      : { color: "#8A8A90" }
+                  }
+                >
+                  {t === "agenda" ? (
+                    <>
+                      <CalendarDays size={15} /> <span className="hidden xs:inline">Agenda</span>
+                    </>
+                  ) : (
+                    <>
+                      <BarChart3 size={15} /> <span className="hidden xs:inline">Resumen</span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <Link href="/dashboard/appointments/new">
+              <button className="btn-primary flex items-center gap-2 text-sm px-4 py-2 sm:px-5 sm:py-2.5">
+                <Plus size={15} />{" "}
+                <span className="hidden sm:inline">Nueva Cita</span>
+                <span className="sm:hidden">Nueva</span>
+              </button>
+            </Link>
+          </div>
         </div>
 
         <ServicesOnboardingBanner businessId={businessId ?? ""} />
-
-        {/* Tabs */}
-        <div
-          className="flex items-center gap-1 p-1 rounded-xl w-fit"
-          style={{ background: "#1E1E21" }}
-        >
-          {(["agenda", "resumen"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 flex items-center gap-2"
-              style={
-                tab === t
-                  ? { background: "#0062FF", color: "#fff" }
-                  : { color: "#8A8A90" }
-              }
-            >
-              {t === "agenda" ? (
-                <>
-                  <CalendarDays size={15} /> Agenda
-                </>
-              ) : (
-                <>
-                  <BarChart3 size={15} /> Resumen
-                </>
-              )}
-            </button>
-          ))}
-        </div>
 
         {/* ── AGENDA TAB ── */}
         {tab === "agenda" && (

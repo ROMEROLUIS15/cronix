@@ -83,7 +83,7 @@ export default async function ClientDetailPage({ params }: Props) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="text-center p-4">
           <Calendar size={20} className="text-brand-600 mx-auto mb-2" />
           <p className="text-2xl font-bold text-foreground">{client.total_appointments ?? 0}</p>
