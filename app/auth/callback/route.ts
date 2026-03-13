@@ -55,12 +55,15 @@ async function handleUserSession(user: User): Promise<SessionResult> {
     .eq('id', user.id)
     .maybeSingle()
 
+  // Usuario existe en nuestra BD → acceso permitido
   if (dbUser) return 'ok'
 
   const provider = user.app_metadata?.provider as string | undefined
 
+  // Email/password: llega aquí tras confirmar email → permitir
   if (provider === 'email') return 'ok'
 
+  // OAuth sin registro previo → eliminar de auth.users y bloquear
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id)
   if (deleteError) {
     console.error('[auth/callback] Failed to delete unregistered OAuth user:', deleteError.message)
@@ -68,3 +71,4 @@ async function handleUserSession(user: User): Promise<SessionResult> {
 
   return 'not_registered'
 }
+
