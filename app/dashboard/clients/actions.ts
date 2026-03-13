@@ -8,10 +8,11 @@ interface RegisterPaymentInput {
   business_id:      string
   client_id:        string
   amount:           number
-  method:           string
+  method:           'other' | 'cash' | 'card' | 'transfer' | 'qr'
   notes?:           string
   appointment_id?:  string
 }
+
 
 // ── Actions ────────────────────────────────────────────────────────────────
 

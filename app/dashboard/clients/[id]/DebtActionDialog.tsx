@@ -20,7 +20,7 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
   const [mode, setMode] = useState<'options' | 'abono' | 'pagado'>('options')
   const [form, setForm] = useState({
     amount: '',
-    method: 'cash' as string,
+    method: 'cash' as 'other' | 'cash' | 'card' | 'transfer' | 'qr',
     reference: ''
   })
 
@@ -157,7 +157,7 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
                 <label className="block text-sm font-bold text-foreground mb-2">Método</label>
                 <select
                   value={form.method}
-                  onChange={(e) => setForm({ ...form, method: e.target.value })}
+                  onChange={(e) => setForm({ ...form, method: e.target.value as any })}
                   className="input-base bg-card py-4"
                 >
                   <option value="cash">Efectivo</option>
