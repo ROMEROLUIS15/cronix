@@ -1,57 +1,49 @@
-"use client";
+'use client'
 
-import { useEffect, useCallback, useRef } from "react";
-import { signout } from "@/app/login/actions";
+import { useEffect, useCallback, useRef } from 'react'
+import { signout } from '@/app/login/actions'
 
-// 30 minutes in milliseconds
-const TIMEOUT_MS = 30 * 60 * 1000;
+// ── Constants ──────────────────────────────────────────────────────────────
+const TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
+const ACTIVITY_EVENTS = [
+  'mousemove',
+  'keydown',
+  'scroll',
+  'click',
+  'touchstart',
+] as const
+
+// ── Component ──────────────────────────────────────────────────────────────
+/**
+ * Invisible component that signs the user out after TIMEOUT_MS of inactivity.
+ * Mount once inside DashboardLayout — returns null, renders nothing.
+ */
 export function SessionTimeout() {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const resetTimeout = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      // User has been inactive for TIMEOUT_MS
-      signout();
-    }, TIMEOUT_MS);
-  }, []);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => { signout() }, TIMEOUT_MS)
+  }, [])
 
   useEffect(() => {
-    // Escuchar eventos de interacción del usuario
-    const events = [
-      "mousemove",
-      "keydown",
-      "scroll",
-      "click",
-      "touchstart",
-    ];
+    // Start the timer immediately on mount
+    resetTimeout()
 
-    const handleUserActivity = () => {
-      resetTimeout();
-    };
-
-    // Registrar los listeners
-    events.forEach((event) => {
-      window.addEventListener(event, handleUserActivity);
-    });
-
-    // Iniciar temporizador inicial
-    resetTimeout();
+    // Reset on any user activity
+    ACTIVITY_EVENTS.forEach(event =>
+      window.addEventListener(event, resetTimeout, { passive: true })
+    )
 
     return () => {
-      // Limpiar listeners y timeout al desmontar
-      events.forEach((event) => {
-        window.removeEventListener(event, handleUserActivity);
-      });
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [resetTimeout]);
+      // Cleanup on unmount
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      ACTIVITY_EVENTS.forEach(event =>
+        window.removeEventListener(event, resetTimeout)
+      )
+    }
+  }, [resetTimeout])
 
-  return null;
+  return null
 }

@@ -1,63 +1,82 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { AlertCircle, CheckCircle2, Rocket, Zap, Star } from "lucide-react";
+import { AlertCircle, CheckCircle2, Rocket, Zap, Star, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { register } from "./actions";
 import { signInWithGoogle } from "@/app/login/actions";
 import { PasswordInput } from "@/components/ui/password-input";
 import { registerSchema } from "@/lib/validations/auth";
 
+// ── Types ──────────────────────────────────────────────────────────────────
+type OAuthError = "google_not_registered" | null;
+
+// ── Constants ──────────────────────────────────────────────────────────────
 const BENEFITS = [
-  {
-    icon: Rocket,
-    title: "Crece rápido",
-    desc: "Más reservas con menos esfuerzo manual.",
-  },
-  {
-    icon: Zap,
-    title: "Fácil uso",
-    desc: "Sin conocimientos técnicos previos.",
-  },
-  {
-    icon: Star,
-    title: "Todo en uno",
-    desc: "Citas, clientes y finanzas integrados.",
-  },
+  { icon: Rocket, title: "Crece rápido",  desc: "Más reservas con menos esfuerzo manual."    },
+  { icon: Zap,    title: "Fácil uso",     desc: "Sin conocimientos técnicos previos."         },
+  { icon: Star,   title: "Todo en uno",   desc: "Citas, clientes y finanzas integrados."      },
 ];
 
+const OAUTH_ERROR_MESSAGES: Record<NonNullable<OAuthError>, { title: string; body: string }> = {
+  google_not_registered: {
+    title: "Tu cuenta de Google no está registrada",
+    body:  "Para ingresar con Google primero debes crear tu cuenta en Cronix. Completa el formulario y luego podrás usar Google para iniciar sesión.",
+  },
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
 export default function RegisterPage() {
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
-  const [isPending, startTransition] = useTransition();
+  const searchParams = useSearchParams();
+
+  // Read ?error= from URL (set by /auth/callback when Google user isn't registered)
+  const rawError    = searchParams.get("error") as OAuthError;
+  const oauthError  = rawError && rawError in OAUTH_ERROR_MESSAGES ? rawError : null;
+  const oauthMsg    = oauthError ? OAUTH_ERROR_MESSAGES[oauthError] : null;
+
+  const [error,            setError]            = useState<string | null>(null);
+  const [success,          setSuccess]          = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isPending,        startTransition]     = useTransition();
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     setValidationErrors({});
+
     const formData = new FormData(e.currentTarget);
-    const result = registerSchema.safeParse(
-      Object.fromEntries(formData.entries()),
-    );
+    const result   = registerSchema.safeParse(Object.fromEntries(formData.entries()));
+
     if (!result.success) {
       const errors: Record<string, string> = {};
-      result.error.issues.forEach((i) => {
+      result.error.issues.forEach(i => {
         if (i.path[0]) errors[i.path[0].toString()] = i.message;
       });
       setValidationErrors(errors);
       return;
     }
+
     startTransition(async () => {
       const res = await register(formData);
-      if (res?.error) setError(res.error);
+      if (res?.error)   setError(res.error);
       else if (res?.success) setSuccess(res.success);
     });
+  };
+
+  // ── Shared input style ────────────────────────────────────────────────────
+  const inputStyle: React.CSSProperties = {
+    background:   "#13131A",
+    border:       "1px solid #22222E",
+    color:        "#F2F2F2",
+    borderRadius: "10px",
+    padding:      "0.75rem 1rem",
+    fontSize:     "14px",
+    outline:      "none",
+    width:        "100%",
   };
 
   return (
@@ -65,33 +84,33 @@ export default function RegisterPage() {
       className="min-h-screen flex flex-col lg:flex-row"
       style={{ backgroundColor: "#060608" }}
     >
-      {/* ═══════════════════════════════════════
-          FORM PANEL — full width mobile, 54% desktop (LEFT on desktop)
-      ═══════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          FORM PANEL
+      ═══════════════════════════════════════════════════════════════════ */}
       <div
         className="flex-1 flex flex-col items-center justify-center relative overflow-hidden order-2 lg:order-1"
         style={{
           background: "linear-gradient(180deg,#0A0A0F 0%,#0D0D14 100%)",
-          padding: "clamp(2rem,6vw,5rem) clamp(1.25rem,8vw,5rem)",
+          padding:    "clamp(2rem,6vw,5rem) clamp(1.25rem,8vw,5rem)",
         }}
       >
         {/* ambient orb */}
         <div
           style={{
-            position: "absolute",
-            bottom: "-5%",
-            left: "-5%",
-            width: "280px",
-            height: "280px",
+            position:     "absolute",
+            bottom:       "-5%",
+            left:         "-5%",
+            width:        "280px",
+            height:       "280px",
             borderRadius: "50%",
-            background:
-              "radial-gradient(circle,rgba(56,132,255,0.06) 0%,transparent 70%)",
-            pointerEvents: "none",
+            background:   "radial-gradient(circle,rgba(56,132,255,0.06) 0%,transparent 70%)",
+            pointerEvents:"none",
           }}
         />
 
         <div className="w-full relative z-10" style={{ maxWidth: "400px" }}>
-          {/* ── MOBILE header ── */}
+
+          {/* ── Mobile logo ─────────────────────────────────────────────── */}
           <Link
             href="/"
             className="flex flex-col items-center lg:hidden"
@@ -100,57 +119,85 @@ export default function RegisterPage() {
             <div
               className="h-16 w-16 rounded-2xl overflow-hidden"
               style={{
-                border: "1px solid rgba(56,132,255,0.3)",
-                boxShadow: "0 0 28px rgba(56,132,255,0.22)",
+                border:       "1px solid rgba(56,132,255,0.3)",
+                boxShadow:    "0 0 28px rgba(56,132,255,0.22)",
                 marginBottom: "0.75rem",
               }}
             >
-              <Image
-                src="/cronix-logo.jpg"
-                alt="Cronix"
-                width={64}
-                height={64}
-                className="h-full w-full object-cover"
-                unoptimized
-              />
+              <Image src="/cronix-logo.jpg" alt="Cronix" width={64} height={64}
+                className="h-full w-full object-cover" unoptimized />
             </div>
-            <div
-              className="relative"
-              style={{ height: "28px", width: "112px" }}
-            >
-              <Image
-                src="/cronix-letras.jpg"
-                alt="Cronix"
-                fill
-                className="object-contain"
-                unoptimized
-              />
+            <div className="relative" style={{ height: "28px", width: "112px" }}>
+              <Image src="/cronix-letras.jpg" alt="Cronix" fill
+                className="object-contain" unoptimized />
             </div>
-            <p
-              style={{
-                color: "#3884FF",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                marginTop: "6px",
-              }}
-            >
+            <p style={{ color: "#3884FF", fontSize: "11px", fontWeight: 700,
+              letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "6px" }}>
               Gestión Inteligente
             </p>
           </Link>
 
+          {/* ── OAuth error banner ───────────────────────────────────────── */}
+          {oauthMsg && (
+            <div
+              className="animate-fade-in"
+              style={{
+                marginBottom: "1.5rem",
+                padding:      "1rem 1.125rem",
+                borderRadius: "14px",
+                background:   "rgba(255,214,10,0.06)",
+                border:       "1px solid rgba(255,214,10,0.25)",
+              }}
+            >
+              {/* Title row */}
+              <div className="flex items-start gap-2.5" style={{ marginBottom: "0.5rem" }}>
+                <AlertCircle
+                  size={16}
+                  style={{ color: "#FFD60A", flexShrink: 0, marginTop: "1px" }}
+                />
+                <p style={{ fontSize: "13px", fontWeight: 700, color: "#FFD60A" }}>
+                  {oauthMsg.title}
+                </p>
+              </div>
+              {/* Body */}
+              <p style={{ fontSize: "12px", color: "rgba(255,214,10,0.75)", lineHeight: "1.55", paddingLeft: "1.4rem" }}>
+                {oauthMsg.body}
+              </p>
+              {/* CTA hint */}
+              <div
+                className="flex items-center gap-2"
+                style={{
+                  marginTop:  "0.875rem",
+                  paddingTop: "0.75rem",
+                  borderTop:  "1px solid rgba(255,214,10,0.15)",
+                  paddingLeft:"1.4rem",
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "rgba(255,214,10,0.55)" }}>
+                  ¿Ya tienes cuenta?
+                </span>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-1 transition-opacity hover:opacity-70"
+                  style={{ fontSize: "12px", fontWeight: 700, color: "#FFD60A" }}
+                >
+                  <LogIn size={12} /> Iniciar sesión
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* ── Success state ────────────────────────────────────────────── */}
           {success ? (
-            /* ── Success state ── */
             <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
               <div
                 className="mx-auto flex items-center justify-center"
                 style={{
-                  height: "64px",
-                  width: "64px",
+                  height:       "64px",
+                  width:        "64px",
                   borderRadius: "20px",
-                  background: "rgba(48,209,88,0.1)",
-                  border: "1px solid rgba(48,209,88,0.2)",
+                  background:   "rgba(48,209,88,0.1)",
+                  border:       "1px solid rgba(48,209,88,0.2)",
                   marginBottom: "1.25rem",
                 }}
               >
@@ -158,79 +205,61 @@ export default function RegisterPage() {
               </div>
               <h2
                 className="font-black text-white"
-                style={{
-                  fontSize: "1.75rem",
-                  letterSpacing: "-0.025em",
-                  marginBottom: "0.5rem",
-                }}
+                style={{ fontSize: "1.75rem", letterSpacing: "-0.025em", marginBottom: "0.5rem" }}
               >
                 ¡Cuenta creada!
               </h2>
-              <p
-                style={{
-                  color: "#6A6A7A",
-                  fontSize: "14px",
-                  marginBottom: "1.75rem",
-                }}
-              >
+              <p style={{ color: "#6A6A7A", fontSize: "14px", marginBottom: "1.75rem" }}>
                 {success}
               </p>
               <Link
                 href="/login"
                 className="inline-flex items-center justify-center"
                 style={{
-                  padding: "0.875rem 2.5rem",
-                  borderRadius: "12px",
-                  background: "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
-                  color: "#fff",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  boxShadow: "0 0 24px rgba(56,132,255,0.35)",
-                  textDecoration: "none",
+                  padding:       "0.875rem 2.5rem",
+                  borderRadius:  "12px",
+                  background:    "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
+                  color:         "#fff",
+                  fontSize:      "14px",
+                  fontWeight:    700,
+                  boxShadow:     "0 0 24px rgba(56,132,255,0.35)",
+                  textDecoration:"none",
                 }}
               >
                 Ir a iniciar sesión
               </Link>
             </div>
+
           ) : (
             <>
               <h1
                 className="font-black text-white"
                 style={{
-                  fontSize: "clamp(1.7rem,4vw,2.25rem)",
+                  fontSize:      "clamp(1.7rem,4vw,2.25rem)",
                   letterSpacing: "-0.035em",
-                  marginBottom: "0.375rem",
+                  marginBottom:  "0.375rem",
                 }}
               >
                 Crea tu cuenta
               </h1>
-              <p
-                style={{
-                  color: "#6A6A7A",
-                  fontSize: "14px",
-                  marginBottom: "1.75rem",
-                }}
-              >
+              <p style={{ color: "#6A6A7A", fontSize: "14px", marginBottom: "1.75rem" }}>
                 Empieza a gestionar tu negocio hoy mismo
               </p>
 
               <form
                 onSubmit={handleSubmit}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.875rem",
-                }}
+                style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}
               >
+                {/* Server-side error */}
                 {error && (
                   <div
                     className="flex items-center gap-2.5 animate-fade-in"
                     style={{
-                      padding: "0.875rem",
+                      padding:      "0.875rem",
                       borderRadius: "12px",
-                      background: "rgba(255,59,48,0.08)",
-                      border: "1px solid rgba(255,59,48,0.2)",
-                      color: "#FF6B6B",
+                      background:   "rgba(255,59,48,0.08)",
+                      border:       "1px solid rgba(255,59,48,0.2)",
+                      color:        "#FF6B6B",
                     }}
                   >
                     <AlertCircle size={15} style={{ flexShrink: 0 }} />
@@ -239,41 +268,17 @@ export default function RegisterPage() {
                 )}
 
                 {/* Name row */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "0.75rem",
-                  }}
-                >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                   <div>
                     <input
                       name="firstName"
                       placeholder="Nombre"
-                      className={cn(
-                        "input-base w-full",
-                        validationErrors.firstName && "border-red-500",
-                      )}
-                      style={{
-                        background: "#13131A",
-                        border: "1px solid #22222E",
-                        color: "#F2F2F2",
-                        borderRadius: "10px",
-                        padding: "0.75rem 1rem",
-                        fontSize: "14px",
-                        outline: "none",
-                        width: "100%",
-                      }}
                       required
+                      className={cn("input-base w-full", validationErrors.firstName && "border-red-500")}
+                      style={inputStyle}
                     />
                     {validationErrors.firstName && (
-                      <p
-                        style={{
-                          color: "#FF6B6B",
-                          fontSize: "10px",
-                          marginTop: "3px",
-                        }}
-                      >
+                      <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                         {validationErrors.firstName}
                       </p>
                     )}
@@ -282,239 +287,137 @@ export default function RegisterPage() {
                     <input
                       name="lastName"
                       placeholder="Apellido"
-                      className={cn(
-                        "input-base w-full",
-                        validationErrors.lastName && "border-red-500",
-                      )}
-                      style={{
-                        background: "#13131A",
-                        border: "1px solid #22222E",
-                        color: "#F2F2F2",
-                        borderRadius: "10px",
-                        padding: "0.75rem 1rem",
-                        fontSize: "14px",
-                        outline: "none",
-                        width: "100%",
-                      }}
                       required
+                      className={cn("input-base w-full", validationErrors.lastName && "border-red-500")}
+                      style={inputStyle}
                     />
                     {validationErrors.lastName && (
-                      <p
-                        style={{
-                          color: "#FF6B6B",
-                          fontSize: "10px",
-                          marginTop: "3px",
-                        }}
-                      >
+                      <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                         {validationErrors.lastName}
                       </p>
                     )}
                   </div>
                 </div>
 
+                {/* Business name */}
                 <div>
                   <input
                     name="bizName"
                     placeholder="Nombre del Negocio"
-                    className={cn(
-                      "input-base w-full",
-                      validationErrors.bizName && "border-red-500",
-                    )}
-                    style={{
-                      background: "#13131A",
-                      border: "1px solid #22222E",
-                      color: "#F2F2F2",
-                      borderRadius: "10px",
-                      padding: "0.75rem 1rem",
-                      fontSize: "14px",
-                      outline: "none",
-                      width: "100%",
-                    }}
                     required
+                    className={cn("input-base w-full", validationErrors.bizName && "border-red-500")}
+                    style={inputStyle}
                   />
                   {validationErrors.bizName && (
-                    <p
-                      style={{
-                        color: "#FF6B6B",
-                        fontSize: "10px",
-                        marginTop: "3px",
-                      }}
-                    >
+                    <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                       {validationErrors.bizName}
                     </p>
                   )}
                 </div>
 
+                {/* Email */}
                 <div>
                   <input
                     name="email"
                     type="email"
                     placeholder="Email"
-                    className={cn(
-                      "input-base w-full",
-                      validationErrors.email && "border-red-500",
-                    )}
-                    style={{
-                      background: "#13131A",
-                      border: "1px solid #22222E",
-                      color: "#F2F2F2",
-                      borderRadius: "10px",
-                      padding: "0.75rem 1rem",
-                      fontSize: "14px",
-                      outline: "none",
-                      width: "100%",
-                    }}
                     required
+                    className={cn("input-base w-full", validationErrors.email && "border-red-500")}
+                    style={inputStyle}
                   />
                   {validationErrors.email && (
-                    <p
-                      style={{
-                        color: "#FF6B6B",
-                        fontSize: "10px",
-                        marginTop: "3px",
-                      }}
-                    >
+                    <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                       {validationErrors.email}
                     </p>
                   )}
                 </div>
 
+                {/* Password */}
                 <div>
                   <PasswordInput
                     name="password"
                     placeholder="Contraseña"
-                    className={
-                      validationErrors.password ? "border-red-500" : undefined
-                    }
                     required
+                    className={validationErrors.password ? "border-red-500" : undefined}
                   />
                   {validationErrors.password && (
-                    <p
-                      style={{
-                        color: "#FF6B6B",
-                        fontSize: "10px",
-                        marginTop: "3px",
-                      }}
-                    >
+                    <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                       {validationErrors.password}
                     </p>
                   )}
                 </div>
 
+                {/* Confirm password */}
                 <div>
                   <PasswordInput
                     name="confirmPassword"
                     placeholder="Confirmar Contraseña"
-                    className={
-                      validationErrors.confirmPassword
-                        ? "border-red-500"
-                        : undefined
-                    }
                     required
+                    className={validationErrors.confirmPassword ? "border-red-500" : undefined}
                   />
                   {validationErrors.confirmPassword && (
-                    <p
-                      style={{
-                        color: "#FF6B6B",
-                        fontSize: "10px",
-                        marginTop: "3px",
-                      }}
-                    >
+                    <p style={{ color: "#FF6B6B", fontSize: "10px", marginTop: "3px" }}>
                       {validationErrors.confirmPassword}
                     </p>
                   )}
                 </div>
 
+                {/* Submit */}
                 <button
-                  disabled={isPending}
                   type="submit"
+                  disabled={isPending}
                   className="transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
                   style={{
-                    width: "100%",
-                    padding: "0.875rem",
+                    width:        "100%",
+                    padding:      "0.875rem",
                     borderRadius: "12px",
-                    background:
-                      "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
-                    color: "#fff",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    boxShadow:
-                      "0 0 24px rgba(56,132,255,0.35),0 4px 12px rgba(56,132,255,0.2)",
-                    border: "none",
-                    cursor: "pointer",
-                    marginTop: "0.25rem",
+                    background:   "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
+                    color:        "#fff",
+                    fontSize:     "14px",
+                    fontWeight:   700,
+                    boxShadow:    "0 0 24px rgba(56,132,255,0.35),0 4px 12px rgba(56,132,255,0.2)",
+                    border:       "none",
+                    cursor:       "pointer",
+                    marginTop:    "0.25rem",
                   }}
                 >
                   {isPending ? "Procesando..." : "Crear cuenta gratis"}
                 </button>
 
-                {/* divider */}
+                {/* Divider */}
                 <div className="relative" style={{ margin: "0.25rem 0" }}>
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div
-                      style={{ width: "100%", borderTop: "1px solid #1A1A24" }}
-                    />
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
+                    <div style={{ width: "100%", borderTop: "1px solid #1A1A24" }} />
                   </div>
-                  <div
-                    style={{
-                      position: "relative",
-                      display: "flex",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        padding: "0 1rem",
-                        background: "#0A0A0F",
-                        color: "#3A3A4A",
-                        fontSize: "12px",
-                      }}
-                    >
+                  <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+                    <span style={{ padding: "0 1rem", background: "#0A0A0F", color: "#3A3A4A", fontSize: "12px" }}>
                       o regístrate con
                     </span>
                   </div>
                 </div>
 
+                {/* Google */}
                 <button
                   type="button"
                   onClick={() => signInWithGoogle()}
                   className="flex items-center justify-center gap-3 transition-all duration-200 active:scale-[0.98] hover:brightness-125"
                   style={{
-                    width: "100%",
-                    padding: "0.875rem",
+                    width:        "100%",
+                    padding:      "0.875rem",
                     borderRadius: "12px",
-                    background: "#13131A",
-                    color: "#D0D0DC",
-                    border: "1px solid #22222E",
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    cursor: "pointer",
+                    background:   "#13131A",
+                    color:        "#D0D0DC",
+                    border:       "1px solid #22222E",
+                    fontSize:     "14px",
+                    fontWeight:   600,
+                    cursor:       "pointer",
                   }}
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24">
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                   </svg>
                   Google
                 </button>
@@ -522,14 +425,7 @@ export default function RegisterPage() {
             </>
           )}
 
-          <p
-            style={{
-              textAlign: "center",
-              color: "#3A3A4A",
-              fontSize: "14px",
-              marginTop: "1.75rem",
-            }}
-          >
+          <p style={{ textAlign: "center", color: "#3A3A4A", fontSize: "14px", marginTop: "1.75rem" }}>
             ¿Ya tienes cuenta?{" "}
             <Link
               href="/login"
@@ -542,255 +438,117 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════
-          BRAND PANEL — hidden on mobile, 46% desktop (RIGHT on desktop)
-      ═══════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          BRAND PANEL
+      ═══════════════════════════════════════════════════════════════════ */}
       <div
         className="hidden lg:flex lg:w-[46%] xl:w-[44%] flex-col relative overflow-hidden order-1 lg:order-2"
         style={{
-          background:
-            "linear-gradient(160deg,#0A0E1A 0%,#0D1B3E 35%,#0A2472 65%,#1140A0 100%)",
+          background: "linear-gradient(160deg,#0A0E1A 0%,#0D1B3E 35%,#0A2472 65%,#1140A0 100%)",
         }}
       >
-        {/* decorative orbs */}
-        <div
-          style={{
-            position: "absolute",
-            top: "-8%",
-            left: "-12%",
-            width: "420px",
-            height: "420px",
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle,rgba(56,132,255,0.22) 0%,rgba(56,132,255,0.04) 50%,transparent 70%)",
-            filter: "blur(10px)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: "-5%",
-            right: "-8%",
-            width: "360px",
-            height: "360px",
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle,rgba(99,179,255,0.12) 0%,transparent 65%)",
-            filter: "blur(22px)",
-            pointerEvents: "none",
-          }}
-        />
-        {/* grid */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.022) 1px,transparent 1px)",
-            backgroundSize: "48px 48px",
-            pointerEvents: "none",
-          }}
-        />
+        {/* Orbs */}
+        <div style={{ position:"absolute", top:"-8%", left:"-12%", width:"420px", height:"420px",
+          borderRadius:"50%", filter:"blur(10px)", pointerEvents:"none",
+          background:"radial-gradient(circle,rgba(56,132,255,0.22) 0%,rgba(56,132,255,0.04) 50%,transparent 70%)" }} />
+        <div style={{ position:"absolute", bottom:"-5%", right:"-8%", width:"360px", height:"360px",
+          borderRadius:"50%", filter:"blur(22px)", pointerEvents:"none",
+          background:"radial-gradient(circle,rgba(99,179,255,0.12) 0%,transparent 65%)" }} />
+        {/* Grid */}
+        <div style={{ position:"absolute", inset:0, pointerEvents:"none",
+          backgroundImage:"linear-gradient(rgba(255,255,255,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.022) 1px,transparent 1px)",
+          backgroundSize:"48px 48px" }} />
 
         <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
-          {/* ── Logo row — big bottom margin ── */}
-          <Link
-            href="/"
-            className="flex items-center gap-3 flex-shrink-0"
-            style={{ marginBottom: "3rem", textDecoration: "none" }}
-          >
-            <div
-              className="h-10 w-10 rounded-xl overflow-hidden flex-shrink-0"
-              style={{
-                border: "1px solid rgba(255,255,255,0.15)",
-                boxShadow: "0 0 18px rgba(56,132,255,0.45)",
-              }}
-            >
-              <Image
-                src="/cronix-logo.jpg"
-                alt="Cronix"
-                width={40}
-                height={40}
-                className="h-full w-full object-cover"
-                unoptimized
-              />
+
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-3 flex-shrink-0"
+            style={{ marginBottom:"3rem", textDecoration:"none" }}>
+            <div className="h-10 w-10 rounded-xl overflow-hidden flex-shrink-0"
+              style={{ border:"1px solid rgba(255,255,255,0.15)", boxShadow:"0 0 18px rgba(56,132,255,0.45)" }}>
+              <Image src="/cronix-logo.jpg" alt="Cronix" width={40} height={40}
+                className="h-full w-full object-cover" unoptimized />
             </div>
-            <div
-              className="relative"
-              style={{ height: "22px", width: "84px", opacity: 0.92 }}
-            >
-              <Image
-                src="/cronix-letras.jpg"
-                alt="Cronix"
-                fill
-                className="object-contain object-left"
-                unoptimized
-              />
+            <div className="relative" style={{ height:"22px", width:"84px", opacity:0.92 }}>
+              <Image src="/cronix-letras.jpg" alt="Cronix" fill
+                className="object-contain object-left" unoptimized />
             </div>
           </Link>
 
-          {/* ── Badge ── */}
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full self-start"
-            style={{
-              marginBottom: "1.5rem",
-              background: "rgba(56,132,255,0.15)",
-              border: "1px solid rgba(56,132,255,0.3)",
-            }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full animate-pulse"
-              style={{ background: "#63B3FF" }}
-            />
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "#63B3FF",
-              }}
-            >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full self-start"
+            style={{ marginBottom:"1.5rem", background:"rgba(56,132,255,0.15)", border:"1px solid rgba(56,132,255,0.3)" }}>
+            <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background:"#63B3FF" }} />
+            <span style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.12em",
+              textTransform:"uppercase", color:"#63B3FF" }}>
               Únete gratis hoy
             </span>
           </div>
 
-          {/* ── Headline ── */}
-          <h1
-            className="font-black text-white"
-            style={{
-              fontSize: "clamp(2rem,3.2vw,2.65rem)",
-              letterSpacing: "-0.035em",
-              lineHeight: 1.1,
-              marginBottom: "1rem",
-            }}
-          >
-            Impulsa tu negocio,
-            <br />
-            <span
-              style={{
-                background: "linear-gradient(90deg,#63B3FF,#A5D8FF)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
+          {/* Headline */}
+          <h1 className="font-black text-white"
+            style={{ fontSize:"clamp(2rem,3.2vw,2.65rem)", letterSpacing:"-0.035em",
+              lineHeight:1.1, marginBottom:"1rem" }}>
+            Impulsa tu negocio,<br />
+            <span style={{ background:"linear-gradient(90deg,#63B3FF,#A5D8FF)",
+              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
               simplifica tu vida.
             </span>
           </h1>
-          <p
-            style={{
-              color: "rgba(255,255,255,0.52)",
-              fontSize: "15px",
-              lineHeight: "1.65",
-              maxWidth: "310px",
-              marginBottom: "2.5rem",
-            }}
-          >
-            Únete a miles de profesionales que ya automatizan sus citas y
-            escalan sus ingresos sin esfuerzo.
+          <p style={{ color:"rgba(255,255,255,0.52)", fontSize:"15px", lineHeight:"1.65",
+            maxWidth:"310px", marginBottom:"2.5rem" }}>
+            Únete a miles de profesionales que ya automatizan sus citas y escalan sus ingresos sin esfuerzo.
           </p>
 
-          {/* ── Stats ── */}
-          <div
-            className="flex gap-6 xl:gap-8"
-            style={{
-              marginBottom: "2rem",
-              paddingBottom: "2rem",
-              borderBottom: "1px solid rgba(56,132,255,0.15)",
-            }}
-          >
+          {/* Stats */}
+          <div className="flex gap-6 xl:gap-8"
+            style={{ marginBottom:"2rem", paddingBottom:"2rem",
+              borderBottom:"1px solid rgba(56,132,255,0.15)" }}>
             {[
-              { value: "+2,400", label: "Negocios activos" },
-              { value: "98%", label: "Satisfacción" },
-              { value: "< 2min", label: "Para comenzar" },
-            ].map((s) => (
+              { value:"+2,400", label:"Negocios activos" },
+              { value:"98%",    label:"Satisfacción"     },
+              { value:"< 2min", label:"Para comenzar"    },
+            ].map(s => (
               <div key={s.label}>
-                <div
-                  style={{
-                    fontSize: "1.5rem",
-                    fontWeight: 900,
-                    letterSpacing: "-0.03em",
-                    background: "linear-gradient(135deg,#fff 30%,#A5D8FF 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                  }}
-                >
+                <div style={{ fontSize:"1.5rem", fontWeight:900, letterSpacing:"-0.03em",
+                  background:"linear-gradient(135deg,#fff 30%,#A5D8FF 100%)",
+                  WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
                   {s.value}
                 </div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    marginTop: "3px",
-                    color: "rgba(165,216,255,0.45)",
-                    fontWeight: 600,
-                  }}
-                >
+                <div style={{ fontSize:"11px", marginTop:"3px",
+                  color:"rgba(165,216,255,0.45)", fontWeight:600 }}>
                   {s.label}
                 </div>
               </div>
             ))}
           </div>
 
-          {/* ── Benefits ── */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.625rem",
-            }}
-          >
+          {/* Benefits */}
+          <div style={{ display:"flex", flexDirection:"column", gap:"0.625rem" }}>
             {BENEFITS.map(({ icon: Icon, title, desc }) => (
-              <div
-                key={title}
-                className="flex items-center gap-4"
-                style={{
-                  padding: "0.9rem 1.1rem",
-                  borderRadius: "14px",
-                  background: "rgba(56,132,255,0.08)",
-                  border: "1px solid rgba(56,132,255,0.22)",
-                  boxShadow:
-                    "0 2px 12px rgba(56,132,255,0.08), inset 0 1px 0 rgba(255,255,255,0.04)",
-                  backdropFilter: "blur(8px)",
-                }}
-              >
-                <div
-                  className="flex items-center justify-center flex-shrink-0"
-                  style={{
-                    height: "38px",
-                    width: "38px",
-                    borderRadius: "12px",
-                    background: "rgba(56,132,255,0.25)",
-                    border: "1px solid rgba(99,179,255,0.4)",
-                    boxShadow: "0 0 10px rgba(56,132,255,0.35)",
-                  }}
-                >
-                  <Icon size={16} style={{ color: "#A5D8FF" }} />
+              <div key={title} className="flex items-center gap-4"
+                style={{ padding:"0.9rem 1.1rem", borderRadius:"14px",
+                  background:"rgba(56,132,255,0.08)", border:"1px solid rgba(56,132,255,0.22)",
+                  boxShadow:"0 2px 12px rgba(56,132,255,0.08),inset 0 1px 0 rgba(255,255,255,0.04)",
+                  backdropFilter:"blur(8px)" }}>
+                <div className="flex items-center justify-center flex-shrink-0"
+                  style={{ height:"38px", width:"38px", borderRadius:"12px",
+                    background:"rgba(56,132,255,0.25)", border:"1px solid rgba(99,179,255,0.4)",
+                    boxShadow:"0 0 10px rgba(56,132,255,0.35)" }}>
+                  <Icon size={16} style={{ color:"#A5D8FF" }} />
                 </div>
                 <div>
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 800,
-                      color: "#E0EEFF",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
+                  <p style={{ fontSize:"13px", fontWeight:800, color:"#E0EEFF", letterSpacing:"-0.01em" }}>
                     {title}
                   </p>
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      marginTop: "2px",
-                      color: "rgba(165,216,255,0.55)",
-                    }}
-                  >
+                  <p style={{ fontSize:"12px", marginTop:"2px", color:"rgba(165,216,255,0.55)" }}>
                     {desc}
                   </p>
                 </div>
               </div>
             ))}
           </div>
+
         </div>
       </div>
     </div>
