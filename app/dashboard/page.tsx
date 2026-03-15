@@ -445,29 +445,29 @@ export default function DashboardPage() {
           </div>
 
           {/* — sm+: all 4 in a compact grouped row — */}
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-3">
             {(["agenda", "resumen"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center gap-2"
+                className="px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center gap-2"
                 style={
                   tab === t
                     ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
                     : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
                 }
               >
-                {t === "agenda" ? <><CalendarDays size={15} /><span>Agenda</span></> : <><BarChart3 size={15} /><span>Resumen</span></>}
+                {t === "agenda" ? <><CalendarDays size={16} /><span>Agenda</span></> : <><BarChart3 size={16} /><span>Resumen</span></>}
               </button>
             ))}
             {/* Subtle divider */}
-            <div style={{ width: 1, height: 24, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+            <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
             <Link href="/dashboard/clients/new">
               <Button
                 variant="secondary"
-                className="text-sm px-4 py-2 rounded-xl font-semibold"
+                className="text-sm px-5 py-2.5 rounded-xl font-semibold"
                 style={{ background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
-                leftIcon={<User size={15} />}
+                leftIcon={<User size={16} />}
               >
                 Nuevo Cliente
               </Button>
@@ -475,13 +475,14 @@ export default function DashboardPage() {
             <Link href="/dashboard/appointments/new">
               <Button
                 variant="primary"
-                className="text-sm px-4 py-2 rounded-xl font-semibold"
-                leftIcon={<Plus size={15} />}
+                className="text-sm px-5 py-2.5 rounded-xl font-semibold"
+                leftIcon={<Plus size={16} />}
               >
                 Nueva Cita
               </Button>
             </Link>
           </div>
+
 
         </div>
 

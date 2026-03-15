@@ -89,13 +89,25 @@
   }
 
   /*
-    Safe-area BOTTOM is applied to the main scroll container's inner wrapper,
-    NOT to body. Since body no longer owns vertical scroll (main does), setting
-    padding-bottom on body has no effect on scrollable content — it caused
-    content to be cut off by the Android/iOS navigation bar at the bottom.
+    MOBILE BOTTOM CLEARANCE — belt + suspenders approach:
+    ----------------------------------------------------------
+    Android nav bar heights vary by manufacturer and nav mode:
+      • 3-button nav:  ~48px
+      • 2-button nav:  ~40px
+      • Gesture nav:   ~20px (but may overlay content)
+    So we use a 80px fallback to be safe on ALL Android devices,
+    even when env(safe-area-inset-bottom) returns 0 (which happens
+    on many Android browsers that don't expose correct insets).
+
+    On sm+ (tablet/desktop): no nav bar overlay, 24px is enough.
   */
   #main-scroll > div {
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 1rem);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 5rem) !important; /* 80px on mobile */
+  }
+  @media (min-width: 640px) {
+    #main-scroll > div {
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 1.5rem) !important; /* 24px on tablet+ */
+    }
   }
 
 

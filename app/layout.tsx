@@ -6,6 +6,14 @@ export const viewport: Viewport = {
   themeColor: '#08080A',
   width: 'device-width',
   initialScale: 1,
+  /*
+    viewportFit: 'cover' is REQUIRED for env(safe-area-inset-*) to return
+    non-zero values on iOS notched devices and Android gesture-nav phones.
+    Without this, the browser constrains the layout above the system chrome
+    and all safe-area env vars are 0 — causing content to be clipped at the
+    bottom behind the Android nav bar on some devices.
+  */
+  viewportFit: 'cover',
 }
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
