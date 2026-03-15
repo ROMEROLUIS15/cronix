@@ -104,6 +104,7 @@ export default function ServicesPage() {
       await loadServices(dbUser.business_id);
     }
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadServices = async (bId: string) => {

@@ -129,6 +129,7 @@ export default function SettingsPage() {
       setLoading(false);
     }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const showMsg = (type: "success" | "error", text: string) => {

@@ -24,6 +24,7 @@ export function ServicesOnboardingBanner({ businessId }: { businessId: string })
       if ((count ?? 0) === 0) setShow(true)
     }
     checkServices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId])
 
   const dismiss = () => {

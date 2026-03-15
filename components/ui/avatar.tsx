@@ -1,4 +1,5 @@
 import * as React from 'react'
+import Image from 'next/image'
 import { getInitials, cn } from '@/lib/utils'
 
 interface AvatarProps {
@@ -23,11 +24,15 @@ export function Avatar({ name, src, color, size = 'md', className }: AvatarProps
 
   if (src) {
     return (
-      <img
-        src={src}
-        alt={name}
-        className={cn('rounded-full object-cover ring-2 ring-border', sizeClasses[size], className)}
-      />
+      <div className={cn("relative shrink-0 rounded-full overflow-hidden ring-2 ring-border", sizeClasses[size], className)}>
+        <Image
+          src={src}
+          alt={name}
+          fill
+          className="object-cover"
+          unoptimized
+        />
+      </div>
     )
   }
 
