@@ -30,6 +30,13 @@
     --accent-red: #ff3b30;
   }
 
+  /* Universal box-sizing — prevents overflow issues on all devices */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
   html {
     color-scheme: dark;
     font-family: "Inter", system-ui, sans-serif;
@@ -53,10 +60,17 @@
     overflow-x: hidden;
     width: 100%;
     position: relative;
+    /* Safe area insets for notched phones */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+
+  /* Scroll lock when sidebar/panel is open on mobile */
+  body.scroll-locked {
+    overflow: hidden;
+    touch-action: none;
   }
 
   button,
@@ -102,11 +116,16 @@
     background-color: #1a1a1f;
     border: 1px solid #272729;
     border-radius: 1.25rem;
-    padding: 1.5rem;
+    padding: 1rem;
     overflow: hidden;
     transition:
       border-color 0.2s ease,
       box-shadow 0.2s ease;
+  }
+  @media (min-width: 640px) {
+    .card-base {
+      padding: 1.5rem;
+    }
   }
   .card-base:hover {
     border-color: rgba(0, 98, 255, 0.35);
@@ -121,6 +140,8 @@
     background-color: #212125;
     border: 1px solid #272729;
     color: #f2f2f2;
+    /* Ensure inputs never overflow their container */
+    min-width: 0;
   }
   .input-base::placeholder {
     color: #909098;
@@ -141,6 +162,8 @@
     background-color: #0062ff;
     color: #ffffff;
     border: 1px solid transparent;
+    /* Prevent buttons from shrinking below content */
+    flex-shrink: 0;
   }
   .btn-primary:hover:not(:disabled) {
     background-color: #0052d6;
@@ -155,6 +178,7 @@
     background-color: #212125;
     color: #f2f2f2;
     border: 1px solid #272729;
+    flex-shrink: 0;
   }
   .btn-secondary:hover {
     background-color: #272729;
@@ -175,8 +199,13 @@
 
   /* ── Navigation ── */
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl
+    @apply flex items-center gap-3 px-3 py-3 rounded-xl
            text-sm font-medium transition-all duration-200;
+  }
+  @media (min-width: 1024px) {
+    .nav-item {
+      @apply py-2.5;
+    }
   }
   .nav-item-active {
     background-color: rgba(0, 98, 255, 0.12);
@@ -224,29 +253,26 @@
     border: 1px solid rgba(39, 39, 41, 0.9);
   }
 
-  /* ── Success accent ── */
-  .text-success {
-    color: #30d158;
-  }
-  .bg-success {
-    background: rgba(48, 209, 88, 0.1);
-  }
-  .text-danger {
-    color: #ff3b30;
-  }
-  .bg-danger {
-    background: rgba(255, 59, 48, 0.1);
-  }
+  /* ── Success/Danger ── */
+  .text-success { color: #30d158; }
+  .bg-success   { background: rgba(48, 209, 88, 0.1); }
+  .text-danger  { color: #ff3b30; }
+  .bg-danger    { background: rgba(255, 59, 48, 0.1); }
 
   /* ── Stat cards ── */
   .stat-card {
     background-color: #1a1a1f;
     border: 1px solid #272729;
     border-radius: 1.25rem;
-    padding: 1.25rem;
+    padding: 1rem;
     transition:
       border-color 0.2s ease,
       box-shadow 0.2s ease;
+  }
+  @media (min-width: 640px) {
+    .stat-card {
+      padding: 1.25rem;
+    }
   }
   .stat-card:hover {
     border-color: rgba(0, 98, 255, 0.3);
@@ -263,6 +289,28 @@
     border-color: rgba(0, 98, 255, 0.25);
   }
 
+  /* ── Bottom Sheet (mobile panels) ── */
+  .bottom-sheet {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 50;
+    border-radius: 1.5rem 1.5rem 0 0;
+    background-color: #1a1a1f;
+    border-top: 1px solid #2e2e38;
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.6);
+    max-height: 90dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bottom-sheet-handle {
+    width: 2.5rem;
+    height: 0.25rem;
+    background: #3a3a44;
+    border-radius: 999px;
+    margin: 0.75rem auto 0;
+  }
+
   /* ── Animations ── */
   .animate-fade-in {
     animation: fadeIn 0.25s ease-out;
@@ -270,23 +318,20 @@
   .animate-slide-up {
     animation: slideUp 0.3s ease-out;
   }
+  .animate-slide-from-bottom {
+    animation: slideFromBottom 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  }
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideFromBottom {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }

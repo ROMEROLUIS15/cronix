@@ -107,13 +107,13 @@ export default function ClientsPage() {
 
       {/* Stats */}
       {!loading && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
           {[
             { label: 'Total clientes', value: clients.length, icon: '👥' },
             { label: 'VIP', value: vipCount, icon: '⭐' },
             { label: 'Ticket promedio', value: formatCurrency(avgSpent), icon: '💰' },
           ].map(s => (
-            <div key={s.label} className="card-base text-center p-4">
+            <div key={s.label} className="card-base text-center p-3 sm:p-4">
               <p className="text-2xl mb-1">{s.icon}</p>
               <p className="text-xl font-bold text-foreground">{s.value}</p>
               <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -181,15 +181,15 @@ function ClientRow({ client }: { client: Client }) {
             <Badge key={tag} variant="brand" className="text-[10px] px-1.5 py-0">{tag}</Badge>
           ))}
         </div>
-        <div className="flex items-center gap-3 mt-0.5">
+        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
           {client.phone && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Phone size={11} /> {client.phone}
             </span>
           )}
           {client.email && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Mail size={11} /> {client.email}
+            <span className="flex items-center gap-1 text-xs text-muted-foreground max-w-[160px] sm:max-w-none">
+              <Mail size={11} /> <span className="truncate">{client.email}</span>
             </span>
           )}
         </div>

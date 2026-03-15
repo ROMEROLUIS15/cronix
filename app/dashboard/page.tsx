@@ -361,15 +361,26 @@ export default function DashboardPage() {
     );
   }
 
+  // Lock body scroll on mobile when panels are open
+  useEffect(() => {
+    const isOpen = dayPanelOpen || panelOpen
+    if (isOpen) {
+      document.body.classList.add('scroll-locked')
+    } else {
+      document.body.classList.remove('scroll-locked')
+    }
+    return () => document.body.classList.remove('scroll-locked')
+  }, [dayPanelOpen, panelOpen])
+
   return (
     <div className="flex h-full relative overflow-hidden">
       {/* ── MAIN CONTENT ─────────────────────────────────────── */}
       <div
-        className={`flex-1 min-w-0 space-y-5 animate-fade-in transition-all duration-300 overflow-y-auto
+        className={`flex-1 min-w-0 space-y-5 animate-fade-in transition-all duration-300
         ${dayPanelOpen || panelOpen ? "lg:mr-80 xl:mr-96" : ""}`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="space-y-3">
           <div>
             <h1
               className="text-xl sm:text-2xl font-black"
@@ -385,61 +396,43 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Tabs */}
-            <div className="flex items-center gap-2 w-full sm:w-fit">
+          {/* Tabs + Actions — stack on mobile, row on sm+ */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            {/* View Tabs */}
+            <div className="flex items-center gap-2">
               {(["agenda", "resumen"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                   style={
                     tab === t
-                      ? {
-                          background: "#0062FF",
-                          color: "#fff",
-                          border: "1px solid #0062FF",
-                        }
-                      : {
-                          background: "rgba(0,98,255,0.1)",
-                          color: "#3884FF",
-                          border: "1px solid rgba(0,98,255,0.2)",
-                        }
+                      ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
+                      : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
                   }
                 >
-                  {t === "agenda" ? (
-                    <>
-                      <CalendarDays size={16} /> <span>Agenda</span>
-                    </>
-                  ) : (
-                    <>
-                      <BarChart3 size={16} /> <span>Resumen</span>
-                    </>
-                  )}
+                  {t === "agenda" ? <><CalendarDays size={15} /> <span>Agenda</span></> : <><BarChart3 size={15} /> <span>Resumen</span></>}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 sm:ml-auto">
               <Link href="/dashboard/clients/new" className="flex-1 sm:flex-none">
                 <Button
                   variant="secondary"
-                  className="w-full justify-center text-sm px-4 py-2.5 rounded-xl font-semibold transition-all duration-200"
-                  style={{
-                    background: "rgba(0,98,255,0.08)",
-                    color: "#3884FF",
-                    border: "1px solid rgba(0,98,255,0.2)",
-                  }}
-                  leftIcon={<User size={16} />}
+                  className="w-full justify-center text-sm px-3 sm:px-4 py-2 rounded-xl font-semibold"
+                  style={{ background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
+                  leftIcon={<User size={15} />}
                 >
-                  Nuevo Cliente
+                  <span className="hidden xs:inline">Nuevo </span>Cliente
                 </Button>
               </Link>
               <Link href="/dashboard/appointments/new" className="flex-1 sm:flex-none">
                 <Button
                   variant="primary"
-                  className="w-full justify-center text-sm px-4 py-2.5 rounded-xl font-semibold"
-                  leftIcon={<Plus size={16} />}
+                  className="w-full justify-center text-sm px-3 sm:px-4 py-2 rounded-xl font-semibold"
+                  leftIcon={<Plus size={15} />}
                 >
                   Nueva Cita
                 </Button>
@@ -589,7 +582,7 @@ export default function DashboardPage() {
                       <button
                         key={day.toISOString()}
                         onClick={() => handleDayClick(day)}
-                        className="relative min-h-[64px] sm:min-h-[80px] md:min-h-[88px] p-1.5 sm:p-2 text-left transition-all duration-150 group"
+                        className="relative min-h-[72px] sm:min-h-[88px] md:min-h-[96px] p-1.5 sm:p-2 text-left transition-all duration-150 group"
                         style={{
                           borderRight:
                             colIdx < 6 ? "1px solid #242430" : "none",
@@ -848,12 +841,24 @@ export default function DashboardPage() {
       </div>
 
       {/* ── DAY PANEL (list of all appointments for selected day) ── */}
+      {/* Mobile: bottom sheet | Desktop lg+: right side drawer */}
       <div
-        className={`fixed top-0 right-0 h-full flex flex-col z-40 transition-transform duration-300
-        ${dayPanelOpen ? "translate-x-0" : "translate-x-full"}
-        ${panelOpen ? "w-0 overflow-hidden" : "w-full sm:w-80 md:w-96"}`}
-        style={{ background: "#0C0C0F", borderLeft: "1px solid #262629" }}
+        className={[
+          // Mobile: bottom sheet
+          'fixed inset-x-0 bottom-0 z-40 flex flex-col transition-transform duration-300 rounded-t-3xl',
+          // Desktop: right side drawer
+          'lg:inset-x-auto lg:right-0 lg:top-0 lg:h-full lg:rounded-none lg:w-80 xl:w-96',
+          // State: open/closed
+          dayPanelOpen && !panelOpen
+            ? 'translate-y-0 lg:translate-y-0 lg:translate-x-0'
+            : 'translate-y-full lg:translate-y-0 lg:translate-x-full',
+          // Hide when apt panel is open
+          panelOpen ? 'invisible' : 'visible',
+        ].join(' ')}
+        style={{ background: "#0C0C0F", borderTop: "1px solid #262629", borderLeft: "1px solid #262629", maxHeight: '90dvh' }}
       >
+        {/* Drag handle — mobile only */}
+        <div className="lg:hidden"><div className="bottom-sheet-handle" /></div>
         {!panelOpen && (
           <>
             {/* Day panel header */}
@@ -1124,11 +1129,19 @@ export default function DashboardPage() {
       </div>
 
       {/* ── APT DETAIL PANEL ── */}
+      {/* Mobile: bottom sheet | Desktop lg+: right side drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-80 md:w-96 flex flex-col z-50 transition-transform duration-300
-        ${panelOpen ? "translate-x-0" : "translate-x-full"}`}
-        style={{ background: "#0C0C0F", borderLeft: "1px solid #262629" }}
+        className={[
+          'fixed inset-x-0 bottom-0 z-50 flex flex-col transition-transform duration-300 rounded-t-3xl',
+          'lg:inset-x-auto lg:right-0 lg:top-0 lg:h-full lg:rounded-none lg:w-80 xl:w-96',
+          panelOpen
+            ? 'translate-y-0 lg:translate-y-0 lg:translate-x-0'
+            : 'translate-y-full lg:translate-y-0 lg:translate-x-full',
+        ].join(' ')}
+        style={{ background: "#0C0C0F", borderTop: "1px solid #262629", borderLeft: "1px solid #262629", maxHeight: '90dvh' }}
       >
+        {/* Drag handle — mobile only */}
+        <div className="lg:hidden"><div className="bottom-sheet-handle" /></div>
         {selectedApt && (
           <>
             <div
@@ -1334,10 +1347,10 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Backdrop mobile */}
+      {/* Backdrop — covers everything behind bottom sheets on mobile */}
       {(dayPanelOpen || panelOpen) && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 animate-fade-in"
           onClick={() => {
             closeDayPanel();
             closeAptPanel();

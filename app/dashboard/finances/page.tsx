@@ -117,25 +117,25 @@ export default function FinancesPage() {
     <div className="space-y-6 animate-fade-in">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-start sm:items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
           <p className="text-muted-foreground text-sm">Resumen financiero del mes actual</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/dashboard/finances/expense">
-            <Button variant="secondary" leftIcon={<Receipt size={16} />}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Link href="/dashboard/finances/expense" className="block flex-1 sm:flex-none">
+            <Button variant="secondary" leftIcon={<Receipt size={16} />} className="w-full sm:w-auto">
               Registrar Gasto
             </Button>
           </Link>
-          <Link href="/dashboard/finances/new">
-            <Button leftIcon={<Plus size={16} />}>Registrar Cobro</Button>
+          <Link href="/dashboard/finances/new" className="block flex-1 sm:flex-none">
+            <Button leftIcon={<Plus size={16} />} className="w-full sm:w-auto">Registrar Cobro</Button>
           </Link>
         </div>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard
           title="Ingresos del mes"
           value={formatCurrency(summary.totalRevenue)}

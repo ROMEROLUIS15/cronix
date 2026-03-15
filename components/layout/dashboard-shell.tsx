@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
@@ -54,6 +54,18 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const { title, subtitle } = getPageMeta(pathname ?? '')
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.classList.add('scroll-locked')
+    } else {
+      document.body.classList.remove('scroll-locked')
+    }
+    return () => {
+      document.body.classList.remove('scroll-locked')
+    }
+  }, [sidebarOpen])
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: '#0F0F12' }}>

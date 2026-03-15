@@ -331,7 +331,7 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label
                   className="block text-sm font-medium mb-1.5"
@@ -516,7 +516,7 @@ export default function ServicesPage() {
           {services.map((s) => (
             <div
               key={s.id}
-              className="flex items-center gap-4 p-4 rounded-2xl transition-all"
+              className="flex items-center gap-3 p-3 sm:p-4 rounded-2xl transition-all"
               style={{
                 background: s.is_active ? "#1A1A1F" : "#161619",
                 border: "1px solid #2E2E33",
@@ -571,7 +571,7 @@ export default function ServicesPage() {
                     <DollarSign size={11} /> {s.price.toLocaleString()}
                   </span>
                   {s.description && (
-                    <span className="truncate max-w-[200px]">
+                    <span className="truncate min-w-0 flex-1">
                       {s.description}
                     </span>
                   )}

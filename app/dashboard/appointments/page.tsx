@@ -80,39 +80,40 @@ export default function AppointmentsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground">Agenda</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus citas y disponibilidad</p>
         </div>
-        <Link href="/dashboard/appointments/new">
+        <Link href="/dashboard/appointments/new" className="flex-shrink-0">
           <Button leftIcon={<Plus size={16} />}>Nueva Cita</Button>
         </Link>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-surface p-2 rounded-2xl border border-border">
-        <div className="flex items-center gap-1 w-full sm:w-auto">
-          <button onClick={handlePrevDay} className="btn-ghost p-2 rounded-xl">
+      <div className="flex flex-col gap-3 bg-surface p-2 rounded-2xl border border-border">
+        {/* Date navigator */}
+        <div className="flex items-center gap-1">
+          <button onClick={handlePrevDay} className="btn-ghost p-2 rounded-xl flex-shrink-0">
             <ChevronLeft size={18} />
           </button>
-          <div className="flex-1 sm:w-48 text-center font-medium text-foreground text-sm">
+          <div className="flex-1 text-center font-medium text-foreground text-sm capitalize">
             {date.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           </div>
-          <button onClick={handleNextDay} className="btn-ghost p-2 rounded-xl">
+          <button onClick={handleNextDay} className="btn-ghost p-2 rounded-xl flex-shrink-0">
             <ChevronRight size={18} />
           </button>
         </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
+        {/* Search + view toggle */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text" placeholder="Buscar cita..."
               value={query} onChange={(e) => setQuery(e.target.value)}
-              className="input-base pl-9 h-9 text-sm"
+              className="input-base pl-9 h-9 text-sm w-full"
             />
           </div>
-          <div className="flex bg-muted p-1 rounded-xl">
+          <div className="flex bg-muted p-1 rounded-xl flex-shrink-0">
             {(['day', 'week'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${

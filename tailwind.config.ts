@@ -56,6 +56,9 @@ const config: Config = {
         "3xl": "1.5rem",
         "4xl": "2rem",
       },
+      screens: {
+        xs: "480px",
+      },
       boxShadow: {
         "brand-sm": "0 1px 3px rgba(0, 98, 255, 0.15)",
         "brand-md": "0 4px 12px rgba(0, 98, 255, 0.25)",

@@ -193,7 +193,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Report selector cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {reportCards.map(r => (
           <div
             key={r.id}
@@ -204,23 +204,25 @@ export default function ReportsPage() {
               border:     activeReport === r.id ? '1px solid rgba(0,98,255,0.35)' : '1px solid #2E2E33',
             }}
           >
-            <div className="flex items-start gap-4">
-              <span className="text-3xl">{r.icon}</span>
+            <div className="flex items-start gap-3">
+              <span className="text-3xl flex-shrink-0">{r.icon}</span>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm" style={{ color: '#F2F2F2' }}>{r.title}</p>
                 <p className="text-xs mt-0.5" style={{ color: '#909098' }}>{r.sub}</p>
-                <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold"
-                  style={{ background: 'rgba(0,98,255,0.1)', color: '#3884FF' }}>
-                  {r.period}
-                </span>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold"
+                    style={{ background: 'rgba(0,98,255,0.1)', color: '#3884FF' }}>
+                    {r.period}
+                  </span>
+                  <Button
+                    variant="secondary" size="sm"
+                    leftIcon={<Download size={14} />}
+                    onClick={(e) => { e.stopPropagation(); handleDownloadReport() }}
+                  >
+                    TXT
+                  </Button>
+                </div>
               </div>
-              <Button
-                variant="secondary" size="sm"
-                leftIcon={<Download size={14} />}
-                onClick={(e) => { e.stopPropagation(); handleDownloadReport() }}
-              >
-                TXT
-              </Button>
             </div>
           </div>
         ))}
