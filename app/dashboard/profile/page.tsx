@@ -40,6 +40,7 @@ export default function ProfilePage() {
       setLoading(false)
     }
     loadUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const showMsg = (type: 'error' | 'success', text: string) => {

@@ -121,6 +121,7 @@ export default function DashboardPage() {
       }
     }
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Fetch entire month appointments ──────────────────────────
@@ -143,6 +144,7 @@ export default function DashboardPage() {
       .order("start_at");
     setMonthApts((data as Apt[]) ?? []);
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, currentMonth]);
 
   // ── Fetch selected day appointments ──────────────────────────
@@ -164,6 +166,7 @@ export default function DashboardPage() {
       .order("start_at");
     setDayApts((data as Apt[]) ?? []);
     setDayLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, selectedDate]);
 
   // ── Fetch stats ───────────────────────────────────────────────
@@ -206,6 +209,7 @@ export default function DashboardPage() {
       ),
       pending: d.count ?? 0,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
   useEffect(() => {
@@ -289,6 +293,17 @@ export default function DashboardPage() {
   const today = new Date();
   const WEEK_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+  // Lock body scroll on mobile when panels are open
+  useEffect(() => {
+    const isOpen = dayPanelOpen || panelOpen;
+    if (isOpen) {
+      document.body.classList.add("scroll-locked");
+    } else {
+      document.body.classList.remove("scroll-locked");
+    }
+    return () => document.body.classList.remove("scroll-locked");
+  }, [dayPanelOpen, panelOpen]);
+
   // ── No business ───────────────────────────────────────────────
   if (!loading && !businessId) {
     return (
@@ -361,16 +376,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Lock body scroll on mobile when panels are open
-  useEffect(() => {
-    const isOpen = dayPanelOpen || panelOpen
-    if (isOpen) {
-      document.body.classList.add('scroll-locked')
-    } else {
-      document.body.classList.remove('scroll-locked')
-    }
-    return () => document.body.classList.remove('scroll-locked')
-  }, [dayPanelOpen, panelOpen])
 
   return (
     <div className="flex h-full relative overflow-hidden">

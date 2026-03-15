@@ -107,6 +107,7 @@ export default function ReportsPage() {
       setLoading(false)
     }
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleDownloadReport = () => {
