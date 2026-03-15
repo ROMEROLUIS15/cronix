@@ -420,29 +420,29 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-              <Link
-                href="/dashboard/clients/new"
-                className="flex-1 sm:flex-none"
-              >
-                <button
-                  className="w-full flex items-center justify-center gap-2 text-sm px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 hover:opacity-90 active:scale-95"
+            <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+              <Link href="/dashboard/clients/new" className="flex-1 sm:flex-none">
+                <Button
+                  variant="secondary"
+                  className="w-full justify-center text-sm px-4 py-2.5 rounded-xl font-semibold transition-all duration-200"
                   style={{
-                    background: "rgba(0,98,255,0.1)",
+                    background: "rgba(0,98,255,0.08)",
                     color: "#3884FF",
                     border: "1px solid rgba(0,98,255,0.2)",
                   }}
+                  leftIcon={<User size={16} />}
                 >
-                  <User size={16} /> <span>Nuevo Cliente</span>
-                </button>
+                  Nuevo Cliente
+                </Button>
               </Link>
-              <Link
-                href="/dashboard/appointments/new"
-                className="flex-1 sm:flex-none"
-              >
-                <button className="w-full btn-primary flex items-center justify-center gap-2 text-sm px-4 py-2.5">
-                  <Plus size={16} /> <span>Nueva Cita</span>
-                </button>
+              <Link href="/dashboard/appointments/new" className="flex-1 sm:flex-none">
+                <Button
+                  variant="primary"
+                  className="w-full justify-center text-sm px-4 py-2.5 rounded-xl font-semibold"
+                  leftIcon={<Plus size={16} />}
+                >
+                  Nueva Cita
+                </Button>
               </Link>
             </div>
           </div>

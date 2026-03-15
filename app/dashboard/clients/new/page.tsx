@@ -86,23 +86,28 @@ export default function NewClientPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
-      {/* Solo visibles en móvil con diseño destacado azul */}
-      {/* Solo visibles en móvil con diseño destacado azul */}
-      <div className="flex sm:hidden items-center gap-3">
-        <Link
-          href="/dashboard/clients"
-          className="flex-1 flex items-center justify-center text-sm gap-2 px-3 py-2.5 rounded-xl transition-all duration-200"
-          style={{ background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
-        >
-          <ArrowLeft size={16} /> Clientes
+    <div className="space-y-6 animate-fade-in max-w-2xl w-full overflow-x-hidden">
+      {/* Navigation links — solid blue design */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/dashboard/clients" className="flex-1 sm:flex-initial">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<ArrowLeft size={16} />}
+            className="w-full h-10 rounded-xl px-4"
+          >
+            Clientes
+          </Button>
         </Link>
-        <Link
-          href="/dashboard"
-          className="flex-1 flex items-center justify-center text-sm gap-2 px-3 py-2.5 rounded-xl transition-all duration-200"
-          style={{ background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
-        >
-          <ArrowLeft size={16} /> Agenda
+        <Link href="/dashboard" className="flex-1 sm:flex-initial">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<ArrowLeft size={16} />}
+            className="w-full h-10 rounded-xl px-4"
+          >
+            Agenda
+          </Button>
         </Link>
       </div>
 

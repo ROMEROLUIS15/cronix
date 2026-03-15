@@ -140,27 +140,29 @@ export default function NewAppointmentPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
+    <div className="space-y-6 animate-fade-in max-w-2xl w-full overflow-x-hidden">
 
       {/* ── Navigation row — back to Agenda + shortcut to Nuevo Cliente ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <Link
-          href="/dashboard/appointments"
-          className="inline-flex items-center gap-2 text-sm font-semibold transition-all hover:opacity-80"
-          style={{ color: '#3884FF' }}
-        >
-          <ArrowLeft size={16} /> Agenda
+      <div className="flex flex-wrap items-center gap-3 min-w-0">
+        <Link href="/dashboard/appointments" className="flex-1 sm:flex-initial">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<ArrowLeft size={16} />}
+            className="w-full h-10 rounded-xl px-4"
+          >
+            Agenda
+          </Button>
         </Link>
-        <Link
-          href="/dashboard/clients/new"
-          className="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
-          style={{
-            background: 'rgba(0,98,255,0.1)',
-            color:      '#3884FF',
-            border:     '1px solid rgba(0,98,255,0.2)',
-          }}
-        >
-          <UserPlus size={15} /> Nuevo Cliente
+        <Link href="/dashboard/clients/new" className="flex-1 sm:flex-initial">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<UserPlus size={15} />}
+            className="w-full h-10 rounded-xl px-4"
+          >
+            Nuevo Cliente
+          </Button>
         </Link>
       </div>
 
@@ -183,15 +185,15 @@ export default function NewAppointmentPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Card>
+        <Card className="overflow-hidden">
           <h2 className="text-base font-semibold text-foreground mb-4">Información de la cita</h2>
           <div className="space-y-4">
 
-            <div>
+            <div className="w-full max-w-full overflow-hidden">
               <label className="block text-sm font-medium text-foreground mb-1.5">Cliente *</label>
               <select required value={form.client_id}
                 onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-                className="input-base bg-card">
+                className="input-base bg-card w-full max-w-full truncate">
                 <option value="">Selecciona un cliente...</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>

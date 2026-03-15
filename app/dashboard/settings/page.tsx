@@ -8,6 +8,7 @@ import {
   Save,
   AlertCircle,
   CheckCircle2,
+  Copy,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -188,6 +189,22 @@ export default function SettingsPage() {
       [key]: { ...(prev[key] ?? { ...DEFAULT_DAY }), [field]: value },
     }));
   };
+  
+  const copyHoursToAll = (sourceKey: string) => {
+    const source = hours[sourceKey];
+    if (!source || !source.active) return;
+    
+    setHours(prev => {
+      const next = { ...prev };
+      DAYS.forEach(({ key }) => {
+        if (key !== sourceKey && next[key]?.active) {
+          next[key] = { ...next[key]!, open: source.open, close: source.close };
+        }
+      });
+      return next;
+    });
+    showMsg("success", "Horarios copiados a los días abiertos");
+  };
 
   const settings = (biz?.settings as unknown as BusinessSettings) ?? {
     notifications: { whatsapp: false, email: false, reminderHours: [] },
@@ -340,103 +357,122 @@ export default function SettingsPage() {
 
       {/* Working Hours — RESPONSIVE FIX */}
       <Card>
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "rgba(0,98,255,0.1)" }}
-          >
-            <Clock size={18} style={{ color: "#0062FF" }} />
-          </div>
-          <div>
-            <h2
-              className="text-base font-semibold"
-              style={{ color: "#F2F2F2" }}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div
+              className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: "rgba(0,98,255,0.1)" }}
             >
-              Horario de Atención
-            </h2>
-            <p className="text-xs" style={{ color: "#909098" }}>
-              Define los horarios de cada día
-            </p>
+              <Clock size={18} style={{ color: "#0062FF" }} />
+            </div>
+            <div>
+              <h2
+                className="text-base font-semibold"
+                style={{ color: "#F2F2F2" }}
+              >
+                Horario de Atención
+              </h2>
+              <p className="text-xs" style={{ color: "#909098" }}>
+                Define los horarios de cada día
+              </p>
+            </div>
           </div>
+          
+          {Object.values(hours).some(h => h.active) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const firstActive = DAYS.find(d => hours[d.key]?.active);
+                if (firstActive) copyHoursToAll(firstActive.key);
+              }}
+              className="text-xs h-8 gap-1.5"
+            >
+              <Copy size={13} />
+              Copiar a todos
+            </Button>
+          )}
         </div>
-        <div className="space-y-2">
+
+        <div className="space-y-3">
           {DAYS.map(({ key, label }) => {
             const h: DayHours = getHour(hours, key);
             return (
               <div
                 key={key}
-                className="rounded-xl p-3"
-                style={{ background: "#212125", border: "1px solid #2E2E33" }}
+                className={`rounded-2xl p-4 transition-all duration-200 ${h.active ? 'bg-brand-500/5 border-brand-500/20' : 'bg-[#1C1C21] border-[#2E2E33]'}`}
+                style={{ border: "1px solid" }}
               >
-                {/* Row 1: día + toggle */}
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: "#F2F2F2" }}
-                  >
-                    {label}
-                  </span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-xs" style={{ color: "#909098" }}>
-                      {h.active ? "Abierto" : "Cerrado"}
-                    </span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={h.active}
-                        onChange={(e) =>
-                          updateHour(key, "active", e.target.checked)
-                        }
-                        className="sr-only peer"
-                      />
-                      <div
-                        className="w-9 h-5 rounded-full transition-colors peer-checked:bg-blue-600"
-                        style={{ background: h.active ? "#0062FF" : "#3A3A3F" }}
-                      />
-                      <div
-                        className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
-                        style={{
-                          transform: h.active
-                            ? "translateX(16px)"
-                            : "translateX(0)",
-                        }}
-                      />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Day and Status Toggle */}
+                  <div className="flex items-center justify-between sm:justify-start gap-4">
+                    <div className="w-24">
+                      <span
+                        className={`text-sm font-bold ${h.active ? 'text-white' : 'text-[#8A8A90]'}`}
+                      >
+                        {label}
+                      </span>
                     </div>
-                  </label>
-                </div>
-                {/* Row 2: horarios — solo si activo */}
-                {h.active && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="time"
-                      value={h.open}
-                      onChange={(e) => updateHour(key, "open", e.target.value)}
-                      className="input-base flex-1 py-2 text-sm"
-                    />
-                    <span
-                      className="text-sm font-bold flex-shrink-0"
-                      style={{ color: "#909098" }}
-                    >
-                      —
-                    </span>
-                    <input
-                      type="time"
-                      value={h.close}
-                      onChange={(e) => updateHour(key, "close", e.target.value)}
-                      className="input-base flex-1 py-2 text-sm"
-                    />
+                    
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={h.active}
+                          onChange={(e) =>
+                            updateHour(key, "active", e.target.checked)
+                          }
+                          className="sr-only peer"
+                        />
+                        <div
+                          className="w-10 h-5 rounded-full transition-colors bg-[#3A3A3F] peer-checked:bg-blue-600"
+                        />
+                        <div
+                          className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"
+                        />
+                      </div>
+                      <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${h.active ? 'text-brand-400' : 'text-[#606068]'}`}>
+                        {h.active ? "Abierto" : "Cerrado"}
+                      </span>
+                    </label>
                   </div>
-                )}
+
+                  {/* Time Selectors — Refined for mobile to prevent overflow */}
+                  {h.active && (
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-fade-in flex-1 sm:max-w-[340px] w-full items-end">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">Desde</p>
+                        <input
+                          type="time"
+                          value={h.open}
+                          onChange={(e) => updateHour(key, "open", e.target.value)}
+                          className="w-full bg-[#16161C] border border-[#2E2E33] rounded-xl px-3 py-2.5 text-sm text-white font-medium focus:border-brand-500 outline-none transition-all"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">Hasta</p>
+                        <input
+                          type="time"
+                          value={h.close}
+                          onChange={(e) => updateHour(key, "close", e.target.value)}
+                          className="w-full bg-[#16161C] border border-[#2E2E33] rounded-xl px-3 py-2.5 text-sm text-white font-medium focus:border-brand-500 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
-          <div className="flex justify-end pt-2">
+          
+          <div className="flex justify-end pt-4">
             <Button
               onClick={handleSaveHours}
               loading={savingHours}
               leftIcon={<Save size={16} />}
+              className="w-full sm:w-auto"
             >
-              Guardar horario
+              Guardar todos los horarios
             </Button>
           </div>
         </div>

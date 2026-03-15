@@ -79,6 +79,7 @@ export default function ServicesPage() {
   const [form, setForm] = useState<ServiceForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isCustom, setIsCustom] = useState(false);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -123,6 +124,7 @@ export default function ServicesPage() {
   const openNew = () => {
     setForm(emptyForm());
     setEditingId(null);
+    setIsCustom(false);
     setShowForm(true);
   };
 
@@ -137,6 +139,7 @@ export default function ServicesPage() {
       is_active: s.is_active ?? true,
     });
     setEditingId(s.id);
+    setIsCustom(![30, 60, 90, 120, 150].includes(s.duration_min));
     setShowForm(true);
   };
 
@@ -207,7 +210,7 @@ export default function ServicesPage() {
     );
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
+    <div className="space-y-6 animate-fade-in max-w-3xl w-full overflow-x-hidden">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "#F2F2F2" }}>
@@ -336,29 +339,55 @@ export default function ServicesPage() {
                 >
                   Duración (min)
                 </label>
-                <div className="relative">
-                  <Clock
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "#909098" }}
-                  />
-                  <select
-                    value={form.duration_min}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        duration_min: Number(e.target.value),
-                      }))
-                    }
-                    className="input-base pl-9"
-                    style={{ backgroundColor: "#212125" }}
-                  >
-                    <option value={30}>30 minutos</option>
-                    <option value={60}>1 hora</option>
-                    <option value={90}>1:30 minutos</option>
-                    <option value={120}>2 horas</option>
-                    <option value={150}>2:30 minutos</option>
-                  </select>
+                <div className="flex flex-col gap-2">
+                  <div className="relative">
+                    <Clock
+                      size={16}
+                      className="absolute left-3 top-1/2 -translate-y-1/2"
+                      style={{ color: "#909098" }}
+                    />
+                    <select
+                      value={isCustom ? "custom" : form.duration_min}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setIsCustom(true);
+                          setForm(f => ({ ...f, duration_min: 0 }));
+                        } else {
+                          setIsCustom(false);
+                          setForm((f) => ({
+                            ...f,
+                            duration_min: Number(val),
+                          }));
+                        }
+                      }}
+                      className="input-base pl-9"
+                      style={{ backgroundColor: "#212125" }}
+                    >
+                      <option value={30}>30 minutos</option>
+                      <option value={60}>1 hora</option>
+                      <option value={90}>1:30 minutos</option>
+                      <option value={120}>2 horas</option>
+                      <option value={150}>2:30 minutos</option>
+                      <option value="custom">Personalizado...</option>
+                    </select>
+                  </div>
+                  {isCustom && (
+                    <div className="animate-fade-in relative">
+                       <input
+                        type="number"
+                        min="1"
+                        placeholder="¿Cuántos minutos?"
+                        value={form.duration_min === 0 ? "" : form.duration_min}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setForm(f => ({ ...f, duration_min: val === "" ? 0 : Number(val) }));
+                        }}
+                        className="input-base pr-12"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#909098] uppercase">min</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div>

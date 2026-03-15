@@ -232,7 +232,7 @@ export function Sidebar({
                   className="text-[10px] uppercase tracking-wider"
                   style={{ color: "#8A8A90" }}
                 >
-                  {user.role}
+                  {user.role === 'owner' ? 'Perfil' : user.role}
                 </p>
               </div>
             </Link>

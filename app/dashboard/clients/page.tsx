@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Plus, Phone, Mail, Star } from 'lucide-react'
+import { Search, Plus, Phone, Mail, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -69,15 +69,40 @@ export default function ClientsPage() {
         </Link>
       </div>
 
-      <div className="relative">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Buscar por nombre, teléfono, email o etiqueta..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="input-base pl-10"
-        />
+      <div className="relative group max-w-2xl">
+        {/* Subtle background glow on focus */}
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-500/0 via-brand-500/20 to-brand-500/0 rounded-[1.3rem] opacity-0 group-focus-within:opacity-100 blur-sm transition-opacity duration-500" />
+        
+        <div className="relative flex items-center">
+          <Search 
+            size={18} 
+            className="absolute left-4 text-[#8A8A90] group-focus-within:text-brand-500 transition-colors duration-300" 
+          />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, teléfono, email o etiqueta..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full bg-[#16161A]/80 backdrop-blur-xl border border-brand-500/10 hover:border-brand-500/30 focus:border-brand-500/50 rounded-2xl py-3.5 pl-12 pr-12 text-sm text-[#F2F2F2] placeholder-[#5A5A62] outline-none transition-all duration-300 focus:ring-4 focus:ring-brand-500/10 shadow-2xl"
+          />
+          
+          {/* Action clues / Clear button */}
+          <div className="absolute right-4 flex items-center gap-2">
+            {query ? (
+              <button 
+                onClick={() => setQuery('')}
+                className="p-1 rounded-md hover:bg-white/10 text-[#8A8A90] hover:text-white transition-colors"
+                title="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded border border-[#2E2E33] bg-[#1C1C21] text-[10px] font-bold text-[#5A5A62] tracking-tighter">
+                <span>/</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Stats */}

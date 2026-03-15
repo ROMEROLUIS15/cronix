@@ -10,28 +10,34 @@ import type { Database } from '@/types/database.types'
 
 type AppointmentRow = Database['public']['Tables']['appointments']['Row'] & {
   service?: { name: string; price: number } | null
-  client?: { name: string } | null
+  client?:  { name: string } | null
 }
-
-type ExpenseRow = Database['public']['Tables']['expenses']['Row']
-type TransactionRow = Database['public']['Tables']['transactions']['Row']
 
 interface ReportData {
-  totalAppointments: number
+  totalAppointments:     number
   completedAppointments: number
   cancelledAppointments: number
-  totalClients: number
-  totalRevenue: number
-  totalExpenses: number
-  netProfit: number
-  byService: Record<string, { count: number; revenue: number }>
-  recentAppointments: AppointmentRow[]
+  totalClients:          number
+  totalRevenue:          number
+  totalExpenses:         number
+  netProfit:             number
+  byService:             Record<string, { count: number; revenue: number }>
+  recentAppointments:    AppointmentRow[]
 }
+
+// ── Status color map ──────────────────────────────────────────────────────────
+const STATUS_STYLES = {
+  completed: { bg: 'rgba(48,209,88,0.1)',  color: '#30D158', label: 'Completada' },
+  cancelled: { bg: 'rgba(255,59,48,0.1)',  color: '#FF3B30', label: 'Cancelada'  },
+  confirmed: { bg: 'rgba(56,132,255,0.1)', color: '#3884FF', label: 'Confirmada' },
+  pending:   { bg: 'rgba(255,214,10,0.1)', color: '#FFD60A', label: 'Pendiente'  },
+  no_show:   { bg: 'rgba(150,150,150,0.1)', color: '#909098', label: 'No se presentó' },
+} as const
 
 export default function ReportsPage() {
   const supabase = createClient()
-  const [data, setData] = useState<ReportData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data,         setData]         = useState<ReportData | null>(null)
+  const [loading,      setLoading]      = useState(true)
   const [activeReport, setActiveReport] = useState<string | null>(null)
 
   useEffect(() => {
@@ -44,11 +50,9 @@ export default function ReportsPage() {
       if (!dbUser?.business_id) { setLoading(false); return }
 
       const bId = dbUser.business_id
-
-      // Get current month range
-      const now = new Date()
+      const now        = new Date()
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString()
+      const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString()
 
       const [aptsRes, clientsRes, txnsRes, expensesRes] = await Promise.all([
         supabase
@@ -77,11 +81,10 @@ export default function ReportsPage() {
           .lte('expense_date', monthEnd.split('T')[0]),
       ])
 
-      const apts = (aptsRes.data ?? []) as AppointmentRow[]
-      const totalRevenue = (txnsRes.data ?? []).reduce((s, t) => s + (t.net_amount ?? 0), 0)
+      const apts          = (aptsRes.data ?? []) as AppointmentRow[]
+      const totalRevenue  = (txnsRes.data ?? []).reduce((s, t) => s + (t.net_amount ?? 0), 0)
       const totalExpenses = (expensesRes.data ?? []).reduce((s, e) => s + e.amount, 0)
 
-      // Group by service
       const byService: Record<string, { count: number; revenue: number }> = {}
       apts.forEach(apt => {
         const name = apt.service?.name ?? 'Sin servicio'
@@ -91,95 +94,80 @@ export default function ReportsPage() {
       })
 
       setData({
-        totalAppointments:    apts.length,
+        totalAppointments:     apts.length,
         completedAppointments: apts.filter(a => a.status === 'completed').length,
         cancelledAppointments: apts.filter(a => a.status === 'cancelled').length,
-        totalClients:         clientsRes.count ?? 0,
+        totalClients:          clientsRes.count ?? 0,
         totalRevenue,
         totalExpenses,
-        netProfit:            totalRevenue - totalExpenses,
+        netProfit:             totalRevenue - totalExpenses,
         byService,
-        recentAppointments:   apts.slice(0, 10),
+        recentAppointments:    apts.slice(0, 10),
       })
       setLoading(false)
     }
     loadData()
   }, [])
 
-  const handleDownloadPDF = () => {
+  const handleDownloadReport = () => {
     if (!data) return
     const lines = [
-      'REPORTE MENSUAL - AGENDO',
+      'REPORTE MENSUAL - CRONIX',
       '========================',
       '',
-      `Citas totales: ${data.totalAppointments}`,
-      `Citas completadas: ${data.completedAppointments}`,
-      `Citas canceladas: ${data.cancelledAppointments}`,
-      `Total clientes: ${data.totalClients}`,
+      `Citas totales:      ${data.totalAppointments}`,
+      `Citas completadas:  ${data.completedAppointments}`,
+      `Citas canceladas:   ${data.cancelledAppointments}`,
+      `Total clientes:     ${data.totalClients}`,
       '',
-      `Ingresos del mes: ${formatCurrency(data.totalRevenue)}`,
-      `Gastos del mes: ${formatCurrency(data.totalExpenses)}`,
-      `Ganancia neta: ${formatCurrency(data.netProfit)}`,
+      `Ingresos del mes:   ${formatCurrency(data.totalRevenue)}`,
+      `Gastos del mes:     ${formatCurrency(data.totalExpenses)}`,
+      `Ganancia neta:      ${formatCurrency(data.netProfit)}`,
       '',
       'SERVICIOS MÁS POPULARES:',
       ...Object.entries(data.byService)
         .sort((a, b) => b[1].count - a[1].count)
         .map(([name, { count, revenue }]) =>
-          `  ${name}: ${count} citas - ${formatCurrency(revenue)}`
+          `  ${name}: ${count} citas — ${formatCurrency(revenue)}`
         ),
     ]
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `reporte-agendo-${new Date().toISOString().split('T')[0]}.txt`
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `reporte-cronix-${new Date().toISOString().split('T')[0]}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const reportCards = [
-    {
-      id: 'appointments',
-      title: 'Reporte de Citas',
-      sub: 'Citas por período, estado y servicio',
-      period: 'Mensual', icon: '📅',
-    },
-    {
-      id: 'finances',
-      title: 'Balance Financiero',
-      sub: 'Ingresos vs gastos',
-      period: 'Mensual', icon: '💰',
-    },
-    {
-      id: 'clients',
-      title: 'Reporte de Clientes',
-      sub: 'Total y métricas CRM',
-      period: 'General', icon: '👥',
-    },
-    {
-      id: 'services',
-      title: 'Servicios Populares',
-      sub: 'Ranking por frecuencia e ingresos',
-      period: 'Mensual', icon: '⭐',
-    },
+    { id: 'appointments', title: 'Reporte de Citas',    sub: 'Citas por estado y servicio',    period: 'Mensual', icon: '📅' },
+    { id: 'finances',     title: 'Balance Financiero',  sub: 'Ingresos vs gastos',             period: 'Mensual', icon: '💰' },
+    { id: 'clients',      title: 'Reporte de Clientes', sub: 'Total y métricas CRM',           period: 'General', icon: '👥' },
+    { id: 'services',     title: 'Servicios Populares', sub: 'Ranking por frecuencia e ingresos', period: 'Mensual', icon: '⭐' },
   ]
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin h-8 w-8 border-4 border-brand-600 border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-4 border-t-transparent rounded-full"
+          style={{ borderColor: '#0062FF', borderTopColor: 'transparent' }} />
       </div>
     )
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
+
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Reportes</h1>
-          <p className="text-muted-foreground text-sm">Análisis del rendimiento de tu negocio — mes actual</p>
+          <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>Reportes</h1>
+          <p className="text-sm" style={{ color: '#909098' }}>
+            Análisis del rendimiento de tu negocio — mes actual
+          </p>
         </div>
-        <Button leftIcon={<Download size={16} />} onClick={handleDownloadPDF}>
+        <Button leftIcon={<Download size={16} />} onClick={handleDownloadReport}>
           Exportar reporte
         </Button>
       </div>
@@ -204,96 +192,119 @@ export default function ReportsPage() {
         />
       </div>
 
-      {/* Report cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+      {/* Report selector cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {reportCards.map(r => (
-          <Card
+          <div
             key={r.id}
-            className={`cursor-pointer transition-all hover:border-brand-300 hover:shadow-md ${
-              activeReport === r.id ? 'border-brand-500 bg-brand-50/30' : ''
-            }`}
+            className="cursor-pointer transition-all duration-200 rounded-2xl p-4"
             onClick={() => setActiveReport(activeReport === r.id ? null : r.id)}
+            style={{
+              background: activeReport === r.id ? 'rgba(0,98,255,0.1)' : '#1A1A1F',
+              border:     activeReport === r.id ? '1px solid rgba(0,98,255,0.35)' : '1px solid #2E2E33',
+            }}
           >
             <div className="flex items-start gap-4">
               <span className="text-3xl">{r.icon}</span>
-              <div className="flex-1">
-                <p className="font-semibold text-foreground">{r.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{r.sub}</p>
-                <span className="inline-block mt-2 px-2 py-0.5 bg-brand-100 text-brand-700 text-xs rounded-full">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm" style={{ color: '#F2F2F2' }}>{r.title}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#909098' }}>{r.sub}</p>
+                <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold"
+                  style={{ background: 'rgba(0,98,255,0.1)', color: '#3884FF' }}>
                   {r.period}
                 </span>
               </div>
               <Button
                 variant="secondary" size="sm"
                 leftIcon={<Download size={14} />}
-                onClick={(e) => { e.stopPropagation(); handleDownloadPDF() }}
+                onClick={(e) => { e.stopPropagation(); handleDownloadReport() }}
               >
-                PDF
+                TXT
               </Button>
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 
-      {/* Detail panels */}
+      {/* ── Detail: Appointments ── */}
       {activeReport === 'appointments' && data && (
         <Card>
-          <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Calendar size={18} className="text-brand-600" /> Citas del mes
+          <h2 className="text-base font-semibold mb-4 flex items-center gap-2"
+            style={{ color: '#F2F2F2' }}>
+            <Calendar size={18} style={{ color: '#0062FF' }} /> Citas del mes
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             {[
-              { label: 'Total', value: data.totalAppointments, color: 'text-foreground' },
-              { label: 'Completadas', value: data.completedAppointments, color: 'text-green-600' },
-              { label: 'Canceladas', value: data.cancelledAppointments, color: 'text-red-500' },
+              { label: 'Total',       value: data.totalAppointments,     color: '#F2F2F2'  },
+              { label: 'Completadas', value: data.completedAppointments, color: '#30D158'  },
+              { label: 'Canceladas',  value: data.cancelledAppointments, color: '#FF3B30'  },
             ].map(s => (
-              <div key={s.label} className="text-center p-3 rounded-xl bg-surface">
-                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
+              <div key={s.label} className="text-center p-3 rounded-xl"
+                style={{ background: '#212125', border: '1px solid #2E2E33' }}>
+                <p className="text-2xl font-bold" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-xs mt-1" style={{ color: '#909098' }}>{s.label}</p>
               </div>
             ))}
           </div>
           {data.recentAppointments.length > 0 && (
-            <div className="space-y-2 mt-2">
-              <p className="text-sm font-medium text-foreground mb-2">Últimas citas</p>
-              {data.recentAppointments.map(apt => (
-                <div key={apt.id} className="flex items-center justify-between p-3 rounded-xl bg-surface text-sm">
-                  <div>
-                    <p className="font-medium text-foreground">{apt.client?.name ?? '—'}</p>
-                    <p className="text-xs text-muted-foreground">{apt.service?.name ?? '—'} · {formatDate(apt.start_at, 'd MMM, HH:mm')}</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium mb-2" style={{ color: '#F2F2F2' }}>Últimas citas</p>
+              {data.recentAppointments.map(apt => {
+                const statusKey = (apt.status || 'pending') as keyof typeof STATUS_STYLES
+                const s = STATUS_STYLES[statusKey] || STATUS_STYLES.pending
+                return (
+                  <div key={apt.id}
+                    className="flex items-center justify-between p-3 rounded-xl"
+                    style={{ background: '#212125', border: '1px solid #2E2E33' }}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" style={{ color: '#F2F2F2' }}>
+                        {apt.client?.name ?? '—'}
+                      </p>
+                      <p className="text-xs truncate" style={{ color: '#909098' }}>
+                        {apt.service?.name ?? '—'} · {formatDate(apt.start_at, 'd MMM, HH:mm')}
+                      </p>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold ml-2 flex-shrink-0"
+                      style={{ background: s.bg, color: s.color }}>
+                      {s.label}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    apt.status === 'completed' ? 'bg-green-100 text-green-700' :
-                    apt.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-                    apt.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>{apt.status}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>
       )}
 
+      {/* ── Detail: Finances ── */}
       {activeReport === 'finances' && data && (
         <Card>
-          <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-            <DollarSign size={18} className="text-brand-600" /> Balance del mes
+          <h2 className="text-base font-semibold mb-4 flex items-center gap-2"
+            style={{ color: '#F2F2F2' }}>
+            <DollarSign size={18} style={{ color: '#0062FF' }} /> Balance del mes
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {[
-              { label: 'Ingresos', value: data.totalRevenue, color: 'text-green-600', bar: 'bg-green-500' },
-              { label: 'Gastos', value: data.totalExpenses, color: 'text-red-500', bar: 'bg-red-400' },
-              { label: 'Ganancia neta', value: data.netProfit, color: data.netProfit >= 0 ? 'text-brand-600' : 'text-red-600', bar: 'bg-brand-600' },
+              { label: 'Ingresos',      value: data.totalRevenue,  color: '#30D158', barBg: 'rgba(48,209,88,0.5)'  },
+              { label: 'Gastos',        value: data.totalExpenses, color: '#FF3B30', barBg: 'rgba(255,59,48,0.5)'  },
+              { label: 'Ganancia neta', value: data.netProfit,     color: data.netProfit >= 0 ? '#3884FF' : '#FF3B30', barBg: 'rgba(56,132,255,0.5)' },
             ].map(s => (
               <div key={s.label}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">{s.label}</span>
-                  <span className={`font-semibold ${s.color}`}>{formatCurrency(s.value)}</span>
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span style={{ color: '#909098' }}>{s.label}</span>
+                  <span className="font-semibold" style={{ color: s.color }}>
+                    {formatCurrency(s.value)}
+                  </span>
                 </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div className={`h-full ${s.bar} rounded-full`}
-                    style={{ width: data.totalRevenue > 0 ? `${Math.min(Math.abs(s.value) / data.totalRevenue * 100, 100)}%` : '0%' }} />
+                <div className="h-2 rounded-full overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      background: s.barBg,
+                      width: data.totalRevenue > 0
+                        ? `${Math.min(Math.abs(s.value) / data.totalRevenue * 100, 100)}%`
+                        : '0%',
+                    }} />
                 </div>
               </div>
             ))}
@@ -301,25 +312,34 @@ export default function ReportsPage() {
         </Card>
       )}
 
+      {/* ── Detail: Services ── */}
       {activeReport === 'services' && data && (
         <Card>
-          <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Star size={18} className="text-brand-600" /> Servicios populares
+          <h2 className="text-base font-semibold mb-4 flex items-center gap-2"
+            style={{ color: '#F2F2F2' }}>
+            <Star size={18} style={{ color: '#0062FF' }} /> Servicios populares
           </h2>
           {Object.keys(data.byService).length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Sin citas este mes</p>
+            <p className="text-sm text-center py-4" style={{ color: '#909098' }}>
+              Sin citas este mes
+            </p>
           ) : (
             <div className="space-y-3">
               {Object.entries(data.byService)
                 .sort((a, b) => b[1].count - a[1].count)
                 .map(([name, { count, revenue }], i) => (
-                  <div key={name} className="flex items-center gap-4 p-3 rounded-xl bg-surface">
-                    <span className="text-lg font-bold text-muted-foreground w-6">#{i + 1}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{name}</p>
-                      <p className="text-xs text-muted-foreground">{count} citas</p>
+                  <div key={name} className="flex items-center gap-4 p-3 rounded-xl"
+                    style={{ background: '#212125', border: '1px solid #2E2E33' }}>
+                    <span className="text-lg font-bold w-6 flex-shrink-0" style={{ color: '#6A6A72' }}>
+                      #{i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: '#F2F2F2' }}>{name}</p>
+                      <p className="text-xs" style={{ color: '#909098' }}>{count} citas</p>
                     </div>
-                    <p className="text-sm font-semibold text-green-600">{formatCurrency(revenue)}</p>
+                    <p className="text-sm font-semibold flex-shrink-0" style={{ color: '#30D158' }}>
+                      {formatCurrency(revenue)}
+                    </p>
                   </div>
                 ))}
             </div>
@@ -327,14 +347,20 @@ export default function ReportsPage() {
         </Card>
       )}
 
+      {/* ── Detail: Clients ── */}
       {activeReport === 'clients' && data && (
         <Card>
-          <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Users size={18} className="text-brand-600" /> Clientes
+          <h2 className="text-base font-semibold mb-4 flex items-center gap-2"
+            style={{ color: '#F2F2F2' }}>
+            <Users size={18} style={{ color: '#0062FF' }} /> Clientes registrados
           </h2>
-          <div className="text-center py-4">
-            <p className="text-5xl font-black text-brand-600">{data.totalClients}</p>
-            <p className="text-muted-foreground text-sm mt-2">clientes registrados en tu negocio</p>
+          <div className="text-center py-6">
+            <p className="text-6xl font-black" style={{ color: '#0062FF' }}>
+              {data.totalClients}
+            </p>
+            <p className="text-sm mt-2" style={{ color: '#909098' }}>
+              clientes registrados en tu negocio
+            </p>
           </div>
         </Card>
       )}

@@ -35,13 +35,9 @@ export function SessionTimeout() {
   }, [])
 
   useEffect(() => {
-    // Start inactivity timer
     resetInactivity()
-
-    // Start absolute session timer — fires once, cannot be reset
     absoluteRef.current = setTimeout(() => signout(), ABSOLUTE_TIMEOUT_MS)
 
-    // Reset inactivity timer on any user activity
     ACTIVITY_EVENTS.forEach(event =>
       window.addEventListener(event, resetInactivity, { passive: true })
     )
