@@ -64,24 +64,25 @@ export default function ForgotPasswordPage() {
           }}
         />
 
-        <div className="flex items-center gap-3 mb-8 justify-center relative z-10">
-          <div 
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl overflow-hidden flex-shrink-0"
-            style={{ 
+        {/* Brand mark — stacked: icon on top, lettering below */}
+        <div className="flex flex-col items-center gap-2 mb-8 relative z-10">
+          <div
+            className="h-14 w-14 rounded-2xl overflow-hidden flex-shrink-0"
+            style={{
               border: "1px solid rgba(56,132,255,0.25)",
-              boxShadow: "0 0 20px rgba(56,132,255,0.2)"
+              boxShadow: "0 0 24px rgba(56,132,255,0.25)"
             }}
           >
             <Image
               src="/cronix-logo.jpg"
               alt="Cronix Logo"
-              width={48}
-              height={48}
+              width={56}
+              height={56}
               className="h-full w-full object-cover"
               unoptimized
             />
           </div>
-          <div className="relative h-7 w-28 sm:h-8 sm:w-32">
+          <div className="relative h-7 w-28">
             <Image
               src="/cronix-letras.jpg"
               alt="Cronix"
@@ -91,6 +92,7 @@ export default function ForgotPasswordPage() {
             />
           </div>
         </div>
+
 
         <h1 className="text-2xl font-black text-center mb-2 text-white relative z-10" style={{ letterSpacing: "-0.035em" }}>
           Recuperar contraseña

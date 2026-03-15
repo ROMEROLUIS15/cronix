@@ -381,7 +381,7 @@ export default function DashboardPage() {
     <div className="flex h-full relative">
       {/* ── MAIN CONTENT ─────────────────────────────────────── */}
       <div
-        className={`flex-1 min-w-0 space-y-5 animate-fade-in transition-all duration-300
+        className={`flex-1 min-w-0 space-y-4 md:space-y-3 animate-fade-in transition-all duration-300
         ${dayPanelOpen || panelOpen ? "lg:mr-80 xl:mr-96" : ""}`}
       >
         {/* Header */}
@@ -450,10 +450,10 @@ export default function DashboardPage() {
 
         {/* ── AGENDA TAB ── */}
         {tab === "agenda" && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Month navigator */}
             <div
-              className="flex items-center justify-between px-5 py-4 rounded-2xl"
+              className="flex items-center justify-between px-4 md:px-5 py-3 rounded-2xl"
               style={{
                 background: "linear-gradient(135deg, #1A1A22 0%, #16161E 100%)",
                 border: "1px solid #2E2E3E",
@@ -587,7 +587,7 @@ export default function DashboardPage() {
                       <button
                         key={day.toISOString()}
                         onClick={() => handleDayClick(day)}
-                        className="relative min-h-[72px] sm:min-h-[88px] md:min-h-[96px] p-1.5 sm:p-2 text-left transition-all duration-150 group"
+                        className="relative min-h-[72px] sm:min-h-[76px] md:min-h-[80px] p-1.5 sm:p-2 text-left transition-all duration-150 group"
                         style={{
                           borderRight:
                             colIdx < 6 ? "1px solid #242430" : "none",

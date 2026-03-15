@@ -4,10 +4,10 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { signout } from '@/app/login/actions'
 
 // ── Constants ──────────────────────────────────────────────────────────────
-/** Sign out after 15 min of inactivity */
-const INACTIVITY_TIMEOUT_MS  = 15 * 60 * 1000          // 15 min
+/** Sign out after 30 min of inactivity */
+const INACTIVITY_TIMEOUT_MS  = 30 * 60 * 1000          // 30 min
 /** Show warning this many ms before inactivity timeout fires */
-const INACTIVITY_WARNING_MS  = 2  * 60 * 1000          // 2 min before → at 13 min
+const INACTIVITY_WARNING_MS  = 2  * 60 * 1000          // 2 min before → at 28 min
 
 /** Absolute session limit: 12 hours */
 const ABSOLUTE_TIMEOUT_MS    = 12 * 60 * 60 * 1000     // 12 h
