@@ -9,11 +9,11 @@ interface DashboardLayoutProps { children: React.ReactNode }
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   const supabase = await createClient()
 
-  // ── Auth check (server-side, no round trip) ───────────────────────────────
+  // ── Auth check — server-side, no client round trip ────────────────────────
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // ── Single parallel query: user + business in one join ────────────────────
+  // ── Single query: user + business via join ────────────────────────────────
   const { data: dbUser } = await supabase
     .from('users')
     .select('name, role, business_id, avatar_url, color, businesses(name, category)')
@@ -21,11 +21,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     .single()
 
   // ── Onboarding gate ───────────────────────────────────────────────────────
-  // Users without a business (new signups via email or Google) must complete
-  // setup before accessing any dashboard page. Exclude /setup itself.
-  const headersList = await headers()
-  const pathname    = headersList.get('x-invoke-path') ?? headersList.get('x-pathname') ?? ''
-  const isSetupPage = pathname.includes('/setup')
+  // New users (Google or email) have business_id = null until setup completes.
+  // next-url header is set by Next.js App Router for the current request path.
+  const headersList  = await headers()
+  const nextUrl      = headersList.get('next-url') ?? ''
+  const isSetupPage  = nextUrl.includes('/setup') || nextUrl === ''
 
   if (!dbUser?.business_id && !isSetupPage) {
     redirect('/dashboard/setup')

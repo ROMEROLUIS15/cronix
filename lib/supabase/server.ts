@@ -1,16 +1,19 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { Database } from '@/types/database.types'
 
+/**
+ * Standard server client — uses ANON_KEY, respects RLS.
+ * Use this in Server Components, Server Actions, and Route Handlers
+ * for all user-facing operations.
+ */
 export async function createClient() {
   const cookieStore = await cookies()
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
   return createServerClient<Database>(
-    supabaseUrl,
-    supabaseServiceKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
@@ -22,11 +25,28 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Ignorar en componentes de servidor sin respuesta directa
+            // Ignore in Server Components without direct response access
           }
         },
       },
-      // Eliminamos el fetch global personalizado ya que puede causar problemas con redirects en Next.js
+    }
+  )
+}
+
+/**
+ * Admin client — uses SERVICE_ROLE_KEY, bypasses RLS.
+ * Use ONLY for privileged operations: deleting auth users, seeding, etc.
+ * Never expose this client to the browser or use it for user data reads.
+ */
+export function createAdminClient() {
+  return createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession:   false,
+      },
     }
   )
 }
