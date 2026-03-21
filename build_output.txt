@@ -1,0 +1,89 @@
+﻿  Ôû▓ Next.js 14.2.29
+  - Environments: .env.local
+  - Experiments (use with caution):
+    ┬À turbo
+
+   Creating an optimized production build ...
+> [PWA] Compile server
+> [PWA] Compile server
+> [PWA] Compile client (static)
+> [PWA] Auto register service worker with: C:\Users\luisc.DESKTOP-LGM74MM\Documents\PROYECTOS PROGRAMACION\cronix\node_modules\next-pwa\register.js
+> [PWA] Service worker: C:\Users\luisc.DESKTOP-LGM74MM\Documents\PROYECTOS PROGRAMACION\cronix\public\sw.js
+> [PWA]   url: /sw.js
+> [PWA]   scope: /
+ Ô£ô Compiled successfully
+   Linting and checking validity of types ...
+npx : 
+En línea: 1 
+Carácter: 1
++ npx next build 
+2>&1 | Out-File 
+-FilePath C:\Users\lu
+isc.DESKTOP-LGM74 ...
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (:String   
+ ) [], RemoteExce    
+ption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+Failed to compile.
+
+./app/dashboard/appoi
+ntments/new/page.tsx
+130:6  Warning: 
+React Hook useEffect 
+has a missing 
+dependency: 
+'supabase'. Either 
+include it or remove 
+the dependency 
+array.  react-hooks/e
+xhaustive-deps
+
+./app/dashboard/appoi
+ntments/[id]/edit/pag
+e.tsx
+169:6  Warning: 
+React Hook useEffect 
+has missing 
+dependencies: 
+'params.id' and 
+'supabase'. Either 
+include them or 
+remove the 
+dependency array.  re
+act-hooks/exhaustive-
+deps
+
+./app/dashboard/clien
+ts/new/page.tsx
+50:6  Warning: React 
+Hook useEffect has a 
+missing dependency: 
+'supabase'. Either 
+include it or remove 
+the dependency 
+array.  react-hooks/e
+xhaustive-deps
+
+./lib/supabase/tenant
+-client.ts
+46:7  Error: 
+Definition for rule '
+@typescript-eslint/ba
+n-ts-comment' was 
+not found.  @typescri
+pt-eslint/ban-ts-comm
+ent
+
+info  - Need to 
+disable some ESLint 
+rules? Learn more 
+here: https://nextjs.
+org/docs/basic-featur
+es/eslint#disabling-r
+ules
