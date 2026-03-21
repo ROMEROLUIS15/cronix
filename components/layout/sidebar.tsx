@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/app/login/actions";
+import { InstallPwaButton } from "@/components/ui/install-pwa-button";
 
 const navItems = [
   { href: "/dashboard", label: "Agenda", icon: CalendarDays },
@@ -175,6 +176,11 @@ export function Sidebar({
             );
           })}
         </nav>
+
+        {/* Install PWA button — only visible on Android Chrome before install */}
+        <div className="px-3 pb-2 flex-shrink-0">
+          <InstallPwaButton />
+        </div>
 
         {/* User profile + logout */}
         {user && (
