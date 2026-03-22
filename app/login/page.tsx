@@ -9,6 +9,7 @@ import {
   BarChart3,
   Shield,
 } from "lucide-react";
+import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { useState, useTransition, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { loginSchema } from "@/lib/validations/auth";
@@ -821,6 +822,11 @@ export default function LoginPage() {
               Regístrate gratis
             </Link>
           </p>
+
+          {/* PWA install prompt */}
+          <div className="flex justify-center mt-5">
+            <PwaInstallBanner />
+          </div>
         </div>
       </div>
     </div>

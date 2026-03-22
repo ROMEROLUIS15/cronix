@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 
 export default function RootPage() {
   return (
@@ -326,6 +327,7 @@ export default function RootPage() {
           >
             Iniciar Sesión
           </Link>
+          <PwaInstallBanner />
         </div>
 
         {/* Feature pills */}
