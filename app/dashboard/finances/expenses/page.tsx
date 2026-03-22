@@ -15,6 +15,7 @@ export default function ExpensesPage() {
   const [query, setQuery] = useState('')
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!businessId) {
@@ -26,8 +27,9 @@ export default function ExpensesPage() {
       try {
         const data = await financesRepo.getExpenses(supabase, businessId!)
         setExpenses(data)
+        setFetchError(null)
       } catch (err) {
-        console.error('Error loading expenses:', err)
+        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los gastos')
       } finally {
         setLoading(false)
       }
@@ -49,6 +51,15 @@ export default function ExpensesPage() {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar los gastos</p>
+        <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
   }

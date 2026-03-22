@@ -15,6 +15,7 @@ export default function TransactionsPage() {
   const [query, setQuery] = useState('')
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!businessId) {
@@ -25,8 +26,9 @@ export default function TransactionsPage() {
       try {
         const data = await financesRepo.getTransactions(supabase, businessId!)
         setTransactions(data)
+        setFetchError(null)
       } catch (err) {
-        console.error('Error loading transactions:', err)
+        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los cobros')
       } finally {
         setLoading(false)
       }
@@ -43,6 +45,15 @@ export default function TransactionsPage() {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar los cobros</p>
+        <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
   }

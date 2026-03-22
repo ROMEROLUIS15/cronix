@@ -70,6 +70,8 @@ export default function DashboardPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     todayCount: 0,
     totalClients: 0,
@@ -91,8 +93,9 @@ export default function DashboardPage() {
         format(end, "yyyy-MM-dd"),
       );
       setMonthApts(data);
+      setFetchError(null);
     } catch (err) {
-      console.error('Error fetching month appointments:', err);
+      setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar las citas del mes');
     } finally {
       setLoading(false);
     }
@@ -111,7 +114,7 @@ export default function DashboardPage() {
       );
       setDayApts(data);
     } catch (err) {
-      console.error('Error fetching day appointments:', err);
+      setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar las citas del día');
     } finally {
       setDayLoading(false);
     }
@@ -134,7 +137,7 @@ export default function DashboardPage() {
       );
       setStats(result);
     } catch (err) {
-      console.error('Error fetching stats:', err);
+      setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar las estadísticas');
     }
   }, [supabase, businessId]);
 
@@ -186,7 +189,7 @@ export default function DashboardPage() {
       fetchDayApts();
       fetchStats();
     } catch (err) {
-      console.error('Error updating status:', err);
+      setActionError(err instanceof Error ? err.message : 'No se pudo actualizar el estado');
     } finally {
       setUpdatingStatus(false);
     }
@@ -205,7 +208,7 @@ export default function DashboardPage() {
       fetchDayApts();
       fetchStats();
     } catch (err) {
-      console.error('Error deleting appointment:', err);
+      setActionError(err instanceof Error ? err.message : 'No se pudo cancelar la cita');
     } finally {
       setDeletingId(null);
     }
@@ -1260,9 +1263,14 @@ export default function DashboardPage() {
                       Cambiar estado
                     </p>
                     <div className="space-y-2">
+                      {actionError && (
+                        <p className="text-xs px-1 py-1.5 text-center rounded-lg" style={{ color: '#FF3B30', background: 'rgba(255,59,48,0.08)' }}>
+                          {actionError}
+                        </p>
+                      )}
                       {selectedApt.status !== "confirmed" && (
                         <button
-                          onClick={() => updateStatus("confirmed")}
+                          onClick={() => { setActionError(null); updateStatus("confirmed"); }}
                           disabled={updatingStatus}
                           className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
                           style={{

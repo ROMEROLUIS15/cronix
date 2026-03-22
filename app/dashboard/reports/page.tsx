@@ -41,6 +41,7 @@ export default function ReportsPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const [data,         setData]         = useState<ReportData | null>(null)
   const [loading,      setLoading]      = useState(true)
+  const [fetchError,   setFetchError]   = useState<string | null>(null)
   const [activeReport, setActiveReport] = useState<string | null>(null)
 
   useEffect(() => {
@@ -100,7 +101,7 @@ export default function ReportsPage() {
           recentAppointments:    apts.slice(0, 10),
         })
       } catch (err) {
-        console.error('Error loading report data:', err)
+        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los reportes')
       } finally {
         setLoading(false)
       }
@@ -151,6 +152,15 @@ export default function ReportsPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin h-8 w-8 border-4 border-t-transparent rounded-full"
           style={{ borderColor: '#0062FF', borderTopColor: 'transparent' }} />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar los reportes</p>
+        <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
   }

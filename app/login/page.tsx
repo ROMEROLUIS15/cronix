@@ -9,7 +9,8 @@ import {
   BarChart3,
   Shield,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { loginSchema } from "@/lib/validations/auth";
 import { PasswordInput } from "@/components/ui/password-input";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,16 @@ const FEATURES = [
     desc: "Datos protegidos con cifrado moderno.",
   },
 ];
+
+/** Reads ?reason=inactivity from URL and calls back if present. Isolated in its
+ *  own component so useSearchParams() has a Suspense boundary (Next.js 14 req). */
+function InactivityDetector({ onInactivity }: { onInactivity: () => void }) {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('reason') === 'inactivity') onInactivity()
+  }, [searchParams, onInactivity])
+  return null
+}
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +83,12 @@ export default function LoginPage() {
       className="min-h-screen flex flex-col lg:flex-row"
       style={{ backgroundColor: "#060608" }}
     >
+      <Suspense fallback={null}>
+        <InactivityDetector onInactivity={() =>
+          setError('Tu sesión expiró por inactividad. Por favor inicia sesión de nuevo.')
+        } />
+      </Suspense>
+
       {/* ── BRAND PANEL ── */}
       <div
         className="hidden lg:flex lg:w-[46%] xl:w-[44%] flex-col relative overflow-hidden"

@@ -16,6 +16,7 @@ export default function ClientsPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -27,8 +28,9 @@ export default function ClientsPage() {
       try {
         const data = await clientsRepo.getClients(supabase, businessId!)
         setClients(data)
+        setFetchError(null)
       } catch (err) {
-        console.error('Error loading clients:', err)
+        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los clientes')
       } finally {
         setLoading(false)
       }
@@ -51,6 +53,15 @@ export default function ClientsPage() {
   const avgSpent = clients.length > 0
     ? clients.reduce((s, c) => s + (c.total_spent ?? 0), 0) / clients.length
     : 0
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar los clientes</p>
+        <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

@@ -21,6 +21,7 @@ export default function FinancesPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [loading,            setLoading]            = useState(true)
+  const [fetchError,         setFetchError]         = useState<string | null>(null)
   const [summary,            setSummary]            = useState({ totalRevenue: 0, totalExpenses: 0, netProfit: 0 })
   const [recentTransactions, setRecentTransactions] = useState<TransactionRow[]>([])
   const [recentExpenses,     setRecentExpenses]     = useState<ExpenseRow[]>([])
@@ -54,8 +55,9 @@ export default function FinancesPage() {
         setRecentTransactions(monthTxns.slice(0, 5))
         setRecentExpenses(monthExps.slice(0, 5))
         setSummary({ totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses })
+        setFetchError(null)
       } catch (err) {
-        console.error('Error loading finances:', err)
+        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar las finanzas')
       } finally {
         setLoading(false)
       }
@@ -63,11 +65,20 @@ export default function FinancesPage() {
     loadData()
   }, [supabase, businessId, contextLoading])
 
-  // ── Loading ───────────────────────────────────────────────────────────────
+  // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#0062FF' }} />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar las finanzas</p>
+        <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
   }
