@@ -1,36 +1,44 @@
 'use client'
 
 /**
- * usePwaInstall — Captures the browser's beforeinstallprompt event.
+ * usePwaInstall — Manages PWA installation for Chrome/Android and iOS.
  *
- * WHY module-level capture:
- *   beforeinstallprompt fires once, early in the page lifecycle — often
- *   BEFORE React mounts and useEffect registers a listener. If we only
- *   listen inside useEffect, we miss the event and canInstall is always false.
- *   Capturing at module level (outside React) guarantees the event is caught
- *   regardless of hydration timing.
+ * WHY two capture strategies:
+ *   beforeinstallprompt fires once, very early in the page lifecycle —
+ *   often BEFORE React mounts. We use two mechanisms in parallel:
+ *   1. An inline <script> in app/layout.tsx stores the event in
+ *      window.__pwaDeferred before any JS bundle loads.
+ *   2. Module-level listeners as a fallback for slower browsers.
+ *   On mount, the hook reads whichever stored it first.
+ *
+ * iOS Safari:
+ *   Apple does not implement beforeinstallprompt. We detect iOS and expose
+ *   `isIos: true` so the UI can show manual "Add to Home Screen" instructions.
  *
  * Returns:
- *  - canInstall:  true when the browser is ready to show the install dialog
- *  - install:     triggers the native install prompt
+ *  - canInstall:  true when Chrome/Android is ready to show install dialog
+ *  - isIos:       true when running on iOS Safari (needs manual install)
  *  - isInstalled: true when the app is already running as a standalone PWA
- *
- * Platform support:
- *  - Android Chrome / Chromium: full support
- *  - iOS Safari: not supported (Apple does not implement beforeinstallprompt)
- *  - Desktop Chrome/Edge: supported
+ *  - install:     triggers the native install prompt (Chrome/Android only)
  */
 
 import { useState, useEffect, useCallback } from 'react'
 
 interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
+  prompt:     () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+// Extend Window type for our custom property
+declare global {
+  interface Window {
+    __pwaDeferred?: BeforeInstallPromptEvent
+  }
+}
+
 // ── Module-level event store ──────────────────────────────────────────────────
-// Runs once when this module loads — before any component mounts.
-// This ensures the event is captured even if React is slow to hydrate.
+// Secondary capture: catches the event if it fires after the bundle loads
+// but before the first component mounts.
 
 let _deferred: BeforeInstallPromptEvent | null = null
 const _subscribers = new Set<() => void>()
@@ -40,14 +48,19 @@ function notifySubscribers() {
 }
 
 if (typeof window !== 'undefined') {
+  // Sync from the inline <script> capture (may already be set)
+  _deferred = window.__pwaDeferred ?? null
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault()
     _deferred = e as BeforeInstallPromptEvent
+    window.__pwaDeferred = _deferred
     notifySubscribers()
   })
 
   window.addEventListener('appinstalled', () => {
     _deferred = null
+    window.__pwaDeferred = undefined
     notifySubscribers()
   })
 }
@@ -56,6 +69,7 @@ if (typeof window !== 'undefined') {
 
 export interface PwaInstallState {
   canInstall:  boolean
+  isIos:       boolean
   isInstalled: boolean
   install:     () => Promise<void>
 }
@@ -63,18 +77,25 @@ export interface PwaInstallState {
 export function usePwaInstall(): PwaInstallState {
   const [isInstalled, setIsInstalled] = useState(false)
   const [hasEvent,    setHasEvent]    = useState(() => _deferred !== null)
+  const [isIos,       setIsIos]       = useState(false)
 
   useEffect(() => {
+    // Detect iOS (Apple does not support beforeinstallprompt)
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    setIsIos(ios)
+
     // Check standalone mode on mount
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
       return
     }
 
-    // Sync with the module-level store in case the event already fired
-    setHasEvent(_deferred !== null)
+    // Sync with both capture sources
+    const deferred = window.__pwaDeferred ?? _deferred ?? null
+    if (deferred && !_deferred) _deferred = deferred
+    setHasEvent(deferred !== null)
 
-    // Subscribe to future updates (event fires after mount, or app gets installed)
+    // Subscribe to future updates
     const onUpdate = () => {
       setHasEvent(_deferred !== null)
       if (_deferred === null) setIsInstalled(true)
@@ -97,6 +118,7 @@ export function usePwaInstall(): PwaInstallState {
 
   return {
     canInstall:  hasEvent && !isInstalled,
+    isIos,
     isInstalled,
     install,
   }

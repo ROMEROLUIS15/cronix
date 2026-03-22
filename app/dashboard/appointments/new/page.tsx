@@ -11,9 +11,11 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
+import { ReminderSelector, type ReminderMinutes } from '@/components/ui/reminder-selector'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
+import { upsertReminder } from '@/lib/repositories/reminders.repo'
 import {
   evaluateDoubleBooking,
   checkSlotOverlap,
@@ -43,6 +45,7 @@ function NewAppointmentForm() {
   const [doubleBookingMsg,   setDoubleBookingMsg]   = useState('')
   const [slotError,          setSlotError]          = useState<string | null>(null)
   const [confirmed,          setConfirmed]          = useState(false)
+  const [reminderMinutes,    setReminderMinutes]    = useState<ReminderMinutes>(0)
   const [saving,             setSaving]             = useState(false)
   const [msg,                setMsg]                = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -143,17 +146,26 @@ function NewAppointmentForm() {
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + (selectedService?.duration_min ?? 30) * 60_000)
 
-    const { error } = await supabase.from('appointments').insert({
-      business_id:      businessId,
-      client_id:        form.client_id,
-      service_id:       form.service_id,
-      assigned_user_id: form.assigned_user_id || null,
-      start_at:         startObj.toISOString(),
-      end_at:           endObj.toISOString(),
-      notes:            form.notes || null,
-      status:           'pending',
-      is_dual_booking:  doubleBookingLevel === 'warn',
-    })
+    const { data: newApt, error } = await supabase
+      .from('appointments')
+      .insert({
+        business_id:      businessId,
+        client_id:        form.client_id,
+        service_id:       form.service_id,
+        assigned_user_id: form.assigned_user_id || null,
+        start_at:         startObj.toISOString(),
+        end_at:           endObj.toISOString(),
+        notes:            form.notes || null,
+        status:           'pending',
+        is_dual_booking:  doubleBookingLevel === 'warn',
+      })
+      .select('id')
+      .single()
+
+    if (!error && newApt && reminderMinutes > 0) {
+      const remindAt = new Date(startObj.getTime() - reminderMinutes * 60_000).toISOString()
+      await upsertReminder(supabase, newApt.id, businessId, remindAt, reminderMinutes).catch(() => null)
+    }
 
     setSaving(false)
     if (error) {
@@ -385,6 +397,12 @@ function NewAppointmentForm() {
                 placeholder="Preferencias del cliente, instrucciones especiales..."
                 className="input-base resize-none" />
             </div>
+
+            {/* Recordatorio */}
+            <ReminderSelector
+              value={reminderMinutes}
+              onChange={setReminderMinutes}
+            />
           </div>
         </Card>
 

@@ -35,6 +35,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className="dark" suppressHydrationWarning>
+      {/*
+        Capture beforeinstallprompt before any JS bundle loads.
+        Chrome fires this event very early in the page lifecycle — before
+        React hydrates. This inline script stores the event in window.__pwaDeferred
+        so the usePwaInstall hook can pick it up immediately on mount.
+      */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html:
+          `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__pwaDeferred=e;});`
+        }} />
+      </head>
       <body>{children}</body>
     </html>
   )

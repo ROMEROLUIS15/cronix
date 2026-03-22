@@ -10,9 +10,15 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
+import { ReminderSelector, type ReminderMinutes } from '@/components/ui/reminder-selector'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
+import {
+  upsertReminder,
+  cancelRemindersByAppointment,
+  getAppointmentReminder,
+} from '@/lib/repositories/reminders.repo'
 import {
   evaluateDoubleBooking,
   checkSlotOverlap,
@@ -55,6 +61,7 @@ export default function EditAppointmentPage({ params }: Props) {
   const [services, setServices] = useState<Service[]>([])
   const [users,    setUsers]    = useState<User[]>([])
 
+  const [reminderMinutes,    setReminderMinutes]    = useState<ReminderMinutes>(0)
   const [doubleBookingLevel, setDoubleBookingLevel] = useState<DoubleBookingLevel>('allowed')
   const [doubleBookingMsg,   setDoubleBookingMsg]   = useState('')
   const [slotError,          setSlotError]          = useState<string | null>(null)
@@ -67,7 +74,7 @@ export default function EditAppointmentPage({ params }: Props) {
       return
     }
     async function init() {
-      const [clientsData, servicesData, usersRes, aptRes] = await Promise.all([
+      const [clientsData, servicesData, usersRes, aptRes, existingReminder] = await Promise.all([
         clientsRepo.getClients(supabase, businessId!),
         servicesRepo.getActiveServices(supabase, businessId!),
         supabase.from('users').select('id, name').eq('business_id', businessId!).eq('is_active', true),
@@ -76,6 +83,7 @@ export default function EditAppointmentPage({ params }: Props) {
           .eq('id', params.id)
           .eq('business_id', businessId!)
           .single(),
+        getAppointmentReminder(supabase, params.id).catch(() => null),
       ])
 
       setClients(clientsData as Client[])
@@ -96,6 +104,12 @@ export default function EditAppointmentPage({ params }: Props) {
         status:           apt.status           ?? 'pending',
         notes:            apt.notes            ?? '',
       })
+      if (existingReminder) {
+        const validMinutes: ReminderMinutes[] = [0, 30, 60, 120, 1440]
+        const minutes = existingReminder.minutes_before as ReminderMinutes
+        setReminderMinutes(validMinutes.includes(minutes) ? minutes : 0)
+      }
+
       setLoadingData(false)
     }
     init()
@@ -194,6 +208,15 @@ export default function EditAppointmentPage({ params }: Props) {
       })
       .eq('id', params.id)
       .eq('business_id', businessId)
+
+    if (!error) {
+      // Cancel existing pending reminder, then create new one if selected
+      await cancelRemindersByAppointment(supabase, params.id).catch(() => null)
+      if (reminderMinutes > 0 && businessId) {
+        const remindAt = new Date(startObj.getTime() - reminderMinutes * 60_000).toISOString()
+        await upsertReminder(supabase, params.id, businessId, remindAt, reminderMinutes).catch(() => null)
+      }
+    }
 
     setSaving(false)
     if (error) {
@@ -367,6 +390,12 @@ export default function EditAppointmentPage({ params }: Props) {
                 placeholder="Preferencias del cliente, instrucciones especiales..."
                 className="input-base resize-none" />
             </div>
+
+            {/* Recordatorio */}
+            <ReminderSelector
+              value={reminderMinutes}
+              onChange={setReminderMinutes}
+            />
           </div>
         </Card>
 
