@@ -108,6 +108,25 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // ── Status enforcement: block rejected users ──────────────────────────────
+  if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    const { data: dbUser } = await supabase
+      .from('users')
+      .select('status')
+      .eq('id', user.id)
+      .single()
+
+    if (dbUser?.status === 'rejected') {
+      await supabase.auth.signOut()
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.searchParams.set('reason', 'account_blocked')
+      const redirect = NextResponse.redirect(url)
+      clearActivity(redirect)
+      return redirect
+    }
+  }
+
   // ── Authenticated on a tracked path: enforce session limits ───────────────
   if (user && isTrackedPath(request.nextUrl.pathname)) {
 

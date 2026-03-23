@@ -163,7 +163,7 @@ export default function RootPage() {
 
       {/* ── Hero ── */}
       <main
-        className="px-5 sm:px-8 py-6 sm:py-14 md:py-20"
+        className="px-5 sm:px-8 pt-6 pb-28 sm:py-14 md:py-20"
         style={{
           position: "relative",
           zIndex: 10,
@@ -182,10 +182,11 @@ export default function RootPage() {
             display: "inline-flex",
             alignItems: "center",
             gap: "8px",
-            padding: "6px 16px",
+            padding: "6px 14px",
             borderRadius: "999px",
             background: "rgba(0,98,255,0.08)",
             border: "1px solid rgba(0,98,255,0.2)",
+            maxWidth: "calc(100vw - 40px)",
           }}
         >
           <span
@@ -197,14 +198,18 @@ export default function RootPage() {
               boxShadow: "0 0 8px rgba(0,98,255,0.8)",
               animation: "pulse 2s ease-in-out infinite",
               display: "inline-block",
+              flexShrink: 0,
             }}
           />
           <span
             style={{
-              fontSize: "12px",
+              fontSize: "11px",
               fontWeight: 700,
               color: "#4D83FF",
-              letterSpacing: "0.05em",
+              letterSpacing: "0.04em",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             PLATAFORMA DE GESTIÓN INTELIGENTE
@@ -266,62 +271,73 @@ export default function RootPage() {
 
         {/* CTAs */}
         <div
-          className="mb-6 sm:mb-14"
+          className="mb-6 sm:mb-14 w-full sm:w-auto"
           style={{
             display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-            justifyContent: "center",
+            flexDirection: "column",
+            gap: "10px",
+            alignItems: "stretch",
+            maxWidth: "320px",
           }}
         >
-          <Link
-            href="/register"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "14px 32px",
-              borderRadius: "14px",
-              fontSize: "15px",
-              fontWeight: 700,
-              color: "#fff",
-              textDecoration: "none",
-              background: "linear-gradient(135deg, #0062FF 0%, #0041AB 100%)",
-              boxShadow:
-                "0 0 30px rgba(0,98,255,0.4), 0 4px 20px rgba(0,98,255,0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
-            }}
+          {/* Row: primary + login side by side on sm+ */}
+          <div
+            className="flex flex-col sm:flex-row"
+            style={{ gap: "10px" }}
           >
-            Comenzar gratis
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M3 8h10M9 4l4 4-4 4"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </Link>
-          <Link
-            href="/login"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "14px 32px",
-              borderRadius: "14px",
-              fontSize: "15px",
-              fontWeight: 600,
-              color: "#F2F2F2",
-              textDecoration: "none",
-              background: "#1A1A1F",
-              border: "1px solid #272729",
-              transition: "border-color 0.2s, box-shadow 0.2s",
-            }}
-          >
-            Iniciar Sesión
-          </Link>
+            <Link
+              href="/register"
+              className="flex-1 sm:flex-none"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "14px 28px",
+                borderRadius: "14px",
+                fontSize: "15px",
+                fontWeight: 700,
+                color: "#fff",
+                textDecoration: "none",
+                background: "linear-gradient(135deg, #0062FF 0%, #0041AB 100%)",
+                boxShadow:
+                  "0 0 30px rgba(0,98,255,0.4), 0 4px 20px rgba(0,98,255,0.3)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+            >
+              Comenzar gratis
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3 8h10M9 4l4 4-4 4"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Link>
+            <Link
+              href="/login"
+              className="flex-1 sm:flex-none"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "14px 28px",
+                borderRadius: "14px",
+                fontSize: "15px",
+                fontWeight: 600,
+                color: "#F2F2F2",
+                textDecoration: "none",
+                background: "#1A1A1F",
+                border: "1px solid #272729",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+            >
+              Iniciar Sesión
+            </Link>
+          </div>
           {/* Desktop only — mobile uses PwaInstallFloating */}
           <span className="hidden lg:contents">
             <PwaInstallBanner />

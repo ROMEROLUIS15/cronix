@@ -54,6 +54,8 @@ export const mockUsers: User[] = [
     color: '#7c3aed',
     phone: null,
     is_active: true,
+    status: 'active',
+    provider: 'email',
     created_at: yesterday,
     updated_at: now
   },
@@ -67,6 +69,8 @@ export const mockUsers: User[] = [
     color: '#2563eb',
     phone: null,
     is_active: true,
+    status: 'active',
+    provider: 'email',
     created_at: yesterday,
     updated_at: now
   }

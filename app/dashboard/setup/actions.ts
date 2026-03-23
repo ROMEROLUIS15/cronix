@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import * as usersRepo from '@/lib/repositories/users.repo'
@@ -55,14 +55,18 @@ export async function createBusiness(
     plan: 'pro',
   })
 
-  // 5. Link user to business via repo
-  await usersRepo.upsertUser(supabase, {
-    id: user.id,
-    name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario',
-    email: user.email ?? '',
-    business_id: business.id,
-    role: 'owner',
-  })
+  // 5. Link user to business and activate (admin bypasses RLS for this privileged op)
+  const admin = createAdminClient()
+  await admin
+    .from('users')
+    .update({
+      name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario',
+      email: user.email ?? '',
+      business_id: business.id,
+      role: 'owner',
+      status: 'active',
+    })
+    .eq('id', user.id)
 
   revalidatePath('/dashboard')
   redirect('/dashboard')

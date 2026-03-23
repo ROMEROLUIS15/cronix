@@ -13,15 +13,24 @@ import {
   X,
   LogOut,
   Wrench,
+  UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/app/login/actions";
 import { InstallPwaButton } from "@/components/ui/install-pwa-button";
 
-const navItems = [
+interface NavItem {
+  href: string
+  label: string
+  icon: typeof CalendarDays
+  ownerOnly?: boolean
+}
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Agenda", icon: CalendarDays },
   { href: "/dashboard/clients", label: "Clientes", icon: Users },
   { href: "/dashboard/services", label: "Servicios", icon: Wrench },
+  { href: "/dashboard/team", label: "Equipo", icon: UsersRound, ownerOnly: true },
   { href: "/dashboard/finances", label: "Finanzas", icon: DollarSign },
   { href: "/dashboard/reports", label: "Reportes", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Ajustes", icon: Settings },
@@ -148,7 +157,9 @@ export function Sidebar({
           >
             Principal
           </p>
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => !item.ownerOnly || user?.role === "owner")
+            .map((item) => {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||

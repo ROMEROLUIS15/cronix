@@ -29,6 +29,8 @@ interface UseBusinessContextResult {
   userId: string | null
   /** The user's first name for greeting */
   userName: string
+  /** The user's role (owner, employee, platform_admin) */
+  userRole: string | null
   /** True while the initial auth/business resolution is in progress */
   loading: boolean
 }
@@ -60,6 +62,7 @@ export function useBusinessContext(): UseBusinessContextResult {
     businessId: context?.businessId ?? null,
     userId:     context?.userId ?? null,
     userName:   context?.userName ?? 'Usuario',
+    userRole:   context?.userRole ?? null,
     loading,
   }
 }

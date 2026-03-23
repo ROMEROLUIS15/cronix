@@ -132,3 +132,20 @@ export async function toggleServiceActive(
 
   if (error) throw new Error(`Error toggling service: ${error.message}`)
 }
+
+/**
+ * Checks if a business has at least one service configured.
+ * Lightweight query used for UI hints/banners.
+ */
+export async function hasAnyService(
+  supabase: Client,
+  businessId: string
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('services')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+
+  if (error) throw new Error(`Error checking services: ${error.message}`)
+  return count !== null && count > 0
+}

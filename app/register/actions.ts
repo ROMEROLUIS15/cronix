@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { registerSchema } from '@/lib/validations/auth'
 import { headers } from 'next/headers'
 
@@ -45,7 +45,8 @@ export async function register(formData: FormData) {
     }
   }
 
-  // 3. Si no requiere confirmación (o ya confirmó), crear el negocio directamente
+  // 3. Si no requiere confirmación (raro), crear el negocio directamente.
+  //    El trigger on_auth_user_created ya creó el row en public.users.
   const { data: bizData, error: bizError } = await supabase
     .from('businesses')
     .insert({
@@ -62,13 +63,15 @@ export async function register(formData: FormData) {
     return { error: 'Error al crear el negocio: ' + bizError.message }
   }
 
-  // 4. Actualizar el perfil con business_id y nombre correcto
-  await supabase
+  // 4. Vincular usuario al negocio y activarlo (usa admin para evitar restricciones RLS)
+  const admin = createAdminClient()
+  await admin
     .from('users')
     .update({
       name: `${firstName} ${lastName}`.trim(),
       business_id: bizData.id,
       role: 'owner',
+      status: 'active',
     })
     .eq('id', user.id)
 

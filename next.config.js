@@ -23,6 +23,7 @@ const nextConfig = {
     turbo: {
       rules: {},
     },
+    serverComponentsExternalPackages: ['@simplewebauthn/server'],
   },
 };
 

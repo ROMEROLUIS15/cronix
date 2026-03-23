@@ -1,149 +1,170 @@
 'use client'
 
-/**
- * PasskeyRegister — Dashboard component for managing WebAuthn passkeys.
- *
- * Shows enrolled passkeys, allows registering new ones, and unenrolling.
- * Designed for the profile/settings page. Fully responsive.
- */
+import { useState, useEffect, useCallback } from 'react'
+import { Fingerprint, Trash2, Plus, AlertCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
-import { useState } from 'react'
-import { Fingerprint, Trash2, Plus, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react'
-import { usePasskey } from '@/lib/hooks/use-passkey'
+interface StoredPasskey {
+  id: string
+  device_name: string | null
+  created_at: string
+}
 
 export function PasskeyRegister() {
-  const {
-    status,
-    error,
-    factors,
-    isSupported,
-    enroll,
-    unenroll,
-    resetError,
-  } = usePasskey()
+  const [passkeys,    setPasskeys]    = useState<StoredPasskey[]>([])
+  const [deviceName,  setDeviceName]  = useState('')
+  const [loading,     setLoading]     = useState(true)
+  const [registering, setRegistering] = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+  const [success,     setSuccess]     = useState<string | null>(null)
+  const [supported,   setSupported]   = useState(true)
 
-  const [deviceName, setDeviceName] = useState('')
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const supabase = createClient()
 
-  if (!isSupported) {
+  const loadPasskeys = useCallback(async () => {
+    const { data } = await supabase
+      .from('user_passkeys')
+      .select('id, device_name, created_at')
+      .order('created_at', { ascending: false })
+    setPasskeys(data ?? [])
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSupported(!!window.PublicKeyCredential)
+    }
+    loadPasskeys()
+  }, [loadPasskeys])
+
+  if (!supported) {
     return (
-      <div
-        className="flex items-start gap-3 rounded-xl p-4"
-        style={{
-          background: 'rgba(255,59,48,0.06)',
-          border:     '1px solid rgba(255,59,48,0.15)',
-        }}
-      >
+      <div className="flex items-start gap-3 rounded-xl p-4"
+        style={{ background: 'rgba(255,59,48,0.06)', border: '1px solid rgba(255,59,48,0.15)' }}>
         <AlertCircle size={18} style={{ color: '#FF3B30', flexShrink: 0, marginTop: 2 }} />
         <div>
           <p className="text-sm font-semibold" style={{ color: '#F2F2F2' }}>
-            Passkeys no disponibles
+            Acceso biométrico no disponible
           </p>
           <p className="text-xs mt-0.5" style={{ color: '#909098' }}>
-            Tu navegador o dispositivo no soporta autenticación biométrica.
-            Prueba con Chrome, Safari o Edge en un dispositivo con huella dactilar o Face ID.
+            Tu dispositivo no soporta autenticación biométrica.
           </p>
         </div>
       </div>
     )
   }
 
-  const isLoading = status === 'enrolling'
+  const handleRegister = async () => {
+    setError(null)
+    setSuccess(null)
+    setRegistering(true)
 
-  async function handleEnroll() {
-    resetError()
-    const name = deviceName.trim() || 'Mi dispositivo'
-    const ok   = await enroll(name)
-    if (ok) setDeviceName('')
+    try {
+      const { startRegistration } = await import('@simplewebauthn/browser')
+
+      const optRes = await fetch('/api/passkey/register/options', { method: 'POST' })
+      if (!optRes.ok) throw new Error('Error al obtener opciones de registro')
+      const options = await optRes.json()
+
+      const credential = await startRegistration({ optionsJSON: options })
+
+      const verRes = await fetch('/api/passkey/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, deviceName: deviceName || 'Mi dispositivo' }),
+      })
+      if (!verRes.ok) {
+        const err = await verRes.json()
+        throw new Error(err.error || 'Error al registrar')
+      }
+
+      setSuccess('¡Huella registrada correctamente!')
+      setDeviceName('')
+      loadPasskeys()
+    } catch (err: unknown) {
+      const e = err as Error
+      if (e.name === 'NotAllowedError') {
+        setError('Registro cancelado')
+      } else {
+        setError(e.message || 'Error al registrar la huella')
+      }
+    } finally {
+      setRegistering(false)
+    }
   }
 
-  async function handleUnenroll(factorId: string) {
-    setPendingDelete(factorId)
-    await unenroll(factorId)
-    setPendingDelete(null)
-  }
-
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('es', {
-      day: 'numeric', month: 'long', year: 'numeric',
-    })
+  const handleDelete = async (id: string) => {
+    await supabase.from('user_passkeys').delete().eq('id', id)
+    loadPasskeys()
   }
 
   return (
     <div className="space-y-4">
 
-      {/* Header */}
       <div className="flex items-center gap-2.5">
-        <div
-          className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(0,98,255,0.12)', border: '1px solid rgba(0,98,255,0.2)' }}
-        >
+        <div className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(0,98,255,0.12)', border: '1px solid rgba(0,98,255,0.2)' }}>
           <Fingerprint size={18} style={{ color: '#4D83FF' }} />
         </div>
         <div>
           <p className="text-sm font-bold" style={{ color: '#F2F2F2' }}>
-            Llaves de acceso (Passkeys)
+            Acceso biométrico
           </p>
           <p className="text-xs" style={{ color: '#909098' }}>
-            Inicia sesión con tu huella o Face ID sin necesidad de contraseña
+            Inicia sesión con tu huella o Face ID sin contraseña
           </p>
         </div>
       </div>
 
-      {/* Error banner */}
       {error && (
-        <div
-          className="flex items-start gap-2.5 rounded-xl p-3 animate-fade-in"
-          style={{
-            background: 'rgba(255,59,48,0.08)',
-            border:     '1px solid rgba(255,59,48,0.2)',
-          }}
-        >
+        <div className="flex items-start gap-2.5 rounded-xl p-3"
+          style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)' }}>
           <AlertCircle size={15} style={{ color: '#FF6B6B', flexShrink: 0, marginTop: 1 }} />
           <p className="text-xs font-medium" style={{ color: '#FF6B6B' }}>{error}</p>
         </div>
       )}
+      {success && (
+        <div className="p-3 rounded-xl text-xs font-medium"
+          style={{ background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.2)', color: '#30D158' }}>
+          {success}
+        </div>
+      )}
 
-      {/* Enrolled passkeys */}
-      {factors.length > 0 && (
+      {/* Passkeys list */}
+      {loading ? (
+        <div className="flex justify-center py-2">
+          <div className="animate-spin h-5 w-5 border-2 rounded-full"
+            style={{ borderColor: '#0062FF', borderTopColor: 'transparent' }} />
+        </div>
+      ) : passkeys.length > 0 && (
         <div className="space-y-2">
-          {factors.map(factor => (
-            <div
-              key={factor.id}
-              className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
-              style={{
-                background: 'rgba(0,98,255,0.05)',
-                border:     '1px solid rgba(0,98,255,0.12)',
-              }}
-            >
+          {passkeys.map(pk => (
+            <div key={pk.id} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+              style={{ background: 'rgba(0,98,255,0.05)', border: '1px solid rgba(0,98,255,0.12)' }}>
               <div className="flex items-center gap-2.5 min-w-0">
-                <ShieldCheck size={16} style={{ color: '#4D83FF', flexShrink: 0 }} />
+                <Fingerprint size={16} style={{ color: '#4D83FF', flexShrink: 0 }} />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate" style={{ color: '#F2F2F2' }}>
-                    {factor.friendly_name || 'Dispositivo'}
+                    {pk.device_name || 'Dispositivo'}
                   </p>
                   <p className="text-xs" style={{ color: '#909098' }}>
-                    Registrado el {formatDate(factor.created_at)}
+                    {new Date(pk.created_at).toLocaleDateString('es', {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                    })}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => handleUnenroll(factor.id)}
-                disabled={pendingDelete === factor.id}
-                className="flex-shrink-0 p-1.5 rounded-lg transition-colors hover:bg-red-500/10 disabled:opacity-40"
-                aria-label="Eliminar llave"
-              >
-                {pendingDelete === factor.id
-                  ? <Loader2 size={14} className="animate-spin" style={{ color: '#909098' }} />
-                  : <Trash2 size={14} style={{ color: '#FF3B30' }} />
-                }
+              <button onClick={() => handleDelete(pk.id)}
+                className="flex-shrink-0 p-1.5 rounded-lg transition-colors hover:bg-red-500/10"
+                aria-label="Eliminar">
+                <Trash2 size={14} style={{ color: '#FF3B30' }} />
               </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Register new passkey */}
+      {/* Register new */}
       <div className="space-y-2">
         <input
           type="text"
@@ -152,37 +173,23 @@ export function PasskeyRegister() {
           placeholder='Nombre del dispositivo (ej: "iPhone de Luis")'
           maxLength={40}
           className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-          style={{
-            background: '#13131A',
-            border:     '1px solid #22222E',
-            color:      '#F2F2F2',
-          }}
-          onKeyDown={e => { if (e.key === 'Enter') handleEnroll() }}
+          style={{ background: '#13131A', border: '1px solid #22222E', color: '#F2F2F2' }}
+          onKeyDown={e => { if (e.key === 'Enter') handleRegister() }}
         />
-
         <button
-          onClick={handleEnroll}
-          disabled={isLoading}
+          onClick={handleRegister}
+          disabled={registering}
           className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
           style={{
-            background: isLoading
+            background: registering
               ? 'rgba(0,98,255,0.3)'
               : 'linear-gradient(135deg, #0062FF 0%, #0041AB 100%)',
-            color:     '#fff',
-            boxShadow: isLoading ? 'none' : '0 0 20px rgba(0,98,255,0.25)',
+            color: '#fff',
+            boxShadow: registering ? 'none' : '0 0 20px rgba(0,98,255,0.25)',
           }}
         >
-          {isLoading ? (
-            <>
-              <Loader2 size={15} className="animate-spin" />
-              Esperando autenticación...
-            </>
-          ) : (
-            <>
-              <Plus size={15} />
-              {factors.length > 0 ? 'Agregar otro dispositivo' : 'Registrar huella / Face ID'}
-            </>
-          )}
+          <Plus size={15} />
+          {registering ? 'Esperando autenticación...' : passkeys.length > 0 ? 'Agregar otro dispositivo' : 'Registrar huella / Face ID'}
         </button>
       </div>
 

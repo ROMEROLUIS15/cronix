@@ -376,7 +376,9 @@ export type Database = {
           is_active: boolean | null
           name: string
           phone: string | null
+          provider: Database["public"]["Enums"]["auth_provider"] | null
           role: Database["public"]["Enums"]["user_role"] | null
+          status: Database["public"]["Enums"]["user_status"] | null
           updated_at: string | null
         }
         Insert: {
@@ -389,7 +391,9 @@ export type Database = {
           is_active?: boolean | null
           name: string
           phone?: string | null
+          provider?: Database["public"]["Enums"]["auth_provider"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
+          status?: Database["public"]["Enums"]["user_status"] | null
           updated_at?: string | null
         }
         Update: {
@@ -402,7 +406,9 @@ export type Database = {
           is_active?: boolean | null
           name?: string
           phone?: string | null
+          provider?: Database["public"]["Enums"]["auth_provider"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
+          status?: Database["public"]["Enums"]["user_status"] | null
           updated_at?: string | null
         }
         Relationships: [
@@ -414,6 +420,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_passkeys: {
+        Row: {
+          id:            string
+          user_id:       string
+          credential_id: string
+          public_key:    string
+          counter:       number
+          device_name:   string | null
+          transports:    string[] | null
+          created_at:    string
+        }
+        Insert: {
+          id?:           string
+          user_id:       string
+          credential_id: string
+          public_key:    string
+          counter?:      number
+          device_name?:  string | null
+          transports?:   string[] | null
+          created_at?:   string
+        }
+        Update: {
+          counter?:     number
+          device_name?: string | null
+        }
+        Relationships: []
+      }
+      passkey_challenges: {
+        Row: {
+          id:         string
+          challenge:  string
+          user_id:    string | null
+          created_at: string
+        }
+        Insert: {
+          id?:        string
+          challenge:  string
+          user_id?:   string | null
+          created_at?: string
+        }
+        Update: {
+          challenge?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -441,7 +492,9 @@ export type Database = {
       notification_channel: "whatsapp" | "email"
       notification_status: "pending" | "sent" | "delivered" | "read" | "failed"
       payment_method: "cash" | "card" | "transfer" | "qr" | "other"
+      auth_provider: "email" | "google" | "hybrid"
       user_role: "owner" | "employee" | "platform_admin"
+      user_status: "pending" | "active" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never

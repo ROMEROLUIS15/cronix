@@ -26,6 +26,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import * as appointmentsRepo from "@/lib/repositories/appointments.repo";
+import * as servicesRepo from "@/lib/repositories/services.repo";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { ServicesOnboardingBanner } from "@/components/dashboard/services-onboarding-banner";
 import { AppointmentStatusBadge } from "@/components/ui/badge";
@@ -78,6 +79,7 @@ export default function DashboardPage() {
     monthRevenue: 0,
     pending: 0,
   });
+  const [hasServices, setHasServices] = useState(false);
 
   // ── Fetch entire month appointments ──────────────────────────
   const fetchMonthApts = useCallback(async () => {
@@ -152,8 +154,13 @@ export default function DashboardPage() {
     if (dayPanelOpen) fetchDayApts();
   }, [fetchDayApts, dayPanelOpen]);
   useEffect(() => {
-    if (businessId) fetchStats();
-  }, [fetchStats, businessId]);
+    if (businessId) {
+      fetchStats();
+      servicesRepo.hasAnyService(supabase, businessId)
+        .then(has => setHasServices(has))
+        .catch(err => console.error('Error checking services:', err));
+    }
+  }, [fetchStats, businessId, supabase]);
 
   // ── Helpers ───────────────────────────────────────────────────
   const getAptsForDay = (day: Date) =>
@@ -423,7 +430,7 @@ export default function DashboardPage() {
 
         </div>
 
-        <ServicesOnboardingBanner businessId={businessId ?? ""} />
+        <ServicesOnboardingBanner businessId={businessId ?? ""} hasServices={hasServices} />
 
         {/* ── AGENDA TAB ── */}
         {tab === "agenda" && (
