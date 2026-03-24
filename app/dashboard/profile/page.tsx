@@ -165,7 +165,7 @@ export default function ProfilePage() {
               style={{ background: 'rgba(0,98,255,0.15)', color: '#0062FF', borderColor: '#1A1A1F' }}>
               {avatarUrl ? (
                 <Image src={avatarUrl} alt={user?.name ?? 'Avatar'} width={96} height={96}
-                  className="h-full w-full object-cover" unoptimized />
+                  className="h-full w-full object-cover" sizes="96px" />
               ) : (
                 <span>{initials}</span>
               )}

@@ -268,7 +268,7 @@ export default function DashboardPage() {
                 width={80}
                 height={80}
                 className="h-full w-full object-cover"
-                unoptimized
+                sizes="80px"
               />
             </div>
             <div
@@ -280,7 +280,7 @@ export default function DashboardPage() {
                 alt="Cronix"
                 fill
                 className="object-contain"
-                unoptimized
+                sizes="144px"
               />
             </div>
           </div>

@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+})
 
 // ── Viewport separado (Next.js 14+ best practice) ────────────────────────────
 export const viewport: Viewport = {
@@ -34,7 +41,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="dark" suppressHydrationWarning>
+    <html lang="es" className={`dark ${inter.className}`} suppressHydrationWarning>
       {/*
         Capture beforeinstallprompt before any JS bundle loads.
         Chrome fires this event very early in the page lifecycle — before

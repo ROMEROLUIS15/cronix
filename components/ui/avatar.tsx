@@ -30,7 +30,7 @@ export function Avatar({ name, src, color, size = 'md', className }: AvatarProps
           alt={name}
           fill
           className="object-cover"
-          unoptimized
+          sizes="48px"
         />
       </div>
     )

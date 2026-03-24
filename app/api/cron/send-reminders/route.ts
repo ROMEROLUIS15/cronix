@@ -56,8 +56,7 @@ export async function GET(req: NextRequest) {
       continue
     }
 
-    const client   = apt.clients
-    const business = apt.businesses
+    const client = apt.clients
 
     if (!client?.phone) {
       // No phone on file — cancel silently
@@ -78,10 +77,12 @@ export async function GET(req: NextRequest) {
       minute: '2-digit',
     })
 
+    const businessName = reminder.businesses?.name ?? 'tu negocio'
+
     const result = await sendAppointmentReminder({
       to:           client.phone,
       clientName:   client.name,
-      businessName: business?.name ?? 'su negocio',
+      businessName,
       date,
       time,
     })

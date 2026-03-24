@@ -68,6 +68,23 @@ export default function NewClientPage() {
       ? `${selectedCountry.dial} ${form.phoneLocal.trim()}`
       : null;
 
+    // Verificar teléfono duplicado dentro del mismo negocio
+    if (fullPhone) {
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("business_id", businessId)
+        .eq("phone", fullPhone)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existing) {
+        setSaving(false);
+        setError(`Este número ya está registrado para el cliente "${existing.name}". Cada teléfono debe ser único por negocio.`);
+        return;
+      }
+    }
+
     const { error: insertError } = await supabase.from("clients").insert({
       business_id: businessId,
       name: form.name.trim(),

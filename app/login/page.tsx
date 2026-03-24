@@ -165,7 +165,7 @@ export default function LoginPage() {
                 width={40}
                 height={40}
                 className="h-full w-full object-cover"
-                unoptimized
+                sizes="40px"
               />
             </div>
             <div
@@ -177,7 +177,7 @@ export default function LoginPage() {
                 alt="Cronix"
                 fill
                 className="object-contain object-left"
-                unoptimized
+                sizes="84px"
               />
             </div>
           </Link>
@@ -477,7 +477,7 @@ export default function LoginPage() {
                 width={64}
                 height={64}
                 className="h-full w-full object-cover"
-                unoptimized
+                sizes="64px"
               />
             </div>
             <div
@@ -489,7 +489,7 @@ export default function LoginPage() {
                 alt="Cronix"
                 fill
                 className="object-contain"
-                unoptimized
+                sizes="112px"
               />
             </div>
             <p

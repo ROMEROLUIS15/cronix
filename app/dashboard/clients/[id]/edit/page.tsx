@@ -85,6 +85,23 @@ export default function ClientEditPage({ params }: Props) {
       ? `${selectedCountry.dial} ${form.phoneLocal.trim()}`
       : null
 
+    // Verificar teléfono duplicado (excluir el cliente actual)
+    if (fullPhone) {
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('business_id', businessId)
+        .eq('phone', fullPhone)
+        .is('deleted_at', null)
+        .neq('id', params.id)
+        .maybeSingle()
+
+      if (existing) {
+        setSaving(false)
+        return showMsg('error', `El número ya está registrado para el cliente "${existing.name}".`)
+      }
+    }
+
     const { error } = await supabase
       .from('clients')
       .update({

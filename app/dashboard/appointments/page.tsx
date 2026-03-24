@@ -213,7 +213,7 @@ export default function AppointmentsPage() {
                       <p className="text-xs font-medium flex-1" style={{ color: '#FFD60A' }}>
                         Esta cita ya pasó. ¿Fue atendido el cliente?
                       </p>
-                      <div className="flex gap-2 flex-shrink-0">
+                      <div className="flex gap-2 flex-shrink-0 flex-wrap">
                         <button
                           onClick={() => handleResolve(apt.id, 'completed')}
                           disabled={resolvingId === apt.id}

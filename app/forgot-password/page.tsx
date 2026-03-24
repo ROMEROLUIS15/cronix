@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: "#060608" }}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-6 sm:p-6" style={{ backgroundColor: "#060608" }}>
       <div 
         className="w-full max-w-md p-8 sm:p-10 rounded-[2rem]"
         style={{
@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
               width={56}
               height={56}
               className="h-full w-full object-cover"
-              unoptimized
+              sizes="56px"
             />
           </div>
           <div className="relative h-7 w-28">
@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
               alt="Cronix"
               fill
               className="object-contain"
-              unoptimized
+              sizes="112px"
             />
           </div>
         </div>

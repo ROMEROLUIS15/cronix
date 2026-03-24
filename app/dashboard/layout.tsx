@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
+import { Providers } from '@/components/providers'
 
 interface DashboardLayoutProps { children: React.ReactNode }
 
@@ -44,9 +45,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     : null
 
   return (
-    <DashboardShell user={userProfile} business={businessProfile}>
-      <SessionTimeout />
-      {children}
-    </DashboardShell>
+    <Providers>
+      <DashboardShell user={userProfile} business={businessProfile}>
+        <SessionTimeout />
+        {children}
+      </DashboardShell>
+    </Providers>
   )
 }

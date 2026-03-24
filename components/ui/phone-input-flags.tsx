@@ -142,7 +142,7 @@ export function PhoneInputFlags({
                 border:      '1px solid #2E2E33',
                 boxShadow:   '0 8px 30px rgba(0,0,0,0.5)',
                 maxHeight:   '240px',
-                minWidth:    '220px',
+                minWidth:    'min(220px, calc(100vw - 2rem))',
               }}
             >
               {COUNTRIES.map(c => (

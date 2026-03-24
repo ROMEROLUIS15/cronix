@@ -106,7 +106,7 @@ export default function RootPage() {
               width={36}
               height={36}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              unoptimized
+              sizes="36px"
             />
           </div>
           <div
@@ -122,7 +122,7 @@ export default function RootPage() {
               alt="Cronix"
               fill
               style={{ objectFit: "contain", objectPosition: "left" }}
-              unoptimized
+              sizes="100px"
             />
           </div>
         </div>
@@ -233,7 +233,7 @@ export default function RootPage() {
             width={88}
             height={88}
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            unoptimized
+            sizes="88px"
           />
         </div>
 
@@ -247,7 +247,7 @@ export default function RootPage() {
             alt="Cronix"
             fill
             style={{ objectFit: "contain" }}
-            unoptimized
+            sizes="(min-width: 640px) 260px, 180px"
           />
         </div>
 

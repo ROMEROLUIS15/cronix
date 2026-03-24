@@ -95,7 +95,7 @@ export function Sidebar({
                 width={36}
                 height={36}
                 className="h-full w-full object-cover"
-                unoptimized
+                sizes="36px"
               />
             </div>
             <div className="relative h-6 w-24 flex-shrink-0">
@@ -104,7 +104,7 @@ export function Sidebar({
                 alt="Cronix"
                 fill
                 className="object-contain object-left"
-                unoptimized
+                sizes="96px"
               />
             </div>
           </Link>
@@ -112,7 +112,7 @@ export function Sidebar({
           {/* Close button — mobile only */}
           {onClose && (
             <button
-              className="p-1.5 rounded-lg lg:hidden transition-colors hover:bg-white/5 flex-shrink-0"
+              className="p-2.5 rounded-lg lg:hidden transition-colors hover:bg-white/5 flex-shrink-0"
               style={{ color: "#8A8A90" }}
               onClick={onClose}
               aria-label="Cerrar menú"
@@ -225,7 +225,7 @@ export function Sidebar({
                     width={32}
                     height={32}
                     className="h-full w-full object-cover"
-                    unoptimized
+                    sizes="32px"
                   />
                 ) : (
                   <div
@@ -258,14 +258,14 @@ export function Sidebar({
             <form action={signout}>
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-[0.98] hover:brightness-125"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 active:scale-[0.98] hover:brightness-125"
                 style={{
                   backgroundColor: "rgba(255,59,48,0.08)",
                   color: "#FF3B30",
                   border: "1px solid rgba(255,59,48,0.2)",
                 }}
               >
-                <LogOut size={13} />
+                <LogOut size={15} />
                 Cerrar sesión
               </button>
             </form>
