@@ -15,6 +15,7 @@ export interface ReminderMessageParams {
   /** Destination phone — any format; non-digit chars are stripped automatically. */
   to:           string
   clientName:   string
+  /** Business name, e.g. "Salón Cronix" */
   businessName: string
   /** Human-readable date, e.g. "viernes, 21 de marzo de 2026" */
   date:         string
@@ -29,7 +30,7 @@ export interface WhatsAppResult {
 
 /**
  * Sends a WhatsApp reminder using the `appointment_reminder` template.
- * Template body variables (in order): clientName, businessName, date, time.
+ * Template body variables (in order): {{1}} clientName, {{2}} businessName, {{3}} date, {{4}} time.
  */
 export async function sendAppointmentReminder(
   params: ReminderMessageParams

@@ -45,40 +45,60 @@ export async function GET(request: Request) {
  */
 async function ensureUserProfile(user: User): Promise<void> {
   const admin = createAdminClient()
+  const authProvider = user.app_metadata?.provider as string | undefined
+  const email = user.email ?? ''
 
+  // 1. Check by auth ID first (normal case)
   const { data: dbUser } = await admin
     .from('users')
     .select('id, provider')
     .eq('id', user.id)
     .maybeSingle()
 
-  const authProvider = user.app_metadata?.provider as string | undefined
-
-  if (!dbUser) {
-    // Safety net: create row if trigger didn't fire (pre-existing user)
-    const fullName = user.user_metadata?.full_name as string | undefined
-    const email    = user.email ?? ''
-    const name     = fullName || email.split('@')[0] || 'Usuario'
-    const provider = authProvider === 'google' ? 'google' : 'email'
-
-    await admin.from('users').insert({
-      id:    user.id,
-      email,
-      name,
-      role:     'owner',
-      status:   'pending',
-      provider: provider as 'email' | 'google',
-      business_id: null,
-    })
+  if (dbUser) {
+    // Account linking: email user now also has Google → mark as hybrid
+    if (dbUser.provider === 'email' && authProvider === 'google') {
+      await admin.from('users')
+        .update({ provider: 'hybrid' })
+        .eq('id', user.id)
+    }
     return
   }
 
-  // Account linking: email user now also has Google → mark as hybrid
-  if (dbUser.provider === 'email' && authProvider === 'google') {
-    await admin.from('users')
-      .update({ provider: 'hybrid' })
-      .eq('id', user.id)
+  // 2. Check by email — handles identity linking (same email, different auth ID)
+  if (email) {
+    const { data: emailUser } = await admin
+      .from('users')
+      .select('id, provider')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (emailUser) {
+      // Link: update the existing row to point to the new auth ID and mark hybrid
+      await admin.from('users')
+        .update({
+          id: user.id,
+          provider: 'hybrid',
+        })
+        .eq('email', email)
+      return
+    }
   }
+
+  // 3. No existing user — create new row (trigger safety net)
+  const fullName = user.user_metadata?.full_name as string | undefined
+  const name     = fullName || email.split('@')[0] || 'Usuario'
+  const provider = authProvider === 'google' ? 'google' : 'email'
+
+  await admin.from('users').insert({
+    id:    user.id,
+    email,
+    name,
+    role:     'owner',
+    status:   'pending',
+    provider: provider as 'email' | 'google',
+    business_id: null,
+  })
 }
 
 /**

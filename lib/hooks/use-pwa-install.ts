@@ -76,7 +76,7 @@ export interface PwaInstallState {
 
 export function usePwaInstall(): PwaInstallState {
   const [isInstalled, setIsInstalled] = useState(false)
-  const [hasEvent,    setHasEvent]    = useState(() => _deferred !== null)
+  const [hasEvent,    setHasEvent]    = useState(false)
   const [isIos,       setIsIos]       = useState(false)
 
   useEffect(() => {

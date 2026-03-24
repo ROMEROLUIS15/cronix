@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Fingerprint, Trash2, Plus, AlertCircle } from 'lucide-react'
+import { Fingerprint, Trash2, Plus, AlertCircle, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface StoredPasskey {
@@ -161,6 +161,24 @@ export function PasskeyRegister() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Empty state — primer passkey */}
+      {!loading && passkeys.length === 0 && (
+        <div
+          className="rounded-xl p-4 space-y-2 animate-fade-in"
+          style={{ background: 'rgba(0,98,255,0.06)', border: '1px solid rgba(0,98,255,0.18)' }}
+        >
+          <div className="flex items-center gap-2">
+            <Zap size={14} style={{ color: '#4D83FF', flexShrink: 0 }} />
+            <p className="text-xs font-bold" style={{ color: '#4D83FF' }}>
+              Activa el acceso rápido con tu huella
+            </p>
+          </div>
+          <p className="text-xs" style={{ color: '#909098', lineHeight: 1.6 }}>
+            Registra tu huella o Face ID para ingresar a Cronix en segundos, sin escribir tu contraseña.
+          </p>
         </div>
       )}
 

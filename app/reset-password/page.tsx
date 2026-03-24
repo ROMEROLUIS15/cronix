@@ -52,14 +52,14 @@ export default function ResetPasswordPage() {
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: "#060608" }}>
+      <div className="min-h-screen flex items-center justify-center px-4 py-6 sm:p-6" style={{ backgroundColor: "#060608" }}>
         <div className="animate-spin h-8 w-8 border-4 border-t-transparent rounded-full" style={{ borderColor: "#3884FF", borderTopColor: "transparent" }} />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: "#060608" }}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-6 sm:p-6" style={{ backgroundColor: "#060608" }}>
       <div 
         className="w-full max-w-md p-8 sm:p-10 rounded-[2rem]"
         style={{
@@ -99,7 +99,7 @@ export default function ResetPasswordPage() {
               width={48}
               height={48}
               className="h-full w-full object-cover"
-              unoptimized
+              sizes="48px"
             />
           </div>
           <div className="relative h-7 w-28 sm:h-8 sm:w-32">
@@ -108,7 +108,7 @@ export default function ResetPasswordPage() {
               alt="Cronix"
               fill
               className="object-contain"
-              unoptimized
+              sizes="128px"
             />
           </div>
         </div>

@@ -21,7 +21,7 @@ import {
 } from '@/lib/repositories/reminders.repo'
 import {
   evaluateDoubleBooking,
-  checkSlotOverlap,
+  checkEmployeeConflict,
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
@@ -132,25 +132,30 @@ export default function EditAppointmentPage({ params }: Props) {
 
     const { data: dayApts } = await supabase
       .from('appointments')
-      .select('id, start_at, end_at, client_id')
+      .select('id, start_at, end_at, client_id, assigned_user_id')
       .eq('business_id', businessId)
       .gte('start_at', start)
       .lte('start_at', end)
       .not('status', 'in', '("cancelled","no_show")')
 
-    const overlap = checkSlotOverlap({
-      proposedStart: startObj,
-      proposedEnd:   endObj,
-      existing:      dayApts ?? [],
-      excludeId,
-    })
+    // Employee conflict check — only when an employee is selected.
+    if (form.assigned_user_id) {
+      const empConflict = checkEmployeeConflict({
+        proposedStart: startObj,
+        proposedEnd:   endObj,
+        existing:      dayApts ?? [],
+        employeeId:    form.assigned_user_id,
+        excludeId,
+      })
 
-    if (overlap.overlaps) {
-      return {
-        slotBlocked: true,
-        slotMsg: `El horario ${startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}–${endObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} ya está ocupado (conflicto a las ${overlap.conflictTime}). Selecciona otro horario.`,
-        bookingLevel: 'blocked' as DoubleBookingLevel,
-        bookingMsg: '',
+      if (empConflict.conflicts) {
+        const employeeName = users.find(u => u.id === form.assigned_user_id)?.name ?? 'El empleado'
+        return {
+          slotBlocked: true,
+          slotMsg: `${employeeName} ya tiene una cita a las ${empConflict.conflictTime}. Cambia el horario o asigna otro empleado.`,
+          bookingLevel: 'blocked' as DoubleBookingLevel,
+          bookingMsg: '',
+        }
       }
     }
 
@@ -189,7 +194,7 @@ export default function EditAppointmentPage({ params }: Props) {
 
     return () => { clearTimeout(t); setValidating(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.client_id, form.start_at, form.service_id, businessId, services])
+  }, [form.client_id, form.start_at, form.service_id, form.assigned_user_id, businessId, services])
 
   // ── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {

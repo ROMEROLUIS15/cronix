@@ -111,6 +111,53 @@ export function checkSlotOverlap(params: {
   return { overlaps: false }
 }
 
+// ── Employee Conflict ─────────────────────────────────────────────────────
+
+/**
+ * Checks if a specific employee already has a conflicting appointment.
+ *
+ * Different from checkSlotOverlap: filters ONLY the given employee's
+ * appointments before checking overlap. Two different employees CAN
+ * have appointments at the same time.
+ *
+ * Overlap condition:
+ *   proposedStart < existingEnd AND proposedEnd > existingStart
+ */
+export function checkEmployeeConflict(params: {
+  proposedStart: Date
+  proposedEnd:   Date
+  existing: Array<{ start_at: string; end_at: string; id?: string; assigned_user_id?: string | null }>
+  employeeId:    string
+  excludeId?:    string
+}): { conflicts: boolean; conflictTime?: string } {
+  const { proposedStart, proposedEnd, existing, employeeId, excludeId } = params
+
+  const employeeApts = existing.filter(
+    a => a.assigned_user_id === employeeId && a.id !== excludeId
+  )
+
+  for (const apt of employeeApts) {
+    const existStart = new Date(apt.start_at)
+    const existEnd   = new Date(apt.end_at)
+
+    const overlaps =
+      proposedStart < existEnd &&
+      proposedEnd   > existStart
+
+    if (overlaps) {
+      return {
+        conflicts:    true,
+        conflictTime: existStart.toLocaleTimeString('es-CO', {
+          hour:   '2-digit',
+          minute: '2-digit',
+        }),
+      }
+    }
+  }
+
+  return { conflicts: false }
+}
+
 // ── Date Boundaries ───────────────────────────────────────────────────────
 
 /**

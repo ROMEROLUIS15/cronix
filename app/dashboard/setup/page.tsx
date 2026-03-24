@@ -46,7 +46,7 @@ export default function SetupPage() {
               width={80}
               height={80}
               className="h-full w-full object-cover"
-              unoptimized
+              sizes="80px"
             />
           </div>
           <div className="relative h-9 w-36">
@@ -55,7 +55,7 @@ export default function SetupPage() {
               alt="Cronix"
               fill
               className="object-contain"
-              unoptimized
+              sizes="144px"
             />
           </div>
           <h1
@@ -70,7 +70,7 @@ export default function SetupPage() {
         </div>
 
         <Card
-          className="p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem]"
+          className="p-5 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem]"
           style={{
             borderTop: "4px solid #0062FF",
             background: "rgba(26,26,31,0.95)",

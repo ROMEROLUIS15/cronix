@@ -49,7 +49,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
       aria-modal="true"
       role="dialog"
@@ -60,7 +60,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
       {/* Dialog */}
       <div
         className={cn(
-          'relative w-full bg-card rounded-3xl border border-border shadow-brand-lg animate-slide-up overflow-hidden',
+          'relative w-full bg-card rounded-t-3xl sm:rounded-3xl border border-border shadow-brand-lg animate-slide-from-bottom sm:animate-slide-up overflow-hidden max-h-[90dvh] sm:max-h-[85vh] flex flex-col',
           sizeClasses[size]
         )}
       >
@@ -73,7 +73,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
             </div>
             <button
               onClick={onClose}
-              className="btn-ghost ml-4 p-1 rounded-lg"
+              className="btn-ghost ml-4 p-2 rounded-lg"
               aria-label="Cerrar"
             >
               <X size={18} />
@@ -82,13 +82,13 @@ export function Modal({ open, onClose, title, description, children, footer, siz
         )}
 
         {/* Body */}
-        <div className="px-6 py-4 overflow-y-auto max-h-[70vh]">
+        <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-border bg-surface">
+          <div className="px-6 py-4 pb-6 sm:pb-4 border-t border-border bg-surface flex-shrink-0">
             {footer}
           </div>
         )}

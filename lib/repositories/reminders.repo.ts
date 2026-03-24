@@ -22,13 +22,13 @@ export type ReminderStatus = 'pending' | 'sent' | 'failed' | 'cancelled'
 export interface PendingReminderRow {
   id:             string
   appointment_id: string
+  business_id:    string
   remind_at:      string
   minutes_before: number
+  businesses:   { name: string } | null
   appointments: {
-    start_at:   string
-    clients:    { name: string; phone: string | null }
-    services:   { name: string }
-    businesses: { name: string }
+    start_at: string
+    clients:  { name: string; phone: string | null }
   } | null
 }
 
@@ -95,13 +95,13 @@ export async function getPendingReminders(
     .select(`
       id,
       appointment_id,
+      business_id,
       remind_at,
       minutes_before,
+      businesses ( name ),
       appointments (
         start_at,
-        clients   ( name, phone ),
-        services  ( name ),
-        businesses ( name )
+        clients ( name, phone )
       )
     `)
     .eq('status', 'pending')

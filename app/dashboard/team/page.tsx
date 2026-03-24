@@ -22,14 +22,28 @@ import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as usersRepo from '@/lib/repositories/users.repo'
 import type { TeamMember } from '@/lib/repositories/users.repo'
+import {
+  PhoneInputFlags,
+  parsePhone,
+  buildPhone,
+  type Country,
+  COUNTRIES,
+} from '@/components/ui/phone-input-flags'
+import {
+  createEmployeeAction,
+  updateEmployeeAction,
+  toggleEmployeeActiveAction,
+  deleteEmployeeAction,
+} from './actions'
 
 // ── Form state ──────────────────────────────────────────────────────────────
 
 interface EmployeeForm {
-  name: string
-  email: string
-  phone: string
-  color: string
+  name:       string
+  email:      string
+  country:    Country
+  localPhone: string
+  color:      string
 }
 
 const COLORS = [
@@ -38,10 +52,11 @@ const COLORS = [
 ]
 
 const emptyForm = (): EmployeeForm => ({
-  name: '',
-  email: '',
-  phone: '',
-  color: '#6366f1',
+  name:       '',
+  email:      '',
+  country:    COUNTRIES[0] as Country,
+  localPhone: '',
+  color:      '#6366f1',
 })
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -82,11 +97,13 @@ export default function TeamPage() {
   }
 
   const openEdit = (m: TeamMember) => {
+    const { country, local } = parsePhone(m.phone)
     setForm({
-      name: m.name,
-      email: m.email ?? '',
-      phone: m.phone ?? '',
-      color: m.color ?? '#6366f1',
+      name:       m.name,
+      email:      m.email ?? '',
+      country,
+      localPhone: local,
+      color:      m.color ?? '#6366f1',
     })
     setEditingId(m.id)
     setShowForm(true)
@@ -97,14 +114,14 @@ export default function TeamPage() {
     setSaving(true)
 
     const payload = {
-      name: form.name.trim(),
+      name:  form.name.trim(),
       email: form.email.trim() || null,
-      phone: form.phone.trim() || null,
+      phone: buildPhone(form.country, form.localPhone),
       color: form.color,
     }
 
     if (editingId) {
-      await usersRepo.updateEmployee(supabase, editingId, businessId, payload)
+      await updateEmployeeAction({ employeeId: editingId, businessId, ...payload })
         .then(() => {
           showMsg('success', 'Empleado actualizado')
           setShowForm(false)
@@ -112,7 +129,7 @@ export default function TeamPage() {
         })
         .catch((err: Error) => showMsg('error', err.message))
     } else {
-      await usersRepo.createEmployee(supabase, businessId, payload)
+      await createEmployeeAction({ businessId, ...payload })
         .then(() => {
           showMsg('success', 'Empleado agregado al equipo')
           setShowForm(false)
@@ -126,7 +143,11 @@ export default function TeamPage() {
 
   const handleToggleActive = async (m: TeamMember) => {
     if (!businessId) return
-    await usersRepo.toggleEmployeeActive(supabase, m.id, businessId, m.is_active ?? true)
+    await toggleEmployeeActiveAction({
+      employeeId: m.id,
+      businessId,
+      currentlyActive: m.is_active ?? true,
+    })
       .then(() => loadMembers(businessId))
       .catch((err: Error) => showMsg('error', err.message))
   }
@@ -134,7 +155,7 @@ export default function TeamPage() {
   const handleDelete = async (id: string) => {
     if (!businessId) return
     setDeletingId(id)
-    await usersRepo.deleteEmployee(supabase, id, businessId)
+    await deleteEmployeeAction({ employeeId: id, businessId })
       .then(() => {
         showMsg('success', 'Empleado eliminado')
         loadMembers(businessId)
@@ -257,16 +278,12 @@ export default function TeamPage() {
                 <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
                   Teléfono
                 </label>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#909098' }} />
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                    className="input-base pl-9"
-                    placeholder="+57 300 000 0000"
-                  />
-                </div>
+                <PhoneInputFlags
+                  country={form.country}
+                  onCountryChange={country => setForm(f => ({ ...f, country }))}
+                  localPhone={form.localPhone}
+                  onLocalPhoneChange={localPhone => setForm(f => ({ ...f, localPhone }))}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ color: '#F2F2F2' }}>

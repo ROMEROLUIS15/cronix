@@ -1,77 +1,64 @@
 'use client'
 
 /**
- * useFetch — Centralized async data-fetching hook.
+ * useFetch — Centralized async data-fetching hook backed by React Query.
  *
- * Replaces scattered try/catch + console.error patterns in Client Components.
- * Returns typed loading / data / error state so UI can react accordingly.
- *
- * When the backend is decoupled, only the `fetcher` function changes —
- * the component code stays identical.
+ * Drop-in replacement with the same API surface. Benefits:
+ *  - Cached: navigating away and back reuses data instead of re-fetching
+ *  - Deduplicated: multiple components with the same key share one request
+ *  - Background refetch: stale data shown instantly while fresh data loads
  *
  * Usage:
  *   const { data, loading, error, refetch } = useFetch(
+ *     'clients',
  *     () => clientsRepo.getClients(supabase, businessId!),
- *     [supabase, businessId],
  *     { enabled: !!businessId }
  *   )
  */
 
-import { useState, useEffect, useCallback, useRef, type DependencyList } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { toErrorMessage } from '@/types/result'
-
-interface FetchState<T> {
-  data:    T | null
-  loading: boolean
-  error:   string | null
-}
 
 interface UseFetchOptions {
   /** Set to false to skip the fetch (e.g. while businessId is null). Defaults to true. */
   enabled?: boolean
+  /** Cache time in ms before data is considered stale. Defaults to 5 min. */
+  staleTime?: number
+}
+
+interface UseFetchResult<T> {
+  data: T | null
+  loading: boolean
+  error: string | null
+  refetch: () => Promise<void>
 }
 
 export function useFetch<T>(
+  key: string | string[],
   fetcher: () => Promise<T>,
-  deps:    DependencyList,
   options?: UseFetchOptions,
-): FetchState<T> & { refetch: () => Promise<void> } {
-  const [state, setState] = useState<FetchState<T>>({
-    data:    null,
-    loading: true,
-    error:   null,
+): UseFetchResult<T> {
+  const queryKey = Array.isArray(key) ? key : [key]
+  const queryClient = useQueryClient()
+
+  const { data, isLoading, error: queryError } = useQuery<T, Error>({
+    queryKey,
+    queryFn: fetcher,
+    enabled: options?.enabled !== false,
+    staleTime: options?.staleTime,
   })
 
-  // Prevent state updates after unmount
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
+  const refetch = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey })
+  }, [queryClient, queryKey])
 
-  const run = useCallback(async () => {
-    if (options?.enabled === false) {
-      if (mountedRef.current) setState(s => ({ ...s, loading: false }))
-      return
-    }
+  const error = queryError ? toErrorMessage(queryError) : null
 
-    if (mountedRef.current) setState(s => ({ ...s, loading: true, error: null }))
-
-    try {
-      const data = await fetcher()
-      if (mountedRef.current) setState({ data, loading: false, error: null })
-    } catch (e) {
-      if (mountedRef.current) {
-        setState({ data: null, loading: false, error: toErrorMessage(e) })
-      }
-    }
-  // Intentional: deps are forwarded from the caller, same as useEffect
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options?.enabled, ...deps])
-
-  useEffect(() => {
-    run()
-  }, [run])
-
-  return { ...state, refetch: run }
+  return {
+    data: data ?? null,
+    loading: isLoading,
+    error,
+    refetch,
+  }
 }

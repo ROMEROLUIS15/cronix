@@ -96,10 +96,10 @@ function RegisterForm() {
             <div className="h-16 w-16 rounded-2xl overflow-hidden"
               style={{ border:"1px solid rgba(56,132,255,0.3)", boxShadow:"0 0 28px rgba(56,132,255,0.22)", marginBottom:"0.75rem" }}>
               <Image src="/cronix-logo.jpg" alt="Cronix" width={64} height={64}
-                className="h-full w-full object-cover" unoptimized />
+                className="h-full w-full object-cover" sizes="64px" />
             </div>
             <div className="relative" style={{ height:"28px", width:"112px" }}>
-              <Image src="/cronix-letras.jpg" alt="Cronix" fill className="object-contain" unoptimized />
+              <Image src="/cronix-letras.jpg" alt="Cronix" fill className="object-contain" sizes="112px" />
             </div>
             <p style={{ color:"#3884FF", fontSize:"11px", fontWeight:700,
               letterSpacing:"0.12em", textTransform:"uppercase", marginTop:"6px" }}>
@@ -214,7 +214,7 @@ function RegisterForm() {
                 )}
 
                 {/* Name row */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem" }}>
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                   <div>
                     <input name="firstName" placeholder="Nombre" required
                       className={cn("input-base w-full", validationErrors.firstName && "border-red-500")}
@@ -342,10 +342,10 @@ function RegisterForm() {
             <div className="h-10 w-10 rounded-xl overflow-hidden flex-shrink-0"
               style={{ border:"1px solid rgba(255,255,255,0.15)", boxShadow:"0 0 18px rgba(56,132,255,0.45)" }}>
               <Image src="/cronix-logo.jpg" alt="Cronix" width={40} height={40}
-                className="h-full w-full object-cover" unoptimized />
+                className="h-full w-full object-cover" sizes="40px" />
             </div>
             <div className="relative" style={{ height:"22px", width:"84px", opacity:0.92 }}>
-              <Image src="/cronix-letras.jpg" alt="Cronix" fill className="object-contain object-left" unoptimized />
+              <Image src="/cronix-letras.jpg" alt="Cronix" fill className="object-contain object-left" sizes="84px" />
             </div>
           </Link>
 

@@ -14,6 +14,19 @@ export async function register(formData: FormData) {
 
   const { firstName, lastName, bizName, email, password } = result.data
   const supabase = await createClient()
+  const admin = createAdminClient()
+
+  // Verificar que el email no esté registrado antes de crear el auth user
+  const { data: existingUser } = await admin
+    .from('users')
+    .select('id, provider')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (existingUser) {
+    const method = existingUser.provider === 'google' ? 'Google' : 'correo y contraseña'
+    return { error: `Ya existe una cuenta con este correo (registrada con ${method}). Inicia sesión en lugar de registrarte.` }
+  }
 
   // Determinar la URL base: priorizar variable de entorno de producción,
   // luego el origin del request (útil en local).
@@ -64,7 +77,6 @@ export async function register(formData: FormData) {
   }
 
   // 4. Vincular usuario al negocio y activarlo (usa admin para evitar restricciones RLS)
-  const admin = createAdminClient()
   await admin
     .from('users')
     .update({

@@ -7,6 +7,8 @@ const MAX_SESSION_MS       = 12 * 60 * 60 * 1000   // 12 hours
 
 const ACTIVITY_COOKIE      = 'cronix_last_activity'
 const SESSION_START_COOKIE = 'cronix_session_start'
+const STATUS_CACHE_COOKIE  = 'cronix_user_status'
+const STATUS_CACHE_TTL_S   = 5 * 60                   // 5 minutes
 
 // ── Paths where activity is tracked ──────────────────────────────────────────
 function isTrackedPath(pathname: string): boolean {
@@ -72,10 +74,29 @@ function stampActivity(response: NextResponse, request: NextRequest): void {
 function clearActivity(response: NextResponse): void {
   response.cookies.set(ACTIVITY_COOKIE,      '', { maxAge: 0, path: '/' })
   response.cookies.set(SESSION_START_COOKIE, '', { maxAge: 0, path: '/' })
+  response.cookies.set(STATUS_CACHE_COOKIE,  '', { maxAge: 0, path: '/' })
+}
+
+// ── Fast path: skip auth round-trip when no session cookies present ───────────
+function hasSessionCookies(request: NextRequest): boolean {
+  return request.cookies.getAll().some(c => c.name.startsWith('sb-'))
 }
 
 // ── Main session updater ──────────────────────────────────────────────────────
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Fast path — no Supabase cookies means unauthenticated user.
+  // Skip the network round-trip to auth server entirely.
+  if (!hasSessionCookies(request)) {
+    if (pathname.startsWith('/dashboard')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -99,24 +120,35 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  // Token stale detectado — limpiar cookies de sesión de Cronix
+  // para evitar retry loops del SDK en requests subsiguientes.
+  if (authError && !user) {
+    supabaseResponse.cookies.set(ACTIVITY_COOKIE, '', { maxAge: 0, path: '/' })
+    supabaseResponse.cookies.set(SESSION_START_COOKIE, '', { maxAge: 0, path: '/' })
+    supabaseResponse.cookies.set(STATUS_CACHE_COOKIE, '', { maxAge: 0, path: '/' })
+  }
 
   // ── Unauthenticated: redirect to login ────────────────────────────────────
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  if (!user && pathname.startsWith('/dashboard')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
   // ── Status enforcement: block rejected users ──────────────────────────────
-  if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('status')
-      .eq('id', user.id)
-      .single()
+  // Only on dashboard page navigations — skip API routes to avoid extra
+  // DB round-trip on every server action / fetch call.
+  // Status is cached in a cookie for 5 minutes to avoid querying on every navigation.
+  const isDashboardPage = user &&
+    pathname.startsWith('/dashboard') &&
+    !pathname.startsWith('/api/')
 
-    if (dbUser?.status === 'rejected') {
+  if (isDashboardPage) {
+    const cachedStatus = request.cookies.get(STATUS_CACHE_COOKIE)?.value
+
+    if (cachedStatus === 'rejected') {
       await supabase.auth.signOut()
       const url = request.nextUrl.clone()
       url.pathname = '/login'
@@ -124,6 +156,35 @@ export async function updateSession(request: NextRequest) {
       const redirect = NextResponse.redirect(url)
       clearActivity(redirect)
       return redirect
+    }
+
+    // No cache or cache expired → query DB and cache result
+    if (!cachedStatus) {
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('status')
+        .eq('id', user.id)
+        .single()
+
+      const status = dbUser?.status ?? 'unknown'
+
+      if (status === 'rejected') {
+        await supabase.auth.signOut()
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        url.searchParams.set('reason', 'account_blocked')
+        const redirect = NextResponse.redirect(url)
+        clearActivity(redirect)
+        return redirect
+      }
+
+      // Cache non-rejected status for 5 minutes
+      supabaseResponse.cookies.set(STATUS_CACHE_COOKIE, status, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: STATUS_CACHE_TTL_S,
+      })
     }
   }
 
