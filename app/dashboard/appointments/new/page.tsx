@@ -26,6 +26,7 @@ import {
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 
 function fmtReminder(mins: number) {
   if (mins >= 1440) return `${mins / 1440} día${mins >= 2880 ? 's' : ''}`
@@ -388,13 +389,11 @@ function NewAppointmentForm() {
                   <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
                     Fecha y hora *
                   </label>
-                  <input
-                    type="datetime-local"
-                    required
+                  <DateTimePicker
                     value={form.start_at}
                     min={new Date().toISOString().slice(0, 16)}
-                    onChange={e => setForm(f => ({ ...f, start_at: e.target.value }))}
-                    className="input-base"
+                    onChange={v => setForm(f => ({ ...f, start_at: v }))}
+                    required
                   />
                 </div>
               )}

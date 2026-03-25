@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
 import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
@@ -357,9 +358,11 @@ export default function EditAppointmentPage({ params }: Props) {
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
                 Fecha y hora <span style={{ color: '#FF3B30' }}>*</span>
               </label>
-              <input type="datetime-local" required value={form.start_at}
-                onChange={e => setForm(f => ({ ...f, start_at: e.target.value }))}
-                className="input-base" />
+              <DateTimePicker
+                value={form.start_at}
+                onChange={v => setForm(f => ({ ...f, start_at: v }))}
+                required
+              />
             </div>
 
             {/* Slot overlap error */}
