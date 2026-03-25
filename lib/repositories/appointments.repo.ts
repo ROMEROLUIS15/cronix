@@ -78,7 +78,7 @@ export async function getDaySlots(
 ): Promise<SlotCheckAppointment[]> {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, start_at, end_at, client_id')
+    .select('id, start_at, end_at, client_id, assigned_user_id')
     .eq('business_id', businessId)
     .gte('start_at', startISO)
     .lte('start_at', endISO)
@@ -86,6 +86,25 @@ export async function getDaySlots(
 
   if (error) throw new Error(`Error fetching day slots: ${error.message}`)
   return (data ?? []) as SlotCheckAppointment[]
+}
+
+/**
+ * Fetches a single appointment by ID for editing.
+ */
+export async function getAppointmentForEdit(
+  supabase: Client,
+  appointmentId: string,
+  businessId: string
+) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, client_id, service_id, assigned_user_id, start_at, status, notes')
+    .eq('id', appointmentId)
+    .eq('business_id', businessId)
+    .single()
+
+  if (error) return null
+  return data
 }
 
 /**
@@ -161,7 +180,7 @@ export async function getDashboardStats(
 }
 
 /**
- * Creates a new appointment.
+ * Creates a new appointment and returns the created ID.
  */
 export async function createAppointment(
   supabase: Client,
@@ -176,13 +195,16 @@ export async function createAppointment(
     status: string
     is_dual_booking: boolean
   }
-) {
-  const { error } = await supabase
+): Promise<{ id: string }> {
+  const { data: row, error } = await supabase
     .from('appointments')
     .insert({
       ...data,
       status: data.status as Database['public']['Enums']['appointment_status'],
     })
+    .select('id')
+    .single()
 
-  if (error) throw new Error(`Error creating appointment: ${error.message}`)
+  if (error || !row) throw new Error(`Error creating appointment: ${error?.message}`)
+  return row
 }

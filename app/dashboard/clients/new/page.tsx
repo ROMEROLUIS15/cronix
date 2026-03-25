@@ -1,25 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { ArrowLeft, UserPlus, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import {
   PhoneInputFlags,
   parsePhone,
+  buildPhone,
   COUNTRIES,
   Country,
 } from "@/components/ui/phone-input-flags";
+import { useContactPicker } from "@/lib/hooks/use-contact-picker";
 
 const TAG_OPTIONS = ["VIP", "Frecuente", "Nuevo"];
 
 export default function NewClientPage() {
   const router = useRouter();
-  const supabase = createClient();
-  const [businessId, setBusinessId] = useState<string | null>(null);
+  const { supabase, businessId } = useBusinessContext();
   const [form, setForm] = useState({
     name: "",
     phoneLocal: "",
@@ -33,21 +34,12 @@ export default function NewClientPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: dbUser } = await supabase
-        .from("users")
-        .select("business_id")
-        .eq("id", user.id)
-        .single();
-      if (dbUser?.business_id) setBusinessId(dbUser.business_id);
+  const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
+    ({ name, phoneLocal, country }) => {
+      setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
+      setSelectedCountry(country);
     }
-    init();
-  }, []);
+  );
 
   const toggleTag = (tag: string) =>
     setSelectedTags((prev) =>
@@ -63,10 +55,8 @@ export default function NewClientPage() {
     setSaving(true);
     setError(null);
 
-    // Combinar dial + número local
-    const fullPhone = form.phoneLocal.trim()
-      ? `${selectedCountry.dial} ${form.phoneLocal.trim()}`
-      : null;
+    // Combinar dial + número local (normalizado)
+    const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
 
     // Verificar teléfono duplicado dentro del mismo negocio
     if (fullPhone) {
@@ -203,6 +193,8 @@ export default function NewClientPage() {
                 onCountryChange={(c) => setSelectedCountry(c)}
                 localPhone={form.phoneLocal}
                 onLocalPhoneChange={(v) => setForm({ ...form, phoneLocal: v })}
+                onPickContact={cpSupported ? pickContact : undefined}
+                pickContactLoading={cpLoading}
               />
             </div>
 

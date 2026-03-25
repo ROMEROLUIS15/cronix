@@ -1,18 +1,17 @@
 /**
- * WhatsApp Cloud API service.
+ * WhatsApp Service — proxy to Supabase Edge Function.
  *
- * Sends appointment reminder messages using the Meta WhatsApp Business API
- * and the approved `appointment_reminder` template.
+ * The actual Meta API call lives in the Edge Function so that
+ * WhatsApp credentials are stored as Supabase Secrets and never
+ * exposed to Vercel environment or the client.
  *
- * Required env vars:
- *   WHATSAPP_PHONE_NUMBER_ID  — from Meta Business Manager
- *   WHATSAPP_ACCESS_TOKEN     — permanent or temporary token
+ * Required env vars (Next.js server-side):
+ *   NEXT_PUBLIC_SUPABASE_URL  — Supabase project URL
+ *   CRON_SECRET               — shared secret with the Edge Function
  */
 
-const WA_API_BASE = 'https://graph.facebook.com/v19.0'
-
 export interface ReminderMessageParams {
-  /** Destination phone — any format; non-digit chars are stripped automatically. */
+  /** Destination phone — any format; non-digit chars are stripped by the Edge Function. */
   to:           string
   clientName:   string
   /** Business name, e.g. "Salón Cronix" */
@@ -28,59 +27,42 @@ export interface WhatsAppResult {
   error?:  string
 }
 
+function isWhatsAppResult(value: unknown): value is WhatsAppResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    typeof (value as Record<string, unknown>).success === 'boolean'
+  )
+}
+
 /**
- * Sends a WhatsApp reminder using the `appointment_reminder` template.
- * Template body variables (in order): {{1}} clientName, {{2}} businessName, {{3}} date, {{4}} time.
+ * Sends a WhatsApp reminder via the Supabase Edge Function.
  */
 export async function sendAppointmentReminder(
   params: ReminderMessageParams
 ): Promise<WhatsAppResult> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
-  const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN
+  const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const cronSecret   = process.env.CRON_SECRET
 
-  if (!phoneNumberId || !accessToken) {
-    return { success: false, error: 'WhatsApp credentials not configured' }
+  if (!supabaseUrl || !cronSecret) {
+    return { success: false, error: 'NEXT_PUBLIC_SUPABASE_URL or CRON_SECRET not configured' }
   }
 
-  // Normalise phone: strip spaces, dashes, parentheses, leading +
-  const to = params.to.replace(/[\s\-\+\(\)]/g, '')
+  const edgeUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
 
   try {
-    const res = await fetch(`${WA_API_BASE}/${phoneNumberId}/messages`, {
+    const res = await fetch(edgeUrl, {
       method:  'POST',
       headers: {
-        Authorization:  `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+        'Content-Type':      'application/json',
+        'x-internal-secret': cronSecret,
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'template',
-        template: {
-          name:     'appointment_reminder',
-          language: { code: 'es' },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: params.clientName   },
-                { type: 'text', text: params.businessName },
-                { type: 'text', text: params.date         },
-                { type: 'text', text: params.time         },
-              ],
-            },
-          ],
-        },
-      }),
+      body: JSON.stringify(params),
     })
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      const msg  = (body as { error?: { message?: string } })?.error?.message
-      return { success: false, error: msg ?? `HTTP ${res.status}` }
-    }
-
-    return { success: true }
+    const raw: unknown = await res.json().catch(() => ({ success: false, error: 'Invalid response from Edge Function' }))
+    return isWhatsAppResult(raw) ? raw : { success: false, error: 'Unexpected response shape from Edge Function' }
   } catch (e) {
     return {
       success: false,

@@ -1,19 +1,16 @@
 /**
  * Reminders Repository — Supabase queries for appointment_reminders.
  *
- * The `appointment_reminders` table must be created via:
+ * The `appointment_reminders` table is defined in:
  *   supabase/migrations/20260321_appointment_reminders.sql
- *
- * NOTE: appointment_reminders is not yet in the auto-generated database.types.ts.
- * Until `supabase gen types` is re-run after the migration, we cast the client
- * to `unknown` when querying this table so the compiler does not reject it.
+ *   types/database.types.ts  (manually synced until next `supabase gen types` run)
  *
  * All mutations accept a standard SupabaseClient (anon or admin).
  * The cron route uses createAdminClient() to bypass RLS.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database, Json } from '@/types/database.types'
 
 type DbClient = SupabaseClient<Database>
 
@@ -25,16 +22,11 @@ export interface PendingReminderRow {
   business_id:    string
   remind_at:      string
   minutes_before: number
-  businesses:   { name: string } | null
+  businesses:   { name: string; settings: Json | null } | null
   appointments: {
     start_at: string
     clients:  { name: string; phone: string | null }
   } | null
-}
-
-// Helper: cast client so TypeScript accepts the unregistered table name
-function remindersTable(supabase: DbClient) {
-  return (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> }).from('appointment_reminders')
 }
 
 /**
@@ -49,12 +41,14 @@ export async function upsertReminder(
   minutesBefore: number
 ): Promise<void> {
   // Delete existing pending reminder first
-  await remindersTable(supabase)
+  await supabase
+    .from('appointment_reminders')
     .delete()
     .eq('appointment_id', appointmentId)
     .eq('status', 'pending')
 
-  const { error } = await remindersTable(supabase)
+  const { error } = await supabase
+    .from('appointment_reminders')
     .insert({
       appointment_id: appointmentId,
       business_id:    businessId,
@@ -74,7 +68,8 @@ export async function cancelRemindersByAppointment(
   supabase: DbClient,
   appointmentId: string
 ): Promise<void> {
-  const { error } = await remindersTable(supabase)
+  const { error } = await supabase
+    .from('appointment_reminders')
     .update({ status: 'cancelled' })
     .eq('appointment_id', appointmentId)
     .eq('status', 'pending')
@@ -91,14 +86,15 @@ export async function getPendingReminders(
 ): Promise<PendingReminderRow[]> {
   const now = new Date().toISOString()
 
-  const { data, error } = await remindersTable(supabase)
+  const { data, error } = await supabase
+    .from('appointment_reminders')
     .select(`
       id,
       appointment_id,
       business_id,
       remind_at,
       minutes_before,
-      businesses ( name ),
+      businesses ( name, settings ),
       appointments (
         start_at,
         clients ( name, phone )
@@ -119,7 +115,8 @@ export async function markReminderSent(
   supabase: DbClient,
   reminderId: string
 ): Promise<void> {
-  const { error } = await remindersTable(supabase)
+  const { error } = await supabase
+    .from('appointment_reminders')
     .update({ status: 'sent', sent_at: new Date().toISOString() })
     .eq('id', reminderId)
 
@@ -134,7 +131,8 @@ export async function markReminderFailed(
   reminderId: string,
   errorMsg:   string
 ): Promise<void> {
-  const { error } = await remindersTable(supabase)
+  const { error } = await supabase
+    .from('appointment_reminders')
     .update({ status: 'failed', error_message: errorMsg })
     .eq('id', reminderId)
 
@@ -149,7 +147,8 @@ export async function getAppointmentReminder(
   supabase: DbClient,
   appointmentId: string
 ): Promise<{ minutes_before: number } | null> {
-  const { data } = await remindersTable(supabase)
+  const { data } = await supabase
+    .from('appointment_reminders')
     .select('minutes_before')
     .eq('appointment_id', appointmentId)
     .eq('status', 'pending')

@@ -14,6 +14,7 @@
 import { useEffect } from 'react'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { logger } from '@/lib/logger'
 
 interface Props {
   error: Error & { digest?: string }
@@ -24,7 +25,7 @@ export default function DashboardError({ error, reset }: Props) {
   useEffect(() => {
     // Centralized server-side error logging.
     // Replace with your observability service (Sentry, Datadog, etc.) here.
-    console.error('[Dashboard] Unhandled error:', error.message, error.digest)
+    logger.error('Dashboard', 'Unhandled error', { message: error.message, digest: error.digest })
   }, [error])
 
   return (

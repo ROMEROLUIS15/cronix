@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointment_reminders: {
+        Row: {
+          appointment_id: string
+          business_id:    string
+          channel:        string
+          created_at:     string
+          error_message:  string | null
+          id:             string
+          minutes_before: number
+          remind_at:      string
+          sent_at:        string | null
+          status:         string
+        }
+        Insert: {
+          appointment_id: string
+          business_id:    string
+          channel?:       string
+          created_at?:    string
+          error_message?: string | null
+          id?:            string
+          minutes_before?: number
+          remind_at:      string
+          sent_at?:       string | null
+          status?:        string
+        }
+        Update: {
+          appointment_id?: string
+          business_id?:    string
+          channel?:        string
+          created_at?:     string
+          error_message?:  string | null
+          id?:             string
+          minutes_before?: number
+          remind_at?:      string
+          sent_at?:        string | null
+          status?:         string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_reminders_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           assigned_user_id: string | null

@@ -17,7 +17,7 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { toErrorMessage } from '@/types/result'
 
 interface UseFetchOptions {
@@ -39,7 +39,11 @@ export function useFetch<T>(
   fetcher: () => Promise<T>,
   options?: UseFetchOptions,
 ): UseFetchResult<T> {
-  const queryKey = Array.isArray(key) ? key : [key]
+  // Stable key reference — prevents refetch from being recreated on every render
+  // when callers pass a constant string like useFetch('clients', ...)
+  const keyStr = Array.isArray(key) ? key.join('\0') : key
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const queryKey = useMemo(() => Array.isArray(key) ? key : [key], [keyStr])
   const queryClient = useQueryClient()
 
   const { data, isLoading, error: queryError } = useQuery<T, Error>({

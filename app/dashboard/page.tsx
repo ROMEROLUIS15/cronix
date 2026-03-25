@@ -47,6 +47,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import type { AppointmentStatus, AppointmentWithRelations } from "@/types";
+import { logger } from "@/lib/logger";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "#FFD60A",
@@ -158,7 +159,7 @@ export default function DashboardPage() {
       fetchStats();
       servicesRepo.hasAnyService(supabase, businessId)
         .then(has => setHasServices(has))
-        .catch(err => console.error('Error checking services:', err));
+        .catch(err => logger.error('dashboard', 'Error checking services', err));
     }
   }, [fetchStats, businessId, supabase]);
 
@@ -269,6 +270,7 @@ export default function DashboardPage() {
                 height={80}
                 className="h-full w-full object-cover"
                 sizes="80px"
+                priority
               />
             </div>
             <div
@@ -281,6 +283,7 @@ export default function DashboardPage() {
                 fill
                 className="object-contain"
                 sizes="144px"
+                priority
               />
             </div>
           </div>

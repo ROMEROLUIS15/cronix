@@ -4,24 +4,34 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarDays, AlertTriangle, Info,
-  Loader2, CheckCircle2, AlertCircle, UserPlus, Ban,
+  Loader2, CheckCircle2, AlertCircle, UserPlus, Ban, Bell, BellOff,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
-import { ReminderSelector, type ReminderMinutes } from '@/components/ui/reminder-selector'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
+import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
+import * as usersRepo from '@/lib/repositories/users.repo'
+import * as businessesRepo from '@/lib/repositories/businesses.repo'
 import { upsertReminder } from '@/lib/repositories/reminders.repo'
+import { notifyOwner } from '@/lib/services/push-notify.service'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
+  checkClientConflict,
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
+
+function fmtReminder(mins: number) {
+  if (mins >= 1440) return `${mins / 1440} día${mins >= 2880 ? 's' : ''}`
+  if (mins >= 60)   return `${mins / 60} hora${mins >= 120 ? 's' : ''}`
+  return `${mins} min`
+}
 
 // ── Inner form component ───────────────────────────────────────────────────
 function NewAppointmentForm() {
@@ -46,7 +56,8 @@ function NewAppointmentForm() {
   const [slotError,          setSlotError]          = useState<string | null>(null)
   const [confirmed,          setConfirmed]          = useState(false)
   const [validating,         setValidating]         = useState(false)
-  const [reminderMinutes,    setReminderMinutes]    = useState<ReminderMinutes>(0)
+  const [bizNotif,           setBizNotif]           = useState<{ whatsapp: boolean; reminderMinutes: number }>({ whatsapp: false, reminderMinutes: 1440 })
+  const [skipReminder,       setSkipReminder]       = useState(false)
   const [saving,             setSaving]             = useState(false)
   const [msg,                setMsg]                = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -57,14 +68,19 @@ function NewAppointmentForm() {
       return
     }
     async function init() {
-      const [clientsData, servicesData, usersRes] = await Promise.all([
+      const [clientsData, servicesData, membersData, bizSettings] = await Promise.all([
         clientsRepo.getClients(supabase, businessId!),
         servicesRepo.getActiveServices(supabase, businessId!),
-        supabase.from('users').select('id, name').eq('business_id', businessId!).eq('is_active', true),
+        usersRepo.getBusinessMembers(supabase, businessId!),
+        businessesRepo.getBusinessSettings(supabase, businessId!),
       ])
       setClients(clientsData as Client[])
       setServices(servicesData as Service[])
-      if (usersRes.data) setUsers(usersRes.data as User[])
+      setUsers(membersData as User[])
+      // Load business notification settings
+      const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
+      const hours  = notif?.reminderHours?.[0] ?? 24
+      setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
       setLoadingData(false)
     }
     init()
@@ -84,21 +100,14 @@ function NewAppointmentForm() {
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
 
-    const { data: dayApts } = await supabase
-      .from('appointments')
-      .select('id, start_at, end_at, client_id, assigned_user_id')
-      .eq('business_id', businessId)
-      .gte('start_at', start)
-      .lte('start_at', end)
-      .not('status', 'in', '("cancelled","no_show")')
+    const dayApts = await appointmentsRepo.getDaySlots(supabase, businessId, start, end)
 
-    // Employee conflict check — only when an employee is selected.
-    // Each employee can only handle one client at a time.
+    // 1) Employee conflict — each employee can only handle one client at a time.
     if (form.assigned_user_id) {
       const empConflict = checkEmployeeConflict({
         proposedStart: startObj,
         proposedEnd:   endObj,
-        existing:      dayApts ?? [],
+        existing:      dayApts,
         employeeId:    form.assigned_user_id,
         excludeId:     opts?.excludeId,
       })
@@ -107,14 +116,38 @@ function NewAppointmentForm() {
         const employeeName = users.find(u => u.id === form.assigned_user_id)?.name ?? 'El empleado'
         return {
           slotBlocked: true,
-          slotMsg: `${employeeName} ya tiene una cita a las ${empConflict.conflictTime}. Cambia el horario o asigna otro empleado.`,
+          slotMsg: `${employeeName} ya tiene una cita de ${empConflict.conflictTime}. Disponible desde las ${empConflict.availableFrom}.`,
           bookingLevel: 'blocked' as DoubleBookingLevel,
           bookingMsg: '',
         }
       }
     }
 
-    const clientApts    = (dayApts ?? []).filter(a => a.client_id === form.client_id)
+    // 2) Client conflict — same client can't be in two places at once.
+    const cliConflict = checkClientConflict({
+      proposedStart: startObj,
+      proposedEnd:   endObj,
+      existing:      dayApts,
+      clientId:      form.client_id,
+      excludeId:     opts?.excludeId,
+    })
+
+    if (cliConflict.conflicts) {
+      const clientName   = clients.find(c => c.id === form.client_id)?.name ?? 'El cliente'
+      const assignedName = cliConflict.assignedUserId
+        ? users.find(u => u.id === cliConflict.assignedUserId)?.name ?? 'otro empleado'
+        : null
+      const withText = assignedName ? ` con ${assignedName}` : ''
+      return {
+        slotBlocked: true,
+        slotMsg: `${clientName} ya tiene cita de ${cliConflict.conflictTime}${withText}. Disponible desde las ${cliConflict.availableFrom}.`,
+        bookingLevel: 'blocked' as DoubleBookingLevel,
+        bookingMsg: '',
+      }
+    }
+
+    // 3) Double booking count — warn/block by number of appointments that day.
+    const clientApts    = (dayApts).filter(a => a.client_id === form.client_id && a.id !== opts?.excludeId)
     const existingSlots = clientApts.map(a => ({
       time:    new Date(a.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
       service: '',
@@ -187,9 +220,9 @@ function NewAppointmentForm() {
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + (selectedService?.duration_min ?? 30) * 60_000)
 
-    const { data: newApt, error } = await supabase
-      .from('appointments')
-      .insert({
+    let newApt: { id: string } | null = null
+    try {
+      newApt = await appointmentsRepo.createAppointment(supabase, {
         business_id:      businessId,
         client_id:        form.client_id,
         service_id:       form.service_id,
@@ -200,17 +233,29 @@ function NewAppointmentForm() {
         status:           'pending',
         is_dual_booking:  doubleBookingLevel === 'warn',
       })
-      .select('id')
-      .single()
+    } catch { /* handled below */ }
 
-    if (!error && newApt && reminderMinutes > 0) {
-      const remindAt = new Date(startObj.getTime() - reminderMinutes * 60_000).toISOString()
-      await upsertReminder(supabase, newApt.id, businessId, remindAt, reminderMinutes).catch(() => null)
+    if (newApt) {
+      // Reminder WhatsApp (si está activado)
+      if (bizNotif.whatsapp && !skipReminder && bizNotif.reminderMinutes > 0) {
+        const remindAt = new Date(startObj.getTime() - bizNotif.reminderMinutes * 60_000).toISOString()
+        await upsertReminder(supabase, newApt.id, businessId, remindAt, bizNotif.reminderMinutes).catch(() => null)
+      }
+
+      // Web Push al dueño: notificación inmediata de nueva cita
+      const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
+      const serviceName = selectedService?.name ?? 'servicio'
+      const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      notifyOwner({
+        title: '📅 Nueva cita agendada',
+        body:  `${clientName} · ${serviceName} · ${timeStr}`,
+        url:   `/dashboard/appointments/${newApt.id}`,
+      }).catch(() => null)
     }
 
     setSaving(false)
-    if (error) {
-      setMsg({ type: 'error', text: 'Error al crear la cita: ' + error.message })
+    if (!newApt) {
+      setMsg({ type: 'error', text: 'Error al crear la cita. Intenta de nuevo.' })
     } else {
       setMsg({ type: 'success', text: 'Cita creada correctamente' })
       setTimeout(() => { router.push('/dashboard/appointments'); router.refresh() }, 1200)
@@ -439,11 +484,34 @@ function NewAppointmentForm() {
                 className="input-base resize-none" />
             </div>
 
-            {/* Recordatorio */}
-            <ReminderSelector
-              value={reminderMinutes}
-              onChange={setReminderMinutes}
-            />
+            {/* Recordatorio automático */}
+            {bizNotif.whatsapp ? (
+              <div className="flex items-center justify-between p-3 rounded-xl"
+                style={{ background: '#212125', border: '1px solid #2E2E33' }}>
+                <div className="flex items-center gap-2">
+                  {skipReminder
+                    ? <BellOff size={14} style={{ color: '#606068' }} />
+                    : <Bell    size={14} style={{ color: '#0062FF' }} />
+                  }
+                  <span className="text-sm" style={{ color: skipReminder ? '#606068' : '#F2F2F2' }}>
+                    {skipReminder
+                      ? 'Sin recordatorio para esta cita'
+                      : `WhatsApp ${fmtReminder(bizNotif.reminderMinutes)} antes`
+                    }
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-xs" style={{ color: '#909098' }}>Omitir</span>
+                  <div className="relative">
+                    <input type="checkbox" className="sr-only peer"
+                      checked={skipReminder} onChange={e => setSkipReminder(e.target.checked)} />
+                    <div className="w-8 h-4 rounded-full transition-colors"
+                      style={{ background: skipReminder ? '#FF3B30' : '#3A3A3F' }} />
+                    <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                  </div>
+                </label>
+              </div>
+            ) : null}
           </div>
         </Card>
 

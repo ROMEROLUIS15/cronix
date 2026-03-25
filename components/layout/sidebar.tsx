@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { signout } from "@/app/login/actions";
 import { InstallPwaButton } from "@/components/ui/install-pwa-button";
+import type { User, Business } from "@/types";
 
 interface NavItem {
   href: string
@@ -39,8 +40,8 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
-  user?: any;
-  business?: any;
+  user?: Pick<User, 'name' | 'role' | 'avatar_url'> | null;
+  business?: Pick<Business, 'name' | 'category'> | null;
 }
 
 export function Sidebar({

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   // Find credential in DB by ID
   const { data: storedCred } = await admin
     .from('user_passkeys')
-    .select('*')
+    .select('id, user_id, credential_id, public_key, counter, transports')
     .eq('credential_id', credential.id)
     .single()
 

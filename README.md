@@ -22,10 +22,12 @@
 | Testing unitario | Vitest + jsdom |
 | Testing de BD | pgTAP (tests de RLS contra Postgres real) |
 | Notificaciones | WhatsApp Cloud API v19.0 (Meta) — plantilla aprobada |
+| Web Push | RFC 8291 — VAPID + AES-128-GCM, Service Worker nativo |
+| Edge Functions | Supabase (Deno) — whatsapp-service, push-notify, cron-reminders |
+| Scheduler | Supabase pg_cron — `cron-reminders` diario a las 00:00 UTC |
 | PWA | next-pwa — instalable en iOS, Android y desktop |
 | Imágenes | Sharp (generación de assets PWA, optimización) |
 | Deploy | Vercel (auto-deploy desde `main`) |
-| CI/CD | GitHub Actions (cron de recordatorios cada 15 min) |
 
 ---
 
@@ -34,9 +36,8 @@
 ```
 cronix/
 ├── app/                          # Next.js App Router
-│   ├── api/                      # API Routes (Edge/Node)
-│   │   ├── passkey/              # WebAuthn register + authenticate
-│   │   ├── cron/send-reminders/  # Cron job WhatsApp
+│   ├── api/                      # API Routes (Node.js — solo lo que requiere bindings nativos)
+│   │   ├── passkey/              # WebAuthn register + authenticate (@simplewebauthn C++)
 │   │   └── activity/ping/        # Heartbeat de sesión
 │   ├── auth/callback/            # OAuth callback (Google) + identity linking
 │   ├── dashboard/                # Páginas protegidas (layout + subpáginas)
@@ -68,14 +69,18 @@ cronix/
 │   └── utils.ts                  # Utilidades generales
 ├── types/                        # Tipos TypeScript globales + tipos generados de BD
 ├── supabase/
+│   ├── functions/                # Edge Functions (Deno)
+│   │   ├── whatsapp-service/     # Envío de mensajes WhatsApp
+│   │   ├── push-notify/          # Web Push RFC 8291 (VAPID + AES-128-GCM)
+│   │   └── cron-reminders/       # Procesamiento de recordatorios (llamado por pg_cron)
 │   ├── migrations/               # SQL migrations versionadas
 │   └── tests/                    # Tests pgTAP de RLS (26 tests)
-├── public/
-│   ├── manifest.json             # PWA manifest con splash screens
-│   ├── sw.js                     # Service Worker
-│   ├── icon-192x192.png          # PWA icon (generado con Sharp)
-│   └── icon-512x512.png          # PWA icon (generado con Sharp)
-└── .github/workflows/            # GitHub Actions (cron de recordatorios)
+├── worker/                       # Custom Service Worker (merged por next-pwa)
+└── public/
+    ├── manifest.json             # PWA manifest con splash screens
+    ├── sw.js                     # Service Worker compilado
+    ├── icon-192x192.png          # PWA icon (generado con Sharp)
+    └── icon-512x512.png          # PWA icon (generado con Sharp)
 ```
 
 ---
@@ -110,12 +115,13 @@ cronix/
 ### Recordatorios WhatsApp
 
 - Tabla `appointment_reminders` con estados `pending → sent / failed / cancelled`
-- Cron job cada 15 minutos via **GitHub Actions** (Vercel Hobby solo permite 1 cron diario)
-- API endpoint `GET /api/cron/send-reminders` protegido con `CRON_SECRET` bearer token
+- **Supabase pg_cron** ejecuta `cron-reminders` Edge Function diariamente a las 00:00 UTC
+- Edge Function `cron-reminders` procesa la cola y llama a `whatsapp-service` EF
 - Integración con **WhatsApp Cloud API v19.0** de Meta
 - **Token permanente** (System User Token de Meta Business Manager, no expira)
 - Template con 4 variables: `{{1}}` cliente, `{{2}}` negocio, `{{3}}` fecha, `{{4}}` hora
 - Reintentos implícitos: si falla, el registro queda en `failed` con el mensaje de error
+- Tras enviar WhatsApp, dispara Web Push al dueño del negocio como confirmación
 
 ### Gestión de Clientes
 
@@ -246,6 +252,7 @@ La plataforma está auditada y optimizada para todos los dispositivos:
 | `clients` | Clientes de cada negocio |
 | `appointments` | Citas agendadas con servicio, cliente y empleado |
 | `appointment_reminders` | Cola de recordatorios WhatsApp |
+| `notification_subscriptions` | Endpoints Web Push por usuario/dispositivo (VAPID) |
 | `services` | Servicios ofrecidos por el negocio |
 | `transactions` | Registros de pagos |
 | `expenses` | Gastos del negocio |
@@ -427,30 +434,36 @@ SUPABASE_SERVICE_ROLE_KEY=
 WHATSAPP_ACCESS_TOKEN=       # System User Token (permanente)
 WHATSAPP_PHONE_NUMBER_ID=
 
-# Seguridad del cron
+# Web Push (VAPID)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY= # Clave pública VAPID (base64url)
+
+# Seguridad del cron / Edge Functions
 CRON_SECRET=
 ```
+
+> Las claves privadas VAPID (`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) se almacenan en **Supabase Secrets**, no en variables de entorno de Vercel.
 
 ---
 
 ## CI/CD
 
-### GitHub Actions — Cron de Recordatorios
+### Supabase pg_cron — Recordatorios
 
-`.github/workflows/cron-reminders.yml` — se ejecuta cada 15 minutos:
+El job `cron-reminders-daily` se ejecuta diariamente a las 00:00 UTC directamente en PostgreSQL:
 
-```yaml
-schedule:
-  - cron: '*/15 * * * *'
+```sql
+SELECT cron.schedule(
+  'cron-reminders-daily',
+  '0 0 * * *',
+  $$ SELECT net.http_post(url := '.../functions/v1/cron-reminders', ...) $$
+);
 ```
 
-Llama `GET /api/cron/send-reminders` con el bearer token `CRON_SECRET`.
-
-> Vercel Hobby plan limita a 1 cron/día. GitHub Actions no tiene esa limitación.
+Llama a la Edge Function `cron-reminders` con el bearer token `CRON_SECRET`. Sin Vercel, sin GitHub Actions.
 
 ### Vercel
 
-Deploy automático en push a `main`. El `vercel.json` mantiene un cron diario como fallback.
+Deploy automático en push a `main`.
 
 ---
 
@@ -500,9 +513,11 @@ supabase test db     # Tests de RLS (requiere supabase start)
 ## Despliegue
 
 1. Conectar repositorio a Vercel
-2. Configurar variables de entorno en Vercel Dashboard
-3. Configurar secrets en GitHub (`APP_URL`, `CRON_SECRET`) para el cron de Actions
-4. Push a `main` → deploy automático
+2. Configurar variables de entorno en Vercel Dashboard (incluyendo `NEXT_PUBLIC_VAPID_PUBLIC_KEY`)
+3. Configurar Supabase Secrets: `CRON_SECRET`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`
+4. Activar pg_cron en Supabase SQL Editor (ver `supabase/migrations/20260325_setup_pg_cron.sql`)
+5. Deploy Edge Functions: `supabase functions deploy`
+6. Push a `main` → deploy automático
 
 ---
 
@@ -515,7 +530,7 @@ supabase test db     # Tests de RLS (requiere supabase start)
 | Auth | Email confirmado, identity linking automático, passkeys |
 | Middleware | Fast-path sin cookies, status cacheado, session timeouts |
 | Server Actions | `assertOwner()` + admin client con validación explícita |
-| API | Bearer token `CRON_SECRET` en endpoints de cron |
+| Edge Functions | `CRON_SECRET` para pg_cron → EF; JWT para llamadas de usuario |
 | Frontend | Protección de rutas, scroll lock, touch-action control |
 
 ---

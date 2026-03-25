@@ -7,6 +7,7 @@
  * Exposes:
  *  - evaluateDoubleBooking:     warn/block if client has multiple citas in a day
  *  - checkSlotOverlap:          detect time slot conflicts
+ *  - checkClientConflict:       detect client time conflicts across employees
  *  - getLocalDayBoundaries:     timezone-correct date range for queries
  *  - isExpiredAppointment:      check if appointment should auto-resolve
  *  - resolveExpiredAppointments: batch resolve expired from a list
@@ -129,8 +130,9 @@ export function checkEmployeeConflict(params: {
   existing: Array<{ start_at: string; end_at: string; id?: string; assigned_user_id?: string | null }>
   employeeId:    string
   excludeId?:    string
-}): { conflicts: boolean; conflictTime?: string } {
+}): { conflicts: boolean; conflictTime?: string; availableFrom?: string } {
   const { proposedStart, proposedEnd, existing, employeeId, excludeId } = params
+  const fmt = (d: Date) => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 
   const employeeApts = existing.filter(
     a => a.assigned_user_id === employeeId && a.id !== excludeId
@@ -140,17 +142,51 @@ export function checkEmployeeConflict(params: {
     const existStart = new Date(apt.start_at)
     const existEnd   = new Date(apt.end_at)
 
-    const overlaps =
-      proposedStart < existEnd &&
-      proposedEnd   > existStart
-
-    if (overlaps) {
+    if (proposedStart < existEnd && proposedEnd > existStart) {
       return {
-        conflicts:    true,
-        conflictTime: existStart.toLocaleTimeString('es-CO', {
-          hour:   '2-digit',
-          minute: '2-digit',
-        }),
+        conflicts:     true,
+        conflictTime:  `${fmt(existStart)} a ${fmt(existEnd)}`,
+        availableFrom: fmt(existEnd),
+      }
+    }
+  }
+
+  return { conflicts: false }
+}
+
+// ── Client Conflict ──────────────────────────────────────────────────────
+
+/**
+ * Checks if a specific client already has a conflicting appointment
+ * at the proposed time, regardless of which employee is assigned.
+ *
+ * Prevents the same client from being booked with two different
+ * employees at overlapping times. Different times on the same day = allowed.
+ */
+export function checkClientConflict(params: {
+  proposedStart: Date
+  proposedEnd:   Date
+  existing: Array<{ start_at: string; end_at: string; id?: string; client_id?: string; assigned_user_id?: string | null }>
+  clientId:      string
+  excludeId?:    string
+}): { conflicts: boolean; conflictTime?: string; availableFrom?: string; assignedUserId?: string | null } {
+  const { proposedStart, proposedEnd, existing, clientId, excludeId } = params
+  const fmt = (d: Date) => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+
+  const clientApts = existing.filter(
+    a => a.client_id === clientId && a.id !== excludeId
+  )
+
+  for (const apt of clientApts) {
+    const existStart = new Date(apt.start_at)
+    const existEnd   = new Date(apt.end_at)
+
+    if (proposedStart < existEnd && proposedEnd > existStart) {
+      return {
+        conflicts:      true,
+        conflictTime:   `${fmt(existStart)} a ${fmt(existEnd)}`,
+        availableFrom:  fmt(existEnd),
+        assignedUserId: apt.assigned_user_id ?? null,
       }
     }
   }
@@ -214,6 +250,18 @@ export function resolveExpiredAppointments<T extends { end_at: string; status: s
  * Calculates the end_at from a start time and service duration.
  * Pure function — no side effects.
  */
+export interface AppointmentPayload {
+  business_id:      string
+  client_id:        string
+  service_id:       string
+  assigned_user_id: string | null
+  start_at:         string
+  end_at:           string
+  notes:            string | null
+  status:           'pending'
+  is_dual_booking:  boolean
+}
+
 export function buildAppointmentPayload(params: {
   startAt: string
   durationMin: number
@@ -223,7 +271,7 @@ export function buildAppointmentPayload(params: {
   notes: string | null
   businessId: string
   isDualBooking: boolean
-}) {
+}): AppointmentPayload {
   const startObj = new Date(params.startAt)
   const endObj   = new Date(startObj.getTime() + params.durationMin * 60_000)
 

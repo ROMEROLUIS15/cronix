@@ -7,7 +7,6 @@ interface TopbarProps {
   subtitle?: string;
   actions?: React.ReactNode;
   onMenuClick?: () => void;
-  user?: any;
 }
 
 export function Topbar({ title, subtitle, actions, onMenuClick }: TopbarProps) {

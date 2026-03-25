@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
 export async function getSession() {
   try {
@@ -14,12 +15,12 @@ export async function getSession() {
     // 2. Buscamos los datos del usuario logueado en nuestra tabla 'users'
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
-      .select('*')
-      .eq('id', user.id) // Filtra exactamente por el ID del que inició sesión
+      .select('id, email, name, role, status, business_id, avatar_url, phone, color, provider, is_active, created_at, updated_at')
+      .eq('id', user.id)
       .maybeSingle()
 
     if (dbError) {
-      console.error('Error fetching dbUser in getSession:', dbError.message)
+      logger.error('getSession', 'Error fetching dbUser', dbError.message)
       // Si hay error de base de datos (como recursión de RLS), devolvemos el usuario de auth sin dbUser
       return { ...user, dbUser: null, business_id: null, error: dbError.message }
     }
@@ -34,7 +35,7 @@ export async function getSession() {
       business_id: dbUser.business_id
     }
   } catch (e) {
-    console.error('Critical failure in getSession:', e)
+    logger.error('getSession', 'Critical failure', e)
     return null
   }
 }
