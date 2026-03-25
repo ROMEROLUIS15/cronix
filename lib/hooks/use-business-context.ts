@@ -46,6 +46,10 @@ export function useBusinessContext(): UseBusinessContextResult {
     queryKey: ['business-context'],
     queryFn: () => getBusinessContext(supabase),
     staleTime: 10 * 60 * 1000, // 10 min — auth context rarely changes mid-session
+    // If context is null (no business yet), refetch every 3s instead of caching
+    // the null for 10 min. Covers the race condition where the auth callback
+    // hasn't finished creating the business by the time the dashboard loads.
+    refetchInterval: (query) => query.state.data === null ? 3_000 : false,
   })
 
   return {
