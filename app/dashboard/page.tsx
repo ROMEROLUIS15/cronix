@@ -80,7 +80,7 @@ export default function DashboardPage() {
     monthRevenue: 0,
     pending: 0,
   });
-  const [hasServices, setHasServices] = useState(false);
+  const [hasServices, setHasServices] = useState<boolean | null>(null);
 
   // ── Fetch entire month appointments ──────────────────────────
   const fetchMonthApts = useCallback(async () => {
@@ -433,7 +433,9 @@ export default function DashboardPage() {
 
         </div>
 
-        <ServicesOnboardingBanner businessId={businessId ?? ""} hasServices={hasServices} />
+        {hasServices !== null && (
+          <ServicesOnboardingBanner businessId={businessId ?? ""} hasServices={hasServices} />
+        )}
 
         {/* ── AGENDA TAB ── */}
         {tab === "agenda" && (

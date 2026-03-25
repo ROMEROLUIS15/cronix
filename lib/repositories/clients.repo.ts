@@ -22,7 +22,7 @@ export async function getClients(
 ): Promise<ClientType[]> {
   const { data, error } = await supabase
     .from('clients')
-    .select('id, business_id, name, phone, email, avatar_url, notes, birthday, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
+    .select('id, business_id, name, phone, email, avatar_url, notes, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('name')
@@ -59,7 +59,7 @@ export async function getClientById(
 ): Promise<ClientType | null> {
   const { data, error } = await supabase
     .from('clients')
-    .select('id, business_id, name, phone, email, avatar_url, notes, birthday, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
+    .select('id, business_id, name, phone, email, avatar_url, notes, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
     .eq('id', clientId)
     .eq('business_id', businessId)
     .single()

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, UserPen, ChevronDown, Mail, Calendar,
+  ArrowLeft, UserPen, ChevronDown, Mail,
   Tag, FileText, Save, AlertCircle, CheckCircle2, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -33,7 +33,6 @@ export default function ClientEditPage({ params }: Props) {
     name:       '',
     phoneLocal: '',
     email:      '',
-    birthday:   '',
     notes:      '',
     tags:       [] as string[],
   })
@@ -62,7 +61,6 @@ export default function ClientEditPage({ params }: Props) {
         name:       client.name      ?? '',
         phoneLocal: local,
         email:      client.email     ?? '',
-        birthday:   client.birthday  ?? '',
         notes:      client.notes     ?? '',
         tags:       client.tags      ?? [],
       })
@@ -114,7 +112,6 @@ export default function ClientEditPage({ params }: Props) {
         name:       form.name.trim(),
         phone:      fullPhone,
         email:      form.email.trim()    || null,
-        birthday:   form.birthday        || null,
         notes:      form.notes.trim()    || null,
         tags:       form.tags.length > 0 ? form.tags : null,
         updated_at: new Date().toISOString(),
@@ -228,36 +225,20 @@ export default function ClientEditPage({ params }: Props) {
             />
           </div>
 
-          {/* Email + Cumpleaños */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Email
-              </label>
-              <div className="relative">
-                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#606068' }} />
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  className="input-base pl-9"
-                  placeholder="correo@ejemplo.com"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Fecha de nacimiento
-              </label>
-              <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#606068' }} />
-                <input
-                  type="date"
-                  value={form.birthday}
-                  onChange={e => setForm({ ...form, birthday: e.target.value })}
-                  className="input-base pl-9"
-                />
-              </div>
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
+              Email
+            </label>
+            <div className="relative">
+              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#606068' }} />
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                className="input-base pl-9"
+                placeholder="correo@ejemplo.com"
+              />
             </div>
           </div>
         </div>

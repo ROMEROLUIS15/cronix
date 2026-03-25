@@ -84,12 +84,18 @@ export default function EditAppointmentPage({ params }: Props) {
       return
     }
     async function init() {
-      const [clientsData, servicesData, membersData, aptData, bizSettings] = await Promise.all([
+      const [clientsData, servicesData, membersData, aptData, bizSettings, existingReminder] = await Promise.all([
         clientsRepo.getClients(supabase, businessId!),
         servicesRepo.getActiveServices(supabase, businessId!),
         usersRepo.getBusinessMembers(supabase, businessId!),
         appointmentsRepo.getAppointmentForEdit(supabase, params.id, businessId!),
         businessesRepo.getBusinessSettings(supabase, businessId!),
+        supabase
+          .from('appointment_reminders')
+          .select('id')
+          .eq('appointment_id', params.id)
+          .in('status', ['pending', 'sent'])
+          .maybeSingle(),
       ])
 
       setClients(clientsData as Client[])
@@ -113,6 +119,8 @@ export default function EditAppointmentPage({ params }: Props) {
       const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
       const hours  = notif?.reminderHours?.[0] ?? 24
       setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
+      // Si no hay reminder activo en la BD, el toggle "Omitir" debe estar ON
+      setSkipReminder(!existingReminder.data)
 
       setLoadingData(false)
     }
