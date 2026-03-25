@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Users, Loader2 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export type Country = {
@@ -62,7 +62,22 @@ export function parsePhone(
  */
 export function buildPhone(country: Country, localPhone: string): string | null {
   const trimmed = localPhone.trim()
-  return trimmed ? `${country.dial} ${trimmed}` : null
+  return trimmed ? `${country.dial} ${normalizeLocal(country.dial, trimmed)}` : null
+}
+
+/**
+ * Strips dial-code prefix (if user typed it), dashes, and extra spaces
+ * from the local part so the stored format is always: "+XX 1234567890"
+ */
+function normalizeLocal(dial: string, local: string): string {
+  let clean = local
+  // Remove accidental leading dial code (e.g. user typed "+58 424...")
+  if (clean.startsWith(dial)) clean = clean.slice(dial.length)
+  // Strip any leading "+" and dial-like prefix (e.g. user typed "+57 316...")
+  clean = clean.replace(/^\+\d+\s*/, '')
+  // Remove dashes, dots, parentheses, and collapse spaces → pure digits
+  clean = clean.replace(/[-.()\s]+/g, '')
+  return clean
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -73,6 +88,10 @@ interface PhoneInputFlagsProps {
   onLocalPhoneChange:(val: string) => void
   /** Shows the "saved as" hint below the input. Default: true */
   showHint?:         boolean
+  /** If provided, shows a contact-picker button next to the input */
+  onPickContact?:    () => void
+  /** Shows a loading spinner on the contact-picker button */
+  pickContactLoading?: boolean
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -82,6 +101,8 @@ export function PhoneInputFlags({
   localPhone,
   onLocalPhoneChange,
   showHint = true,
+  onPickContact,
+  pickContactLoading = false,
 }: PhoneInputFlagsProps) {
   const [open,        setOpen]       = useState(false)
   const dropdownRef                  = useRef<HTMLDivElement>(null)
@@ -178,6 +199,30 @@ export function PhoneInputFlags({
           className="input-base flex-1"
           autoComplete="tel-national"
         />
+
+        {/* ── Contact picker button (mobile only) ────────────────────────── */}
+        {onPickContact && (
+          <button
+            type="button"
+            onClick={onPickContact}
+            disabled={pickContactLoading}
+            aria-label="Seleccionar de contactos"
+            title="Importar desde agenda"
+            className="flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+            style={{
+              background: 'rgba(0,98,255,0.1)',
+              border:     '1px solid rgba(0,98,255,0.25)',
+              color:      '#4D83FF',
+              width:      '42px',
+              height:     '42px',
+            }}
+          >
+            {pickContactLoading
+              ? <Loader2 size={17} className="animate-spin" />
+              : <Users size={17} />
+            }
+          </button>
+        )}
       </div>
 
       {/* ── Hint ─────────────────────────────────────────────────────────── */}

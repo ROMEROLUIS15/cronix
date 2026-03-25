@@ -35,7 +35,7 @@ export interface BusinessSettings {
   notifications: {
     whatsapp: boolean
     email: boolean
-    reminderHours: number[]
+    reminderHours?: number[]  // legacy — no longer used in UI; defaults to 24h
   }
   workingHours: Record<string, [string, string] | null>
   maxDailyBookingsPerClient: number

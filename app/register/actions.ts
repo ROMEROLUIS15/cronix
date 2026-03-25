@@ -12,7 +12,7 @@ export async function register(formData: FormData) {
     return { error: result.error?.errors?.[0]?.message || 'Datos de registro inválidos' }
   }
 
-  const { firstName, lastName, bizName, email, password } = result.data
+  const { firstName, lastName, bizName, bizCategory, email, password } = result.data
   const supabase = await createClient()
   const admin = createAdminClient()
 
@@ -40,7 +40,13 @@ export async function register(formData: FormData) {
     email,
     password,
     options: {
-      data: { full_name: `${firstName} ${lastName}`.trim() },
+      // biz_name stored in user_metadata so the callback can auto-create
+      // the business after email confirmation — user never sees /setup
+      data: {
+        full_name:    `${firstName} ${lastName}`.trim(),
+        biz_name:     bizName,
+        biz_category: bizCategory,
+      },
       emailRedirectTo: `${siteUrl}/auth/callback`,
     }
   })
@@ -63,16 +69,18 @@ export async function register(formData: FormData) {
   const { data: bizData, error: bizError } = await supabase
     .from('businesses')
     .insert({
-      name: bizName,
+      name:     bizName,
       owner_id: user.id,
-      category: 'General',
-      plan: 'pro',
+      category: bizCategory,
+      plan:     'pro',
     })
     .select()
     .single()
 
   if (bizError) {
-    console.error('Error creating business:', bizError)
+    // Log structured error — user sees generic message below
+    const { logger } = await import('@/lib/logger')
+    logger.error('register', 'Error creating business', bizError)
     return { error: 'Error al crear el negocio: ' + bizError.message }
   }
 

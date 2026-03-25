@@ -25,7 +25,7 @@ export async function getServices(
 ): Promise<Service[]> {
   const { data, error } = await supabase
     .from('services')
-    .select('*')
+    .select('id, business_id, name, description, duration_min, price, color, category, is_active, created_at')
     .eq('business_id', businessId)
     .order('name')
 

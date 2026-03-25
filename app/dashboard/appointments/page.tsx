@@ -61,13 +61,7 @@ export default function AppointmentsPage() {
     resolution: 'completed' | 'no_show'
   ) => {
     setResolvingId(aptId)
-    await supabase
-      .from('appointments')
-      .update({
-        status:     resolution,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', aptId)
+    await appointmentsRepo.updateAppointmentStatus(supabase, aptId, resolution)
     setAppointments(prev =>
       prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
     )

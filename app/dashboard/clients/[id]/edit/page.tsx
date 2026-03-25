@@ -11,7 +11,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
-import { PhoneInputFlags, parsePhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
+import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
+import { useContactPicker } from '@/lib/hooks/use-contact-picker'
 
 const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo']
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -38,6 +39,13 @@ export default function ClientEditPage({ params }: Props) {
   })
 
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country)
+
+  const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
+    ({ name, phoneLocal, country }) => {
+      setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
+      setSelectedCountry(country);
+    }
+  );
 
   useEffect(() => {
     if (!businessId) {
@@ -81,9 +89,7 @@ export default function ClientEditPage({ params }: Props) {
     if (!businessId) return
     setSaving(true)
 
-    const fullPhone = form.phoneLocal.trim()
-      ? `${selectedCountry.dial} ${form.phoneLocal.trim()}`
-      : null
+    const fullPhone = buildPhone(selectedCountry, form.phoneLocal)
 
     // Verificar teléfono duplicado (excluir el cliente actual)
     if (fullPhone) {
@@ -217,6 +223,8 @@ export default function ClientEditPage({ params }: Props) {
               onCountryChange={c => setSelectedCountry(c)}
               localPhone={form.phoneLocal}
               onLocalPhoneChange={v => setForm({ ...form, phoneLocal: v })}
+              onPickContact={cpSupported ? pickContact : undefined}
+              pickContactLoading={cpLoading}
             />
           </div>
 

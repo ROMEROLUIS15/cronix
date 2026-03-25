@@ -14,7 +14,7 @@ export const BusinessSettingsSchema = z.object({
   notifications: z.object({
     whatsapp:       z.boolean().default(false),
     email:          z.boolean().default(false),
-    reminderHours:  z.array(z.number()).default([24, 2]),
+    reminderHours:  z.array(z.number()).optional(),  // legacy — no longer editable in UI
   }).optional(),
   maxDailyBookingsPerClient: z.number().int().positive().default(2).optional(),
 })

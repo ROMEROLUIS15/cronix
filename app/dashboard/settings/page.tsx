@@ -14,24 +14,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import type { Business, BusinessSettings, BusinessSettingsJson } from "@/types";
-import { PhoneInputFlags, parsePhone, COUNTRIES, Country } from "@/components/ui/phone-input-flags";
-
-const CATEGORIES = [
-  "Barbería",
-  "Salón de belleza",
-  "Clínica",
-  "Consultorio médico",
-  "Spa",
-  "Entrenador personal",
-  "Restaurante",
-  "Consultoría",
-  "Estética / Belleza",
-  "Salud / Medicina",
-  "Deportes / Gimnasio",
-  "Tech",
-  "Electrodomésticos",
-  "Otros",
-];
+import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from "@/components/ui/phone-input-flags";
+import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 const DAYS = [
   { key: "mon", label: "Lunes" },
@@ -80,6 +64,11 @@ export default function SettingsPage() {
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
   const [hours, setHours] =
     useState<Record<string, DayHours>>(buildDefaultHours);
+  const [notifSettings, setNotifSettings] = useState<{
+    whatsapp: boolean
+    email:    boolean
+  }>({ whatsapp: false, email: false });
+  const [savingNotif, setSavingNotif] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -99,7 +88,7 @@ export default function SettingsPage() {
       setBizId(dbUser.business_id);
       const { data: business } = await supabase
         .from("businesses")
-        .select("*")
+        .select("id, name, category, phone, address, logo_url, slug, owner_id, settings, timezone, locale, plan, created_at, updated_at")
         .eq("id", dbUser.business_id)
         .single();
       if (business) {
@@ -125,6 +114,13 @@ export default function SettingsPage() {
           }
         }
         setHours(loaded);
+        const notif = (business.settings as unknown as BusinessSettingsJson)?.notifications
+        if (notif) {
+          setNotifSettings({
+            whatsapp: notif.whatsapp ?? false,
+            email:    notif.email    ?? false,
+          });
+        }
       }
       setLoading(false);
     }
@@ -141,10 +137,8 @@ export default function SettingsPage() {
     if (!bizId) return;
     setSaving(true);
     
-    // Combinar dial + número local
-    const fullPhone = form.phoneLocal.trim()
-      ? `${selectedCountry.dial} ${form.phoneLocal.trim()}`
-      : null;
+    // Combinar dial + número local (normalizado)
+    const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
 
     const { error } = await supabase
       .from("businesses")
@@ -191,6 +185,26 @@ export default function SettingsPage() {
     }));
   };
   
+  const handleSaveNotifications = async () => {
+    if (!bizId || !biz) return;
+    setSavingNotif(true);
+    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
+    const { error } = await supabase
+      .from("businesses")
+      .update({ settings: { ...currentSettings, notifications: notifSettings } })
+      .eq("id", bizId);
+    setSavingNotif(false);
+    if (!error) {
+      setBiz(prev => prev ? {
+        ...prev,
+        settings: { ...(prev.settings as object), notifications: notifSettings } as never,
+      } : prev);
+    }
+    error
+      ? showMsg("error", "Error al guardar notificaciones: " + error.message)
+      : showMsg("success", "Preferencias de recordatorio guardadas");
+  };
+
   const copyHoursToAll = (sourceKey: string) => {
     const source = hours[sourceKey];
     if (!source || !source.active) return;
@@ -208,7 +222,7 @@ export default function SettingsPage() {
   };
 
   const settings = (biz?.settings as unknown as BusinessSettings) ?? {
-    notifications: { whatsapp: false, email: false, reminderHours: [] },
+    notifications: { whatsapp: false, email: false },
     workingHours: {},
     maxDailyBookingsPerClient: 2,
   };
@@ -308,7 +322,7 @@ export default function SettingsPage() {
                 style={{ backgroundColor: "#212125" }}
               >
                 <option value="">Selecciona una categoría</option>
-                {CATEGORIES.map((cat) => (
+                {BUSINESS_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -501,18 +515,12 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="space-y-4">
-          {[
-            {
-              key: "whatsapp",
-              label: "WhatsApp",
-              desc: "Recordatorios por WhatsApp",
-            },
-            {
-              key: "email",
-              label: "Email",
-              desc: "Recordatorios por correo electrónico",
-            },
-          ].map(({ key, label, desc }) => (
+          {(
+            [
+              { key: "whatsapp", label: "WhatsApp", desc: "Recordatorios por WhatsApp" },
+              { key: "email",    label: "Email",    desc: "Recordatorios por correo electrónico" },
+            ] as const
+          ).map(({ key, label, desc }) => (
             <div
               key={key}
               className="flex items-center justify-between p-4 rounded-xl"
@@ -529,51 +537,29 @@ export default function SettingsPage() {
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  defaultChecked={
-                    settings.notifications?.[key as "whatsapp" | "email"]
+                  checked={notifSettings[key]}
+                  onChange={e =>
+                    setNotifSettings(prev => ({ ...prev, [key]: e.target.checked }))
                   }
                   className="sr-only peer"
                 />
                 <div
                   className="w-10 h-5 rounded-full transition-colors"
-                  style={{ background: "#3A3A3F" }}
+                  style={{ background: notifSettings[key] ? "#0062FF" : "#3A3A3F" }}
                 />
                 <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
               </label>
             </div>
           ))}
-          <div>
-            <p
-              className="text-sm font-medium mb-2"
-              style={{ color: "#F2F2F2" }}
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={handleSaveNotifications}
+              loading={savingNotif}
+              leftIcon={<Save size={16} />}
+              className="w-full sm:w-auto"
             >
-              Anticipación del recordatorio
-            </p>
-            <div className="flex gap-2 flex-wrap">
-              {[1, 2, 6, 12, 24, 48].map((h) => (
-                <button
-                  key={h}
-                  className="px-3 py-1.5 rounded-lg text-sm border transition-all"
-                  style={
-                    (settings.notifications?.reminderHours ?? [24, 2]).includes(
-                      h,
-                    )
-                      ? {
-                          background: "#0062FF",
-                          color: "#fff",
-                          border: "1px solid #0062FF",
-                        }
-                      : {
-                          background: "transparent",
-                          color: "#909098",
-                          border: "1px solid #2E2E33",
-                        }
-                  }
-                >
-                  {h}h
-                </button>
-              ))}
-            </div>
+              Guardar recordatorios
+            </Button>
           </div>
         </div>
       </Card>

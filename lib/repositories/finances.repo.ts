@@ -24,7 +24,7 @@ export async function getTransactions(
 ): Promise<TransactionRow[]> {
   let query = supabase
     .from('transactions')
-    .select('*')
+    .select('id, business_id, appointment_id, amount, net_amount, discount, tip, method, notes, paid_at, created_at')
     .eq('business_id', businessId)
     .order('paid_at', { ascending: false })
 
@@ -47,7 +47,7 @@ export async function getExpenses(
 ): Promise<ExpenseRow[]> {
   const { data, error } = await supabase
     .from('expenses')
-    .select('*')
+    .select('id, business_id, category, amount, description, expense_date, created_at, created_by, receipt_url')
     .eq('business_id', businessId)
     .order('expense_date', { ascending: false })
 

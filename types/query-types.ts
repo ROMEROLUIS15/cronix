@@ -112,6 +112,7 @@ export interface SlotCheckAppointment {
   start_at: string
   end_at: string
   client_id: string
+  assigned_user_id: string | null
 }
 
 // ── Business settings typed wrapper ────────────────────────────────────────
@@ -121,7 +122,7 @@ export interface BusinessSettingsJson {
   notifications?: {
     whatsapp: boolean
     email: boolean
-    reminderHours: number[]
+    reminderHours?: number[]  // legacy
   }
   maxDailyBookingsPerClient?: number
 }

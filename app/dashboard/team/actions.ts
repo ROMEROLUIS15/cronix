@@ -3,7 +3,8 @@
 import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { TeamMember, CreateEmployeePayload, UpdateEmployeePayload } from '@/lib/repositories/users.repo'
+import type { TeamMember, UpdateEmployeePayload } from '@/lib/repositories/users.repo'
+import * as usersRepo from '@/lib/repositories/users.repo'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -56,28 +57,12 @@ export async function createEmployeeAction(
 
   await assertOwner()
 
-  const { businessId, name, email, phone, color } = parsed.data
+  const { businessId, ...payload } = parsed.data
   const admin = createAdminClient()
-
-  const { data, error } = await admin
-    .from('users')
-    .insert({
-      name,
-      email,
-      phone,
-      color,
-      business_id: businessId,
-      role: 'employee',
-      is_active: true,
-      status: 'active',
-    })
-    .select('id, name, email, phone, avatar_url, color, role, is_active, created_at')
-    .single()
-
-  if (error) throw new Error(`Error creating employee: ${error.message}`)
+  const data = await usersRepo.createEmployee(admin, businessId, payload)
 
   revalidatePath('/dashboard/team')
-  return { success: true, data: data as TeamMember }
+  return { success: true, data }
 }
 
 export async function updateEmployeeAction(
@@ -90,15 +75,7 @@ export async function updateEmployeeAction(
 
   const { employeeId, businessId, ...payload } = parsed.data
   const admin = createAdminClient()
-
-  const { error } = await admin
-    .from('users')
-    .update(payload as UpdateEmployeePayload)
-    .eq('id', employeeId)
-    .eq('business_id', businessId)
-    .eq('role', 'employee')
-
-  if (error) throw new Error(`Error updating employee: ${error.message}`)
+  await usersRepo.updateEmployee(admin, employeeId, businessId, payload as UpdateEmployeePayload)
 
   revalidatePath('/dashboard/team')
   return { success: true }
@@ -110,15 +87,7 @@ export async function toggleEmployeeActiveAction(
   await assertOwner()
 
   const admin = createAdminClient()
-
-  const { error } = await admin
-    .from('users')
-    .update({ is_active: !input.currentlyActive })
-    .eq('id', input.employeeId)
-    .eq('business_id', input.businessId)
-    .eq('role', 'employee')
-
-  if (error) throw new Error(`Error toggling employee status: ${error.message}`)
+  await usersRepo.toggleEmployeeActive(admin, input.employeeId, input.businessId, input.currentlyActive)
 
   revalidatePath('/dashboard/team')
   return { success: true }
@@ -130,27 +99,7 @@ export async function deleteEmployeeAction(
   await assertOwner()
 
   const admin = createAdminClient()
-
-  const { count } = await admin
-    .from('appointments')
-    .select('id', { count: 'exact', head: true })
-    .eq('assigned_user_id', input.employeeId)
-    .eq('business_id', input.businessId)
-
-  if (count && count > 0) {
-    throw new Error(
-      `No se puede eliminar: este empleado tiene ${count} cita(s) asignada(s). Desactívalo en su lugar.`
-    )
-  }
-
-  const { error } = await admin
-    .from('users')
-    .delete()
-    .eq('id', input.employeeId)
-    .eq('business_id', input.businessId)
-    .eq('role', 'employee')
-
-  if (error) throw new Error(`Error deleting employee: ${error.message}`)
+  await usersRepo.deleteEmployee(admin, input.employeeId, input.businessId)
 
   revalidatePath('/dashboard/team')
   return { success: true }

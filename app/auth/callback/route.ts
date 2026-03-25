@@ -26,6 +26,8 @@ export async function GET(request: Request) {
   if (token_hash && type) {
     const { data, error } = await supabase.auth.verifyOtp({ token_hash, type })
     if (!error && data.user) {
+      await ensureUserProfile(data.user)
+      await ensureBusinessFromMetadata(data.user)
       const destination = await getRedirectDestination(data.user, next)
       return NextResponse.redirect(`${siteUrl}${destination}`)
     }
@@ -99,6 +101,53 @@ async function ensureUserProfile(user: User): Promise<void> {
     provider: provider as 'email' | 'google',
     business_id: null,
   })
+}
+
+/**
+ * Auto-creates the business from user_metadata set during registration.
+ *
+ * During signUp, register/actions.ts stores `biz_name` in user_metadata.
+ * On email confirmation this fires and creates the business + links the user,
+ * so the user lands on /dashboard instead of being redirected to /setup.
+ *
+ * Idempotent: if the user already has a business, or if biz_name is absent
+ * (e.g. Google OAuth users), this is a no-op and setup page is shown as fallback.
+ */
+async function ensureBusinessFromMetadata(user: User): Promise<void> {
+  const admin       = createAdminClient()
+  const bizName     = user.user_metadata?.biz_name     as string | undefined
+  const bizCategory = user.user_metadata?.biz_category as string | undefined
+  if (!bizName) return
+
+  const { data: dbUser } = await admin
+    .from('users')
+    .select('id, business_id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (!dbUser || dbUser.business_id) return  // already has a business
+
+  const { data: bizData, error: bizError } = await admin
+    .from('businesses')
+    .insert({
+      name:     bizName,
+      owner_id: user.id,
+      category: bizCategory ?? 'General',
+      plan:     'pro',
+    })
+    .select('id')
+    .single()
+
+  if (bizError || !bizData) return  // silent fail → user will see /setup as fallback
+
+  await admin
+    .from('users')
+    .update({
+      business_id: bizData.id,
+      role:        'owner',
+      status:      'active',
+    })
+    .eq('id', user.id)
 }
 
 /**

@@ -22,7 +22,7 @@ export async function getClients(
 ): Promise<ClientType[]> {
   const { data, error } = await supabase
     .from('clients')
-    .select('*')
+    .select('id, business_id, name, phone, email, avatar_url, notes, birthday, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('name')
@@ -59,7 +59,7 @@ export async function getClientById(
 ): Promise<ClientType | null> {
   const { data, error } = await supabase
     .from('clients')
-    .select('*')
+    .select('id, business_id, name, phone, email, avatar_url, notes, birthday, tags, total_appointments, total_spent, last_visit_at, created_at, updated_at, deleted_at')
     .eq('id', clientId)
     .eq('business_id', businessId)
     .single()
@@ -78,7 +78,7 @@ export async function getClientAppointments(
 ): Promise<ClientAppointmentWithDetails[]> {
   const { data, error } = await supabase
     .from('appointments')
-    .select('*, service:services(id, name, color, price, duration_min), transactions(net_amount, amount)')
+    .select('id, start_at, end_at, status, is_dual_booking, notes, client_id, service:services(id, name, color, price, duration_min), transactions(net_amount, amount)')
     .eq('client_id', clientId)
     .eq('business_id', businessId)
     .order('start_at', { ascending: false })

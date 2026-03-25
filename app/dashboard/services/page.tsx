@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import * as servicesRepo from "@/lib/repositories/services.repo";
 import type { Service } from "@/types";
+import { logger } from "@/lib/logger";
 
 interface ServiceForm {
   name: string;
@@ -81,7 +82,7 @@ export default function ServicesPage() {
       const data = await servicesRepo.getServices(supabase, bId);
       setServices(data);
     } catch (err) {
-      console.error('Error loading services:', err);
+      logger.error('services', 'Error loading services', err);
     } finally {
       setLoading(false);
     }

@@ -3,28 +3,36 @@
 import { useState, useEffect } from 'react'
 import {
   ArrowLeft, CalendarDays, AlertTriangle, Info,
-  Loader2, CheckCircle2, AlertCircle, Save, Ban,
+  Loader2, CheckCircle2, AlertCircle, Save, Ban, Bell, BellOff,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
-import { ReminderSelector, type ReminderMinutes } from '@/components/ui/reminder-selector'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
+import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
+import * as usersRepo from '@/lib/repositories/users.repo'
+import * as businessesRepo from '@/lib/repositories/businesses.repo'
 import {
   upsertReminder,
   cancelRemindersByAppointment,
-  getAppointmentReminder,
 } from '@/lib/repositories/reminders.repo'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
+  checkClientConflict,
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
+
+function fmtReminder(mins: number) {
+  if (mins >= 1440) return `${mins / 1440} día${mins >= 2880 ? 's' : ''}`
+  if (mins >= 60)   return `${mins / 60} hora${mins >= 120 ? 's' : ''}`
+  return `${mins} min`
+}
 
 function toDatetimeLocal(iso: string): string {
   if (!iso) return ''
@@ -61,7 +69,8 @@ export default function EditAppointmentPage({ params }: Props) {
   const [services, setServices] = useState<Service[]>([])
   const [users,    setUsers]    = useState<User[]>([])
 
-  const [reminderMinutes,    setReminderMinutes]    = useState<ReminderMinutes>(0)
+  const [bizNotif,           setBizNotif]           = useState<{ whatsapp: boolean; reminderMinutes: number }>({ whatsapp: false, reminderMinutes: 1440 })
+  const [skipReminder,       setSkipReminder]       = useState(false)
   const [doubleBookingLevel, setDoubleBookingLevel] = useState<DoubleBookingLevel>('allowed')
   const [doubleBookingMsg,   setDoubleBookingMsg]   = useState('')
   const [slotError,          setSlotError]          = useState<string | null>(null)
@@ -75,28 +84,24 @@ export default function EditAppointmentPage({ params }: Props) {
       return
     }
     async function init() {
-      const [clientsData, servicesData, usersRes, aptRes, existingReminder] = await Promise.all([
+      const [clientsData, servicesData, membersData, aptData, bizSettings] = await Promise.all([
         clientsRepo.getClients(supabase, businessId!),
         servicesRepo.getActiveServices(supabase, businessId!),
-        supabase.from('users').select('id, name').eq('business_id', businessId!).eq('is_active', true),
-        supabase.from('appointments')
-          .select('id, client_id, service_id, assigned_user_id, start_at, status, notes')
-          .eq('id', params.id)
-          .eq('business_id', businessId!)
-          .single(),
-        getAppointmentReminder(supabase, params.id).catch(() => null),
+        usersRepo.getBusinessMembers(supabase, businessId!),
+        appointmentsRepo.getAppointmentForEdit(supabase, params.id, businessId!),
+        businessesRepo.getBusinessSettings(supabase, businessId!),
       ])
 
       setClients(clientsData as Client[])
       setServices(servicesData as Service[])
-      if (usersRes.data) setUsers(usersRes.data as User[])
+      setUsers(membersData as User[])
 
-      if (!aptRes.data || aptRes.error) {
+      if (!aptData) {
         router.push('/dashboard/appointments')
         return
       }
 
-      const apt = aptRes.data
+      const apt = aptData
       setForm({
         client_id:        apt.client_id        ?? '',
         service_id:       apt.service_id       ?? '',
@@ -105,11 +110,9 @@ export default function EditAppointmentPage({ params }: Props) {
         status:           apt.status           ?? 'pending',
         notes:            apt.notes            ?? '',
       })
-      if (existingReminder) {
-        const validMinutes: ReminderMinutes[] = [0, 30, 60, 120, 1440]
-        const minutes = existingReminder.minutes_before as ReminderMinutes
-        setReminderMinutes(validMinutes.includes(minutes) ? minutes : 0)
-      }
+      const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
+      const hours  = notif?.reminderHours?.[0] ?? 24
+      setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
 
       setLoadingData(false)
     }
@@ -138,7 +141,7 @@ export default function EditAppointmentPage({ params }: Props) {
       .lte('start_at', end)
       .not('status', 'in', '("cancelled","no_show")')
 
-    // Employee conflict check — only when an employee is selected.
+    // 1) Employee conflict — each employee can only handle one client at a time.
     if (form.assigned_user_id) {
       const empConflict = checkEmployeeConflict({
         proposedStart: startObj,
@@ -152,13 +155,37 @@ export default function EditAppointmentPage({ params }: Props) {
         const employeeName = users.find(u => u.id === form.assigned_user_id)?.name ?? 'El empleado'
         return {
           slotBlocked: true,
-          slotMsg: `${employeeName} ya tiene una cita a las ${empConflict.conflictTime}. Cambia el horario o asigna otro empleado.`,
+          slotMsg: `${employeeName} ya tiene una cita de ${empConflict.conflictTime}. Disponible desde las ${empConflict.availableFrom}.`,
           bookingLevel: 'blocked' as DoubleBookingLevel,
           bookingMsg: '',
         }
       }
     }
 
+    // 2) Client conflict — same client can't be in two places at once.
+    const cliConflict = checkClientConflict({
+      proposedStart: startObj,
+      proposedEnd:   endObj,
+      existing:      dayApts ?? [],
+      clientId:      form.client_id,
+      excludeId,
+    })
+
+    if (cliConflict.conflicts) {
+      const clientName   = clients.find(c => c.id === form.client_id)?.name ?? 'El cliente'
+      const assignedName = cliConflict.assignedUserId
+        ? users.find(u => u.id === cliConflict.assignedUserId)?.name ?? 'otro empleado'
+        : null
+      const withText = assignedName ? ` con ${assignedName}` : ''
+      return {
+        slotBlocked: true,
+        slotMsg: `${clientName} ya tiene cita de ${cliConflict.conflictTime}${withText}. Disponible desde las ${cliConflict.availableFrom}.`,
+        bookingLevel: 'blocked' as DoubleBookingLevel,
+        bookingMsg: '',
+      }
+    }
+
+    // 3) Double booking count — warn/block by number of appointments that day.
     const clientApts = (dayApts ?? []).filter(
       a => a.client_id === form.client_id && a.id !== excludeId
     )
@@ -242,11 +269,10 @@ export default function EditAppointmentPage({ params }: Props) {
       .eq('business_id', businessId)
 
     if (!error) {
-      // Cancel existing pending reminder, then create new one if selected
       await cancelRemindersByAppointment(supabase, params.id).catch(() => null)
-      if (reminderMinutes > 0 && businessId) {
-        const remindAt = new Date(startObj.getTime() - reminderMinutes * 60_000).toISOString()
-        await upsertReminder(supabase, params.id, businessId, remindAt, reminderMinutes).catch(() => null)
+      if (bizNotif.whatsapp && !skipReminder && bizNotif.reminderMinutes > 0 && businessId) {
+        const remindAt = new Date(startObj.getTime() - bizNotif.reminderMinutes * 60_000).toISOString()
+        await upsertReminder(supabase, params.id, businessId, remindAt, bizNotif.reminderMinutes).catch(() => null)
       }
     }
 
@@ -423,11 +449,34 @@ export default function EditAppointmentPage({ params }: Props) {
                 className="input-base resize-none" />
             </div>
 
-            {/* Recordatorio */}
-            <ReminderSelector
-              value={reminderMinutes}
-              onChange={setReminderMinutes}
-            />
+            {/* Recordatorio automático */}
+            {bizNotif.whatsapp ? (
+              <div className="flex items-center justify-between p-3 rounded-xl"
+                style={{ background: '#212125', border: '1px solid #2E2E33' }}>
+                <div className="flex items-center gap-2">
+                  {skipReminder
+                    ? <BellOff size={14} style={{ color: '#606068' }} />
+                    : <Bell    size={14} style={{ color: '#0062FF' }} />
+                  }
+                  <span className="text-sm" style={{ color: skipReminder ? '#606068' : '#F2F2F2' }}>
+                    {skipReminder
+                      ? 'Sin recordatorio para esta cita'
+                      : `WhatsApp ${fmtReminder(bizNotif.reminderMinutes)} antes`
+                    }
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-xs" style={{ color: '#909098' }}>Omitir</span>
+                  <div className="relative">
+                    <input type="checkbox" className="sr-only peer"
+                      checked={skipReminder} onChange={e => setSkipReminder(e.target.checked)} />
+                    <div className="w-8 h-4 rounded-full transition-colors"
+                      style={{ background: skipReminder ? '#FF3B30' : '#3A3A3F' }} />
+                    <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                  </div>
+                </label>
+              </div>
+            ) : null}
           </div>
         </Card>
 

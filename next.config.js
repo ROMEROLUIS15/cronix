@@ -2,15 +2,14 @@ const withPWA = require("next-pwa")({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: true,
-  skipWaiting: true,
+  skipWaiting: false, // Controlled manually via SKIP_WAITING message for One-Click Update
+  // Merges worker/index.js into the compiled sw.js — adds push + notificationclick handlers
+  customWorkerDir: "worker",
 });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // reactStrictMode OFF — en desarrollo ejecutaba cada useEffect 2 veces,
-  // duplicando todas las queries a Supabase y causando lentitud perceptible.
-  // En producción no tiene efecto, pero en local generaba el doble de requests.
-  reactStrictMode: false,
+  reactStrictMode: true,
 
   images: {
     remotePatterns: [

@@ -6,23 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Store, ArrowRight, Sparkles, AlertCircle } from "lucide-react";
 import Image from "next/image";
-
-const CATEGORIES = [
-  "Barbería",
-  "Estética / Belleza",
-  "Salón de belleza",
-  "Clínica",
-  "Consultorio médico",
-  "Spa",
-  "Entrenador personal",
-  "Restaurante",
-  "Consultoría",
-  "Salud / Medicina",
-  "Deportes / Gimnasio",
-  "Tech",
-  "Electrodomésticos",
-  "Otros",
-];
+import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 export default function SetupPage() {
   const [state, formAction] = useFormState(createBusiness, null);
@@ -47,6 +31,7 @@ export default function SetupPage() {
               height={80}
               className="h-full w-full object-cover"
               sizes="80px"
+              priority
             />
           </div>
           <div className="relative h-9 w-36">
@@ -56,6 +41,7 @@ export default function SetupPage() {
               fill
               className="object-contain"
               sizes="144px"
+              priority
             />
           </div>
           <h1
@@ -128,7 +114,7 @@ export default function SetupPage() {
                   style={{ backgroundColor: "#212125" }}
                 >
                   <option value="">Selecciona una opción</option>
-                  {CATEGORIES.map((cat) => (
+                  {BUSINESS_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>

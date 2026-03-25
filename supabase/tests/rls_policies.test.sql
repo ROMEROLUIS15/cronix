@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(26);
+SELECT plan(33);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -225,12 +225,22 @@ UPDATE public.users
 SET name = 'Hacked'
 WHERE id = '00000000-0000-0000-0000-000000000002';
 
+-- User A can't even SEE user B → NULL (RLS filters the row)
+SELECT is(
+  (SELECT name FROM public.users WHERE id = '00000000-0000-0000-0000-000000000002'),
+  NULL::TEXT,
+  'Owner A cannot see Owner B user row (RLS filters it)'
+);
+
+RESET ROLE;
+
+-- Verify with service_role that the name was NOT changed
+SET LOCAL ROLE service_role;
 SELECT is(
   (SELECT name FROM public.users WHERE id = '00000000-0000-0000-0000-000000000002'),
   'Owner B',
-  'Owner A UPDATE on Owner B row is silently ignored'
+  'Owner B name unchanged after Owner A UPDATE attempt'
 );
-
 RESET ROLE;
 
 -- ── 8. Owner cannot UPDATE another owner's business ──────────────────────────
@@ -312,16 +322,23 @@ RESET ROLE;
 
 SET LOCAL ROLE service_role;
 
-SELECT is(
-  (SELECT COUNT(*)::INT FROM public.users),
-  2,
-  'service_role sees all users (bypasses RLS)'
+-- Use >= instead of exact count (production has real data beyond test fixtures)
+SELECT ok(
+  (SELECT COUNT(*)::INT FROM public.users) >= 2,
+  'service_role sees all users (bypasses RLS) — at least 2'
 );
 
+SELECT ok(
+  (SELECT COUNT(*)::INT FROM public.businesses) >= 2,
+  'service_role sees all businesses (bypasses RLS) — at least 2'
+);
+
+-- Verify service_role can see BOTH test businesses specifically
 SELECT is(
-  (SELECT COUNT(*)::INT FROM public.businesses),
+  (SELECT COUNT(*)::INT FROM public.businesses
+   WHERE id IN ('aaaaaaaa-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000002')),
   2,
-  'service_role sees all businesses (bypasses RLS)'
+  'service_role sees both test businesses'
 );
 
 RESET ROLE;
@@ -347,6 +364,63 @@ SELECT ok(
 SELECT ok(
   EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='appointment_reminders' AND policyname='reminders_select_own_business'),
   'policy reminders_select_own_business exists'
+);
+
+-- ── 12. Phone uniqueness constraint per business ────────────────────────────
+
+-- Unique index exists
+SELECT ok(
+  EXISTS(
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = 'clients' AND indexname = 'clients_business_phone_unique'
+  ),
+  'unique index clients_business_phone_unique exists'
+);
+
+-- Insert a client with phone for business A
+INSERT INTO public.clients (id, name, phone, business_id)
+VALUES (
+  'cccccccc-0000-0000-0000-000000000010',
+  'Phone Test Client',
+  '+58 4241234567',
+  'aaaaaaaa-0000-0000-0000-000000000001'
+);
+
+-- Duplicate phone in SAME business → error
+SELECT throws_ok(
+  $q$
+    INSERT INTO public.clients (name, phone, business_id)
+    VALUES ('Duplicate Phone', '+58 4241234567', 'aaaaaaaa-0000-0000-0000-000000000001')
+  $q$,
+  '23505',
+  NULL,
+  'duplicate phone in same business is rejected'
+);
+
+-- Same phone in DIFFERENT business → allowed
+SELECT lives_ok(
+  $q$
+    INSERT INTO public.clients (name, phone, business_id)
+    VALUES ('Same Phone Diff Biz', '+58 4241234567', 'bbbbbbbb-0000-0000-0000-000000000002')
+  $q$,
+  'same phone in different business is allowed'
+);
+
+-- NULL phone is always allowed (multiple clients without phone)
+SELECT lives_ok(
+  $q$
+    INSERT INTO public.clients (name, phone, business_id)
+    VALUES ('No Phone 1', NULL, 'aaaaaaaa-0000-0000-0000-000000000001')
+  $q$,
+  'NULL phone is allowed (no uniqueness constraint on NULL)'
+);
+
+SELECT lives_ok(
+  $q$
+    INSERT INTO public.clients (name, phone, business_id)
+    VALUES ('No Phone 2', NULL, 'aaaaaaaa-0000-0000-0000-000000000001')
+  $q$,
+  'multiple NULL phones in same business are allowed'
 );
 
 SELECT * FROM finish();

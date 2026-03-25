@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { BUSINESS_CATEGORIES } from '@/lib/constants/business'
 
 export const passwordSchema = z
   .string()
@@ -14,11 +15,12 @@ export const loginSchema = z.object({
 })
 
 export const registerSchema = z.object({
-  firstName: z.string().min(2, 'El nombre es muy corto'),
-  lastName: z.string().min(2, 'El apellido es muy corto'),
-  bizName: z.string().min(2, 'El nombre del negocio es muy corto'),
-  email: z.string().email('Email inválido'),
-  password: passwordSchema,
+  firstName:   z.string().min(2, 'El nombre es muy corto'),
+  lastName:    z.string().min(2, 'El apellido es muy corto'),
+  bizName:     z.string().min(2, 'El nombre del negocio es muy corto'),
+  bizCategory: z.enum(BUSINESS_CATEGORIES, { errorMap: () => ({ message: 'Selecciona un tipo de negocio' }) }),
+  email:       z.string().email('Email inválido'),
+  password:    passwordSchema,
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Las contraseñas no coinciden",

@@ -10,6 +10,7 @@ import { register } from "./actions";
 import { signUpWithGoogle } from "@/app/login/actions";
 import { PasswordInput } from "@/components/ui/password-input";
 import { registerSchema } from "@/lib/validations/auth";
+import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 type OAuthError = "google_not_registered" | null;
 
@@ -240,6 +241,22 @@ function RegisterForm() {
                     style={inputStyle} />
                   {validationErrors.bizName && (
                     <p style={{ color:"#FF6B6B", fontSize:"10px", marginTop:"3px" }}>{validationErrors.bizName}</p>
+                  )}
+                </div>
+
+                {/* Business category */}
+                <div>
+                  <select name="bizCategory" required
+                    className={cn("input-base w-full", validationErrors.bizCategory && "border-red-500")}
+                    style={{ ...inputStyle, backgroundColor: "#13131A" }}
+                    defaultValue="">
+                    <option value="" disabled>Tipo de negocio</option>
+                    {BUSINESS_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  {validationErrors.bizCategory && (
+                    <p style={{ color:"#FF6B6B", fontSize:"10px", marginTop:"3px" }}>{validationErrors.bizCategory}</p>
                   )}
                 </div>
 

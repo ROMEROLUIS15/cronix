@@ -94,7 +94,6 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
           title={title}
           subtitle={subtitle}
           onMenuClick={() => setSidebarOpen(prev => !prev)}
-          user={user}
         />
         {/*
           SCROLL CONTRACT:
