@@ -1,15 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { useFormState } from "react-dom";
 import { createBusiness } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Store, ArrowRight, Sparkles, AlertCircle } from "lucide-react";
+import { Store, ArrowRight, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 export default function SetupPage() {
   const [state, formAction] = useFormState(createBusiness, null);
+  const [initialData, setInitialData] = useState<{ name: string; category: string } | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+
+  useEffect(() => {
+    async function getUserData() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata) {
+        setInitialData({
+          name: user.user_metadata.biz_name || "",
+          category: user.user_metadata.biz_category || "",
+        });
+      }
+      setLoadingUser(false);
+    }
+    getUserData();
+  }, []);
+
+  if (loadingUser) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4">
@@ -92,6 +119,7 @@ export default function SetupPage() {
                   name="name"
                   type="text"
                   required
+                  defaultValue={initialData?.name}
                   placeholder="Ej. Barbería El Elegante"
                   className="input-base text-base sm:text-lg py-4 sm:py-6"
                 />
@@ -110,6 +138,7 @@ export default function SetupPage() {
                   id="category"
                   name="category"
                   required
+                  defaultValue={initialData?.category}
                   className="input-base text-base sm:text-lg py-3"
                   style={{ backgroundColor: "#212125" }}
                 >

@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
     
     const result = resetPasswordSchema.safeParse(data)
     if (!result.success) {
-      setError(result.error?.errors?.[0]?.message || 'Contraseña inválida')
+      setError(result.error.issues[0]?.message ?? 'Contraseña inválida')
       return
     }
     

@@ -9,10 +9,11 @@ import {
   AlertCircle,
   CheckCircle2,
   Copy,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { Business, BusinessSettings, BusinessSettingsJson } from "@/types";
+import type { Business, BusinessSettingsJson } from "@/types";
 import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useNotifications } from "@/lib/hooks/use-notifications";
@@ -190,7 +191,7 @@ export default function SettingsPage() {
     if (!error) {
       setBiz(prev => prev ? {
         ...prev,
-        settings: { ...(prev.settings as object), notifications: notifSettings } as never,
+        settings: { ...(prev.settings as BusinessSettingsJson), notifications: notifSettings } as unknown as Business['settings'],
       } : prev);
     }
     error
@@ -214,11 +215,6 @@ export default function SettingsPage() {
     showMsg("success", "Horarios copiados a los días abiertos");
   };
 
-  const settings = (biz?.settings as unknown as BusinessSettings) ?? {
-    notifications: { whatsapp: false, email: false },
-    workingHours: {},
-    maxDailyBookingsPerClient: 2,
-  };
 
   if (loading)
     return (
@@ -557,27 +553,41 @@ export default function SettingsPage() {
                 <p className="text-xs" style={{ color: "#909098" }}>
                   {notif.state === 'denied'
                     ? 'Bloqueadas — actívalas en la configuración de tu navegador'
+                    : notif.state === 'missing_config'
+                    ? 'Error: clave VAPID no configurada en el servidor'
+                    : notif.state === 'sw_unavailable'
+                    ? 'Requiere build de producción — prueba con next build && next start'
+                    : notif.loading
+                    ? 'Procesando…'
                     : notif.subscribed
                     ? 'Activo en este dispositivo'
                     : 'Recibe alertas de citas en este dispositivo'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => notif.subscribed ? notif.unsubscribe() : notif.subscribe()}
-                disabled={notif.loading || notif.state === 'denied'}
-                className="relative flex-shrink-0"
-                aria-label="Activar notificaciones push"
-              >
-                <div
-                  className="w-10 h-5 rounded-full transition-colors"
-                  style={{ background: notif.subscribed ? '#0062FF' : '#3A3A3F' }}
-                />
-                <div
-                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200"
-                  style={{ left: notif.subscribed ? '22px' : '2px' }}
-                />
-              </button>
+              {notif.loading ? (
+                <Loader2 size={20} className="animate-spin flex-shrink-0" style={{ color: '#0062FF' }} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => notif.subscribed ? notif.unsubscribe() : notif.subscribe()}
+                  disabled={
+                    notif.state === 'denied' ||
+                    notif.state === 'missing_config' ||
+                    notif.state === 'sw_unavailable'
+                  }
+                  className="relative flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={notif.subscribed ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+                >
+                  <div
+                    className="w-10 h-5 rounded-full transition-colors"
+                    style={{ background: notif.subscribed ? '#0062FF' : '#3A3A3F' }}
+                  />
+                  <div
+                    className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200"
+                    style={{ left: notif.subscribed ? '22px' : '2px' }}
+                  />
+                </button>
+              )}
             </div>
           )}
 

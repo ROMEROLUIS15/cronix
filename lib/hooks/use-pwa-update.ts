@@ -49,6 +49,8 @@ export function usePwaUpdate(): PwaUpdateState {
         }
 
         // Case 2: new SW starts installing while the page is open
+        let stateChangeCleanup: (() => void) | null = null
+
         function onUpdateFound() {
           const newWorker = registration.installing
           if (!newWorker) return
@@ -56,13 +58,13 @@ export function usePwaUpdate(): PwaUpdateState {
           const worker = newWorker
           function onStateChange() {
             if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-              // A new version is ready but waiting — show the toast
               waitingWorkerRef.current = worker
               setUpdateAvailable(true)
             }
           }
 
           worker.addEventListener('statechange', onStateChange)
+          stateChangeCleanup = () => worker.removeEventListener('statechange', onStateChange)
         }
 
         registration.addEventListener('updatefound', onUpdateFound)
@@ -77,6 +79,7 @@ export function usePwaUpdate(): PwaUpdateState {
         cleanupFn = () => {
           registration.removeEventListener('updatefound', onUpdateFound)
           navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+          stateChangeCleanup?.()
         }
       } catch (err) {
         logger.error('PWA-UPDATE', 'Service worker registration error', err)

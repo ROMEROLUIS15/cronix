@@ -113,11 +113,11 @@ export async function getAppointmentForEdit(
 export async function updateAppointmentStatus(
   supabase: Client,
   appointmentId: string,
-  status: string
+  status: Database['public']['Enums']['appointment_status']
 ) {
   const { error } = await supabase
     .from('appointments')
-    .update({ status: status as Database['public']['Enums']['appointment_status'], updated_at: new Date().toISOString() })
+    .update({ status, updated_at: new Date().toISOString() })
     .eq('id', appointmentId)
 
   if (error) throw new Error(`Error updating appointment status: ${error.message}`)

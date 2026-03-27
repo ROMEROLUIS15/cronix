@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight,
   Search, Clock, Loader2, CheckCircle2, XCircle, AlertCircle,
@@ -55,6 +55,14 @@ export default function AppointmentsPage() {
     }
   }, [fetchAppointments, contextLoading])
 
+  const filteredApts = useMemo(
+    () => appointments.filter(a =>
+      a.client?.name?.toLowerCase().includes(query.toLowerCase()) ||
+      a.service?.name?.toLowerCase().includes(query.toLowerCase())
+    ),
+    [appointments, query]
+  )
+
   // ── Resolve expired appointment ────────────────────────────────────────
   const handleResolve = async (
     aptId: string,
@@ -68,18 +76,13 @@ export default function AppointmentsPage() {
     setResolvingId(null)
   }
 
-  if (loading && contextLoading) {
+  if (loading || contextLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="animate-spin" style={{ color: '#0062FF' }} />
       </div>
     )
   }
-
-  const filteredApts = appointments.filter(a =>
-    a.client?.name?.toLowerCase().includes(query.toLowerCase()) ||
-    a.service?.name?.toLowerCase().includes(query.toLowerCase())
-  )
 
   const handlePrevDay = () => setDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
   const handleNextDay = () => setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })

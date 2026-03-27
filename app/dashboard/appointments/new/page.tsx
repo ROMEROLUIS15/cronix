@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarDays, AlertTriangle, Info,
   Loader2, CheckCircle2, AlertCircle, UserPlus, Ban, Bell, BellOff,
+  Mic, MicOff
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -19,6 +20,7 @@ import * as usersRepo from '@/lib/repositories/users.repo'
 import * as businessesRepo from '@/lib/repositories/businesses.repo'
 import { upsertReminder } from '@/lib/repositories/reminders.repo'
 import { notifyOwner } from '@/lib/services/push-notify.service'
+import { parseVoiceCommand } from '@/lib/actions/voice-assistant'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
@@ -27,6 +29,28 @@ import {
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+
+// ── Web Speech API types (not yet in lib.dom.d.ts for this TS version) ────────
+interface SpeechRecognitionEventData {
+  readonly results: SpeechRecognitionResultList
+}
+interface SpeechRecognitionInstance {
+  lang:            string
+  continuous:      boolean
+  interimResults:  boolean
+  onstart:         (() => void) | null
+  onend:           (() => void) | null
+  onerror:         (() => void) | null
+  onresult:        ((event: SpeechRecognitionEventData) => void) | null
+  start():         void
+}
+interface SpeechRecognitionConstructor {
+  new(): SpeechRecognitionInstance
+}
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?:       SpeechRecognitionConstructor
+  webkitSpeechRecognition?: SpeechRecognitionConstructor
+}
 
 function fmtReminder(mins: number) {
   if (mins >= 1440) return `${mins / 1440} día${mins >= 2880 ? 's' : ''}`
@@ -61,6 +85,8 @@ function NewAppointmentForm() {
   const [skipReminder,       setSkipReminder]       = useState(false)
   const [saving,             setSaving]             = useState(false)
   const [msg,                setMsg]                = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [isListening,        setIsListening]        = useState(false)
+  const [aiParsing,          setAiParsing]          = useState(false)
 
   // ── Load form data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -266,6 +292,55 @@ function NewAppointmentForm() {
     }
   }
 
+  // ── Voice Assistant Logic ──────────────────────────────────────────────
+  const handleVoiceAssistant = () => {
+    const win = window as SpeechRecognitionWindow
+    const SpeechRecognitionCtor = win.SpeechRecognition ?? win.webkitSpeechRecognition
+    if (!SpeechRecognitionCtor) {
+      setMsg({ type: 'error', text: 'Tu navegador no soporta reconocimiento de voz.' })
+      return
+    }
+
+    if (isListening) {
+      setIsListening(false)
+      return
+    }
+
+    const recognition = new SpeechRecognitionCtor()
+    recognition.lang = 'es-CO'
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onstart = () => setIsListening(true)
+    recognition.onend   = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+
+    recognition.onresult = async (event: SpeechRecognitionEventData) => {
+      const transcript = event.results[0]?.[0]?.transcript
+      if (!transcript) return
+
+      setAiParsing(true)
+      const parsed = await parseVoiceCommand(transcript, { services, clients })
+      setAiParsing(false)
+
+      if (parsed) {
+        setForm(f => ({
+          ...f,
+          client_id:        parsed.client_id        || f.client_id,
+          service_id:       parsed.service_id       || f.service_id,
+          start_at:         parsed.date && parsed.time ? `${parsed.date}T${parsed.time}` : f.start_at,
+          notes:            parsed.notes            || f.notes,
+          assigned_user_id: parsed.assigned_user_id || f.assigned_user_id,
+        }))
+        setMsg({ type: 'success', text: 'Entendido. He rellenado el formulario por ti.' })
+      } else {
+        setMsg({ type: 'error', text: 'No pude procesar el comando de voz. Intenta de nuevo.' })
+      }
+    }
+
+    recognition.start()
+  }
+
   if (loadingData) {
     return (
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
@@ -306,9 +381,28 @@ function NewAppointmentForm() {
         </Link>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>Nueva Cita</h1>
-        <p className="text-sm" style={{ color: '#909098' }}>Completa los datos para agendar una cita</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>Nueva Cita</h1>
+          <p className="text-sm" style={{ color: '#909098' }}>Completa los datos para agendar una cita</p>
+        </div>
+        
+        <Button 
+          type="button"
+          onClick={handleVoiceAssistant}
+          disabled={aiParsing}
+          variant="secondary"
+          className={`h-11 w-11 p-0 rounded-full flex items-center justify-center transition-all ${isListening ? 'animate-pulse bg-red-500/20 border-red-500/50 text-red-500' : ''}`}
+          title="Asistente de Voz AI"
+        >
+          {aiParsing ? (
+            <Loader2 className="animate-spin text-brand-500" size={20} />
+          ) : isListening ? (
+            <MicOff size={20} />
+          ) : (
+            <Mic size={20} />
+          )}
+        </Button>
       </div>
 
       {msg && (

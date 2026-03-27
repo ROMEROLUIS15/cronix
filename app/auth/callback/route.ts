@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 import type { EmailOtpType, User } from '@supabase/supabase-js'
 
 export async function GET(request: Request) {
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error && data.user) {
       await ensureUserProfile(data.user)
+      await ensureBusinessFromMetadata(data.user)
       const destination = await getRedirectDestination(data.user, next)
       return NextResponse.redirect(`${siteUrl}${destination}`)
     }
@@ -138,7 +140,10 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
     .select('id')
     .single()
 
-  if (bizError || !bizData) return  // silent fail → user will see /setup as fallback
+  if (bizError || !bizData) {
+    logger.error('auth-callback', 'Failed to auto-create business from metadata', bizError)
+    return
+  }
 
   await admin
     .from('users')

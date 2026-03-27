@@ -30,8 +30,10 @@ export function calculateClientDebt(
   for (const apt of appointments) {
     if (apt.status === 'cancelled' || apt.status === 'no_show') continue
 
-    const isPast = new Date(apt.start_at) < now
-    if (!isPast) continue
+    const startDate = new Date(apt.start_at)
+    if (isNaN(startDate.getTime())) continue
+
+    if (startDate >= now) continue
 
     const debt = calculateAppointmentDebt(apt)
     if (debt > 0) totalDebt += debt
@@ -45,9 +47,14 @@ export function calculateClientDebt(
  * Returns positive number if client owes money, 0 if paid.
  */
 export function calculateAppointmentDebt(apt: AppointmentWithPayment): number {
-  const price = apt.service?.price ?? 0
-  const paid  = apt.transactions?.reduce(
-    (sum, t) => sum + (t.net_amount ?? 0),
+  const price = Number(apt.service?.price ?? 0)
+  if (!isFinite(price) || price <= 0) return 0
+
+  const paid = apt.transactions?.reduce(
+    (sum, t) => {
+      const amount = Number(t.net_amount ?? 0)
+      return sum + (isFinite(amount) ? amount : 0)
+    },
     0,
   ) ?? 0
 

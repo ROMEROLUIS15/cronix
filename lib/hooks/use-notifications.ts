@@ -23,7 +23,7 @@
  *     useNotifications(businessId)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
@@ -49,9 +49,34 @@ function isPushSupported(): boolean {
   )
 }
 
+/**
+ * Resolves when a ServiceWorker becomes active, or rejects after `ms` milliseconds.
+ * Prevents infinite hangs if the SW fails to register (build issues, browser quirks).
+ */
+function getReadyRegistration(ms = 8_000): Promise<ServiceWorkerRegistration> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('SW_NOT_READY')), ms)
+  )
+  return Promise.race([navigator.serviceWorker.ready, timeout])
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type NotificationPermission = 'unsupported' | 'default' | 'granted' | 'denied'
+/**
+ * - unsupported   : browser lacks Push/Notification/ServiceWorker API
+ * - default       : permission not yet requested
+ * - granted       : permission granted
+ * - denied        : user blocked notifications (must unlock in browser settings)
+ * - missing_config: NEXT_PUBLIC_VAPID_PUBLIC_KEY env var not set
+ * - sw_unavailable: ServiceWorker not registered (disabled in dev, or build issue)
+ */
+export type NotificationPermission =
+  | 'unsupported'
+  | 'default'
+  | 'granted'
+  | 'denied'
+  | 'missing_config'
+  | 'sw_unavailable'
 
 export interface UseNotificationsReturn {
   /** Current permission state — 'unsupported' if the browser lacks Push API. */
@@ -69,7 +94,7 @@ export interface UseNotificationsReturn {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useNotifications(businessId: string | null): UseNotificationsReturn {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [state,      setState]      = useState<NotificationPermission>('default')
   const [subscribed, setSubscribed] = useState(false)
@@ -81,6 +106,11 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
       setState('unsupported')
       return
     }
+    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    if (!vapidPublicKey) {
+      setState('missing_config')
+      return
+    }
     setState(window.Notification.permission as NotificationPermission)
   }, [])
 
@@ -90,19 +120,12 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
 
     async function checkExisting() {
       try {
-        const reg      = await navigator.serviceWorker.ready
+        const reg      = await getReadyRegistration()
         const existing = await reg.pushManager.getSubscription()
         if (!existing) { setSubscribed(false); return }
 
-        const { data } = await (supabase as unknown as {
-          from: (t: string) => {
-            select: (c: string) => {
-              eq:         (col: string, val: string) => {
-                maybeSingle: () => Promise<{ data: unknown }>
-              }
-            }
-          }
-        }).from('notification_subscriptions')
+        const { data } = await supabase
+          .from('notification_subscriptions')
           .select('id')
           .eq('endpoint', existing.endpoint)
           .maybeSingle()
@@ -128,12 +151,19 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
       setState(perm as NotificationPermission)
       if (perm !== 'granted') return
 
-      // 2. Wait for SW registration
-      const reg = await navigator.serviceWorker.ready
+      // 2. Wait for SW registration (8 s timeout — fails gracefully in dev/no-SW envs)
+      let reg: ServiceWorkerRegistration
+      try {
+        reg = await getReadyRegistration()
+      } catch {
+        setState('sw_unavailable')
+        return
+      }
 
       // 3. Subscribe via PushManager
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
       if (!vapidPublicKey) {
+        setState('missing_config')
         logger.error('useNotifications', 'NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set')
         return
       }
@@ -155,11 +185,7 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
 
       // 6. Persist to notification_subscriptions with upsert
       //    (handles browser refresh → same endpoint, different keys)
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => {
-          upsert: (row: unknown, opts: unknown) => Promise<{ error: unknown }>
-        }
-      }).from('notification_subscriptions').upsert(
+      const { error } = await supabase.from('notification_subscriptions').upsert(
         {
           user_id:     user.id,
           business_id: businessId,
@@ -189,7 +215,7 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
   const unsubscribe = useCallback(async () => {
     setLoading(true)
     try {
-      const reg = await navigator.serviceWorker.ready
+      const reg = await getReadyRegistration()
       const sub = await reg.pushManager.getSubscription()
 
       if (sub) {
@@ -197,13 +223,7 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
         await sub.unsubscribe()
 
         // Remove from DB
-        await (supabase as unknown as {
-          from: (t: string) => {
-            delete: () => {
-              eq: (col: string, val: string) => Promise<unknown>
-            }
-          }
-        }).from('notification_subscriptions')
+        await supabase.from('notification_subscriptions')
           .delete()
           .eq('endpoint', sub.endpoint)
       }

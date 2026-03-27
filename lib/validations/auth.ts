@@ -7,7 +7,7 @@ export const passwordSchema = z
   .regex(/[A-Z]/, 'Debe contener al menos una letra mayúscula')
   .regex(/[a-z]/, 'Debe contener al menos una letra minúscula')
   .regex(/[0-9]/, 'Debe contener al menos un número')
-  .regex(/[^A-Za-z0-0]/, 'Debe contener al menos un carácter especial')
+  .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial')
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),

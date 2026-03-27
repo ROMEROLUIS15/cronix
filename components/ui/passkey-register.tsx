@@ -82,11 +82,14 @@ export function PasskeyRegister() {
       setDeviceName('')
       loadPasskeys()
     } catch (err: unknown) {
-      const e = err as Error
-      if (e.name === 'NotAllowedError') {
-        setError('Registro cancelado')
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError') {
+          setError('Registro cancelado')
+        } else {
+          setError(err.message || 'Error al registrar la huella')
+        }
       } else {
-        setError(e.message || 'Error al registrar la huella')
+        setError('Error al registrar la huella')
       }
     } finally {
       setRegistering(false)
@@ -94,7 +97,11 @@ export function PasskeyRegister() {
   }
 
   const handleDelete = async (id: string) => {
-    await supabase.from('user_passkeys').delete().eq('id', id)
+    const { error: deleteError } = await supabase.from('user_passkeys').delete().eq('id', id)
+    if (deleteError) {
+      setError('Error al eliminar la credencial.')
+      return
+    }
     loadPasskeys()
   }
 

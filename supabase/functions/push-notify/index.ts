@@ -321,7 +321,8 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 
   // ── Parse body first (needed for both auth paths) ────────────────────
-  let body: PushPayload & { business_id?: string }
+  // We make body 'any' locally to inspect shape safely (could be standard or DB Webhook)
+  let body: any
   try {
     body = await req.json()
   } catch {
@@ -331,12 +332,10 @@ Deno.serve(async (req: Request) => {
   // ── Auth — two paths ─────────────────────────────────────────────────
   //
   // PATH A (server→server): x-internal-secret == CRON_SECRET
-  //   Used by cron-reminders to send "upcoming reminder" alerts to the owner.
-  //   business_id MUST be provided in the request body.
+  //   Used by cron-reminders OR Supabase Database Webhooks.
   //
   // PATH B (browser→EF): Authorization: Bearer <Supabase JWT>
-  //   Used by the Next.js frontend when a new appointment is created.
-  //   business_id is resolved from the authenticated user's record.
+  //   Used by frontend when a new appointment is created.
 
   const cronSecret     = Deno.env.get('CRON_SECRET')
   const internalSecret = req.headers.get('x-internal-secret')
@@ -345,11 +344,21 @@ Deno.serve(async (req: Request) => {
   let businessId: string
 
   if (isInternalCall) {
-    // PATH A — internal call from cron-reminders
-    if (!body.business_id) {
+    // PATH A — internal call (cron or Database Webhook)
+    
+    // Support for Supabase Database Webhooks (table: appointments on INSERT)
+    if (body.type === 'INSERT' && body.table === 'appointments' && body.record) {
+      businessId = body.record.business_id as string
+      // Auto-fill push payload since the Webhook only sends the row data
+      body.title = '¡Nueva Reserva!'
+      body.body  = `Nueva cita recibida para el ${body.record.start_at.split('T')[0]}.`
+    } 
+    // Standard internal call expecting explicit business_id
+    else if (!body.business_id) {
       return json({ error: 'business_id required for internal calls' }, 400)
+    } else {
+      businessId = body.business_id as string
     }
-    businessId = body.business_id
   } else {
     // PATH B — user JWT from the browser
     const authHeader = req.headers.get('authorization') ?? ''

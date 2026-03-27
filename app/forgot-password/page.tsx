@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
     
     const result = forgotPasswordSchema.safeParse({ email })
     if (!result.success) {
-      setError(result.error?.errors?.[0]?.message || 'Email inválido')
+      setError(result.error.issues[0]?.message ?? 'Email inválido')
       return
     }
     

@@ -9,7 +9,7 @@ export async function forgotPassword(formData: FormData) {
 
   const result = forgotPasswordSchema.safeParse({ email });
   if (!result.success) {
-    return { error: result.error?.errors?.[0]?.message || "Email inválido" };
+    return { error: result.error.issues[0]?.message ?? "Email inválido" };
   }
 
   const supabase = await createClient();

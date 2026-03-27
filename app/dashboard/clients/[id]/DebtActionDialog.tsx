@@ -19,6 +19,7 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'options' | 'abono' | 'pagado'>('options')
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     amount: '',
     method: 'cash' as 'other' | 'cash' | 'card' | 'transfer' | 'qr',
@@ -28,6 +29,7 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
   const reset = () => {
     setOpen(false)
     setMode('options')
+    setError(null)
     setForm({ amount: '', method: 'cash', reference: '' })
   }
 
@@ -46,8 +48,8 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
         notes: form.reference ? `Ref: ${form.reference}` : undefined
       })
       reset()
-    } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : 'Error desconocido'))
+    } catch {
+      setError('Error al registrar el pago. Intenta de nuevo.')
     } finally {
       setLoading(false)
     }
@@ -131,6 +133,12 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
 
         {mode !== 'options' && (
           <form onSubmit={handleSubmit} className="space-y-5 py-2">
+            {error && (
+              <div className="p-3 rounded-xl text-xs font-medium"
+                style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', color: '#FF6B6B' }}>
+                {error}
+              </div>
+            )}
             {mode === 'abono' && (
               <div>
                 <label className="block text-sm font-bold text-foreground mb-2">Monto del abono</label>

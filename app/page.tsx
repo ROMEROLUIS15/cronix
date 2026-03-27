@@ -10,8 +10,7 @@ export default function RootPage() {
         minHeight: "100vh",
         backgroundColor: "#0F0F12",
         fontFamily: "'Inter', system-ui, sans-serif",
-        overflowX: "hidden", // FIXED: changed from hidden to overflowX: hidden
-        position: "relative",
+        overflowX: "hidden",         position: "relative",
       }}
     >
       {/* ── Ambient background effects ── */}
@@ -29,9 +28,7 @@ export default function RootPage() {
             position: "absolute",
             top: "-20%",
             right: "-10%",
-            width: "min(600px, 150vw)", // FIXED: responsive width
-            height: "min(600px, 150vw)", // FIXED: responsive height
-            borderRadius: "50%",
+            width: "min(600px, 150vw)",             height: "min(600px, 150vw)",             borderRadius: "50%",
             background:
               "radial-gradient(circle, rgba(0,98,255,0.12) 0%, transparent 70%)",
             filter: "blur(40px)",
@@ -43,9 +40,7 @@ export default function RootPage() {
             position: "absolute",
             bottom: "-10%",
             left: "-5%",
-            width: "min(500px, 120vw)", // FIXED: responsive width
-            height: "min(500px, 120vw)", // FIXED: responsive height
-            borderRadius: "50%",
+            width: "min(500px, 120vw)",             height: "min(500px, 120vw)",             borderRadius: "50%",
             background:
               "radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%)",
             filter: "blur(60px)",
@@ -79,8 +74,7 @@ export default function RootPage() {
 
       {/* ── Top nav ── */}
       <nav
-        className="px-5 sm:px-8 md:px-12 py-5 sm:py-6" // FIXED: responsive padding
-        style={{
+        className="px-5 sm:px-8 md:px-12 py-5 sm:py-6"         style={{
           position: "relative",
           zIndex: 10,
           display: "flex",
@@ -489,8 +483,7 @@ export default function RootPage() {
             >
               {/* Stats row */}
               <div
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2" // FIXED: Responsive grid for stats mockup
-              >
+                className="grid grid-cols-2 sm:grid-cols-4 gap-2"               >
                 {[
                   { label: "Citas hoy", val: "8", color: "#0062FF" },
                   { label: "Clientes", val: "124", color: "#30D158" },

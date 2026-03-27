@@ -35,7 +35,7 @@ export async function createBusiness(
   })
 
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0]?.message ?? 'Datos inválidos'
+    const firstError = parsed.error.issues[0]?.message ?? 'Datos inválidos'
     return { error: firstError }
   }
 
@@ -57,16 +57,18 @@ export async function createBusiness(
 
   // 5. Link user to business and activate (admin bypasses RLS for this privileged op)
   const admin = createAdminClient()
-  await admin
+  const { error: linkError } = await admin
     .from('users')
     .update({
-      name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario',
+      name: (user.user_metadata as Record<string, string> | null)?.full_name || user.email?.split('@')[0] || 'Usuario',
       email: user.email ?? '',
       business_id: business.id,
       role: 'owner',
       status: 'active',
     })
     .eq('id', user.id)
+
+  if (linkError) return { error: 'Error al vincular el usuario al negocio.' }
 
   revalidatePath('/dashboard')
   redirect('/dashboard')

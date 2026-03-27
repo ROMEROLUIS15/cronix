@@ -37,13 +37,14 @@ async function assertOwner(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autorizado.')
 
-  const { data: dbUser } = await supabase
+  const { data: dbUser, error: dbError } = await supabase
     .from('users')
     .select('role, business_id')
     .eq('id', user.id)
     .single()
 
-  if (dbUser?.role !== 'owner') throw new Error('Solo el dueño puede gestionar el equipo.')
+  if (dbError || !dbUser) throw new Error('No se pudo verificar el rol del usuario.')
+  if (dbUser.role !== 'owner') throw new Error('Solo el dueño puede gestionar el equipo.')
   return user.id
 }
 
@@ -53,7 +54,7 @@ export async function createEmployeeAction(
   input: z.infer<typeof CreateEmployeeSchema>
 ): Promise<{ success: true; data: TeamMember }> {
   const parsed = CreateEmployeeSchema.safeParse(input)
-  if (!parsed.success) throw new Error(parsed.error.errors[0]?.message ?? 'Datos inválidos')
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Datos inválidos')
 
   await assertOwner()
 
@@ -69,7 +70,7 @@ export async function updateEmployeeAction(
   input: z.infer<typeof UpdateEmployeeSchema>
 ): Promise<{ success: true }> {
   const parsed = UpdateEmployeeSchema.safeParse(input)
-  if (!parsed.success) throw new Error(parsed.error.errors[0]?.message ?? 'Datos inválidos')
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Datos inválidos')
 
   await assertOwner()
 

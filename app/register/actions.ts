@@ -9,7 +9,7 @@ export async function register(formData: FormData) {
 
   const result = registerSchema.safeParse(data)
   if (!result.success) {
-    return { error: result.error?.errors?.[0]?.message || 'Datos de registro inválidos' }
+    return { error: result.error.issues[0]?.message ?? 'Datos de registro inválidos' }
   }
 
   const { firstName, lastName, bizName, bizCategory, email, password } = result.data
@@ -85,7 +85,7 @@ export async function register(formData: FormData) {
   }
 
   // 4. Vincular usuario al negocio y activarlo (usa admin para evitar restricciones RLS)
-  await admin
+  const { error: linkError } = await admin
     .from('users')
     .update({
       name: `${firstName} ${lastName}`.trim(),
@@ -94,6 +94,12 @@ export async function register(formData: FormData) {
       status: 'active',
     })
     .eq('id', user.id)
+
+  if (linkError) {
+    const { logger } = await import('@/lib/logger')
+    logger.error('register', 'Error linking user to business', linkError)
+    return { error: 'Error al vincular tu cuenta con el negocio. Intenta iniciar sesión.' }
+  }
 
   return {
     success: '¡Cuenta creada! Revisa tu correo electrónico y confirma tu cuenta para iniciar sesión.'

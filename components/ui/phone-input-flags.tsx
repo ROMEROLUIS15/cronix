@@ -66,8 +66,9 @@ export function buildPhone(country: Country, localPhone: string): string | null 
 }
 
 /**
- * Strips dial-code prefix (if user typed it), dashes, and extra spaces
- * from the local part so the stored format is always: "+XX 1234567890"
+ * Strips dial-code prefix (if user typed it), dashes, extra spaces,
+ * and leading zeros from the local part.
+ * Stored format is always: "+XX 1234567890" (no leading 0 in local part).
  */
 function normalizeLocal(dial: string, local: string): string {
   let clean = local
@@ -77,7 +78,19 @@ function normalizeLocal(dial: string, local: string): string {
   clean = clean.replace(/^\+\d+\s*/, '')
   // Remove dashes, dots, parentheses, and collapse spaces → pure digits
   clean = clean.replace(/[-.()\s]+/g, '')
+  // Strip leading zeros — local numbers must not include the trunk prefix (e.g. 0 in 04247092980)
+  clean = clean.replace(/^0+/, '')
   return clean
+}
+
+/**
+ * Returns true if the stored phone starts with a recognized international dial code.
+ * A false result means the number is in legacy local format (no country code)
+ * and should be corrected by the user in the edit form.
+ */
+export function isE164Phone(phone: string | null | undefined): boolean {
+  if (!phone) return true
+  return COUNTRIES.some(c => phone.startsWith(c.dial))
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────

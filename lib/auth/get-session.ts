@@ -22,7 +22,7 @@ export async function getSession() {
     if (dbError) {
       logger.error('getSession', 'Error fetching dbUser', dbError.message)
       // Si hay error de base de datos (como recursión de RLS), devolvemos el usuario de auth sin dbUser
-      return { ...user, dbUser: null, business_id: null, error: dbError.message }
+      return { ...user, dbUser: null, business_id: null, error: 'Error al obtener datos del usuario.' }
     }
 
     if (!dbUser) {

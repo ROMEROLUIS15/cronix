@@ -1,87 +1,151 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Receipt, Search, Plus } from 'lucide-react'
+import { ArrowLeft, Receipt } from 'lucide-react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
-import { mockExpenses } from '@/lib/mock/data'
-import { formatCurrency, formatDate, expenseCategoryLabels } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { expenseCategoryLabels } from '@/lib/utils'
+import type { ExpenseCategory } from '@/types'
 
-export default function ExpensesPage() {
-  const [query, setQuery] = useState('')
+const CATEGORIES = Object.entries(expenseCategoryLabels) as [ExpenseCategory, string][]
 
-  // REESCRITURA TOTAL DEL FILTRO: Blindaje de nivel industrial para Vercel
-  const filtered = mockExpenses.filter((e) => {
-    const searchTerm = (query || '').toLowerCase();
-    const description = String(e?.description || '').toLowerCase();
-    const category = String(e?.category || '').toLowerCase();
-    
-    return description.includes(searchTerm) || category.includes(searchTerm);
+export default function NewExpensePage() {
+  const router = useRouter()
+  const { supabase, businessId } = useBusinessContext()
+
+  const [form, setForm] = useState({
+    category: 'supplies' as ExpenseCategory,
+    amount:   '',
+    description: '',
+    date:     new Date().toISOString().split('T')[0],
   })
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!businessId) return
+
+    const amount = parseFloat(form.amount)
+    if (isNaN(amount) || amount <= 0) {
+      setMsg({ type: 'error', text: 'Ingresa un monto válido mayor a 0.' })
+      return
+    }
+
+    setSaving(true)
+    setMsg(null)
+
+    try {
+      const { createExpense } = await import('@/lib/repositories/finances.repo')
+      await createExpense(supabase, {
+        business_id:  businessId,
+        category:     form.category,
+        amount,
+        description:  form.description.trim() || null,
+        expense_date: form.date,
+      })
+
+      router.push('/dashboard/finances/expenses')
+      router.refresh()
+    } catch (err) {
+      setMsg({ type: 'error', text: err instanceof Error ? err.message : 'Error al registrar el gasto.' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/finances" className="btn-ghost p-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft size={18} />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Historial de Gastos</h1>
-            <p className="text-muted-foreground text-sm">{mockExpenses.length} egresos registrados</p>
-          </div>
+    <div className="space-y-6 animate-fade-in max-w-2xl">
+      <Link href="/dashboard/finances" className="btn-ghost inline-flex text-sm gap-2 text-muted-foreground">
+        <ArrowLeft size={16} /> Volver a Finanzas
+      </Link>
+
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Registrar Gasto</h1>
+        <p className="text-muted-foreground text-sm">Registra un egreso o gasto operativo</p>
+      </div>
+
+      {msg && (
+        <div className={`text-sm font-medium px-4 py-3 rounded-lg ${msg.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'}`}>
+          {msg.text}
         </div>
-        <Link href="/dashboard/finances/expense">
-          <Button variant="secondary" leftIcon={<Plus size={16} />}>Registrar Gasto</Button>
-        </Link>
-      </div>
+      )}
 
-      <div className="relative max-w-md">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="text" 
-          placeholder="Buscar gasto..."
-          value={query} 
-          onChange={(e) => setQuery(e.target.value)}
-          className="input-base pl-10 w-full"
-        />
-      </div>
-
-      <Card className="p-0 overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <Receipt size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="text-muted-foreground">No se encontraron gastos para &quot;{query}&quot;</p>
-            {query && (
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setQuery('')}>
-                Limpiar búsqueda
-              </Button>
-            )}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Card>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-9 w-9 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <Receipt size={18} className="text-red-600" />
+            </div>
+            <h2 className="text-base font-semibold text-foreground">Detalles del gasto</h2>
           </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {filtered.map((exp) => (
-              <div key={exp.id} className="flex items-center gap-4 px-5 py-4 hover:bg-surface transition-colors">
-                <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                  <Receipt size={18} className="text-red-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">
-                    {expenseCategoryLabels[exp.category as keyof typeof expenseCategoryLabels] ?? exp.category ?? 'Gasto General'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatDate(exp.expense_date, 'd MMM yyyy')} · {exp.description || 'Sin descripción'}
-                  </p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-base font-bold text-red-600">-{formatCurrency(exp.amount || 0)}</p>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="amount">
+                  Monto *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <input
+                    id="amount" type="number" required min="1" step="0.01"
+                    value={form.amount}
+                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                    className="input-base pl-8" placeholder="0.00"
+                  />
                 </div>
               </div>
-            ))}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="category">
+                  Categoría *
+                </label>
+                <select id="category" required value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value as ExpenseCategory })}
+                  className="input-base bg-card"
+                >
+                  {CATEGORIES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="date">
+                Fecha del gasto *
+              </label>
+              <input id="date" type="date" required value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="input-base"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="description">
+                Descripción (opcional)
+              </label>
+              <textarea id="description" rows={2} value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="input-base resize-none"
+                placeholder="Detalle del gasto..."
+              />
+            </div>
           </div>
-        )}
-      </Card>
+        </Card>
+
+        <div className="flex items-center justify-end gap-3">
+          <Link href="/dashboard/finances">
+            <Button variant="secondary" type="button">Cancelar</Button>
+          </Link>
+          <Button type="submit" loading={saving} leftIcon={<Receipt size={16} />}>
+            Guardar Gasto
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

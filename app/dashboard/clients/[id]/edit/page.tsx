@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
-import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
+import { PhoneInputFlags, parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
 import { useContactPicker } from '@/lib/hooks/use-contact-picker'
 
 const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo']
@@ -27,6 +27,7 @@ export default function ClientEditPage({ params }: Props) {
   const [saving,         setSaving]         = useState(false)
   const [deleting,       setDeleting]       = useState(false)
   const [confirmDelete,  setConfirmDelete]  = useState(false)
+  const [legacyPhone,    setLegacyPhone]    = useState(false)
   const [msg,            setMsg]            = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const [form, setForm] = useState({
@@ -55,6 +56,7 @@ export default function ClientEditPage({ params }: Props) {
       const client = await clientsRepo.getClientById(supabase, params.id, businessId!)
       if (!client) return router.push('/dashboard/clients')
 
+      setLegacyPhone(!isE164Phone(client.phone))
       const { country, local } = parsePhone(client.phone ?? '')
       setSelectedCountry(country)
       setForm({
@@ -121,6 +123,7 @@ export default function ClientEditPage({ params }: Props) {
 
     setSaving(false)
     if (error) return showMsg('error', 'Error al guardar: ' + error.message)
+    setLegacyPhone(false)
     showMsg('success', 'Cliente actualizado correctamente')
     setTimeout(() => router.push(`/dashboard/clients/${params.id}`), 1200)
   }
@@ -181,6 +184,26 @@ export default function ClientEditPage({ params }: Props) {
             : <AlertCircle  size={18} />
           }
           {msg.text}
+        </div>
+      )}
+
+      {/* ── Aviso número legado ──────────────────────────────────────────── */}
+      {legacyPhone && (
+        <div
+          className="p-4 rounded-xl flex items-start gap-3 text-sm"
+          style={{
+            background: 'rgba(255,214,10,0.06)',
+            border:     '1px solid rgba(255,214,10,0.25)',
+            color:      '#FFD60A',
+          }}
+        >
+          <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Teléfono sin código de país</p>
+            <p className="mt-0.5 text-xs" style={{ color: 'rgba(255,214,10,0.75)' }}>
+              El número guardado no incluye el prefijo internacional. Selecciona el país correcto, verifica el número y guarda para corregirlo — de lo contrario los recordatorios de WhatsApp no llegarán.
+            </p>
+          </div>
         </div>
       )}
 

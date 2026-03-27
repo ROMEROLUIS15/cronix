@@ -20,10 +20,11 @@ export default function NewFinancePage() {
     date:      new Date().toISOString().split('T')[0],
   })
   const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!businessId) return alert('No se pudo obtener la sesión.')
+    if (!businessId) return
     setSaving(true)
 
     const amount = parseFloat(form.amount)
@@ -39,7 +40,7 @@ export default function NewFinancePage() {
 
     setSaving(false)
     if (error) {
-      alert('Error al registrar el ingreso: ' + error.message)
+      setMsg({ type: 'error', text: 'Error al registrar el ingreso.' })
     } else {
       router.push('/dashboard/finances')
       router.refresh()

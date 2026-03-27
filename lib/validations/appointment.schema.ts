@@ -25,7 +25,13 @@ export const UpdateAppointmentSchema = z.object({
   start_at:      z.coerce.date().optional(),
   end_at:        z.coerce.date().optional(),
   assigned_user_id: z.string().uuid().optional().nullable(),
-})
+}).refine(
+  (d) => {
+    if (d.start_at && d.end_at) return d.end_at > d.start_at
+    return true
+  },
+  { message: 'La hora de fin debe ser posterior al inicio', path: ['end_at'] }
+)
 
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>
 export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema>

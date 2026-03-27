@@ -6,3 +6,12 @@
 .env.keys
 .env.local
 .env.*.local
+.env.
+.env.prod_secrets
+.env.test_secrets
+.env.dev_secrets
+.env.local_secrets
+.env.prod_secrets.local
+.env.test_secrets.local
+.env.dev_secrets.local
+.env.local_secrets.local

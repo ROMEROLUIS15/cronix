@@ -10,6 +10,16 @@ dist/
 
 # Variables de entorno y Secretos (Seguridad Crítica)
 .env
+supabase/.env
+supabase/.env.test
+supabase/.env.prod_secrets
+supabase/.env.test_secrets
+supabase/.env.dev_secrets
+supabase/.env.local_secrets
+supabase/.env.prod_secrets.local
+supabase/.env.test_secrets.local
+supabase/.env.dev_secrets.local
+supabase/.env.local_secrets.local
 .env.local
 .env.development.local
 .env.test.local

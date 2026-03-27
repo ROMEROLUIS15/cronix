@@ -169,7 +169,7 @@ export default function DashboardPage() {
     try {
       await appointmentsRepo.updateAppointmentStatus(supabase, selectedApt.id, status);
       setSelectedApt((prev) => (prev ? { ...prev, status } : null));
-      Promise.all([fetchMonthApts(), fetchStats()]);
+      await Promise.all([fetchMonthApts(), fetchStats()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'No se pudo actualizar el estado');
     } finally {
@@ -186,7 +186,7 @@ export default function DashboardPage() {
         setPanelOpen(false);
         setSelectedApt(null);
       }
-      Promise.all([fetchMonthApts(), fetchStats()]);
+      await Promise.all([fetchMonthApts(), fetchStats()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'No se pudo cancelar la cita');
     } finally {

@@ -138,9 +138,7 @@ export function PasskeyLoginButton() {
       router.refresh()
 
     } catch (err: unknown) {
-      const e = err as Error
-      if (e.name === 'NotAllowedError') {
-        // Browser dismissed because no passkey found on device — guide user
+      if (err instanceof Error && err.name === 'NotAllowedError') {
         setStatus('no_passkey')
         return
       }
