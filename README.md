@@ -13,8 +13,6 @@
 ## Technical Highlights
 - **Cutting-Edge Security:** Implementation of Passkeys (WebAuthn) eliminating password dependency.
 - **Robust Data Architecture:** Intensive use of **PostgreSQL RLS** (Row Level Security) with 26 automated tests in **pgTAP**, guaranteeing real multi-tenancy at the database level.
-- **AI-Powered Automation:** Integrated WhatsApp AI Agent using **Google Gemini 1.5 Flash** for natural language appointment scheduling with tool-calling capabilities.
-- **Event-Driven Architecture:** Supabase Database Webhooks securely decoupling data transactions from push notifications.
 - **Serverless Automation:** Scalable reminder system using **Supabase Edge Functions (Deno)** and **pg_cron**, integrated with Meta's WhatsApp Cloud API v19.0.
 - **UX Offline-First:** PWA configured with custom Service Workers for a native mobile experience.
 
@@ -40,9 +38,7 @@
 | DB Testing | pgTAP (RLS tests against real Postgres) |
 | Notifications | WhatsApp Cloud API v19.0 (Meta) — approved template |
 | Web Push | RFC 8291 — VAPID + AES-128-GCM, native Service Worker |
-| AI Engine | Google Gemini 1.5 Flash (Multi-turn conversational loops & Tool Use) |
-| Event Engine | Supabase Database Webhooks (pg_net) for decoupled notifications |
-| Edge Functions | Supabase (Deno) — whatsapp-service, whatsapp-webhook, push-notify, cron-reminders |
+ main
 | Scheduler | Supabase pg_cron — `cron-reminders` daily at 00:00 UTC |
 | PWA | next-pwa — installable on iOS, Android, and desktop |
 | Images | Sharp (PWA asset generation, optimization) |
@@ -88,9 +84,6 @@ cronix/
 ├── types/                  # Global TypeScript types + generated DB types
 ├── supabase/
 │   ├── functions/          # Edge Functions (Deno)
-│   │   ├── whatsapp-webhook/ # Gemini 1.5 AI Agent & Meta Webhook Verification
-│   │   ├── whatsapp-service/ # WhatsApp message sending
-│   │   ├── push-notify/    # Web Push RFC 8291 (Triggered organically by Database Webhooks)
 │   │   └── cron-reminders/ # Reminder processing (called by pg_cron)
 │   ├── migrations/         # Versioned SQL migrations
 │   └── tests/              # pgTAP tests for RLS (26 tests)
@@ -141,14 +134,6 @@ cronix/
 - Implicit retries: if it fails, the record remains in `failed` with the error message
 - After sending WhatsApp, it triggers a Web Push to the business owner as confirmation
 
-### WhatsApp AI Assistant (Gemini 1.5)
-
-- **Automated Booking:** Clients can schedule appointments purely through natural conversation via WhatsApp.
-- **Multi-turn Conversation:** The AI maintains context, checks real-time database availability, and responds naturally.
-- **Strict Tool Calling:** Gemini utilizes `get_available_slots` and `create_appointment` natively through database RPC functions to guarantee RLS and data isolation.
-- **Graceful Fallbacks:** The assistant securely handles Meta's HMAC SHA-256 signature verification, unmatched businesses, and unsupported requests.
-- **Event-Driven Push Notifications:** Once the AI books an appointment, Postgres Database Webhooks automatically fire an asynchronous background job to notify the business owner via PWA Push Notifications without blocking the AI runtime.
-
 ### Client Management
 
 - Full CRUD with contact details, notes, tags, and avatar photo
@@ -166,24 +151,4 @@ cronix/
 
 - Recording of transactions and income
 - Recording of expenses by categories (`supplies`, `rent`, `utilities`, `payroll`, `marketing`, `equipment`, `other`)
-- Multiple payment methods: cash, card, transfer, QR, others.
-
----
-
-## Setup & Configuration
-
-### Edge Functions Secrets
-For the AI Webhook and Notifier to operate securely, configure these secrets in your Supabase Production Dashboard (`npx supabase secrets set <NAME>=<VALUE>`):
-- `GEMINI_API_KEY`: API Key for Google Gemini 1.5.
-- `WHATSAPP_VERIFY_TOKEN`: Custom secret token to verify Webhook attachment to Meta.
-- `WHATSAPP_APP_SECRET`: Meta App Secret used to compute SHA-256 integrity signatures on incoming requests.
-- `CRON_SECRET`: Custom internal secret string for intra-service authentication.
-
-### Event-Driven Push Notifications (Database Webhooks)
-To guarantee strict Separation of Concerns (SoC) and atomic database transactions, Push Notifications are triggered directly by Postgres on row creation:
-1. Go to **Supabase Dashboard -> Database -> Webhooks**.
-2. Create a hook on the `appointments` table for **INSERT** events.
-3. Target the `push-notify` Edge Function via **POST**.
-4. Pass your `CRON_SECRET` through an HTTP Header named `x-internal-secret`. 
-
-*This achieves 0-coupled logic: the Webhook simply inserts the rows, and Postgres handles notifying the business owner in the PWA.*
+- Multiple payment methods: cash, card, transfer, QR, others
