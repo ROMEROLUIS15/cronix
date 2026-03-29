@@ -44,6 +44,11 @@ export interface AppointmentAssignedUser {
 
 // ── Appointment with Relations (Dashboard calendar, agenda) ────────────────
 
+export interface AppointmentServiceJunction {
+  sort_order: number
+  service: AppointmentService
+}
+
 export interface AppointmentWithRelations {
   id: string
   start_at: string
@@ -53,6 +58,7 @@ export interface AppointmentWithRelations {
   notes: string | null
   client: AppointmentClient | null
   service: AppointmentService | null
+  appointment_services?: AppointmentServiceJunction[]
   assigned_user: AppointmentAssignedUser | null
 }
 
@@ -72,6 +78,7 @@ export interface ClientAppointmentWithDetails {
   notes: string | null
   client_id: string
   service: AppointmentService | null
+  appointment_services?: AppointmentServiceJunction[]
   transactions: TransactionSummary[]
 }
 

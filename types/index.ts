@@ -92,6 +92,7 @@ export interface DashboardStats {
 // ── Query Response Types (Supabase JOINs) ───────────────────
 export type {
   AppointmentWithRelations,
+  AppointmentServiceJunction,
   AppointmentClient,
   AppointmentService,
   AppointmentAssignedUser,

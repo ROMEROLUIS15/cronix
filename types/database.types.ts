@@ -68,6 +68,45 @@ export type Database = {
           },
         ]
       }
+      appointment_services: {
+        Row: {
+          id: string
+          appointment_id: string
+          service_id: string
+          sort_order: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          appointment_id: string
+          service_id: string
+          sort_order?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          appointment_id?: string
+          service_id?: string
+          sort_order?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_services_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           assigned_user_id: string | null
@@ -80,7 +119,7 @@ export type Database = {
           id: string
           is_dual_booking: boolean | null
           notes: string | null
-          service_id: string
+          service_id: string | null
           start_at: string
           status: Database["public"]["Enums"]["appointment_status"] | null
           updated_at: string | null
@@ -96,7 +135,7 @@ export type Database = {
           id?: string
           is_dual_booking?: boolean | null
           notes?: string | null
-          service_id: string
+          service_id?: string | null
           start_at: string
           status?: Database["public"]["Enums"]["appointment_status"] | null
           updated_at?: string | null
@@ -112,7 +151,7 @@ export type Database = {
           id?: string
           is_dual_booking?: boolean | null
           notes?: string | null
-          service_id?: string
+          service_id?: string | null
           start_at?: string
           status?: Database["public"]["Enums"]["appointment_status"] | null
           updated_at?: string | null
