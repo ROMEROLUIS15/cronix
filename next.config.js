@@ -25,6 +25,7 @@ const nextConfig = {
     turbo: {
       rules: {},
     },
+    optimizePackageImports: ['lucide-react', 'date-fns', 'date-fns/locale'],
     serverComponentsExternalPackages: ['@simplewebauthn/server'],
   },
 };

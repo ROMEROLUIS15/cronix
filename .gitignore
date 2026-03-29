@@ -1,3 +1,6 @@
+# Postmortem interno
+WHATSAPP_FIX_POSTMORTEM.md
+
 # Dependencias (¡Pesadísimas!)
 node_modules/
 jspm_packages/
