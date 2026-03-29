@@ -1,0 +1,43 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration: pg_cron setup para cron-reminders
+-- Ejecuta cron-reminders Edge Function CADA HORA para cubrir todas las
+-- zonas horarias. La Edge Function internamente filtra los negocios cuya
+-- hora local sea 8 PM (20:00).
+--
+-- Requiere: pg_cron + pg_net extensions (habilitadas por Supabase)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- ── EJECUTAR MANUALMENTE en Supabase Dashboard → SQL Editor ─────────────
+-- No puede ir en migración porque requiere current_setting() con secrets.
+--
+-- PASO 1: Configurar las variables (solo una vez):
+--
+--   ALTER DATABASE postgres SET app.settings.supabase_url = 'https://psuthbtdvprojdbsimvq.supabase.co';
+--   ALTER DATABASE postgres SET app.settings.cron_secret  = 'TU_CRON_SECRET_AQUI';
+--
+-- PASO 2: Crear el cron job (cada hora en punto):
+--
+--   SELECT cron.schedule(
+--     'cron-reminders-hourly',
+--     '0 * * * *',
+--     $$
+--       SELECT net.http_post(
+--         url     := current_setting('app.settings.supabase_url') || '/functions/v1/cron-reminders',
+--         headers := jsonb_build_object(
+--           'Content-Type',  'application/json',
+--           'Authorization', 'Bearer ' || current_setting('app.settings.cron_secret')
+--         ),
+--         body := '{}'::jsonb
+--       ) AS request_id;
+--     $$
+--   );
+--
+-- PASO 3: Verificar que el job está activo:
+--
+--   SELECT * FROM cron.job;
+--
+-- PASO 4 (si existía el job viejo diario): Eliminar el anterior:
+--
+--   SELECT cron.unschedule('cron-reminders-daily');
