@@ -187,7 +187,7 @@ export async function createAppointment(
   data: {
     business_id: string
     client_id: string
-    service_id: string
+    service_ids: string[]
     assigned_user_id: string | null
     start_at: string
     end_at: string
@@ -196,15 +196,30 @@ export async function createAppointment(
     is_dual_booking: boolean
   }
 ): Promise<{ id: string }> {
+  const { service_ids, ...rest } = data
+  
   const { data: row, error } = await supabase
     .from('appointments')
     .insert({
-      ...data,
-      status: data.status as Database['public']['Enums']['appointment_status'],
+      ...rest,
+      service_id: service_ids[0] ?? null,
+      status: rest.status as Database['public']['Enums']['appointment_status'],
     })
     .select('id')
     .single()
 
   if (error || !row) throw new Error(`Error creating appointment: ${error?.message}`)
+
+  // Insert into multi-service junction table
+  if (service_ids.length > 0) {
+    await supabase.from('appointment_services').insert(
+      service_ids.map((sid, i) => ({
+        appointment_id: row.id,
+        service_id: sid,
+        sort_order: i,
+      }))
+    )
+  }
+
   return row
 }
