@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { registerSchema } from '@/lib/validations/auth'
 import { headers } from 'next/headers'
+import { generateBusinessSlug } from '@/lib/repositories/businesses.repo'
 
 export async function register(formData: FormData) {
   const data = Object.fromEntries(formData.entries())
@@ -13,6 +14,7 @@ export async function register(formData: FormData) {
   }
 
   const { firstName, lastName, bizName, bizCategory, email, password } = result.data
+  const timezone = (data.timezone as string) || 'America/Caracas'
   const supabase = await createClient()
   const admin = createAdminClient()
 
@@ -46,6 +48,7 @@ export async function register(formData: FormData) {
         full_name:    `${firstName} ${lastName}`.trim(),
         biz_name:     bizName,
         biz_category: bizCategory,
+        biz_timezone: timezone,
       },
       emailRedirectTo: `${siteUrl}/auth/callback`,
     }
@@ -72,7 +75,9 @@ export async function register(formData: FormData) {
       name:     bizName,
       owner_id: user.id,
       category: bizCategory,
+      timezone,
       plan:     'pro',
+      slug:     generateBusinessSlug(bizName),
     })
     .select()
     .single()

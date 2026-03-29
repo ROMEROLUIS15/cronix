@@ -203,6 +203,7 @@ function RegisterForm() {
 
               <form onSubmit={handleSubmit}
                 style={{ display:"flex", flexDirection:"column", gap:"0.875rem" }}>
+                <input type="hidden" name="timezone" value={Intl.DateTimeFormat().resolvedOptions().timeZone} />
 
                 {/* Server error */}
                 {error && (

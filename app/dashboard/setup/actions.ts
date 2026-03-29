@@ -40,6 +40,7 @@ export async function createBusiness(
   }
 
   const { name, category } = parsed.data
+  const timezone = (formData.get('timezone') as string) || 'America/Caracas'
 
   // 3. Check if user already has a business
   const existingBizId = await usersRepo.getUserBusinessId(supabase, user.id)
@@ -52,6 +53,7 @@ export async function createBusiness(
     name,
     category,
     owner_id: user.id,
+    timezone,
     plan: 'pro',
   })
 

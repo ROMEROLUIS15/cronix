@@ -90,6 +90,7 @@ export default function SetupPage() {
           }}
         >
           <form action={formAction} className="space-y-6">
+            <input type="hidden" name="timezone" value={typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/Caracas'} />
             {state?.error && (
               <div
                 className="p-4 rounded-2xl flex items-start gap-2 text-sm font-bold animate-fade-in"

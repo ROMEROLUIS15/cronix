@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Copy,
   Loader2,
+  MessageCircle,
+  Link as LinkIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +74,34 @@ export default function SettingsPage() {
   }>({ whatsapp: false, email: false });
   const [savingNotif, setSavingNotif] = useState(false);
   const notif = useNotifications(bizId);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const WA_NUMBER = '584147531158';
+  const whatsappLink = biz?.slug
+    ? `https://wa.me/${WA_NUMBER}?text=%23${encodeURIComponent(biz.slug)}`
+    : null;
+  const [generatingSlug, setGeneratingSlug] = useState(false);
+
+  const handleGenerateSlug = async () => {
+    if (!bizId || !biz) return;
+    setGeneratingSlug(true);
+    const base = biz.name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20);
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const newSlug = base ? `${base}-${suffix}` : suffix;
+    const { error } = await supabase
+      .from('businesses')
+      .update({ slug: newSlug })
+      .eq('id', bizId);
+    if (!error) setBiz(prev => prev ? { ...prev, slug: newSlug } : prev);
+    else showMsg('error', 'Error al generar el enlace');
+    setGeneratingSlug(false);
+  };
 
   // Only one query needed — auth/business_id come from cached context
   useEffect(() => {
@@ -357,6 +387,84 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* WhatsApp Deep Link */}
+      <Card>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(37,211,102,0.1)" }}
+          >
+            <MessageCircle size={18} style={{ color: "#25D366" }} />
+          </div>
+          <div>
+            <h2
+              className="text-base font-semibold"
+              style={{ color: "#F2F2F2" }}
+            >
+              Link de WhatsApp
+            </h2>
+            <p className="text-xs" style={{ color: "#909098" }}>
+              Comparte este enlace para que tus clientes agenden por WhatsApp
+            </p>
+          </div>
+        </div>
+
+        {whatsappLink ? (
+          <>
+            <div
+              className="flex items-center gap-3 p-3 rounded-xl"
+              style={{ background: "#16161C", border: "1px solid #2E2E33" }}
+            >
+              <LinkIcon size={16} className="flex-shrink-0" style={{ color: "#909098" }} />
+              <span
+                className="text-sm truncate flex-1 font-mono"
+                style={{ color: "#F2F2F2" }}
+              >
+                {whatsappLink}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-shrink-0 gap-1.5"
+                onClick={() => {
+                  navigator.clipboard.writeText(whatsappLink);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+              >
+                {copiedLink ? (
+                  <>
+                    <CheckCircle2 size={14} style={{ color: "#30D158" }} />
+                    <span style={{ color: "#30D158" }}>Copiado</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} />
+                    Copiar
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs mt-3" style={{ color: "#909098" }}>
+              Cuando un cliente abre este enlace, WhatsApp se abre con tu negocio pre-seleccionado. Ideal para Instagram, tarjetas de presentación o tu página web.
+            </p>
+          </>
+        ) : (
+          <div className="text-center py-4 space-y-3">
+            <p className="text-sm" style={{ color: "#909098" }}>
+              Tu negocio aún no tiene un enlace de WhatsApp generado.
+            </p>
+            <Button
+              onClick={handleGenerateSlug}
+              loading={generatingSlug}
+              leftIcon={<MessageCircle size={16} />}
+            >
+              Generar enlace de WhatsApp
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Working Hours — RESPONSIVE FIX */}

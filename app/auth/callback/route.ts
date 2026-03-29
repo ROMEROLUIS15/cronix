@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import type { EmailOtpType, User } from '@supabase/supabase-js'
+import { generateBusinessSlug } from '@/lib/repositories/businesses.repo'
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url)
@@ -119,6 +120,7 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
   const admin       = createAdminClient()
   const bizName     = user.user_metadata?.biz_name     as string | undefined
   const bizCategory = user.user_metadata?.biz_category as string | undefined
+  const bizTimezone = user.user_metadata?.biz_timezone as string | undefined
   if (!bizName) return
 
   const { data: dbUser } = await admin
@@ -135,7 +137,9 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
       name:     bizName,
       owner_id: user.id,
       category: bizCategory ?? 'General',
+      timezone: bizTimezone ?? 'America/Caracas',
       plan:     'pro',
+      slug:     generateBusinessSlug(bizName),
     })
     .select('id')
     .single()
