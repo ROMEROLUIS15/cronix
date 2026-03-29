@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
+import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
@@ -59,7 +60,7 @@ export default function EditAppointmentPage({ params }: Props) {
 
   const [form, setForm] = useState({
     client_id:        '',
-    service_id:       '',
+    service_ids:      [] as string[],
     assigned_user_id: '',
     start_at:         '',
     status:           'pending',
@@ -109,9 +110,17 @@ export default function EditAppointmentPage({ params }: Props) {
       }
 
       const apt = aptData
+      // Prefer junction table data; fall back to legacy service_id
+      const junctionIds = (apt.appointment_services ?? [])
+        .sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order)
+        .map((as: { service_id: string }) => as.service_id)
+      const serviceIds = junctionIds.length > 0
+        ? junctionIds
+        : apt.service_id ? [apt.service_id] : []
+
       setForm({
         client_id:        apt.client_id        ?? '',
-        service_id:       apt.service_id       ?? '',
+        service_ids:      serviceIds,
         assigned_user_id: apt.assigned_user_id ?? '',
         start_at:         toDatetimeLocal(apt.start_at),
         status:           apt.status           ?? 'pending',
@@ -128,16 +137,18 @@ export default function EditAppointmentPage({ params }: Props) {
     init()
   }, [supabase, businessId, contextLoading, params.id, router])
 
-  const selectedService = services.find(s => s.id === form.service_id)
+  const selectedServices = services.filter(s => form.service_ids.includes(s.id))
+  const totalDuration    = selectedServices.reduce((sum, s) => sum + s.duration_min, 0)
+  const totalPrice       = selectedServices.reduce((sum, s) => sum + s.price, 0)
 
   // ── Core validation logic (reused by effect debounce AND handleSubmit) ──
   async function runValidation(excludeId: string) {
-    if (!form.client_id || !form.start_at || !form.service_id || !businessId) {
+    if (!form.client_id || !form.start_at || !form.service_ids.length || !businessId) {
       return { slotBlocked: false, bookingLevel: 'allowed' as DoubleBookingLevel, bookingMsg: '' }
     }
 
-    const svc      = services.find(s => s.id === form.service_id)
-    const duration = svc?.duration_min ?? 30
+    const selectedSvcs = services.filter(s => form.service_ids.includes(s.id))
+    const duration     = selectedSvcs.reduce((sum, s) => sum + s.duration_min, 0) || 30
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
@@ -212,7 +223,7 @@ export default function EditAppointmentPage({ params }: Props) {
     setValidating(true)
     setSlotError(null)
 
-    if (!form.client_id || !form.start_at || !form.service_id || !businessId) {
+    if (!form.client_id || !form.start_at || !form.service_ids.length || !businessId) {
       setDoubleBookingLevel('allowed')
       setDoubleBookingMsg('')
       setValidating(false)
@@ -230,7 +241,7 @@ export default function EditAppointmentPage({ params }: Props) {
 
     return () => { clearTimeout(t); setValidating(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.client_id, form.start_at, form.service_id, form.assigned_user_id, businessId, services])
+  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services])
 
   // ── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -259,13 +270,14 @@ export default function EditAppointmentPage({ params }: Props) {
       return
     }
     const startObj = new Date(form.start_at)
-    const endObj   = new Date(startObj.getTime() + (selectedService?.duration_min ?? 30) * 60_000)
+    const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
+    // Update appointment (service_id = first for backward compat)
     const { error } = await supabase
       .from('appointments')
       .update({
         client_id:        form.client_id,
-        service_id:       form.service_id,
+        service_id:       form.service_ids[0] ?? null,
         assigned_user_id: form.assigned_user_id || null,
         start_at:         startObj.toISOString(),
         end_at:           endObj.toISOString(),
@@ -277,14 +289,44 @@ export default function EditAppointmentPage({ params }: Props) {
       .eq('id', params.id)
       .eq('business_id', businessId)
 
+    // Sync junction table: delete old rows + insert new ones
+    if (!error) {
+      await supabase
+        .from('appointment_services')
+        .delete()
+        .eq('appointment_id', params.id)
+
+      if (form.service_ids.length > 0) {
+        await supabase
+          .from('appointment_services')
+          .insert(form.service_ids.map((sid, i) => ({
+            appointment_id: params.id,
+            service_id:     sid,
+            sort_order:     i,
+          })))
+      }
+    }
+
     if (!error) {
       await cancelRemindersByAppointment(supabase, params.id).catch(() => null)
-      if (bizNotif.whatsapp && !skipReminder && businessId) {
-        // remind_at = midnight UTC on appointment day = 8 PM Venezuela (UTC-4) the evening before
+      if (bizNotif.whatsapp && businessId) {
         const remindAt = new Date(Date.UTC(
           startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
         )).toISOString()
-        await upsertReminder(supabase, params.id, businessId, remindAt, 0).catch(() => null)
+
+        if (!skipReminder) {
+          await upsertReminder(supabase, params.id, businessId, remindAt, 0).catch(() => null)
+        } else {
+          // Owner opted out — insert cancelled record so cron skips this appointment
+          await supabase.from('appointment_reminders').insert({
+            appointment_id: params.id,
+            business_id:    businessId,
+            remind_at:      remindAt,
+            minutes_before: 0,
+            status:         'cancelled',
+            channel:        'whatsapp',
+          }).then(() => null, () => null)
+        }
       }
     }
 
@@ -348,12 +390,12 @@ export default function EditAppointmentPage({ params }: Props) {
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
                 Cliente <span style={{ color: '#FF3B30' }}>*</span>
               </label>
-              <select required value={form.client_id}
-                onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-                className="input-base">
-                <option value="">Selecciona un cliente...</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <ClientSelect
+                clients={clients}
+                value={form.client_id}
+                onChange={val => setForm(f => ({ ...f, client_id: val }))}
+                required
+              />
             </div>
 
             {/* Date/time */}
@@ -402,23 +444,58 @@ export default function EditAppointmentPage({ params }: Props) {
               </div>
             )}
 
-            {/* Service */}
+            {/* Servicios (multi-select) */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Servicio <span style={{ color: '#FF3B30' }}>*</span>
+                Servicios <span style={{ color: '#FF3B30' }}>*</span>
               </label>
-              <select required value={form.service_id}
-                onChange={e => setForm(f => ({ ...f, service_id: e.target.value }))}
-                className="input-base">
-                <option value="">Selecciona un servicio...</option>
-                {services.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} – {s.duration_min} min</option>
-                ))}
-              </select>
-              {selectedService && (
-                <p className="mt-1.5 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
+              <div className="space-y-2">
+                {services.map(s => {
+                  const isSelected = form.service_ids.includes(s.id)
+                  return (
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                      style={{
+                        background: isSelected ? 'rgba(0,98,255,0.08)' : '#212125',
+                        border: isSelected ? '1px solid rgba(0,98,255,0.35)' : '1px solid #2E2E33',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setForm(f => ({
+                            ...f,
+                            service_ids: isSelected
+                              ? f.service_ids.filter(id => id !== s.id)
+                              : [...f.service_ids, s.id],
+                          }))
+                        }}
+                        className="w-4 h-4 rounded flex-shrink-0"
+                        style={{ accentColor: '#0062FF' }}
+                      />
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: s.color ?? '#ccc' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium" style={{ color: isSelected ? '#F2F2F2' : '#909098' }}>
+                          {s.name}
+                        </span>
+                      </div>
+                      <span className="text-xs flex-shrink-0" style={{ color: '#606068' }}>
+                        {s.duration_min} min · ${s.price.toLocaleString('es-CO')}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {selectedServices.length > 0 && (
+                <p className="mt-2 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
                   <Info size={12} />
-                  Duración: {selectedService.duration_min} min · Precio: ${selectedService.price.toLocaleString('es-CO')}
+                  Total: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
+                  {selectedServices.length > 1 && ` · ${selectedServices.length} servicios`}
                 </p>
               )}
             </div>

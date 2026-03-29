@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
+import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import * as servicesRepo from '@/lib/repositories/services.repo'
@@ -67,7 +68,7 @@ function NewAppointmentForm() {
 
   const [form,               setForm]               = useState({
     client_id:        '',
-    service_id:       '',
+    service_ids:      [] as string[],
     assigned_user_id: '',
     start_at:         preselectedDate ? `${preselectedDate}T00:00` : '',
     notes:            '',
@@ -113,16 +114,18 @@ function NewAppointmentForm() {
     init()
   }, [supabase, businessId, contextLoading])
 
-  const selectedService = services.find(s => s.id === form.service_id)
+  const selectedServices = services.filter(s => form.service_ids.includes(s.id))
+  const totalDuration    = selectedServices.reduce((sum, s) => sum + s.duration_min, 0)
+  const totalPrice       = selectedServices.reduce((sum, s) => sum + s.price, 0)
 
   // ── Core validation logic (reused by effect debounce AND handleSubmit) ──
   async function runValidation(opts?: { excludeId?: string }) {
-    if (!form.client_id || !form.start_at || !form.service_id || !businessId) {
+    if (!form.client_id || !form.start_at || !form.service_ids.length || !businessId) {
       return { slotBlocked: false, bookingLevel: 'allowed' as DoubleBookingLevel, bookingMsg: '' }
     }
 
-    const svc      = services.find(s => s.id === form.service_id)
-    const duration = svc?.duration_min ?? 30
+    const selectedSvcs = services.filter(s => form.service_ids.includes(s.id))
+    const duration     = selectedSvcs.reduce((sum, s) => sum + s.duration_min, 0) || 30
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
@@ -190,7 +193,7 @@ function NewAppointmentForm() {
     setValidating(true)
     setSlotError(null)
 
-    if (!form.client_id || !form.start_at || !form.service_id || !businessId) {
+    if (!form.client_id || !form.start_at || !form.service_ids.length || !businessId) {
       setDoubleBookingLevel('allowed')
       setDoubleBookingMsg('')
       setValidating(false)
@@ -208,7 +211,8 @@ function NewAppointmentForm() {
 
     return () => { clearTimeout(t); setValidating(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.client_id, form.start_at, form.service_id, form.assigned_user_id, businessId, services])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services])
 
   const canSubmit =
     !validating &&
@@ -245,14 +249,14 @@ function NewAppointmentForm() {
     }
 
     const startObj = new Date(form.start_at)
-    const endObj   = new Date(startObj.getTime() + (selectedService?.duration_min ?? 30) * 60_000)
+    const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
     let newApt: { id: string } | null = null
     try {
       newApt = await appointmentsRepo.createAppointment(supabase, {
         business_id:      businessId,
         client_id:        form.client_id,
-        service_id:       form.service_id,
+        service_ids:      form.service_ids,
         assigned_user_id: form.assigned_user_id || null,
         start_at:         startObj.toISOString(),
         end_at:           endObj.toISOString(),
@@ -263,18 +267,31 @@ function NewAppointmentForm() {
     } catch { /* handled below */ }
 
     if (newApt) {
-      // Reminder WhatsApp (si está activado)
-      if (bizNotif.whatsapp && !skipReminder) {
-        // remind_at = midnight UTC on appointment day = 8 PM Venezuela (UTC-4) the evening before
+      // Reminder WhatsApp
+      if (bizNotif.whatsapp) {
         const remindAt = new Date(Date.UTC(
           startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
         )).toISOString()
-        await upsertReminder(supabase, newApt.id, businessId, remindAt, 0).catch(() => null)
+
+        if (!skipReminder) {
+          // Create pending reminder — cron will send WhatsApp at 8 PM
+          await upsertReminder(supabase, newApt.id, businessId, remindAt, 0).catch(() => null)
+        } else {
+          // Owner opted out — insert cancelled record so cron skips this appointment
+          await supabase.from('appointment_reminders').insert({
+            appointment_id: newApt.id,
+            business_id:    businessId,
+            remind_at:      remindAt,
+            minutes_before: 0,
+            status:         'cancelled',
+            channel:        'whatsapp',
+          }).then(() => null, () => null)
+        }
       }
 
       // Web Push al dueño: notificación inmediata de nueva cita
       const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
-      const serviceName = selectedService?.name ?? 'servicio'
+      const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
       const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
       notifyOwner({
         title: '📅 Nueva cita agendada',
@@ -327,7 +344,7 @@ function NewAppointmentForm() {
         setForm(f => ({
           ...f,
           client_id:        parsed.client_id        || f.client_id,
-          service_id:       parsed.service_id       || f.service_id,
+          service_ids:      parsed.service_id       ? [parsed.service_id] : f.service_ids,
           start_at:         parsed.date && parsed.time ? `${parsed.date}T${parsed.time}` : f.start_at,
           notes:            parsed.notes            || f.notes,
           assigned_user_id: parsed.assigned_user_id || f.assigned_user_id,
@@ -427,12 +444,12 @@ function NewAppointmentForm() {
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
                 Cliente *
               </label>
-              <select required value={form.client_id}
-                onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-                className="input-base bg-card">
-                <option value="">Selecciona un cliente...</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <ClientSelect
+                clients={clients}
+                value={form.client_id}
+                onChange={val => setForm(f => ({ ...f, client_id: val }))}
+                required
+              />
             </div>
 
             {/* Fecha y hora — dos modos */}
@@ -530,28 +547,66 @@ function NewAppointmentForm() {
               </div>
             )}
 
-            {/* Servicio */}
+            {/* Servicios (multi-select) */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Servicio *
+                Servicios *
               </label>
-              <select required value={form.service_id}
-                onChange={e => {
-                  if (e.target.value === 'new-service') { router.push('/dashboard/services'); return }
-                  setForm(f => ({ ...f, service_id: e.target.value }))
-                }}
-                className="input-base bg-card">
-                <option value="">Selecciona un servicio...</option>
-                {services.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} – {s.duration_min} min</option>
-                ))}
-                <option value="disabled-separator" disabled>─────────────────</option>
-                <option value="new-service">✨ Añadir nuevo servicio...</option>
-              </select>
-              {selectedService && (
-                <p className="mt-1.5 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
+              <div className="space-y-2">
+                {services.map(s => {
+                  const isSelected = form.service_ids.includes(s.id)
+                  return (
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                      style={{
+                        background: isSelected ? 'rgba(0,98,255,0.08)' : '#212125',
+                        border: isSelected ? '1px solid rgba(0,98,255,0.35)' : '1px solid #2E2E33',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setForm(f => ({
+                            ...f,
+                            service_ids: isSelected
+                              ? f.service_ids.filter(id => id !== s.id)
+                              : [...f.service_ids, s.id],
+                          }))
+                        }}
+                        className="w-4 h-4 rounded flex-shrink-0"
+                        style={{ accentColor: '#0062FF' }}
+                      />
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: s.color ?? '#ccc' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium" style={{ color: isSelected ? '#F2F2F2' : '#909098' }}>
+                          {s.name}
+                        </span>
+                      </div>
+                      <span className="text-xs flex-shrink-0" style={{ color: '#606068' }}>
+                        {s.duration_min} min · ${s.price.toLocaleString('es-CO')}
+                      </span>
+                    </label>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard/services')}
+                  className="w-full text-left p-3 rounded-xl text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{ background: '#212125', border: '1px solid #2E2E33', color: '#3884FF' }}
+                >
+                  + Añadir nuevo servicio...
+                </button>
+              </div>
+              {selectedServices.length > 0 && (
+                <p className="mt-2 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
                   <Info size={12} />
-                  Duración: {selectedService.duration_min} min · Precio: ${selectedService.price.toLocaleString('es-CO')}
+                  Total: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
+                  {selectedServices.length > 1 && ` · ${selectedServices.length} servicios`}
                 </p>
               )}
             </div>
