@@ -213,9 +213,9 @@ describe('buildAppointmentPayload', () => {
   it('debe calcular end_at correctamente a partir de duration', () => {
     const payload = buildAppointmentPayload({
       startAt: '2026-03-20T10:00:00Z',
-      durationMin: 30,
+      totalDurationMin: 30,
       clientId: 'c1',
-      serviceId: 's1',
+      serviceIds: ['s1'],
       assignedUserId: 'u1',
       notes: 'Test',
       businessId: 'b1',
@@ -232,9 +232,9 @@ describe('buildAppointmentPayload', () => {
   it('debe manejar notes null correctamente', () => {
     const payload = buildAppointmentPayload({
       startAt: '2026-03-20T10:00:00Z',
-      durationMin: 60,
+      totalDurationMin: 60,
       clientId: 'c1',
-      serviceId: 's1',
+      serviceIds: ['s1'],
       assignedUserId: null,
       notes: null,
       businessId: 'b1',

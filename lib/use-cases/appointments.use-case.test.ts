@@ -260,14 +260,14 @@ describe('getLocalDayBoundaries', () => {
 describe('buildAppointmentPayload', () => {
   it('calculates end_at from start + duration', () => {
     const payload = buildAppointmentPayload({
-      startAt:        '2026-03-24T09:00:00',
-      durationMin:    60,
-      clientId:       'c1',
-      serviceId:      's1',
-      assignedUserId: 'u1',
-      notes:          null,
-      businessId:     'b1',
-      isDualBooking:  false,
+      startAt:          '2026-03-24T09:00:00',
+      totalDurationMin: 60,
+      clientId:         'c1',
+      serviceIds:       ['s1'],
+      assignedUserId:   'u1',
+      notes:            null,
+      businessId:       'b1',
+      isDualBooking:    false,
     })
 
     const startMs = new Date(payload.start_at).getTime()
@@ -278,14 +278,14 @@ describe('buildAppointmentPayload', () => {
 
   it('handles 90-minute service', () => {
     const payload = buildAppointmentPayload({
-      startAt:        '2026-03-24T09:00:00',
-      durationMin:    90,
-      clientId:       'c1',
-      serviceId:      's1',
-      assignedUserId: null,
-      notes:          'VIP',
-      businessId:     'b1',
-      isDualBooking:  true,
+      startAt:          '2026-03-24T09:00:00',
+      totalDurationMin: 90,
+      clientId:         'c1',
+      serviceIds:       ['s1'],
+      assignedUserId:   null,
+      notes:            'VIP',
+      businessId:       'b1',
+      isDualBooking:    true,
     })
 
     const startMs = new Date(payload.start_at).getTime()

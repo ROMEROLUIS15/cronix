@@ -161,8 +161,9 @@ describe('getPendingReminders', () => {
     const result = await getPendingReminders(supabase)
 
     expect(result).toHaveLength(1)
-    expect(result[0].id).toBe('r1')
-    expect(result[0].appointments?.clients.name).toBe('María')
+    const first = result[0]!
+    expect(first.id).toBe('r1')
+    expect(first.appointments?.clients.name).toBe('María')
     expect(chain.eq).toHaveBeenCalledWith('status', 'pending')
   })
 

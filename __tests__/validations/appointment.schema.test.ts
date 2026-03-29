@@ -8,7 +8,7 @@ describe('CreateAppointmentSchema', () => {
   const validInput = {
     business_id: '550e8400-e29b-41d4-a716-446655440000',
     client_id: '550e8400-e29b-41d4-a716-446655440001',
-    service_id: '550e8400-e29b-41d4-a716-446655440002',
+    service_ids: ['550e8400-e29b-41d4-a716-446655440002'],
     start_at: new Date('2026-03-20T10:00:00Z'),
     end_at: new Date('2026-03-20T11:00:00Z'),
   }
