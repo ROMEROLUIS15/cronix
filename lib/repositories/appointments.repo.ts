@@ -98,7 +98,7 @@ export async function getAppointmentForEdit(
 ) {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, client_id, service_id, assigned_user_id, start_at, status, notes')
+    .select('id, client_id, service_id, assigned_user_id, start_at, status, notes, appointment_services(service_id, sort_order)')
     .eq('id', appointmentId)
     .eq('business_id', businessId)
     .single()
