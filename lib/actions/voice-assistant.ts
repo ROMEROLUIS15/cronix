@@ -2,13 +2,18 @@
 
 /**
  * AI Server Actions for Cronix Dashboard.
- * Powered by Google Gemini 1.5 Flash.
+ *
+ * To switch LLM provider: update LLM_API_URL + LLM_MODEL below and set LLM_API_KEY in .env.
  */
 
 import { logger } from '@/lib/logger'
 import type { Service, Client } from '@/types'
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+// ── LLM Provider Configuration ────────────────────────────────────────────────
+// Change these two values + LLM_API_KEY in .env to swap providers at any time.
+
+const LLM_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const LLM_MODEL   = 'llama-3.3-70b-versatile'
 
 interface ParseResult {
   client_id?: string
@@ -19,11 +24,9 @@ interface ParseResult {
   assigned_user_id?: string
 }
 
-interface GeminiApiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>
-    }
+interface LlmApiResponse {
+  choices?: Array<{
+    message?: { content?: string }
   }>
 }
 
@@ -39,9 +42,9 @@ export async function parseVoiceCommand(
   transcript: string,
   context: VoiceCommandContext
 ): Promise<ParseResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.LLM_API_KEY
   if (!apiKey) {
-    logger.error('voice-assistant', 'GEMINI_API_KEY not found in environment')
+    logger.error('voice-assistant', 'LLM_API_KEY not found in environment')
     return null
   }
 
@@ -59,7 +62,7 @@ export async function parseVoiceCommand(
     2. Identifica el servicio y busca el 'id' exacto.
     3. Extrae la fecha en formato YYYY-MM-DD y la hora en HH:mm.
     4. Si el texto menciona notas, extráelas.
-    5. RESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO.
+    5. RESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO, sin explicaciones ni markdown.
     6. Hoy es ${new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 
     FORMATO DE RESPUESTA:
@@ -73,25 +76,33 @@ export async function parseVoiceCommand(
   `
 
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    const response = await fetch(LLM_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: transcript }] }],
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: {
-          response_mime_type: "application/json"
-        }
-      })
+        model:       LLM_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: transcript },
+        ],
+        temperature: 0.1,
+        max_tokens:  256,
+      }),
     })
 
-    if (!response.ok) throw new Error(`Gemini API error: ${await response.text()}`)
+    if (!response.ok) throw new Error(`LLM API error: ${await response.text()}`)
 
-    const data = await response.json() as GeminiApiResponse
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    const data = await response.json() as LlmApiResponse
+    const text = data.choices?.[0]?.message?.content
 
     if (!text) return null
-    return JSON.parse(text) as ParseResult
+
+    // Strip markdown code fences if the model wraps the JSON
+    const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    return JSON.parse(clean) as ParseResult
   } catch (error) {
     logger.error('voice-assistant', 'Error parsing voice command', error)
     return null

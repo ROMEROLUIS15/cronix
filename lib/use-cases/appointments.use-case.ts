@@ -253,7 +253,7 @@ export function resolveExpiredAppointments<T extends { end_at: string; status: s
 export interface AppointmentPayload {
   business_id:      string
   client_id:        string
-  service_id:       string
+  service_ids:      string[]
   assigned_user_id: string | null
   start_at:         string
   end_at:           string
@@ -264,21 +264,21 @@ export interface AppointmentPayload {
 
 export function buildAppointmentPayload(params: {
   startAt: string
-  durationMin: number
+  totalDurationMin: number
   clientId: string
-  serviceId: string
+  serviceIds: string[]
   assignedUserId: string | null
   notes: string | null
   businessId: string
   isDualBooking: boolean
 }): AppointmentPayload {
   const startObj = new Date(params.startAt)
-  const endObj   = new Date(startObj.getTime() + params.durationMin * 60_000)
+  const endObj   = new Date(startObj.getTime() + params.totalDurationMin * 60_000)
 
   return {
     business_id:      params.businessId,
     client_id:        params.clientId,
-    service_id:       params.serviceId,
+    service_ids:      params.serviceIds,
     assigned_user_id: params.assignedUserId,
     start_at:         startObj.toISOString(),
     end_at:           endObj.toISOString(),

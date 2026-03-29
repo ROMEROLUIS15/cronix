@@ -17,6 +17,23 @@ type BusinessInsert = Database['public']['Tables']['businesses']['Insert']
 type BusinessRow = Database['public']['Tables']['businesses']['Row']
 
 /**
+ * Generates a URL-safe slug for WhatsApp deep-links.
+ * Format: <sanitized-name>-<6-char random suffix>
+ * The random suffix prevents slug enumeration across businesses.
+ */
+export function generateBusinessSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // strip accents
+    .replace(/[^a-z0-9]+/g, '-')       // non-alphanumeric → hyphen
+    .replace(/^-+|-+$/g, '')           // trim leading/trailing hyphens
+    .slice(0, 20)
+  const suffix = Math.random().toString(36).slice(2, 8)
+  return base ? `${base}-${suffix}` : suffix
+}
+
+/**
  * Returns the settings JSON for a business.
  * Used by appointment forms to check notification preferences, working hours, etc.
  */
@@ -40,11 +57,11 @@ export async function getBusinessSettings(
  */
 export async function createBusiness(
   supabase: Client,
-  data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'>
+  data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string }
 ): Promise<BusinessRow> {
   const { data: business, error } = await supabase
     .from('businesses')
-    .insert(data)
+    .insert({ ...data, slug: generateBusinessSlug(data.name) })
     .select()
     .single()
 

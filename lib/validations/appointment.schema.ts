@@ -7,7 +7,7 @@ export const AppointmentStatusSchema = z.enum([
 export const CreateAppointmentSchema = z.object({
   business_id:     z.string().uuid('ID de negocio inválido'),
   client_id:       z.string().uuid('Debes seleccionar un cliente'),
-  service_id:      z.string().uuid('Debes seleccionar un servicio'),
+  service_ids:     z.array(z.string().uuid()).min(1, 'Debes seleccionar al menos un servicio'),
   assigned_user_id: z.string().uuid().optional(),
   start_at:        z.coerce.date(),
   end_at:          z.coerce.date(),
