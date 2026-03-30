@@ -156,20 +156,26 @@ export async function getBusinessServices(businessId: string): Promise<ServiceRo
 /**
  * Looks up a registered client by their WhatsApp phone number.
  * Returns null for new (unregistered) contacts.
+ *
+ * WhatsApp sends phones as bare digits (e.g. "584247092980") but the clients
+ * table stores them with formatting (e.g. "+58 4247092980", "+58 04247092980").
+ * Uses fn_clean_phone (DB function that strips non-digits) for reliable matching.
  */
 export async function getClientByPhone(
   businessId: string,
   phone:      string
 ): Promise<ClientRow | null> {
-  const { data } = await supabase
-    .from('clients')
-    .select('id, name')
-    .eq('business_id', businessId)
-    .eq('phone', phone)
-    .is('deleted_at', null)
-    .single()
+  const digits = phone.replace(/\D/g, '')
 
-  return (data as ClientRow | null) ?? null
+  // Use the existing fn_clean_phone DB function for server-side comparison
+  const { data } = await supabase
+    .rpc('fn_find_client_by_phone', {
+      p_business_id: businessId,
+      p_phone_digits: digits,
+    })
+
+  if (!data || (data as ClientRow[]).length === 0) return null
+  return (data as ClientRow[])[0]
 }
 
 /**
