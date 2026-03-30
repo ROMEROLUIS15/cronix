@@ -63,7 +63,7 @@ export class LlmRateLimitError extends Error {
  */
 export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<string | null> {
   // @ts-ignore — Deno runtime global
-  const apiKey = Deno.env.get('LLM_API_KEY')
+  const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
   if (!apiKey) throw new Error('LLM_API_KEY no configurada')
 
   // Groq Whisper requires a filename with extension — derive from mime_type
@@ -99,7 +99,7 @@ export async function processConversation(
   customerName: string
 ): Promise<string> {
   // @ts-ignore — Deno runtime global
-  const apiKey = Deno.env.get('LLM_API_KEY')
+  const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
   if (!apiKey) throw new Error('LLM_API_KEY no configurada')
 
   const systemInstruction = buildSystemInstruction(context, customerName)

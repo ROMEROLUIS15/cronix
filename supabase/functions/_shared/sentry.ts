@@ -11,7 +11,8 @@
  * Required secret (set via Supabase Dashboard or CLI):
  *   npx supabase secrets set SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
  *
- * If SENTRY_DSN is absent all calls are silent no-ops — safe in local dev.
+ * If SENTRY_DSN is absent OR @sentry/deno fails to load, all calls are
+ * silent no-ops — the Edge Function keeps working without observability.
  *
  * IMPORTANT: call `await flushSentry()` before every `return new Response(...)`.
  * Deno workers can be killed before async tasks complete, so flushing is mandatory.
@@ -19,11 +20,21 @@
 
 // deno-lint-ignore-file no-explicit-any
 
-import * as Sentry from 'npm:@sentry/deno'
-
 type SeverityLevel = 'fatal' | 'error' | 'warning' | 'info' | 'debug'
 
 const DSN = Deno.env.get('SENTRY_DSN') ?? ''
+
+// ── Dynamic Sentry import (graceful fallback) ────────────────────────────────
+// @sentry/deno may not work on all Deno Deploy runtimes.
+// If the import fails, Sentry is replaced with a no-op stub.
+
+let Sentry: any = null
+
+try {
+  Sentry = await import('npm:@sentry/deno')
+} catch {
+  // Import failed — Sentry unavailable, all calls will be no-ops
+}
 
 // ── PII scrubbing ─────────────────────────────────────────────────────────────
 
@@ -73,7 +84,7 @@ function scrubEvent(event: any): any | null {
  * cold start, not once per request.
  */
 export function initSentry(functionName: string): void {
-  if (!DSN) return
+  if (!DSN || !Sentry) return
 
   Sentry.init({
     dsn:         DSN,
@@ -100,7 +111,7 @@ export function captureException(
   error:  unknown,
   extra?: Record<string, unknown>,
 ): void {
-  if (!DSN) return
+  if (!DSN || !Sentry) return
 
   if (extra) {
     Sentry.withScope((scope: any) => {
@@ -127,7 +138,7 @@ export function addBreadcrumb(
   level:    SeverityLevel = 'info',
   data?:    Record<string, unknown>,
 ): void {
-  if (!DSN) return
+  if (!DSN || !Sentry) return
   Sentry.addBreadcrumb({
     message,
     category,
@@ -142,7 +153,7 @@ export function addBreadcrumb(
  * Use for multi-tenant filtering (e.g. business_id).
  */
 export function setSentryTag(key: string, value: string): void {
-  if (!DSN) return
+  if (!DSN || !Sentry) return
   Sentry.setTag(key, value)
 }
 
@@ -152,6 +163,6 @@ export function setSentryTag(key: string, value: string): void {
  * since the worker process can be killed before async tasks complete.
  */
 export async function flushSentry(): Promise<void> {
-  if (!DSN) return
+  if (!DSN || !Sentry) return
   await Sentry.flush(2000)
 }

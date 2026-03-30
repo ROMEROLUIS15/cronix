@@ -231,7 +231,7 @@ serve(async (req: Request) => {
         const landingMsg =
           '¡Hola! 👋 Soy el asistente virtual de reservas de *Cronix*.\n\n' +
           'Para comunicarte con un negocio y agendar una cita, necesitas usar su enlace directo de WhatsApp.\n\n' +
-          '🔗 Encuentra todos los negocios disponibles en:\nhttps://cronix.app\n\n' +
+          '🔗 Encuentra todos los negocios disponibles en:\nhttps://cronix-app.vercel.app\n\n' +
           '¡Te esperamos!'
         await sendWhatsAppMessage(sender, landingMsg)
         await flushSentry()
