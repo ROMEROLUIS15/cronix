@@ -15,6 +15,7 @@
  *   VAPID_PUBLIC_KEY   — base64url-encoded VAPID public key (65 bytes)
  *   VAPID_PRIVATE_KEY  — base64url-encoded VAPID private key (32 bytes)
  *   VAPID_SUBJECT      — mailto: URI or https URL (e.g. mailto:admin@cronix.app)
+ *   SENTRY_DSN         — optional, enables error tracking
  *
  * Auto-injected by Supabase runtime:
  *   SUPABASE_URL              — project URL
@@ -31,6 +32,9 @@
 
 // @deno-types="npm:@supabase/supabase-js@2/dist/module/index.d.ts"
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { initSentry, captureException, addBreadcrumb, setSentryTag, flushSentry } from '../_shared/sentry.ts'
+
+initSentry('push-notify')
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const corsHeaders = {
@@ -286,13 +290,13 @@ async function sendWebPush(
     const res = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
-        'Content-Type':    'application/octet-stream',
-        'Content-Length':  String(ciphertext.length),
+        'Content-Type':     'application/octet-stream',
+        'Content-Length':   String(ciphertext.length),
         'Content-Encoding': 'aesgcm',
-        'Encryption':      `salt=${toB64url(salt)}`,
-        'Crypto-Key':      cryptoKey,
-        'Authorization':   `vapid t=${vapidJWT},k=${vapidPubKey}`,
-        'TTL':             '86400',
+        'Encryption':       `salt=${toB64url(salt)}`,
+        'Crypto-Key':       cryptoKey,
+        'Authorization':    `vapid t=${vapidJWT},k=${vapidPubKey}`,
+        'TTL':              '86400',
       },
       body: ciphertext,
     })
@@ -315,6 +319,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== 'POST') {
+    await flushSentry()
     return json({ error: 'Method not allowed' }, 405)
   }
 
@@ -326,6 +331,7 @@ Deno.serve(async (req: Request) => {
   try {
     body = await req.json()
   } catch {
+    await flushSentry()
     return json({ error: 'Invalid JSON body' }, 400)
   }
 
@@ -345,16 +351,17 @@ Deno.serve(async (req: Request) => {
 
   if (isInternalCall) {
     // PATH A — internal call (cron or Database Webhook)
-    
+
     // Support for Supabase Database Webhooks (table: appointments on INSERT)
     if (body.type === 'INSERT' && body.table === 'appointments' && body.record) {
       businessId = body.record.business_id as string
       // Auto-fill push payload since the Webhook only sends the row data
       body.title = '¡Nueva Reserva!'
       body.body  = `Nueva cita recibida para el ${body.record.start_at.split('T')[0]}.`
-    } 
+    }
     // Standard internal call expecting explicit business_id
     else if (!body.business_id) {
+      await flushSentry()
       return json({ error: 'business_id required for internal calls' }, 400)
     } else {
       businessId = body.business_id as string
@@ -363,7 +370,10 @@ Deno.serve(async (req: Request) => {
     // PATH B — user JWT from the browser
     const authHeader = req.headers.get('authorization') ?? ''
     const jwt        = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (!jwt) return json({ error: 'Unauthorized' }, 401)
+    if (!jwt) {
+      await flushSentry()
+      return json({ error: 'Unauthorized' }, 401)
+    }
 
     const anonKey  = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const userClient = createClient(supabaseUrl, anonKey, {
@@ -372,7 +382,10 @@ Deno.serve(async (req: Request) => {
     })
 
     const { data: { user }, error: authErr } = await userClient.auth.getUser()
-    if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+    if (authErr || !user) {
+      await flushSentry()
+      return json({ error: 'Unauthorized' }, 401)
+    }
 
     const { data: dbUser, error: userErr } = await userClient
       .from('users')
@@ -381,10 +394,21 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (userErr || !dbUser?.business_id) {
+      captureException(userErr ?? new Error('business_id not found for user'), {
+        stage:   'resolve_business_jwt',
+        user_id: user.id,
+      })
+      await flushSentry()
       return json({ error: 'Business not found' }, 400)
     }
     businessId = dbUser.business_id as string
   }
+
+  // Tag all events in this invocation with the target tenant
+  setSentryTag('business_id', businessId)
+  addBreadcrumb('Auth resolved, business identified', 'auth', 'info', {
+    path: isInternalCall ? 'internal' : 'jwt',
+  })
 
   // Extract notification payload (business_id already consumed above)
   const payload: PushPayload = {
@@ -400,6 +424,11 @@ Deno.serve(async (req: Request) => {
   const vapidSubject = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@cronix.app'
 
   if (!vapidPubKey || !vapidPrivKey) {
+    captureException(new Error('VAPID keys not configured'), {
+      stage:   'vapid_check',
+      missing: !vapidPubKey ? 'VAPID_PUBLIC_KEY' : 'VAPID_PRIVATE_KEY',
+    })
+    await flushSentry()
     return json({ error: 'VAPID keys not configured' }, 500)
   }
 
@@ -416,13 +445,20 @@ Deno.serve(async (req: Request) => {
     .eq('business_id', businessId)
 
   if (subsErr) {
-    console.error('[push-notify] subscriptions query error:', subsErr.message)
+    captureException(subsErr, { stage: 'fetch_subscriptions', business_id: businessId })
+    await flushSentry()
     return json({ error: subsErr.message }, 500)
   }
 
   if (!subs || subs.length === 0) {
+    await flushSentry()
     return json({ ok: true, sent: 0, total: 0 })
   }
+
+  addBreadcrumb('Sending push notifications', 'push', 'info', {
+    business_id: businessId,
+    count:       subs.length,
+  })
 
   // ── Fan out — send to all subscriptions for this business ────────────
   const results = await Promise.allSettled(
@@ -448,6 +484,12 @@ Deno.serve(async (req: Request) => {
         (result.value.status === 410 || result.value.status === 404)
       ) {
         expiredEndpoints.push(sub.endpoint)
+      } else if (result.status === 'rejected') {
+        // Unexpected encryption or network error — capture it
+        captureException(result.reason, {
+          stage:       'send_web_push',
+          business_id: businessId,
+        })
       }
     }
   }
@@ -458,9 +500,10 @@ Deno.serve(async (req: Request) => {
       .from('notification_subscriptions')
       .delete()
       .in('endpoint', expiredEndpoints)
-      .then(() => console.log(`[push-notify] purged ${expiredEndpoints.length} expired subs`))
-      .catch(err => console.error('[push-notify] purge error:', err))
+      .then(() => null)
+      .catch(err => captureException(err, { stage: 'purge_expired_subs', business_id: businessId }))
   }
 
+  await flushSentry()
   return json({ ok: true, sent, failed, total: subs.length })
 })

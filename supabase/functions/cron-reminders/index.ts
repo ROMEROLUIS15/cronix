@@ -11,6 +11,7 @@
  *
  * Required Supabase Secrets:
  *   CRON_SECRET               — shared with pg_cron trigger
+ *   SENTRY_DSN                — optional, enables error tracking
  *   SUPABASE_URL              — auto-injected
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected
  *
@@ -20,6 +21,11 @@
 
 // @deno-types="npm:@supabase/supabase-js@2/dist/module/index.d.ts"
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { initSentry, captureException, addBreadcrumb,
+         setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
+
+// Initialize once per cold start
+initSentry('cron-reminders')
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const corsHeaders = {
@@ -62,15 +68,15 @@ function is8PMInTimezone(timezone: string): boolean {
 // ── Helper: Get tomorrow's date range in a timezone ──────────────────────────
 function getTomorrowRange(timezone: string): { start: string; end: string } {
   const now = new Date()
-  
+
   // Get "today" in the business timezone
   const localDateStr = now.toLocaleDateString('en-CA', { timeZone: timezone }) // YYYY-MM-DD
   const localDate = new Date(localDateStr + 'T00:00:00Z')
-  
+
   // Tomorrow = localDate + 1 day
   const tomorrow = new Date(localDate.getTime() + 24 * 60 * 60 * 1000)
   const dayAfter = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000)
-  
+
   return {
     start: tomorrow.toISOString(),
     end:   dayAfter.toISOString(),
@@ -88,8 +94,11 @@ Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get('authorization')
 
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    await flushSentry()
     return json({ error: 'Unauthorized' }, 401)
   }
+
+  addBreadcrumb('Cron auth verified', 'security')
 
   // ── Admin client ────────────────────────────────────────────────────────
   const supabaseUrl    = Deno.env.get('SUPABASE_URL') ?? ''
@@ -105,11 +114,22 @@ Deno.serve(async (req: Request) => {
     .select('id, name, timezone, settings')
 
   if (bizErr || !businesses) {
-    console.error('[cron-reminders] businesses fetch error:', bizErr?.message)
+    captureException(bizErr ?? new Error('No businesses returned'), {
+      stage: 'fetch_businesses',
+    })
+    await flushSentry()
     return json({ error: bizErr?.message ?? 'No businesses found' }, 500)
   }
 
-  const results = { businesses_checked: 0, businesses_at_8pm: 0, wa_sent: 0, wa_failed: 0, push_sent: 0 }
+  addBreadcrumb('Businesses fetched', 'database', 'info', { count: businesses.length })
+
+  const results = {
+    businesses_checked: 0,
+    businesses_at_8pm:  0,
+    wa_sent:            0,
+    wa_failed:          0,
+    push_sent:          0,
+  }
 
   for (const biz of businesses as BusinessRow[]) {
     results.businesses_checked++
@@ -121,11 +141,19 @@ Deno.serve(async (req: Request) => {
     }
 
     results.businesses_at_8pm++
-    console.log(`[cron-reminders] Business "${biz.name}" is at 8 PM (${timezone}). Processing...`)
+
+    // Scope all Sentry events in this iteration to the current business
+    setSentryTag('business_id',   biz.id)
+    setSentryTag('business_name', biz.name)
+    addBreadcrumb(`Processing business at 8 PM: ${biz.name}`, 'cron', 'info', {
+      business_id: biz.id,
+      timezone,
+    })
 
     // ── Skip if business explicitly disabled WhatsApp notifications ────
     const settings = biz.settings as Record<string, unknown> | null
-    const whatsappEnabled = (settings?.notifications as Record<string, unknown>)?.whatsapp !== false
+    const whatsappEnabled =
+      (settings?.notifications as Record<string, unknown>)?.whatsapp !== false
 
     // ── Get tomorrow's appointments ───────────────────────────────────────
     const { start, end } = getTomorrowRange(timezone)
@@ -146,16 +174,23 @@ Deno.serve(async (req: Request) => {
       .order('start_at', { ascending: true })
 
     if (aptErr) {
-      console.error(`[cron-reminders] appointments fetch error for ${biz.name}:`, aptErr.message)
+      captureException(aptErr, {
+        stage:       'fetch_appointments',
+        business_id: biz.id,
+      })
       continue
     }
 
     const apts = (appointments ?? []) as unknown as AppointmentWithClient[]
 
     if (apts.length === 0) {
-      console.log(`[cron-reminders] No appointments tomorrow for "${biz.name}". Skipping.`)
       continue
     }
+
+    addBreadcrumb('Appointments fetched for tomorrow', 'database', 'info', {
+      business_id: biz.id,
+      count:       apts.length,
+    })
 
     // ── Get cancelled reminders (appointments where owner toggled "Omitir") ──
     const aptIds = apts.map(a => a.id)
@@ -174,9 +209,14 @@ Deno.serve(async (req: Request) => {
       // Skip appointments where the owner opted out of the reminder
       const sendableApts = apts.filter(apt => apt.clients?.phone && !skippedAptIds.has(apt.id))
 
+      addBreadcrumb('Sending WhatsApp reminders', 'whatsapp', 'info', {
+        business_id: biz.id,
+        count:       sendableApts.length,
+      })
+
       const waResults = await Promise.allSettled(
         sendableApts.map(async (apt) => {
-          const client = apt.clients!
+          const client    = apt.clients!
           const startDate = new Date(apt.start_at)
           const date = startDate.toLocaleDateString('es-CO', {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -224,6 +264,13 @@ Deno.serve(async (req: Request) => {
           results.wa_sent++
         } else {
           results.wa_failed++
+          // Capture individual delivery failures as non-fatal exceptions
+          if (result.status === 'rejected') {
+            captureException(result.reason, {
+              stage:       'whatsapp_send',
+              business_id: biz.id,
+            })
+          }
         }
       }
     }
@@ -231,7 +278,7 @@ Deno.serve(async (req: Request) => {
     // ── 2. Send consolidated push to business owner ───────────────────────
     const MAX_LISTED = 5
     const listed = apts.slice(0, MAX_LISTED).map(apt => {
-      const clientName = apt.clients?.name ?? 'Cliente'
+      const clientName  = apt.clients?.name  ?? 'Cliente'
       const serviceName = apt.services?.name ?? 'Servicio'
       const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
         hour: '2-digit', minute: '2-digit',
@@ -240,7 +287,7 @@ Deno.serve(async (req: Request) => {
     })
 
     const overflow = apts.length > MAX_LISTED ? `\n+${apts.length - MAX_LISTED} más` : ''
-    const pushBody = listed.join('\n') + overflow
+    const pushBody  = listed.join('\n') + overflow
 
     const pushUrl = `${supabaseUrl}/functions/v1/push-notify`
 
@@ -260,10 +307,15 @@ Deno.serve(async (req: Request) => {
       })
       results.push_sent++
     } catch (err) {
-      console.error(`[cron-reminders] push error for ${biz.name}:`, err)
+      captureException(err, {
+        stage:       'push_notify',
+        business_id: biz.id,
+      })
     }
   }
 
-  console.log('[cron-reminders] Run complete:', JSON.stringify(results))
+  addBreadcrumb('Cron run complete', 'cron', 'info', { ...results })
+
+  await flushSentry()
   return json({ ok: true, ...results })
 })

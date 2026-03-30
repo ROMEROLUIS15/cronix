@@ -2,12 +2,22 @@
  * Supabase Edge Function — WhatsApp AI Webhook
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { processConversation }                                          from "./gemini.ts"
-import { sendWhatsAppMessage }                                          from "./whatsapp.ts"
-import type { AppointmentPayload }                                      from "./database.ts"
-import { getBusinessByPhone, getBusinessServices, getAvailableSlots,
-         createAppointment, logInteraction }                            from "./database.ts"
+import { serve }             from "https://deno.land/std@0.168.0/http/server.ts"
+import { processConversation } from "./ai-agent.ts"
+import { sendWhatsAppMessage }  from "./whatsapp.ts"
+import type {
+  MetaWebhookPayload,
+  AppointmentPayload,
+  BusinessRagContext,
+  WaBusinessSettings,
+} from "./types.ts"
+import { getBusinessByPhone, getBusinessServices,
+         createAppointment, logInteraction }         from "./database.ts"
+import { initSentry, captureException, addBreadcrumb,
+         setSentryTag, flushSentry }                 from "../_shared/sentry.ts"
+
+// Initialize once per cold start — Deno module cache ensures a single call
+initSentry('whatsapp-webhook')
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
@@ -24,8 +34,6 @@ function json(data: unknown, status = 200): Response {
 }
 
 // ── Meta webhook signature verification ──────────────────────────────────────
-// Prevents spoofed POST requests from reaching the agent.
-// Requires env var: WHATSAPP_APP_SECRET (Meta App Secret, not the access token).
 
 async function verifyMetaSignature(signature: string | null, rawBody: string): Promise<boolean> {
   const appSecret = Deno.env.get('WHATSAPP_APP_SECRET')
@@ -46,37 +54,6 @@ async function verifyMetaSignature(signature: string | null, rawBody: string): P
     .join('')
 
   return computedHash === expectedHash
-}
-
-// ── Meta webhook payload types ────────────────────────────────────────────────
-
-interface MetaContact {
-  profile?: { name?: string }
-}
-
-interface MetaMessage {
-  from:  string
-  text?: { body: string }
-}
-
-interface MetaMetadata {
-  phone_number_id?:      string
-  display_phone_number?: string
-}
-
-interface MetaValue {
-  messages?: MetaMessage[]
-  contacts?: MetaContact[]
-  metadata?: MetaMetadata
-}
-
-interface MetaEntry {
-  changes?: Array<{ value?: MetaValue }>
-}
-
-interface MetaWebhookPayload {
-  object?: string
-  entry?:  MetaEntry[]
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -100,7 +77,6 @@ serve(async (req: Request) => {
   }
 
   if (method === 'POST') {
-    // Read raw body first — req.json() and req.text() can only be called once
     const rawBody = await req.text()
 
     const isValid = await verifyMetaSignature(
@@ -108,8 +84,11 @@ serve(async (req: Request) => {
       rawBody
     )
     if (!isValid) {
+      await flushSentry()
       return new Response('Unauthorized', { status: 401 })
     }
+
+    addBreadcrumb('Meta HMAC signature verified', 'security')
 
     try {
       const body: MetaWebhookPayload = JSON.parse(rawBody)
@@ -117,6 +96,7 @@ serve(async (req: Request) => {
       const messages = value?.messages
 
       if (body.object !== 'whatsapp_business_account' || !messages?.[0]) {
+        await flushSentry()
         return json({ success: true, message: 'Event ignored' })
       }
 
@@ -127,44 +107,53 @@ serve(async (req: Request) => {
       const waIdentifier = value?.metadata?.phone_number_id
                         ?? value?.metadata?.display_phone_number
 
+      addBreadcrumb('WhatsApp message received', 'webhook', 'info', {
+        has_text:      !!text,
+        wa_identifier: waIdentifier,
+      })
+
       if (!text || !waIdentifier) {
+        await flushSentry()
         return json({ success: true, message: 'Non-text message or missing metadata' })
       }
 
       const business = await getBusinessByPhone(waIdentifier)
       if (!business) {
+        await flushSentry()
         return json({ success: false, error: 'Business not found' })
       }
+
+      setSentryTag('business_id',   business.id)
+      setSentryTag('business_name', business.name)
+      addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id })
 
       const services = await getBusinessServices(business.id)
       const timezone = business.timezone ?? 'UTC'
 
-      const aiResponse = await processConversation(
-        text,
-        {
-          businessName: business.name,
-          services,
-          currentTime:  new Date().toLocaleString('es-ES', { timeZone: timezone }),
-          customerName
+      // Build BusinessRagContext for the new ai-agent.ts API
+      const context: BusinessRagContext = {
+        business: {
+          id:       business.id,
+          name:     business.name,
+          timezone: timezone,
+          settings: (business.settings ?? {}) as WaBusinessSettings,
         },
-        async (name, args) => {
-          if (name === 'get_available_slots') {
-            return getAvailableSlots(business.id, args.date, args.service_id, timezone)
-          }
-          if (name === 'create_appointment') {
-            const payload: AppointmentPayload = {
-              client_phone: sender,
-              client_name:  args.client_name ?? customerName,
-              service_id:   args.service_id,
-              date:         args.date,
-              time:         args.time,
-              timezone,
-            }
-            return createAppointment(business.id, payload)
-          }
-          return { error: 'Tool not found' }
-        }
-      )
+        services,
+        client:             null,
+        activeAppointments: [],
+        history:            [],
+      }
+
+      addBreadcrumb('Sending prompt to AI model', 'llm', 'info', {
+        model:    'llama-3.3-70b-versatile',
+        timezone: timezone,
+      })
+
+      const aiResponse = await processConversation(text, context, customerName)
+
+      addBreadcrumb('AI response received', 'llm', 'info', {
+        response_length: aiResponse?.length ?? 0,
+      })
 
       await sendWhatsAppMessage(sender, aiResponse, value?.metadata?.phone_number_id)
 
@@ -172,14 +161,18 @@ serve(async (req: Request) => {
         business_id:  business.id,
         sender_phone: sender,
         message_text: text,
-        ai_response:  aiResponse
+        ai_response:  aiResponse,
       })
 
+      await flushSentry()
       return json({ success: true })
     } catch (error) {
+      captureException(error, { stage: 'webhook_post_handler' })
+      await flushSentry()
       return json({ error: 'Internal Server Error' }, 500)
     }
   }
 
+  await flushSentry()
   return json({ error: 'Method not allowed' }, 405)
 })

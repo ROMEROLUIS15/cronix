@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs')
+
 const withPWA = require("next-pwa")({
   dest: "public",
   disable: process.env.NODE_ENV === "development", // SW requires production build assets
@@ -30,4 +32,28 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+// ── Sentry webpack plugin options ─────────────────────────────────────────────
+// SENTRY_AUTH_TOKEN: generate at https://sentry.io/settings/auth-tokens/
+// SENTRY_ORG / SENTRY_PROJECT: set in Vercel env vars for CI source map uploads.
+// All values come from env — no secrets hardcoded here.
+
+/** @type {import('@sentry/nextjs').SentryBuildOptions} */
+const sentryBuildOptions = {
+  org:            process.env.SENTRY_ORG,
+  project:        process.env.SENTRY_PROJECT,
+  authToken:      process.env.SENTRY_AUTH_TOKEN,
+
+  // Print Sentry output only in CI to keep local builds clean
+  silent: !process.env.CI,
+
+  // Never serve source maps publicly — uploaded to Sentry then removed
+  hideSourceMaps: true,
+
+  // Tree-shake Sentry debug logger out of the production bundle
+  disableLogger: true,
+
+  // Cronix doesn't use Vercel Cron Monitors (uses Supabase pg_cron instead)
+  automaticVercelMonitors: false,
+}
+
+module.exports = withSentryConfig(withPWA(nextConfig), sentryBuildOptions)

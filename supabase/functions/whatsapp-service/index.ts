@@ -9,9 +9,14 @@
  *   WHATSAPP_PHONE_NUMBER_ID  — from Meta Business Manager
  *   WHATSAPP_ACCESS_TOKEN     — permanent or temporary token
  *   CRON_SECRET               — shared secret with Next.js cron route
+ *   SENTRY_DSN                — optional, enables error tracking
  *
  * Deploy: npx supabase functions deploy whatsapp-service
  */
+
+import { initSentry, captureException, addBreadcrumb, flushSentry } from '../_shared/sentry.ts'
+
+initSentry('whatsapp-service')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -34,6 +39,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== 'POST') {
+    await flushSentry()
     return json({ error: 'Method not allowed' }, 405)
   }
 
@@ -42,6 +48,7 @@ Deno.serve(async (req: Request) => {
   const cronSecret     = Deno.env.get('CRON_SECRET')
 
   if (!cronSecret || internalSecret !== cronSecret) {
+    await flushSentry()
     return json({ error: 'Unauthorized' }, 401)
   }
 
@@ -52,6 +59,8 @@ Deno.serve(async (req: Request) => {
     ;({ to, clientName, businessName, date, time } = body)
     if (!to || !clientName) throw new Error('Missing required fields')
   } catch (e) {
+    captureException(e, { stage: 'parse_body' })
+    await flushSentry()
     return json({ error: 'Invalid request body' }, 400)
   }
 
@@ -60,11 +69,21 @@ Deno.serve(async (req: Request) => {
   const accessToken   = Deno.env.get('WHATSAPP_ACCESS_TOKEN')
 
   if (!phoneNumberId || !accessToken) {
+    captureException(new Error('WhatsApp credentials not configured'), {
+      stage:    'credentials_check',
+      missing:  !phoneNumberId ? 'WHATSAPP_PHONE_NUMBER_ID' : 'WHATSAPP_ACCESS_TOKEN',
+    })
+    await flushSentry()
     return json({ success: false, error: 'WhatsApp credentials not configured' })
   }
 
   // Normalize phone: strip spaces, dashes, parens, leading +
   const phone = to.replace(/[\s\-\+\(\)]/g, '')
+
+  addBreadcrumb('Calling Meta WhatsApp API', 'whatsapp', 'info', {
+    phone_number_id: phoneNumberId,
+    // phone is PII — scrubbed by beforeSend in _shared/sentry.ts
+  })
 
   // ── Call Meta API ──────────────────────────────────────────────────────
   try {
@@ -97,13 +116,25 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      const msg  = (body as { error?: { message?: string } })?.error?.message
+      const errBody = await res.json().catch(() => ({}))
+      const msg     = (errBody as { error?: { message?: string } })?.error?.message
+      // Capture Meta API errors — critical for diagnosing token expiry or template issues
+      captureException(new Error(`Meta API error: ${msg ?? `HTTP ${res.status}`}`), {
+        stage:       'meta_api_call',
+        http_status: res.status,
+        meta_error:  msg,
+        business:    businessName,
+      })
+      await flushSentry()
       return json({ success: false, error: msg ?? `HTTP ${res.status}` })
     }
 
+    addBreadcrumb('WhatsApp message sent successfully', 'whatsapp', 'info')
+    await flushSentry()
     return json({ success: true })
   } catch (e) {
+    captureException(e, { stage: 'meta_api_call', business: businessName })
+    await flushSentry()
     return json({
       success: false,
       error:   e instanceof Error ? e.message : 'Unknown error',

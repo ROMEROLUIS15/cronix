@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers } from '@/components/providers'
+import { setSentryUser } from '@/lib/sentry'
 
 interface DashboardLayoutProps { children: React.ReactNode }
 
@@ -20,6 +21,16 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     .select('name, role, business_id, avatar_url, color, businesses(name, category)')
     .eq('id', user.id)
     .single()
+
+  // ── Sentry: bind user + tenant context to this request ───────────────────
+  // From this point on, every error thrown in this layout tree will carry
+  // user_id and business_id as searchable tags in Sentry.
+  if (user) {
+    const businessName = dbUser?.businesses && !Array.isArray(dbUser.businesses)
+      ? dbUser.businesses.name
+      : null
+    setSentryUser(user.id, dbUser?.business_id ?? null, businessName)
+  }
 
   // ── Onboarding gate ───────────────────────────────────────────────────────
   // New users (Google or email) have business_id = null until setup completes.
