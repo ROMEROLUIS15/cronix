@@ -55,3 +55,6 @@ coverage/
 .agent/
 .claude/
 .cache/
+
+# Archivos de documentación no publicables
+TECHNICAL_DOCUMENTATION.md

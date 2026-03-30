@@ -340,7 +340,7 @@ serve(async (req: Request) => {
             body: JSON.stringify({
               business_id: business.id,
               title:       '¡Nueva Reserva! 📅',
-              body:        `${client?.name ?? customerName} · ${svcName} — ${date} ${time}`,
+              body:        `${client?.name ?? customerName} · ${svcName} — ${date} ${time} ✅`,
               url:         '/dashboard',
             }),
           }).catch(err => captureException(err, { stage: 'push_new_booking', business_id: business.id }))

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight,
-  Search, Clock, Loader2, CheckCircle2, XCircle, AlertCircle, MessageCircle,
+  Search, Clock, Loader2, CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -74,19 +74,6 @@ export default function AppointmentsPage() {
     await appointmentsRepo.updateAppointmentStatus(supabase, aptId, resolution)
     setAppointments(prev =>
       prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
-    )
-    setResolvingId(null)
-  }
-
-  // ── Approve / Reject WhatsApp pending appointment ─────────────────────
-  const handleWhatsAppReview = async (
-    aptId: string,
-    action: 'confirmed' | 'cancelled'
-  ) => {
-    setResolvingId(aptId)
-    await appointmentsRepo.updateAppointmentStatus(supabase, aptId, action)
-    setAppointments(prev =>
-      prev.map(a => a.id === aptId ? { ...a, status: action } : a)
     )
     setResolvingId(null)
   }
@@ -170,8 +157,6 @@ export default function AppointmentsPage() {
                 end_at: apt.end_at,
                 status: apt.status ?? 'pending',
               })
-              const isWhatsAppPending = apt.status === 'pending' && apt.notes === 'Agendado vía WhatsApp AI'
-
               return (
                 <div key={apt.id}>
                   {/* Main appointment row */}
@@ -218,43 +203,6 @@ export default function AppointmentsPage() {
                       </Link>
                     </div>
                   </div>
-
-                  {/* WhatsApp pending approval bar */}
-                  {isWhatsAppPending && !expired && (
-                    <div className="flex items-center gap-3 px-4 py-3 flex-wrap"
-                      style={{ background: 'rgba(37,211,102,0.06)', borderTop: '1px solid rgba(37,211,102,0.15)' }}>
-                      <div className="flex items-center gap-2 flex-1">
-                        <MessageCircle size={14} style={{ color: '#25D366', flexShrink: 0 }} />
-                        <p className="text-xs font-medium" style={{ color: '#25D366' }}>
-                          Solicitud vía WhatsApp — pendiente de aprobación
-                        </p>
-                      </div>
-                      <div className="flex gap-2 flex-shrink-0 flex-wrap">
-                        <button
-                          onClick={() => handleWhatsAppReview(apt.id, 'confirmed')}
-                          disabled={resolvingId === apt.id}
-                          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all disabled:opacity-50"
-                          style={{ background: 'rgba(48,209,88,0.12)', color: '#30D158', border: '1px solid rgba(48,209,88,0.25)' }}>
-                          {resolvingId === apt.id
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <CheckCircle2 size={13} />
-                          }
-                          Confirmar
-                        </button>
-                        <button
-                          onClick={() => handleWhatsAppReview(apt.id, 'cancelled')}
-                          disabled={resolvingId === apt.id}
-                          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all disabled:opacity-50"
-                          style={{ background: 'rgba(255,59,48,0.08)', color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }}>
-                          {resolvingId === apt.id
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <XCircle size={13} />
-                          }
-                          Rechazar
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Expired resolution bar */}
                   {expired && (
