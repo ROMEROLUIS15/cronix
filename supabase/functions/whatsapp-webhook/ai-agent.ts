@@ -183,14 +183,16 @@ Sé CONCISO en tus respuestas. Máximo 2-3 oraciones por mensaje salvo que la si
   }
 
   if (activeAppointments.length > 0) {
-    prompt += `\nCITAS ACTIVAS:\n`
+    prompt += `\nCITAS ACTIVAS DEL CLIENTE:\n`
+    prompt += `⚠️ PRIVACIDAD: Los REF# son identificadores INTERNOS DEL SISTEMA. NUNCA los menciones ni los muestres al cliente. Úsalos SOLO dentro de los tags de acción.\n`
     for (const apt of activeAppointments) {
       const dt      = new Date(apt.start_at)
       const dateStr = dt.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: timezone })
       const timeStr = dt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: timezone })
-      prompt += `• [ID: ${apt.id}] ${apt.service_name} — ${dateStr} a las ${timeStr} (${apt.status})\n`
+      prompt += `• REF#${apt.id} | ${apt.service_name} — ${dateStr} a las ${timeStr} (${apt.status})\n`
     }
-    prompt += `\nDEBES informarle sobre estas citas y preguntarle qué desea:\n`
+    prompt += `\nCuando hables de estas citas al cliente, usa SOLO la fecha y servicio. Jamás menciones el REF#.\n`
+    prompt += `Pregúntale qué desea:\n`
     prompt += `  a) Mantener su cita actual y agendar una nueva\n`
     prompt += `  b) Reagendar (cambiar fecha/hora)\n`
     prompt += `  c) Cancelar\n`
@@ -198,9 +200,10 @@ Sé CONCISO en tus respuestas. Máximo 2-3 oraciones por mensaje salvo que la si
 
   // ── Section 3: Services Catalog ──
   prompt += `\n--- CATÁLOGO DE SERVICIOS ---\n`
+  prompt += `⚠️ PRIVACIDAD: Los REF# de servicios son identificadores internos. Nunca los muestres al cliente. Úsalos SOLO dentro de los tags de acción.\n`
   if (services.length > 0) {
     for (const svc of services) {
-      prompt += `• ${svc.name} — ${svc.duration_min} min — $${svc.price} [ID: ${svc.id}]\n`
+      prompt += `• ${svc.name} — ${svc.duration_min} min — $${svc.price} | REF#${svc.id}\n`
     }
   } else {
     prompt += `(Sin servicios configurados)\n`

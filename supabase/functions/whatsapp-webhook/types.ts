@@ -50,6 +50,7 @@ export interface ActiveAppointmentRow {
   id:           string
   service_name: string
   start_at:     string
+  end_at:       string
   status:       string
 }
 
