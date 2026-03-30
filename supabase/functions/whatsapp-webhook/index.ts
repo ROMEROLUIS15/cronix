@@ -21,7 +21,9 @@ import type {
   WaBusinessSettings,
 }                                   from "./types.ts"
 import {
-  getBusinessByPhone,
+  getBusinessBySlug,
+  getSessionBusiness,
+  upsertSession,
   getBusinessServices,
   getClientByPhone,
   getActiveAppointments,
@@ -186,20 +188,54 @@ serve(async (req: Request) => {
       const withinRateLimit = await checkMessageRateLimit(sender)
       if (!withinRateLimit) {
         addBreadcrumb('Message rate limited', 'rate-limit', 'warning')
-        // Fail-secure: do not respond (avoids confirming the phone is active to spammers)
         await flushSentry()
         return json({ success: true })
       }
 
+      // ── Slug extraction (BEFORE sanitization — # would be stripped) ────────
+      // Matches #slug-name anywhere in the message text
+      const slugMatch = rawText.match(/#([a-z0-9][a-z0-9-]{1,30})/i)
+      const slug      = slugMatch?.[1]?.toLowerCase() ?? null
+
+      // Remove the #slug from the text so the AI doesn't see it as conversation
+      const rawTextWithoutSlug = slug
+        ? rawText.replace(slugMatch![0], '').trim()
+        : rawText
+
       // Layer 3: Sanitize message (anti prompt-injection)
-      const text = sanitizeMessage(rawText)
+      // If only #slug was sent, use a greeting so the AI introduces itself
+      const text = sanitizeMessage(rawTextWithoutSlug) || 'Hola'
       addBreadcrumb('Message sanitized', 'security', 'info', { length: text.length })
 
-      // Resolve tenant
-      const business = await getBusinessByPhone(waIdentifier)
+      // ── 3-tier tenant routing ─────────────────────────────────────────────
+      // Priority 1: Explicit #slug in message → resolve by slug
+      // Priority 2: No slug → check wa_sessions for last-active business
+      // Priority 3: Neither → send Cronix landing message
+      let business = slug ? await getBusinessBySlug(slug) : null
+
+      if (business && slug) {
+        // Anchor this sender to the business for future messages
+        await upsertSession(sender, business.id)
+        addBreadcrumb('Business resolved by slug', 'tenant', 'info', { slug })
+      }
+
       if (!business) {
+        business = await getSessionBusiness(sender)
+        if (business) {
+          addBreadcrumb('Business resolved by session', 'tenant', 'info')
+        }
+      }
+
+      if (!business) {
+        // No routing possible — send SaaS landing message
+        const landingMsg =
+          '¡Hola! 👋 Soy el asistente virtual de reservas de *Cronix*.\n\n' +
+          'Para comunicarte con un negocio y agendar una cita, necesitas usar su enlace directo de WhatsApp.\n\n' +
+          '🔗 Encuentra todos los negocios disponibles en:\nhttps://cronix.app\n\n' +
+          '¡Te esperamos!'
+        await sendWhatsAppMessage(sender, landingMsg)
         await flushSentry()
-        return json({ success: false, error: 'Business not found' })
+        return json({ success: true, message: 'No business routed — landing sent' })
       }
 
       setSentryTag('business_id',   business.id)

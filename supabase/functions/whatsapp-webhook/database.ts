@@ -72,8 +72,64 @@ export async function checkBookingRateLimit(
   return data as boolean
 }
 
-// ── Business ──────────────────────────────────────────────────────────────────
+// ── Business routing (single shared number → slug + session) ─────────────────
 
+/**
+ * Resolves a business by its URL-safe slug (e.g. "#rs-studio" → RS Studio).
+ * Used as the primary routing mechanism when the user includes #slug in their message.
+ */
+export async function getBusinessBySlug(slug: string): Promise<BusinessRow | null> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('id, name, timezone, settings')
+    .eq('slug', slug)
+    .single()
+
+  if (error || !data) return null
+  return data as BusinessRow
+}
+
+/**
+ * Retrieves the last business a sender interacted with from wa_sessions.
+ * Fallback when no #slug is present in the message.
+ */
+export async function getSessionBusiness(senderPhone: string): Promise<BusinessRow | null> {
+  const { data: session, error: sessionErr } = await supabase
+    .from('wa_sessions')
+    .select('business_id')
+    .eq('sender_phone', senderPhone)
+    .single()
+
+  if (sessionErr || !session) return null
+
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('id, name, timezone, settings')
+    .eq('id', (session as { business_id: string }).business_id)
+    .single()
+
+  if (error || !data) return null
+  return data as BusinessRow
+}
+
+/**
+ * Anchors a sender to a business in wa_sessions.
+ * Called when a #slug resolves successfully, so future messages without slug
+ * automatically route to the same business.
+ */
+export async function upsertSession(senderPhone: string, businessId: string): Promise<void> {
+  await supabase
+    .from('wa_sessions')
+    .upsert(
+      { sender_phone: senderPhone, business_id: businessId, updated_at: new Date().toISOString() },
+      { onConflict: 'sender_phone' }
+    )
+}
+
+/**
+ * Legacy: resolves business by WhatsApp phone number ID or display phone.
+ * Only useful if a business has a dedicated WhatsApp number.
+ */
 export async function getBusinessByPhone(waIdentifier: string): Promise<BusinessRow | null> {
   const { data, error } = await supabase
     .rpc('fn_get_business_by_phone', { p_wa_phone_id: waIdentifier })
