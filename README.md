@@ -27,6 +27,7 @@
   - [Finances](#finances)
   - [Reports & Analytics](#reports--analytics)
   - [Business Settings](#business-settings)
+  - [Error Tracking & Monitoring (Sentry)](#error-tracking--monitoring-sentry)
   - [WhatsApp Integration & AI Agent](#whatsapp-integration--ai-agent)
   - [Voice Notes & Transcription](#voice-notes--transcription)
   - [Push Notifications](#push-notifications)
@@ -52,6 +53,7 @@
 - **Serverless Automation:** Scalable reminder system using **Supabase Edge Functions (Deno)** and **pg_cron**, integrated with Meta's WhatsApp Cloud API v19.0.
 - **Voice Support:** Real-time voice note transcription via Groq Whisper (`whisper-large-v3-turbo`), converting spoken Spanish into text for appointment booking.
 - **3-Layer Anti-Spam Defense:** Message rate limiting (atomic PostgreSQL), message sanitization (anti prompt-injection), and booking rate limiting.
+- **Enterprise Error Monitoring:** Full-stack Sentry integration (Next.js components, API routes, and Deno Edge Functions) with multi-tenant custom tags, breadcrumbs, and real-time alerts.
 - **UX Offline-First:** PWA configured with custom Service Workers for a native mobile experience.
 - **Contact Integration:** Native Contact Picker API for seamless phone number extraction.
 
@@ -75,6 +77,7 @@
 | Icons | Lucide React |
 | Unit Testing | Vitest + jsdom |
 | DB Testing | pgTAP (RLS tests against real Postgres) |
+| Error Tracking | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions) |
 | Notifications | WhatsApp Cloud API v19.0 (Meta) — approved template |
 | Web Push | RFC 8291 — VAPID + AES-128-GCM, native Service Worker |
 | AI Engine | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Zero-Shot Routing) |
@@ -521,6 +524,25 @@ If a user registers with email and later joins with Google (or vice-versa), acco
 
 - Business settings only visible to owner and team members with RLS
 - Only owner can edit settings
+
+---
+
+### Error Tracking & Monitoring (Sentry)
+
+**Global Setup:** Full-stack Sentry initialization across all Next.js environments (`client`, `server`, and `edge`) and Supabase Deno Edge Functions.
+
+#### Next.js Integration
+
+- **Global Error Boundaries:** `app/global-error.tsx` catches and reports unhandled React rendering errors.
+- **Server Actions & API Routes:** Automatically traces requests, captures unhandled exceptions, and monitors backend performance.
+- **Source Maps:** Automated release tagging and source map uploading via `@sentry/nextjs`.
+
+#### Supabase Edge Functions (Deno)
+
+- **Custom Wrapper:** `supabase/functions/_shared/sentry.ts` manages Deno edge environment limitations.
+- **Breadcrumbs:** Strategic placement (`addBreadcrumb`) throughout AI pipelines to track prompt-injection blocks, LLM responses, rate limiting events, and payload sanitization logic.
+- **Context & Tags:** Cross-references errors with specific businesses using `setSentryTag('business_id', id)` to isolate tenant-specific issues without exposing PII.
+- **Graceful Flushing:** Ensures `flushSentry()` runs securely before closing worker processes given Supabase Edge's fire-and-forget limitations, avoiding lost reports during cold starts or crashes.
 
 ---
 
