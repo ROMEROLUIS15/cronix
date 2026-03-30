@@ -24,6 +24,7 @@ const nextConfig = {
   },
 
   experimental: {
+    instrumentationHook: true,
     turbo: {
       rules: {},
     },
@@ -49,11 +50,13 @@ const sentryBuildOptions = {
   // Never serve source maps publicly — uploaded to Sentry then removed
   hideSourceMaps: true,
 
-  // Tree-shake Sentry debug logger out of the production bundle
-  disableLogger: true,
+  webpack: {
+    // Tree-shake Sentry debug logger out of the production bundle
+    treeshake: { removeDebugLogging: true },
 
-  // Cronix doesn't use Vercel Cron Monitors (uses Supabase pg_cron instead)
-  automaticVercelMonitors: false,
+    // Cronix doesn't use Vercel Cron Monitors (uses Supabase pg_cron instead)
+    automaticVercelMonitors: false,
+  },
 }
 
 module.exports = withSentryConfig(withPWA(nextConfig), sentryBuildOptions)

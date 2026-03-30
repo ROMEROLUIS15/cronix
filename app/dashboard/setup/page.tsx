@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useFormState } from "react-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { createBusiness } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,9 +13,22 @@ import Image from "next/image";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 export default function SetupPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [state, formAction] = useFormState(createBusiness, null);
   const [initialData, setInitialData] = useState<{ name: string; category: string } | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+
+  // When the server action returns success, clear the stale React Query cache for
+  // business-context before navigating. Without this, the dashboard page renders
+  // with the cached null businessId and shows "Configurar mi negocio" again,
+  // causing the setup → dashboard → setup redirect loop.
+  useEffect(() => {
+    if (state?.success) {
+      queryClient.removeQueries({ queryKey: ['business-context'] });
+      router.push('/dashboard');
+    }
+  }, [state, queryClient, router]);
 
   useEffect(() => {
     async function getUserData() {

@@ -219,10 +219,10 @@ Deno.serve(async (req: Request) => {
           const client    = apt.clients!
           const startDate = new Date(apt.start_at)
           const date = startDate.toLocaleDateString('es-CO', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: timezone,
           })
           const time = startDate.toLocaleTimeString('es-CO', {
-            hour: '2-digit', minute: '2-digit',
+            hour: '2-digit', minute: '2-digit', timeZone: timezone,
           })
 
           const res = await fetch(whatsappUrl, {
@@ -281,7 +281,7 @@ Deno.serve(async (req: Request) => {
       const clientName  = apt.clients?.name  ?? 'Cliente'
       const serviceName = apt.services?.name ?? 'Servicio'
       const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
-        hour: '2-digit', minute: '2-digit',
+        hour: '2-digit', minute: '2-digit', timeZone: timezone,
       })
       return `${time} · ${clientName} — ${serviceName}`
     })

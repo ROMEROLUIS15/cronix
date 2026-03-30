@@ -16,6 +16,7 @@ const CreateBusinessSchema = z.object({
 // ── Action state type ─────────────────────────────────────────────────────
 interface CreateBusinessState {
   error?: string
+  success?: true
 }
 
 export async function createBusiness(
@@ -73,5 +74,8 @@ export async function createBusiness(
   if (linkError) return { error: 'Error al vincular el usuario al negocio.' }
 
   revalidatePath('/dashboard')
-  redirect('/dashboard')
+  // Return success so the client can clear the React Query cache before navigating.
+  // Calling redirect() here would bypass the client-side cache invalidation and
+  // cause the dashboard to render with stale null businessId, triggering the setup loop.
+  return { success: true as const }
 }

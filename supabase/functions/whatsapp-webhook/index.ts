@@ -11,8 +11,10 @@
 
 import { serve }                   from "https://deno.land/std@0.168.0/http/server.ts"
 import { processConversation,
+         transcribeAudio,
          LlmRateLimitError }        from "./ai-agent.ts"
-import { sendWhatsAppMessage }      from "./whatsapp.ts"
+import { sendWhatsAppMessage,
+         downloadMediaBuffer }      from "./whatsapp.ts"
 import type {
   MetaWebhookPayload,
   BusinessRagContext,
@@ -24,7 +26,6 @@ import {
   getClientByPhone,
   getActiveAppointments,
   getConversationHistory,
-  getAvailableSlots,
   createAppointment,
   rescheduleAppointment,
   cancelAppointmentById,
@@ -153,13 +154,32 @@ serve(async (req: Request) => {
       const msg          = messages[0]
       const sender       = msg.from
       const customerName = value?.contacts?.[0]?.profile?.name ?? 'Cliente'
-      const rawText      = msg.text?.body
       const waIdentifier = value?.metadata?.phone_number_id
                         ?? value?.metadata?.display_phone_number
 
-      if (!rawText || !waIdentifier) {
+      if (!waIdentifier) {
         await flushSentry()
-        return json({ success: true, message: 'Non-text message or missing metadata' })
+        return json({ success: true, message: 'Missing metadata' })
+      }
+
+      // Extract text from text message or transcribe voice note
+      let rawText = msg.text?.body ?? null
+
+      if (!rawText && msg.audio?.id) {
+        addBreadcrumb('Voice note received, downloading media', 'whatsapp', 'info')
+        try {
+          const { buffer, mimeType } = await downloadMediaBuffer(msg.audio.id)
+          addBreadcrumb('Media downloaded, transcribing with Whisper', 'llm', 'info')
+          rawText = await transcribeAudio(buffer, mimeType)
+        } catch (err) {
+          if (err instanceof LlmRateLimitError) throw err
+          captureException(err, { stage: 'voice_transcription', sender })
+        }
+      }
+
+      if (!rawText) {
+        await flushSentry()
+        return json({ success: true, message: 'Non-text message or empty transcription' })
       }
 
       // Layer 2: Message rate limit
@@ -228,7 +248,7 @@ serve(async (req: Request) => {
         if (err instanceof LlmRateLimitError) {
           const mins = Math.ceil(err.retryAfterSecs / 60)
           const msg  = `Estoy atendiendo muchas consultas. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`
-          await sendWhatsAppMessage(sender, msg, value?.metadata?.phone_number_id)
+          await sendWhatsAppMessage(sender, msg)
           await flushSentry()
           return json({ success: true })
         }
@@ -254,7 +274,7 @@ serve(async (req: Request) => {
         const bookingAllowed = await checkBookingRateLimit(sender, business.id)
         if (!bookingAllowed) {
           const limitMsg = 'Has alcanzado el límite de citas nuevas por hoy. Por favor contáctanos directamente para más ayuda.'
-          await sendWhatsAppMessage(sender, limitMsg, value?.metadata?.phone_number_id)
+          await sendWhatsAppMessage(sender, limitMsg)
           await logInteraction({ business_id: business.id, sender_phone: sender, message_text: text, ai_response: 'BOOKING_RATE_LIMITED' })
           await flushSentry()
           return json({ success: true })
@@ -270,6 +290,24 @@ serve(async (req: Request) => {
             timezone,
           })
           addBreadcrumb('Appointment created via WhatsApp AI', 'booking', 'info')
+
+          // Notify business owner immediately — fire-and-forget (non-blocking)
+          const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
+          const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+          const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
+          fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+            method:  'POST',
+            headers: {
+              'Content-Type':      'application/json',
+              'x-internal-secret': cronSecret,
+            },
+            body: JSON.stringify({
+              business_id: business.id,
+              title:       '¡Nueva Reserva! 📅',
+              body:        `${client?.name ?? customerName} · ${svcName} — ${date} ${time}`,
+              url:         '/dashboard',
+            }),
+          }).catch(err => captureException(err, { stage: 'push_new_booking', business_id: business.id }))
         } catch (err) {
           captureException(err, { stage: 'create_appointment', service_id: serviceId, date })
         }
@@ -305,7 +343,7 @@ serve(async (req: Request) => {
       // Strip all tags before sending to the user
       const cleanResponse = aiResponse.replace(ALL_TAGS_RE, '').replace(/\s{2,}/g, ' ').trim()
 
-      await sendWhatsAppMessage(sender, cleanResponse, value?.metadata?.phone_number_id)
+      await sendWhatsAppMessage(sender, cleanResponse)
 
       // Log full response (including tags) for audit trail
       await logInteraction({
