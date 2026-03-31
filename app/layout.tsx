@@ -12,7 +12,7 @@ const inter = Inter({
 
 // ── Viewport separado (Next.js 14+ best practice) ────────────────────────────
 export const viewport: Viewport = {
-  themeColor: '#0062FF',
+  themeColor: '#000000',
   width: 'device-width',
   initialScale: 1,
   /*
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black-translucent',
     title: 'Cronix',
   },
   icons: {

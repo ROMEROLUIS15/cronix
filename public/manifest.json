@@ -4,8 +4,8 @@
   "description": "Sistema de gestión de citas",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#0066FF",
-  "theme_color": "#0066FF",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait",
   "icons": [
     {
