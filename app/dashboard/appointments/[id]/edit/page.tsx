@@ -182,6 +182,27 @@ export default function EditAppointmentPage({ params }: Props) {
       }
     }
 
+    // 1.5) Unassigned slot conflict — appointments without employee block the timeslot
+    //      for all employees (e.g. AI-created bookings that haven't been assigned yet).
+    const unassignedOverlap = (dayApts ?? []).find(a => {
+      if (a.id === excludeId) return false
+      if (a.assigned_user_id != null) return false
+      const aStart = new Date(a.start_at)
+      const aEnd   = new Date(a.end_at)
+      return startObj < aEnd && endObj > aStart
+    })
+    if (unassignedOverlap) {
+      const fmt = (d: Date) => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      const oStart = new Date(unassignedOverlap.start_at)
+      const oEnd   = new Date(unassignedOverlap.end_at)
+      return {
+        slotBlocked: true,
+        slotMsg: `Ya existe una cita sin asignar de ${fmt(oStart)} a ${fmt(oEnd)}. Asígnala a un empleado o elige otro horario.`,
+        bookingLevel: 'blocked' as DoubleBookingLevel,
+        bookingMsg: '',
+      }
+    }
+
     // 2) Client conflict — same client can't be in two places at once.
     const cliConflict = checkClientConflict({
       proposedStart: startObj,
