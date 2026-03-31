@@ -104,9 +104,9 @@ function sanitizeMessage(text: string): string {
 // ── Action tag regexes ────────────────────────────────────────────────────────
 // These are the ONLY valid execution triggers — the LLM cannot self-execute.
 
-const CONFIRM_TAG_RE    = /\[CONFIRM_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const RESCHEDULE_TAG_RE = /\[RESCHEDULE_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const CANCEL_TAG_RE     = /\[CANCEL_BOOKING:\s*([a-f0-9-]{36})\]/i
+const CONFIRM_TAG_RE    = /\[CONFIRM_BOOKING:\s*(?:REF#)?([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
+const RESCHEDULE_TAG_RE = /\[RESCHEDULE_BOOKING:\s*(?:REF#)?([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
+const CANCEL_TAG_RE     = /\[CANCEL_BOOKING:\s*(?:REF#)?([a-f0-9-]{36})\]/i
 const ALL_TAGS_RE       = /\[(CONFIRM|RESCHEDULE|CANCEL)_BOOKING:[^\]]*\]/gi
 
 // ── Handler ───────────────────────────────────────────────────────────────────

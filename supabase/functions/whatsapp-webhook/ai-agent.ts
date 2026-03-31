@@ -25,9 +25,30 @@ import type { BusinessRagContext } from "./types.ts"
 // Change these two values + LLM_API_KEY in .env to swap providers at any time.
 
 const LLM_MODEL          = 'llama-3.3-70b-versatile'
-const LLM_API_URL        = 'https://api.groq.com/openai/v1/chat/completions'
 const WHISPER_MODEL      = 'whisper-large-v3-turbo'
-const WHISPER_API_URL    = 'https://api.groq.com/openai/v1/audio/transcriptions'
+
+// Helicone gateway: proxies Groq calls for latency, cost, and threat monitoring.
+// Falls back to direct Groq if HELICONE_API_KEY is not set.
+// @ts-ignore — Deno runtime global
+const HELICONE_API_KEY = Deno.env.get('HELICONE_API_KEY') ?? ''
+const GROQ_BASE        = HELICONE_API_KEY
+  ? 'https://groq.helicone.ai/openai/v1'
+  : 'https://api.groq.com/openai/v1'
+
+const LLM_API_URL     = `${GROQ_BASE}/chat/completions`
+const WHISPER_API_URL = `${GROQ_BASE}/audio/transcriptions`
+
+function heliconeHeaders(properties: Record<string, string> = {}): Record<string, string> {
+  if (!HELICONE_API_KEY) return {}
+  const headers: Record<string, string> = {
+    'Helicone-Auth':           `Bearer ${HELICONE_API_KEY}`,
+    'Helicone-Property-Source': 'whatsapp-webhook',
+  }
+  for (const [key, value] of Object.entries(properties)) {
+    headers[`Helicone-Property-${key}`] = value
+  }
+  return headers
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -156,10 +177,16 @@ function buildSystemInstruction(context: BusinessRagContext, customerName: strin
     ? JSON.stringify(settings.working_hours, null, 2)
     : 'No especificado — pregunta al cliente qué horario le conviene.'
 
-  const currentTime = new Date().toLocaleString('es-ES', { timeZone: timezone })
+  const now = new Date()
+  const currentTime = now.toLocaleString('es-ES', { timeZone: timezone })
+  const currentYear = now.toLocaleDateString('en-CA', { timeZone: timezone, year: 'numeric' }).slice(0, 4)
+  const currentDateISO = now.toLocaleDateString('en-CA', { timeZone: timezone })
 
   // ── Section 1: Identity & Isolation ──
   let prompt = `Eres el asistente virtual de "${business.name}". Tu ÚNICA función es ayudar a los clientes a agendar, reagendar o cancelar citas para este negocio.
+
+⚠️ FECHA Y AÑO ACTUAL: Hoy es ${currentDateISO} (año ${currentYear}). Hora actual: ${currentTime}.
+Todas las fechas que generes DEBEN usar el año ${currentYear}. NUNCA uses 2024 ni 2025. El año correcto es ${currentYear}.
 
 AISLAMIENTO ESTRICTO:
 - Tú SOLO existes para "${business.name}". No conoces otros negocios ni tienes acceso a información de ellos.
@@ -215,7 +242,7 @@ Sé CONCISO en tus respuestas. Máximo 2-3 oraciones por mensaje salvo que la si
   if (rules) {
     prompt += `Reglas del negocio: ${rules}\n`
   }
-  prompt += `Fecha/hora actual: ${currentTime}\n`
+  prompt += `Fecha/hora actual: ${currentTime} (AÑO: ${currentYear})\n`
   prompt += `Zona horaria: ${timezone}\n`
 
   // ── Section 5: Conversation History Instructions ──
@@ -266,6 +293,8 @@ FLUJO DE NUEVA CITA:
 3. Confirma los detalles → SIN TAG
 4. Solo cuando responda "sí" → emitir [CONFIRM_BOOKING: ID_SERVICIO, YYYY-MM-DD, HH:mm]
 
+⚠️ RECORDATORIO: El año actual es ${currentYear}. Todas las fechas en los tags DEBEN tener el año ${currentYear}. Ejemplo: ${currentYear}-04-28, NO 2024-04-28.
+
 IMPORTANTE — CONFIRMACIÓN AUTOMÁTICA:
 Las citas se confirman AUTOMÁTICAMENTE al crearse. Cuando el cliente confirme y emitas el tag, dile que su cita está CONFIRMADA (no "pendiente de aprobación"). Ejemplo: "¡Listo! Tu cita de [Servicio] para el [Fecha] a las [Hora] está confirmada. ¡Te esperamos!"
 
@@ -277,6 +306,9 @@ FLUJO DE CANCELACIÓN:
 REGLAS DE LOS TAGS:
 - NUNCA emitas un tag sin que el cliente haya dicho "sí" en el mensaje actual o en el historial inmediato.
 - Los IDs deben ser EXACTOS (copiados de la lista de servicios o citas activas).
+- ⚠️ NUNCA incluyas "REF#" dentro del tag. Usa SOLO el UUID sin prefijo.
+  ✅ CORRECTO: [CONFIRM_BOOKING: 339afed4-cbc2-423b-9d8c-17a6f52fb642, ${currentYear}-04-28, 09:00]
+  ❌ INCORRECTO: [CONFIRM_BOOKING: REF#339afed4-cbc2-423b-9d8c-17a6f52fb642, ${currentYear}-04-28, 09:00]
 - La hora debe ser la hora LOCAL que acordaste con el cliente en formato 24h (HH:mm). NO conviertas a UTC.
 - Emite UN SOLO tag por respuesta.
 - El tag va al FINAL del mensaje, después de tu texto conversacional.

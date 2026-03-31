@@ -11,6 +11,13 @@ out/
 build/
 dist/
 
+# next-pwa build artifacts (regenerated on every `next build`)
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+
 # Variables de entorno y Secretos (Seguridad Crítica)
 .env
 supabase/.env
