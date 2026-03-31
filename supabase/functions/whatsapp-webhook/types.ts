@@ -22,6 +22,7 @@ export interface WaBusinessSettings {
     whatsapp: boolean
     email:    boolean
   }
+  wa_verified?: boolean
   maxDailyBookingsPerClient?: number
 }
 
@@ -30,6 +31,7 @@ export interface WaBusinessSettings {
 export interface BusinessRow {
   id:       string
   name:     string
+  phone:    string | null
   timezone: string | null
   settings: WaBusinessSettings | null
 }

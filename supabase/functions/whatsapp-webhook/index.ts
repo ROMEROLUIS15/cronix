@@ -22,6 +22,7 @@ import type {
 }                                   from "./types.ts"
 import {
   getBusinessBySlug,
+  verifyBusinessPhone,
   getSessionBusiness,
   upsertSession,
   getBusinessServices,
@@ -184,6 +185,25 @@ serve(async (req: Request) => {
         return json({ success: true, message: 'Non-text message or empty transcription' })
       }
 
+      // ── Business Owner Verification Webhook Interceptor ──
+      const textUpper = rawText.toUpperCase().trim()
+      if (textUpper.startsWith('VINCULAR-')) {
+        const slug = textUpper.replace('VINCULAR-', '').toLowerCase()
+        const businessName = await verifyBusinessPhone(slug, sender)
+        
+        if (businessName) {
+          const successMsg = `✅ *¡WhatsApp vinculado exitosamente!*\n\nTu número ha sido registrado para el negocio *${businessName}*.\nA partir de ahora recibirás alertas instantáneas cuando la Inteligencia Artificial agende nuevas citas.\n\n_Seguridad Cronix_ 🛡️`
+          await sendWhatsAppMessage(sender, successMsg)
+        } else {
+          const errMsg = `❌ *Error de vinculación*\n\nNo se encontró ningún negocio con el identificador "${slug}". Verifica que el enlace sea correcto.`
+          await sendWhatsAppMessage(sender, errMsg)
+        }
+        
+        addBreadcrumb('Business phone verified natively', 'verification', 'info', { slug, sender })
+        await flushSentry()
+        return json({ success: true, message: 'Owner verification intercept processed' })
+      }
+
       // Layer 2: Message rate limit
       const withinRateLimit = await checkMessageRateLimit(sender)
       if (!withinRateLimit) {
@@ -331,6 +351,8 @@ serve(async (req: Request) => {
           const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
           const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
           const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
+
+          // Channel 1: Web Push notification (PWA)
           fetch(`${supabaseUrl}/functions/v1/push-notify`, {
             method:  'POST',
             headers: {
@@ -344,6 +366,20 @@ serve(async (req: Request) => {
               url:         '/dashboard',
             }),
           }).catch(err => captureException(err, { stage: 'push_new_booking', business_id: business.id }))
+
+          // Channel 2: WhatsApp message to business owner
+          if (business.phone) {
+            const ownerPhone = business.phone.replace(/\D/g, '')
+            const waNotif =
+              `📅 *Nueva cita agendada vía IA*\n\n` +
+              `👤 *Cliente:* ${client?.name ?? customerName}\n` +
+              `💇 *Servicio:* ${svcName}\n` +
+              `📆 *Fecha:* ${date}\n` +
+              `🕐 *Hora:* ${time}\n\n` +
+              `_Reserva automática · ${business.name}_`
+            sendWhatsAppMessage(ownerPhone, waNotif)
+              .catch(err => captureException(err, { stage: 'wa_notify_owner', business_id: business.id }))
+          }
         } catch (err) {
           captureException(err, { stage: 'create_appointment', service_id: serviceId, date })
         }

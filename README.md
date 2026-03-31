@@ -98,6 +98,8 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 | **Event-Driven** | Supabase Database Webhooks decoupling data transactions from push notifications |
 | **Serverless** | 4 Supabase Edge Functions (Deno) + pg_cron for timezone-aware daily reminders |
 | **Error Monitoring** | Full-stack Sentry integration (Next.js client/server/edge + Deno Edge Functions) with multi-tenant tags and breadcrumbs |
+| **LLM Observability** | Helicone Proxy Gateway tracking latency, token cost, threat monitoring, and prompts per tenant (`heliconeHeaders`) |
+| **Zero-Latency Opt-in** | B2B WhatsApp verification interceptor (`VINCULAR-[slug]`) enabling real-time secure admin alerts without LLM overhead |
 | **Offline-First** | PWA with custom Service Worker — installable on iOS, Android, and desktop |
 
 ---
@@ -122,6 +124,7 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 | Error Tracking | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions) |
 | WhatsApp | WhatsApp Cloud API v19.0 (Meta) — approved template |
 | Web Push | RFC 8291 — VAPID + AES-128-GCM, native Service Worker |
+| AI Observability | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant) |
 | AI Engine | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing) |
 | Voice Transcription | Groq Whisper (`whisper-large-v3-turbo`) |
 | Event Engine | Supabase Database Webhooks (pg_net) |
@@ -352,6 +355,13 @@ Voice Note → Meta CDN → Download Binary → Groq Whisper → Spanish Transcr
 | Session Management | 30-min inactivity timeout, 12-hour absolute limit |
 | Identity Linking | `enable_manual_linking = true` — email + Google merge automatically |
 | Route Protection | Middleware protects `/dashboard/*`; blocked users auto-logged out |
+
+### Zero-Latency Admin Verification (WhatsApp)
+
+To comply with Meta Business Opt-In policies without incurring LLM processing delays, an **Inversion of Flow Interceptor** is used to validate business owners securely. The merchant clicks a deep link (`wa.me/?text=VINCULAR-[slug]`), entirely bypassing the core RAG LLM. The edge function:
+1. Validates the unique cryptographic payload (`slug`) against the PostgreSQL tenant database.
+2. Irrevocably pairs the legitimate WhatsApp remote sender number to the `business` record.
+3. Automatically authenticates the owner to receive real-time automated AI booking alerts.
 
 ### 3-Layer Anti-Spam Defense
 

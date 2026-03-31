@@ -99,7 +99,10 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
 
   const res = await fetch(WHISPER_API_URL, {
     method:  'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` },
+    headers: { 
+      'Authorization': `Bearer ${apiKey}`,
+      ...heliconeHeaders({ type: 'audio-transcription' })
+    },
     body:    form,
   })
 
@@ -141,6 +144,10 @@ export async function processConversation(
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type':  'application/json',
+      ...heliconeHeaders({ 
+        tenant: context.business.slug,
+        customer: customerName
+      })
     },
     body: JSON.stringify(payload),
   })

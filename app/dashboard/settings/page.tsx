@@ -12,6 +12,8 @@ import {
   Loader2,
   MessageCircle,
   Link as LinkIcon,
+  ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -586,6 +588,66 @@ export default function SettingsPage() {
             >
               Guardar todos los horarios
             </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Admin Alerts */}
+      <Card>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(34,197,94,0.1)" }}
+          >
+            <ShieldCheck size={18} style={{ color: "#22C55E" }} />
+          </div>
+          <div>
+            <h2
+              className="text-base font-semibold"
+              style={{ color: "#F2F2F2" }}
+            >
+              Notificaciones del Administrador
+            </h2>
+            <p className="text-xs" style={{ color: "#909098" }}>
+              Alertas de reservas automáticas exclusivas para el dueño
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div
+            className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl gap-4"
+            style={{ background: "#212125", border: "1px solid #2E2E33" }}
+          >
+            <div>
+              <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
+                WhatsApp del Negocio
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#909098" }}>
+                Recibe notificaciones instantáneas en tu celular cada vez que la IA agende una nueva cita.
+              </p>
+            </div>
+            
+            {(biz?.settings as unknown as BusinessSettingsJson)?.wa_verified && biz?.phone ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20 self-start sm:self-center">
+                <CheckCircle2 size={16} className="text-[#22C55E]" />
+                <span className="text-sm font-medium text-[#22C55E]">
+                  Verificado: {biz.phone}
+                </span>
+              </div>
+            ) : (
+              <a
+                href={`https://wa.me/${WA_NUMBER}?text=VINCULAR-${biz?.slug || ''}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#22C55E] hover:bg-[#16a34a] transition-colors self-start sm:self-center whitespace-nowrap"
+              >
+                <Smartphone size={16} className="text-white" />
+                <span className="text-sm font-semibold text-white">
+                  Vincular mi WhatsApp
+                </span>
+              </a>
+            )}
           </div>
         </div>
       </Card>

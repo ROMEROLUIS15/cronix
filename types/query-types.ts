@@ -131,5 +131,6 @@ export interface BusinessSettingsJson {
     email: boolean
     reminderHours?: number[]  // legacy
   }
+  wa_verified?: boolean
   maxDailyBookingsPerClient?: number
 }

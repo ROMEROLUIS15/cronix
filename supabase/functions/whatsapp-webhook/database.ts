@@ -81,7 +81,7 @@ export async function checkBookingRateLimit(
 export async function getBusinessBySlug(slug: string): Promise<BusinessRow | null> {
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, timezone, settings')
+    .select('id, name, phone, timezone, settings')
     .eq('slug', slug)
     .single()
 
@@ -104,7 +104,7 @@ export async function getSessionBusiness(senderPhone: string): Promise<BusinessR
 
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, timezone, settings')
+    .select('id, name, phone, timezone, settings')
     .eq('id', (session as { business_id: string }).business_id)
     .single()
 
@@ -136,6 +136,37 @@ export async function getBusinessByPhone(waIdentifier: string): Promise<Business
 
   if (error || !data || (data as BusinessRow[]).length === 0) return null
   return (data as BusinessRow[])[0]
+}
+
+/**
+ * Updates the business phone number and sets wa_verified to true in settings.
+ * Returns the business name if successful, null otherwise.
+ */
+export async function verifyBusinessPhone(slug: string, phone: string): Promise<string | null> {
+  const business = await getBusinessBySlug(slug)
+  if (!business) return null
+
+  const newSettings = {
+    ...business.settings,
+    wa_verified: true
+  }
+
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ 
+      phone: phone, 
+      settings: newSettings as any 
+    })
+    .eq('slug', slug)
+    .select('name')
+    .single()
+
+  if (error || !data) {
+    captureException(error || new Error('Unknown error updating phone'), { stage: 'db_verify_phone', slug })
+    return null
+  }
+  
+  return data.name
 }
 
 // ── Services ──────────────────────────────────────────────────────────────────
