@@ -30,7 +30,7 @@ const baseUrl = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}`
   : process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
+    : 'https://cronix-app.vercel.app' // Fallback oficial de producción
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
