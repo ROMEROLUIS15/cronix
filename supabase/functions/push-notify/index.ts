@@ -496,12 +496,17 @@ Deno.serve(async (req: Request) => {
 
   // Purge expired subscriptions asynchronously (best-effort)
   if (expiredEndpoints.length > 0) {
-    adminClient
-      .from('notification_subscriptions')
-      .delete()
-      .in('endpoint', expiredEndpoints)
-      .then(() => null)
-      .catch(err => captureException(err, { stage: 'purge_expired_subs', business_id: businessId }))
+    const purgeExpired = async () => {
+      const { error } = await adminClient
+        .from('notification_subscriptions')
+        .delete()
+        .in('endpoint', expiredEndpoints)
+      
+      if (error) {
+        captureException(error, { stage: 'purge_expired_subs', business_id: businessId })
+      }
+    }
+    purgeExpired()
   }
 
   await flushSentry()

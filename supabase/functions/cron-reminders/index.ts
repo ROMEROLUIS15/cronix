@@ -253,7 +253,7 @@ Deno.serve(async (req: Request) => {
             channel:        'whatsapp',
             sent_at:        data.success === true ? new Date().toISOString() : null,
             error_message:  data.success === true ? null : 'WhatsApp delivery failed',
-          }, { onConflict: 'appointment_id' }).catch(() => null)
+          }, { onConflict: 'appointment_id' })
 
           return data.success === true
         })

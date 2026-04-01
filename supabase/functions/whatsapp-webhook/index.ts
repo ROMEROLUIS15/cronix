@@ -112,12 +112,19 @@ serve(async (req: Request) => {
         return json({ success: true, message: 'Event ignored (not a message)' })
       }
 
-      // If valid, forward the entire exact rawBody to QStash targeting our separate processor function.
-      const destinationUrl = Deno.env.get('PROCESS_WHATSAPP_URL')
+      // Forwarding to QStash targeting our separate processor function.
+      const supabaseUrl    = Deno.env.get('SUPABASE_URL')
       const qstashToken    = Deno.env.get('QSTASH_TOKEN')
+      // Fallback: if PROCESS_WHATSAPP_URL is not set, assume the same project's process-whatsapp function
+      const destinationUrl = Deno.env.get('PROCESS_WHATSAPP_URL') || 
+                            (supabaseUrl ? `${supabaseUrl}/functions/v1/process-whatsapp` : null)
 
       if (!destinationUrl || !qstashToken) {
-        throw new Error('Missing PROCESS_WHATSAPP_URL or QSTASH_TOKEN environment variables.')
+        const missing = [
+          !destinationUrl && 'PROCESS_WHATSAPP_URL',
+          !qstashToken && 'QSTASH_TOKEN'
+        ].filter(Boolean).join(' and ')
+        throw new Error(`Missing environment variables: ${missing}. Please set them using 'supabase secrets set'.`)
       }
 
       // Call Upstash QStash REST API
