@@ -145,9 +145,9 @@ export async function cancel_appointment(business_id: string, client_name: strin
     .limit(1)
 
   if (apptErr) return `Error buscando citas: ${apptErr.message}`
-  if (!appts?.length) return `${client.name} no tiene citas próximas activas para cancelar.`
-
   const apt = appts[0]
+  if (!apt) return `${client.name} no tiene citas próximas activas para cancelar.`
+
   const { error: updErr } = await supabase
     .from('appointments')
     .update({ status: 'cancelled', updated_at: new Date().toISOString() })
