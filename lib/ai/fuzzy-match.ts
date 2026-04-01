@@ -28,12 +28,16 @@ function levenshtein(a: string, b: string): number {
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
     Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
   )
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-  return dp[m][n]
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const row = dp[i]!
+      const prevRow = dp[i - 1]!
+      row[j] = a[i - 1] === b[j - 1]
+        ? prevRow[j - 1]!
+        : 1 + Math.min(prevRow[j]!, row[j - 1]!, prevRow[j - 1]!)
+    }
+  }
+  return dp[m]![n]!
 }
 
 // ── Similarity score [0..1] ────────────────────────────────────────────────
@@ -72,6 +76,7 @@ export function fuzzyFind<T extends NamedEntity>(
   if (scored.length === 0) return { status: 'not_found' }
 
   const best = scored[0]
+  if (!best) return { status: 'not_found' }
   const second = scored[1]
 
   // Clear winner: gap of at least 0.15 from second best
