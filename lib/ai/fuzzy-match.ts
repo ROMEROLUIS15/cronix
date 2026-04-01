@@ -29,15 +29,17 @@ function levenshtein(a: string, b: string): number {
     Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
   )
   for (let i = 1; i <= m; i++) {
+    const row = dp[i]
+    const prevRow = dp[i - 1]
+    if (!row || !prevRow) continue
+
     for (let j = 1; j <= n; j++) {
-      const row = dp[i]!
-      const prevRow = dp[i - 1]!
       row[j] = a[i - 1] === b[j - 1]
-        ? prevRow[j - 1]!
-        : 1 + Math.min(prevRow[j]!, row[j - 1]!, prevRow[j - 1]!)
+        ? (prevRow[j - 1] ?? 0)
+        : 1 + Math.min((prevRow[j] ?? 0), (row[j - 1] ?? 0), (prevRow[j - 1] ?? 0))
     }
   }
-  return dp[m]![n]!
+  return (dp[m] ?? [])[n] ?? 0
 }
 
 // ── Similarity score [0..1] ────────────────────────────────────────────────
