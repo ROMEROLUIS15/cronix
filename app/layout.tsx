@@ -27,9 +27,37 @@ export const viewport: Viewport = {
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
-  title: { default: 'Cronix', template: '%s – Cronix' },
-  description: 'Plataforma inteligente para gestionar citas, clientes y finanzas.',
+  title: {
+    default: 'Cronix - Gestión Inteligente',
+    template: '%s | Cronix'
+  },
+  description: 'Gestiona citas, clientes y finanzas de tu negocio en un solo lugar. Diseñado para profesionales que no se conforman.',
   manifest: '/manifest.json',
+  keywords: ['agenda', 'citas', 'gestión de clientes', 'crm', 'finanzas', 'supabase', 'whatsapp bot', 'pwa'],
+  authors: [{ name: 'Cronix Team' }],
+  metadataBase: new URL('https://cronix-app-git-develop-luis-romeros-projects.vercel.app'),
+  openGraph: {
+    type: 'website',
+    locale: 'es_ES',
+    url: 'https://cronix-app-git-develop-luis-romeros-projects.vercel.app',
+    title: 'Cronix - Gestión Inteligente',
+    description: 'La plataforma que centraliza tus citas, clientes y finanzas en una sola App.',
+    siteName: 'Cronix',
+    images: [
+      {
+        url: '/og-cronix.png',
+        width: 1200,
+        height: 630,
+        alt: 'Cronix - Gestión Inteligente Dashboard',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Cronix - Gestión Inteligente',
+    description: 'Centraliza tu negocio con el poder de la IA y WhatsApp.',
+    images: ['/og-cronix.png'],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

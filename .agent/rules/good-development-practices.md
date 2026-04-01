@@ -139,6 +139,18 @@ Si algo puede recalcularse, no debe guardarse.
 
 ---
 
+### 5️⃣ Protocolo de Acceso Seguro (Vercel-Safe)
+
+**REGLA DE ORO:** Este proyecto tiene habilitado `noUncheckedIndexedAccess: true`.
+
+- **PROHIBIDO** acceder a arrays por índice directamente: `const x = array[0].prop` es ILEGAL.
+- **OBLIGATORIO** usar guardas o aserciones:
+   - ✅ `if (!array[0]) return;`
+   - ✅ `const item = array[0]!;` (Solo si la lógica garantiza su existencia).
+   - ✅ `const valor = array[0]?.valor ?? 0;`
+
+---
+
 # IV. UI/UX — SISTEMA DE DISEÑO ATÓMICO
 
 ### 1️⃣ Tokenización Obligatoria
@@ -234,10 +246,10 @@ El camino feliz debe quedar plano.
 
 Nunca silenciar errores.
 
-Si no puedes resolverlo localmente:
-
-- Propágalo
-- O tradúcelo a error de dominio comprensible
+**Patrones Obligatorios:**
+- **Base de Datos (Supabase)**: Chequeo explícito del objeto `{ data, error }`. No usar `.catch()` en builders.
+- **Lógica/APIs**: Usar `try/catch` solo en puntos de entrada (Edge Functions) o donde sea posible un throw genuino (parsing, fetch externo).
+- **Traducción**: Si no puedes resolverlo localmente, propágalo o tradúcelo a un error de dominio.
 
 ---
 
@@ -272,9 +284,10 @@ Antes de entregar código, validar mentalmente:
 2. ¿Duplica estado?
 3. ¿Introduce datos no validados?
 4. ¿Rompe aislamiento multi-tenant?
-5. ¿Hardcodea valores visuales?
-6. ¿Es testeable?
-7. ¿Introduce abstracción innecesaria?
+5. ¿Accede a un array por índice sin validarlo? (`noUncheckedIndexedAccess`)
+6. ¿Usa `.catch()` en un query builder de Supabase?
+7. ¿Es testeable?
+8. ¿Introduce abstracción innecesaria?
 
 Si alguna respuesta es “sí” → refactorizar antes de responder.
 

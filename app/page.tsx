@@ -121,37 +121,9 @@ export default function RootPage() {
           </div>
         </div>
 
-        {/* Nav links */}
+        {/* Nav actions (PWA Install Button ALWAYS visible for design) */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Link
-            href="/login"
-            style={{
-              padding: "8px 20px",
-              borderRadius: "10px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#909098",
-              textDecoration: "none",
-              transition: "color 0.2s",
-            }}
-          >
-            Iniciar Sesión
-          </Link>
-          <Link
-            href="/register"
-            style={{
-              padding: "9px 22px",
-              borderRadius: "10px",
-              fontSize: "13px",
-              fontWeight: 700,
-              color: "#fff",
-              textDecoration: "none",
-              background: "linear-gradient(135deg, #0062FF, #0041AB)",
-              boxShadow: "0 0 20px rgba(0,98,255,0.3)",
-            }}
-          >
-            Crear Cuenta
-          </Link>
+          <PwaInstallBanner variant="navbar" />
         </div>
       </nav>
 
@@ -332,10 +304,7 @@ export default function RootPage() {
               Iniciar Sesión
             </Link>
           </div>
-          {/* Desktop only — mobile uses PwaInstallFloating */}
-          <span className="hidden lg:contents">
-            <PwaInstallBanner />
-          </span>
+
         </div>
 
         {/* Feature pills — hidden on mobile to keep CTAs in viewport */}
