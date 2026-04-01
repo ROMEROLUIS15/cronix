@@ -257,6 +257,7 @@ export const mockTransactions: Transaction[] = [
   {
     id: 'tra-001',
     business_id: BUSINESS_ID,
+    client_id: 'cli-001',
     appointment_id: 'apt-001',
     amount: 35000,
     net_amount: 35000,
