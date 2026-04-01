@@ -25,6 +25,13 @@ export const viewport: Viewport = {
   */
 }
 
+// ── Dynamic Base URL for Metadata ──────────────────────────────────────────
+const baseUrl = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
+
 // ── Metadata ──────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
   title: {
@@ -35,11 +42,11 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   keywords: ['agenda', 'citas', 'gestión de clientes', 'crm', 'finanzas', 'supabase', 'whatsapp bot', 'pwa'],
   authors: [{ name: 'Cronix Team' }],
-  metadataBase: new URL('https://cronix-app-git-develop-luis-romeros-projects.vercel.app'),
+  metadataBase: new URL(baseUrl),
   openGraph: {
     type: 'website',
     locale: 'es_ES',
-    url: 'https://cronix-app-git-develop-luis-romeros-projects.vercel.app',
+    url: baseUrl,
     title: 'Cronix - Gestión Inteligente',
     description: 'La plataforma que centraliza tus citas, clientes y finanzas en una sola App.',
     siteName: 'Cronix',
