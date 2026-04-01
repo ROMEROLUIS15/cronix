@@ -62,6 +62,7 @@ coverage/
 .agent/
 .claude/
 .cache/
+supabase/.temp/
 
 # Archivos de documentación no publicables
 TECHNICAL_DOCUMENTATION.md
