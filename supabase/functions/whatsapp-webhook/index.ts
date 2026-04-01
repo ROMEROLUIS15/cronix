@@ -89,11 +89,13 @@ serve(async (req: Request) => {
   // ── Incoming message (POST) ───────────────────────────────────────────────
   if (method === 'POST') {
     const rawBody = await req.text()
+    const signature = req.headers.get('x-hub-signature-256')
 
     // Layer 1: Meta HMAC verification
-    const isValid = await verifyMetaSignature(req.headers.get('x-hub-signature-256'), rawBody)
+    const isValid = await verifyMetaSignature(signature, rawBody)
     
     if (!isValid) {
+
       await flushSentry()
       return new Response('Unauthorized', { status: 401 })
     }
@@ -103,19 +105,27 @@ serve(async (req: Request) => {
     try {
       const body: MetaWebhookPayload = JSON.parse(rawBody)
       const value    = body.entry?.[0]?.changes?.[0]?.value
-      // Note: We only check if it is a message. Meta also sends 'statuses' (read receipts)
-      // which we intentionally ignore to save QStash quota.
       const messages = value?.messages
 
-      if (body.object !== 'whatsapp_business_account' || !messages?.[0]) {
+      const msg = messages?.[0]
+      const msgType = msg?.type
+
+      // Layer 2: Filter by message type.
+      // We only want to process actual content (text, audio, interactive).
+      // This ignores status updates (delivered, read) which are sent in separate arrays
+      // but some Meta payloads can be tricky.
+      const isProcessable = ['text', 'audio', 'interactive', 'button'].includes(msgType ?? '')
+
+      if (body.object !== 'whatsapp_business_account' || !msg || !isProcessable) {
         await flushSentry()
-        return json({ success: true, message: 'Event ignored (not a message)' })
+        const reason = !msg ? 'No messages array' : !isProcessable ? `Unsupported type: ${msgType}` : 'Not a WA business account'
+        return json({ success: true, message: `Event ignored (${reason})` })
       }
 
       // Forwarding to QStash targeting our separate processor function.
       const supabaseUrl    = Deno.env.get('SUPABASE_URL')
       const qstashToken    = Deno.env.get('QSTASH_TOKEN')
-      // Fallback: if PROCESS_WHATSAPP_URL is not set, assume the same project's process-whatsapp function
+      const qstashUrl      = Deno.env.get('QSTASH_URL') || 'https://qstash.upstash.io'
       const destinationUrl = Deno.env.get('PROCESS_WHATSAPP_URL') || 
                             (supabaseUrl ? `${supabaseUrl}/functions/v1/process-whatsapp` : null)
 
@@ -124,16 +134,19 @@ serve(async (req: Request) => {
           !destinationUrl && 'PROCESS_WHATSAPP_URL',
           !qstashToken && 'QSTASH_TOKEN'
         ].filter(Boolean).join(' and ')
-        throw new Error(`Missing environment variables: ${missing}. Please set them using 'supabase secrets set'.`)
+        
+        throw new Error(`Missing environment variables: ${missing}`)
       }
 
       // Call Upstash QStash REST API
-      const qstashResponse = await fetch(`https://qstash.upstash.io/v2/publish/${destinationUrl}`, {
+      const publishUrl = `${qstashUrl.replace(/\/$/, '')}/v2/publish/${destinationUrl}`
+      console.log(`[QStash] Publishing to: ${publishUrl}`)
+      
+      const qstashResponse = await fetch(publishUrl, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${qstashToken}`,
           "Content-Type": "application/json",
-          // Send along message ID as deduplication ID to ensure we don't enqueue the exact same message twice
           ...(messages[0].id ? { "Upstash-Deduplication-Id": messages[0].id } : {})
         },
         body: rawBody
@@ -144,17 +157,15 @@ serve(async (req: Request) => {
         throw new Error(`Failed to publish to QStash: ${qstashResponse.status} - ${errorText}`)
       }
 
+      console.log(`[QStash] Successfully enqueued message ${messages[0].id}`)
+
       addBreadcrumb('Message enqueued to QStash', 'infrastructure', 'info', { message_id: messages[0].id })
       await flushSentry()
-
-      // ALWAYS return 200 OK immediately so Meta stops retrying.
       return json({ success: true, enqueued: true })
 
     } catch (error) {
       captureException(error, { stage: 'webhook_post_handler' })
       await flushSentry()
-      // Return 200 OK even on error so Meta doesn't retry?
-      // Actually, if we fail to enqueue to QStash, we DO want Meta to retry! So we return 500.
       return json({ error: 'Internal Server Error' }, 500)
     }
   }

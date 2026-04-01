@@ -9,7 +9,8 @@
  */
 
 import { useState } from 'react'
-import { Download, Share, X, Smartphone } from 'lucide-react'
+import Image from 'next/image'
+import { Download, Share, X, Smartphone, Monitor } from 'lucide-react'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
 
 interface PwaInstallBannerProps {
@@ -29,82 +30,168 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
 
   const isNavbar = variant === 'navbar'
 
-  // Styles based on variant
-  const buttonStyles: React.CSSProperties = {
-    display:         'inline-flex',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             isNavbar ? '8px' : '10px',
-    padding:         isNavbar ? '9px 22px' : '14px 32px',
-    borderRadius:    isNavbar ? '10px' : '14px',
-    fontSize:        isNavbar ? '13px' : '15px',
-    fontWeight:      700,
-    color:           '#fff',
-    textDecoration:  'none',
-    background:      isNavbar 
-      ? 'linear-gradient(135deg, #0062FF 0%, #0041AB 100%)' 
-      : 'linear-gradient(135deg, #00C853 0%, #009624 100%)',
-    boxShadow:       isNavbar
-      ? '0 0 20px rgba(0,98,255,0.3)'
-      : '0 0 30px rgba(0,200,83,0.35), 0 4px 20px rgba(0,200,83,0.25)',
-    border:          'none',
-    cursor:          'pointer',
-    transition:      'transform 0.15s, box-shadow 0.15s',
-    whiteSpace:      'nowrap',
-  }
-
-  // ── Android / Chrome ──────────────────────────────────────────────────────
-  if (canInstall || variant === 'navbar') {
+  // ── RENDER NAVBAR VARIANT (Simple Button) ──────────────────────────────────
+  if (isNavbar) {
     return (
       <button
-        onClick={canInstall ? install : () => {}}
+        onClick={canInstall ? install : (isIos ? () => setShowIosGuide(v => !v) : () => {})}
         style={{
-          ...buttonStyles,
-          opacity: canInstall ? 1 : 0.9, // Sutil diferencia para desarrolladores
+          display:         'inline-flex',
+          alignItems:      'center',
+          justifyContent:  'center',
+          gap:             '8px',
+          padding:         '9px 22px',
+          borderRadius:    '10px',
+          fontSize:        '13px',
+          fontWeight:      700,
+          color:           '#fff',
+          background:      'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)',
+          boxShadow:       '0 0 20px rgba(56,132,255,0.25)',
+          border:          'none',
+          cursor:          'pointer',
+          transition:      'all 0.2s ease',
+          whiteSpace:      'nowrap',
         }}
         onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')}
         onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
       >
-        <Download size={isNavbar ? 16 : 18} />
-        {isNavbar ? 'Descargar App' : 'Instalar app gratis'}
+        <Download size={16} />
+        Descargar App
       </button>
     )
   }
 
-  // ── iOS ───────────────────────────────────────────────────────────────────
+  // ── RENDER HERO/LOGIN VARIANT (Smart App Card) ──────────────────────────────
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        onClick={() => setShowIosGuide(v => !v)}
-        style={buttonStyles}
+    <div 
+      style={{ 
+        width: '100%',
+        maxWidth: '440px',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          padding: '16px',
+          borderRadius: '18px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(56,132,255,0.15)',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          transition: 'border-color 0.3s ease',
+        }}
       >
-        <Smartphone size={isNavbar ? 16 : 18} />
-        {isNavbar ? 'Instalar App' : 'Añadir a inicio'}
-      </button>
+        {/* Official Logo Mark */}
+        <div 
+          style={{ 
+            width: '48px', 
+            height: '48px', 
+            borderRadius: '12px', 
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.1)',
+            flexShrink: 0,
+            boxShadow: '0 0 15px rgba(56,132,255,0.2)'
+          }}
+        >
+          <Image 
+            src="/cronix-logo.jpg" 
+            alt="Cronix" 
+            width={48} 
+            height={48} 
+            className="object-cover" 
+          />
+        </div>
 
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+            <h4 style={{ color: '#F2F2F2', fontSize: '14px', fontWeight: 800, margin: 0 }}>
+              Cronix App
+            </h4>
+            <span style={{ 
+              fontSize: '9px', 
+              fontWeight: 700, 
+              background: 'rgba(56,132,255,0.15)', 
+              color: '#3884FF', 
+              padding: '2px 6px', 
+              borderRadius: '6px',
+              letterSpacing: '0.02em'
+            }}>
+              PWA
+            </span>
+          </div>
+          <p style={{ color: '#909098', fontSize: '12px', margin: 0, lineHeight: 1.4 }}>
+            Notificaciones y acceso rápido.
+          </p>
+        </div>
+
+        {/* Action Button */}
+        <button
+          onClick={() => {
+            if (canInstall) {
+              install();
+            } else if (isIos) {
+              setShowIosGuide(v => !v);
+            } else if (isInstalled) {
+              alert("¡Cronix ya está instalado en tu equipo! Puedes abrirlo desde tu escritorio o menú de aplicaciones.");
+            } else {
+              alert("El instalador aún se está cargando o tu navegador no soporta instalaciones automáticas. Intenta usar el icono de la barra de direcciones.");
+            }
+          }}
+          disabled={isInstalled && !isNavbar}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            fontSize: '13px',
+            fontWeight: 800,
+            color: '#fff',
+            background: isInstalled 
+              ? 'rgba(56,132,255,0.1)' 
+              : 'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)',
+            border: isInstalled ? '1px solid rgba(56,132,255,0.3)' : 'none',
+            cursor: isInstalled ? 'default' : 'pointer',
+            boxShadow: isInstalled ? 'none' : '0 4px 12px rgba(56,132,255,0.3)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap',
+            opacity: isInstalled ? 0.8 : 1,
+          }}
+          onMouseEnter={e => {
+            if (!isInstalled) e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={e => {
+            if (!isInstalled) e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          {isInstalled ? 'Instalada' : (canInstall ? 'Instalar' : 'Obtener')}
+        </button>
+      </div>
+
+      {/* iOS guide popup integration */}
       {showIosGuide && (
         <div
           style={{
-            position:     'absolute',
-            top:          isNavbar ? 'calc(100% + 12px)' : 'auto',
-            bottom:       isNavbar ? 'auto' : 'calc(100% + 12px)',
-            right:        isNavbar ? '0' : 'auto',
-            left:         isNavbar ? 'auto' : '50%',
-            transform:    isNavbar ? 'none' : 'translateX(-50%)',
-            width:        '280px',
+            marginTop:    '8px',
+            width:        '100%',
             padding:      '16px',
             borderRadius: '16px',
-            background:   '#1C1C1F',
-            border:       '1px solid rgba(255,255,255,0.1)',
-            boxShadow:    '0 8px 40px rgba(0,0,0,0.5)',
+            background:   '#161619',
+            border:       '1px solid rgba(56,132,255,0.2)',
+            boxShadow:    '0 12px 40px rgba(0,0,0,0.5)',
             zIndex:       100,
             textAlign:    'left',
+            animation:    'fade-in 0.3s ease',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontWeight: 700, fontSize: '14px', color: '#F2F2F2', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Share size={14} style={{ color: '#4D83FF' }} />
-              Instalar en iPhone/iPad
+            <span style={{ fontWeight: 700, fontSize: '13px', color: '#F2F2F2', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Share size={14} style={{ color: '#3884FF' }} />
+              Instalar en iPhone / iPad
             </span>
             <button
               onClick={() => setShowIosGuide(false)}
@@ -115,33 +202,15 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
           </div>
           <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {[
-              <>Toca el ícono de compartir <strong style={{ color: '#4D83FF' }}>⬆</strong> en Safari</>,
-              <>Desplázate y toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong></>,
-              <>Toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir&rdquo;</strong> para confirmar</>,
+              <>1. Toca el ícono de compartir <strong style={{ color: '#3884FF' }}>⬆</strong> en Safari</>,
+              <>2. Selecciona <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong></>,
+              <>3. Toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir&rdquo;</strong> para confirmar</>,
             ].map((step, i) => (
-              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#D1D1D6', lineHeight: 1.5 }}>
-                <span style={{ color: isNavbar ? '#0062FF' : '#00C853', fontWeight: 800, flexShrink: 0 }}>{i + 1}.</span>
-                <span>{step}</span>
+              <li key={i} style={{ fontSize: '12px', color: '#D1D1D6', lineHeight: 1.5 }}>
+                {step}
               </li>
             ))}
           </ol>
-          <button
-            onClick={() => setDismissed(true)}
-            style={{
-              marginTop:    '14px',
-              width:        '100%',
-              padding:      '8px',
-              borderRadius: '10px',
-              background:   'rgba(255,255,255,0.05)',
-              border:       '1px solid rgba(255,255,255,0.08)',
-              color:        '#909098',
-              fontSize:     '12px',
-              cursor:       'pointer',
-              fontWeight:   600,
-            }}
-          >
-            No mostrar de nuevo
-          </button>
         </div>
       )}
     </div>

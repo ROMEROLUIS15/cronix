@@ -72,30 +72,43 @@ async function verifyQStash(req: Request, rawBody: string): Promise<boolean> {
     
     if (!signature) {
       console.error("[verifyQStash] No Upstash-Signature header found.");
+      // Log all headers for debugging (excluding secrets)
+      const headersRec: Record<string, string> = {};
+      req.headers.forEach((v, k) => { headersRec[k] = v; });
+      console.log("[verifyQStash] Available headers:", JSON.stringify(headersRec));
       return false;
     }
 
-    const currentSigningKey = Deno.env.get("QSTASH_CURRENT_SIGNING_KEY");
-    const nextSigningKey = Deno.env.get("QSTASH_NEXT_SIGNING_KEY");
+    const currentKey = Deno.env.get("QSTASH_CURRENT_SIGNING_KEY");
+    const nextKey    = Deno.env.get("QSTASH_NEXT_SIGNING_KEY");
 
-    if (!currentSigningKey || !nextSigningKey) {
+    if (!currentKey || !nextKey) {
       console.error("[verifyQStash] QStash signing keys are missing in env.");
       return false;
     }
 
     const receiver = new Receiver({
-      currentSigningKey,
-      nextSigningKey,
+      currentSigningKey: currentKey,
+      nextSigningKey:    nextKey,
     });
 
     const isValid = await receiver.verify({
       signature,
       body: rawBody,
+    }).catch(err => {
+      console.error("[verifyQStash] receiver.verify catch:", err);
+      return false;
     });
+
+    if (!isValid) {
+      console.warn("[verifyQStash] Signature is INVALID.");
+    } else {
+      console.log("[verifyQStash] Signature is VALID.");
+    }
 
     return isValid;
   } catch (error) {
-    console.error("[verifyQStash] Signature validation error:", error);
+    console.error("[verifyQStash] Global validation error:", error);
     return false;
   }
 }
@@ -164,6 +177,9 @@ serve(async (req: Request) => {
       const waIdentifier = value?.metadata?.phone_number_id
                         ?? value?.metadata?.display_phone_number
 
+      setSentryTag('sender_phone', sender)
+      addBreadcrumb('Processing WhatsApp message', 'message', 'info', { sender, name: customerName })
+
       if (!waIdentifier) {
         await flushSentry()
         return json({ success: true, message: 'Missing metadata' })
@@ -181,6 +197,10 @@ serve(async (req: Request) => {
         } catch (err) {
           if (err instanceof LlmRateLimitError) throw err
           captureException(err, { stage: 'voice_transcription', sender })
+          // Notify user instead of silent failure
+          await sendWhatsAppMessage(sender, "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?")
+          await flushSentry()
+          return json({ success: true, message: 'Voice transcription failed — user notified' })
         }
       }
 
@@ -212,8 +232,9 @@ serve(async (req: Request) => {
       const withinRateLimit = await checkMessageRateLimit(sender)
       if (!withinRateLimit) {
         addBreadcrumb('Message rate limited', 'rate-limit', 'warning')
+        await sendWhatsAppMessage(sender, "⚠️ Estás enviando mensajes demasiado rápido. Por favor, espera un minuto antes de continuar.")
         await flushSentry()
-        return json({ success: true })
+        return json({ success: true, message: 'Rate limited — user notified' })
       }
 
       // ── Slug extraction (BEFORE sanitization — # would be stripped) ────────
@@ -227,8 +248,14 @@ serve(async (req: Request) => {
         : rawText
 
       // Layer 3: Sanitize message (anti prompt-injection)
-      // If only #slug was sent, use a greeting so the AI introduces itself
-      const text = sanitizeMessage(rawTextWithoutSlug) || 'Hola'
+      const text = sanitizeMessage(rawTextWithoutSlug)
+      
+      if (!text) {
+        addBreadcrumb('Message became empty after sanitization', 'security', 'info')
+        await flushSentry()
+        return json({ success: true, message: 'Empty text after sanitization' })
+      }
+
       addBreadcrumb('Message sanitized', 'security', 'info', { length: text.length })
 
       // ── 3-tier tenant routing ─────────────────────────────────────────────
@@ -264,7 +291,8 @@ serve(async (req: Request) => {
 
       setSentryTag('business_id',   business.id)
       setSentryTag('business_name', business.name)
-      addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id })
+      setSentryTag('business_slug', business.slug || 'unknown')
+      addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
 
       const timezone = business.timezone ?? 'UTC'
 
@@ -308,12 +336,16 @@ serve(async (req: Request) => {
         aiResponse = await processConversation(text, context, customerName)
       } catch (err) {
         if (err instanceof LlmRateLimitError) {
+          addBreadcrumb('LLM Rate limit hit', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
+          captureException(err, { stage: 'ai_rate_limit', sender })
+          
           const mins = Math.ceil(err.retryAfterSecs / 60)
           const msg  = `Estoy atendiendo muchas consultas. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`
           await sendWhatsAppMessage(sender, msg)
           await flushSentry()
           return json({ success: true })
         }
+        captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text.length })
         throw err
       }
 
@@ -401,8 +433,16 @@ serve(async (req: Request) => {
               `Servicio: *${svcName}*\n\n` +
               `¡Sigo trabajando a toda máquina para mantener tu agenda llena! 💪🚀`;
               
+            addBreadcrumb('Sending notification to business owner', 'notification', 'info', { ownerPhone })
             sendWhatsAppMessage(ownerPhone, waNotif)
-              .catch(err => captureException(err, { stage: 'wa_notify_owner', business_id: business.id }))
+              .then(() => console.log(`[Notification] Sent to owner: ${ownerPhone}`))
+              .catch(err => {
+                console.error(`[Notification] Failed for ${ownerPhone}:`, err)
+                captureException(err, { stage: 'wa_notify_owner', business_id: business.id, ownerPhone })
+              })
+          } else {
+            console.warn(`[Notification] Business ${business.name} has no phone configured.`)
+            addBreadcrumb('Owner notification skipped: no phone', 'notification', 'warning')
           }
         } catch (err) {
           // Only true DB/network failures reach here
@@ -504,6 +544,17 @@ serve(async (req: Request) => {
 
     } catch (error) {
       captureException(error, { stage: 'webhook_post_handler_qstash' })
+      
+      // Notify user of technical failure instead of silence
+      try {
+        const sender = (JSON.parse(rawBody) as MetaWebhookPayload).entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from
+        if (sender) {
+          await sendWhatsAppMessage(sender, "⚠️ Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento.")
+        }
+      } catch (notifyErr) {
+        console.error("Failed to notify user of error:", notifyErr)
+      }
+
       await flushSentry()
       // If we throw here, QStash will automatically retry!
       return json({ error: 'Internal Server Error' }, 500)

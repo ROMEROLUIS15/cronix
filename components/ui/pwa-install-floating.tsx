@@ -86,14 +86,14 @@ export function PwaInstallFloating() {
               fontSize:        '15px',
               fontWeight:      700,
               color:           '#fff',
-              background:      'linear-gradient(135deg, #00C853 0%, #009624 100%)',
-              boxShadow:       '0 0 24px rgba(0,200,83,0.3), 0 4px 16px rgba(0,0,0,0.4)',
+              background:      'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)',
+              boxShadow:       '0 0 24px rgba(56,132,255,0.3), 0 4px 16px rgba(0,0,0,0.4)',
               border:          'none',
               cursor:          'pointer',
             }}
           >
             {canInstall ? <Download size={18} /> : <Smartphone size={18} />}
-            {canInstall ? 'Instalar app gratis' : 'Añadir a inicio (iOS)'}
+            {canInstall ? 'Instalar app gratis' : 'Obtener App (iOS)'}
           </button>
 
           <button

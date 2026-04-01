@@ -165,6 +165,14 @@ export async function verifyBusinessPhone(slug: string, phone: string): Promise<
     captureException(error || new Error('Unknown error updating phone'), { stage: 'db_verify_phone', slug })
     return null
   }
+
+  // Audit trail for success
+  await logInteraction({
+    business_id:  business.id,
+    sender_phone: phone,
+    message_text: `[SYSTEM] VINCULAR-${slug}`,
+    ai_response:  `Business verified: ${data.name}`,
+  })
   
   return data.name
 }
