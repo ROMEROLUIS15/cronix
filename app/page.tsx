@@ -593,8 +593,6 @@ export default function RootPage() {
         a:hover { opacity: 0.9; }
       `}</style>
 
-      {/* Floating install bar — mobile only, always visible without scroll */}
-      <PwaInstallFloating />
     </div>
   );
 }
