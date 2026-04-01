@@ -20,6 +20,7 @@
  */
 
 import type { BusinessRagContext } from "./types.ts"
+import { addBreadcrumb }         from "../_shared/sentry.ts"
 
 // ── LLM Provider Configuration ────────────────────────────────────────────────
 // Change these two values + LLM_API_KEY in .env to swap providers at any time.
@@ -97,6 +98,7 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   form.append('language', 'es')
   form.append('response_format', 'text')
 
+  addBreadcrumb('Calling Whisper API', 'llm', 'info', { model: WHISPER_MODEL, mimeType })
   const res = await fetch(WHISPER_API_URL, {
     method:  'POST',
     headers: { 
@@ -108,6 +110,7 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
 
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get('retry-after') ?? '60', 10)
+    addBreadcrumb('Whisper Rate Limit hit', 'llm', 'warning', { retryAfter })
     throw new LlmRateLimitError(isNaN(retryAfter) ? 60 : retryAfter)
   }
 
@@ -139,6 +142,12 @@ export async function processConversation(
     max_tokens:  500,
   }
 
+  addBreadcrumb('Calling LLM API', 'llm', 'info', { 
+    model: LLM_MODEL, 
+    prompt_length: prompt.length,
+    business: context.business.name
+  })
+
   const res = await fetch(LLM_API_URL, {
     method:  'POST',
     headers: {
@@ -166,9 +175,11 @@ export async function processConversation(
 
   const textResponse = data.choices?.[0]?.message?.content
   if (!textResponse) {
+    addBreadcrumb('LLM returned empty response', 'llm', 'error', { data: JSON.stringify(data) })
     throw new Error(`Respuesta vacía del LLM: ${JSON.stringify(data)}`)
   }
 
+  addBreadcrumb('LLM response received', 'llm', 'info', { response_length: textResponse.length })
   return textResponse.trim()
 }
 
