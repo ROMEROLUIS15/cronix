@@ -63,6 +63,11 @@ export interface ChatHistoryItem {
 
 // ── Aggregate Context (single fetch boundary) ────────────────────────────────
 
+export interface BookedSlot {
+  start_at: string
+  end_at:   string
+}
+
 export interface BusinessRagContext {
   business: {
     id:       string
@@ -74,6 +79,7 @@ export interface BusinessRagContext {
   client:             ClientRow | null
   activeAppointments: ActiveAppointmentRow[]
   history:            ChatHistoryItem[]
+  bookedSlots:        BookedSlot[]
 }
 
 // ── Payloads ─────────────────────────────────────────────────────────────────

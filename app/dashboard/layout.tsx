@@ -5,6 +5,7 @@ import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers } from '@/components/providers'
 import { setSentryUser } from '@/lib/sentry'
+import { VoiceAssistantFab } from '@/components/dashboard/voice-assistant-fab'
 
 interface DashboardLayoutProps { children: React.ReactNode }
 
@@ -59,6 +60,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     <Providers>
       <DashboardShell user={userProfile} business={businessProfile}>
         <SessionTimeout />
+        <VoiceAssistantFab />
         {children}
       </DashboardShell>
     </Providers>

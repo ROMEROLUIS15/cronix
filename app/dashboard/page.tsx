@@ -332,20 +332,25 @@ export default function DashboardPage() {
           */}
           {/* — Mobile: stacked — */}
           <div className="flex items-center gap-2 sm:hidden">
-            {(["agenda", "resumen"] as const).map((t) => (
+            <button
+              onClick={() => setTab("agenda")}
+              className="flex-1 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+              style={
+                tab === "agenda"
+                  ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
+                  : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
+              }
+            >
+              <CalendarDays size={15} /><span>Agenda</span>
+            </button>
+            <Link href="/dashboard/finances/new" className="flex-1 block">
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className="flex-1 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-                style={
-                  tab === t
-                    ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
-                    : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
-                }
+                className="w-full h-full px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.2)" }}
               >
-                {t === "agenda" ? <><CalendarDays size={15} /><span>Agenda</span></> : <><BarChart3 size={15} /><span>Resumen</span></>}
+                <DollarSign size={15} /><span>Cobros</span>
               </button>
-            ))}
+            </Link>
           </div>
           <div className="flex items-center gap-2 sm:hidden">
             <Link href="/dashboard/clients/new" className="flex-1">
@@ -369,39 +374,51 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* — sm+: all 4 in a compact grouped row — */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* — sm+: Full Width Action Bar (Modern B2B Layout) — */}
+          <div className="hidden sm:grid grid-cols-4 lg:grid-cols-5 gap-3 w-full mt-2">
             {(["agenda", "resumen"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className="px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center gap-2"
+                className="w-full h-11 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                 style={
                   tab === t
-                    ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
-                    : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
+                    ? { background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 0 15px rgba(0,98,255,0.4)" }
+                    : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
                 }
               >
-                {t === "agenda" ? <><CalendarDays size={16} /><span>Agenda</span></> : <><BarChart3 size={16} /><span>Resumen</span></>}
+                {t === "agenda" ? <><CalendarDays size={18} /><span>Agenda</span></> : <><BarChart3 size={18} /><span>Métricas</span></>}
               </button>
             ))}
-            {/* Subtle divider */}
-            <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
-            <Link href="/dashboard/clients/new">
+            
+            <Link href="/dashboard/clients/new" className="w-full">
               <Button
                 variant="secondary"
-                className="text-sm px-5 py-2.5 rounded-xl font-semibold"
+                className="w-full h-11 text-sm rounded-xl font-semibold transition-all hover:bg-blue-900/20"
                 style={{ background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
-                leftIcon={<User size={16} />}
+                leftIcon={<User size={18} />}
               >
                 Nuevo Cliente
               </Button>
             </Link>
-            <Link href="/dashboard/appointments/new">
+
+            <Link href="/dashboard/finances/new" className="w-full hidden lg:block">
+              <Button
+                variant="secondary"
+                className="w-full h-11 text-sm rounded-xl font-semibold transition-all hover:bg-emerald-900/30 hover:border-emerald-500/50"
+                style={{ background: "rgba(48,209,88,0.05)", color: "#30D158", border: "1px solid rgba(48,209,88,0.2)" }}
+                leftIcon={<DollarSign size={18} />}
+              >
+                Registrar Cobro
+              </Button>
+            </Link>
+
+            <Link href="/dashboard/appointments/new" className="w-full">
               <Button
                 variant="primary"
-                className="text-sm px-5 py-2.5 rounded-xl font-semibold"
-                leftIcon={<Plus size={16} />}
+                className="w-full h-11 text-sm rounded-xl font-bold uppercase tracking-wide"
+                style={{ background: "#F5F5F5", color: "#000", border: "none" }}
+                leftIcon={<Plus size={18} />}
               >
                 Nueva Cita
               </Button>

@@ -406,6 +406,7 @@ export type Database = {
           amount: number
           appointment_id: string | null
           business_id: string
+          client_id: string | null
           created_at: string | null
           discount: number | null
           id: string
@@ -419,6 +420,7 @@ export type Database = {
           amount: number
           appointment_id?: string | null
           business_id: string
+          client_id?: string | null
           created_at?: string | null
           discount?: number | null
           id?: string
@@ -432,6 +434,7 @@ export type Database = {
           amount?: number
           appointment_id?: string | null
           business_id?: string
+          client_id?: string | null
           created_at?: string | null
           discount?: number | null
           id?: string

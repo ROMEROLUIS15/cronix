@@ -89,49 +89,51 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 
 ## Technical Highlights
 
-| Area | Implementation |
-|------|---------------|
-| **AI Agent** | Conversational actuator using Groq + Llama-3.3-70B with Structured In-Memory RAG and Action Tag routing (see [AI Architecture](#ai-agent-architecture)) |
-| **Security** | Passkeys (WebAuthn), Meta HMAC-SHA256, 3-layer anti-spam, PII scrubbing, PostgreSQL RLS with 26 pgTAP tests |
-| **Voice Support** | Real-time voice note transcription via Groq Whisper (`whisper-large-v3-turbo`), converting spoken Spanish into scheduled appointments |
-| **Push Notifications** | RFC 8291 Web Push (VAPID + AES-128-GCM) built from scratch with zero npm dependencies using Web Crypto API |
-| **Event-Driven** | Supabase Database Webhooks decoupling data transactions from push notifications |
-| **Serverless** | 4 Supabase Edge Functions (Deno) + pg_cron for timezone-aware daily reminders |
-| **Error Monitoring** | Full-stack Sentry integration (Next.js client/server/edge + Deno Edge Functions) with multi-tenant tags and breadcrumbs |
-| **LLM Observability** | Helicone Proxy Gateway tracking latency, token cost, threat monitoring, and prompts per tenant (`heliconeHeaders`) |
-| **Zero-Latency Opt-in** | B2B WhatsApp verification interceptor (`VINCULAR-[slug]`) enabling real-time secure admin alerts without LLM overhead |
-| **Offline-First** | PWA with custom Service Worker — installable on iOS, Android, and desktop |
+| Area                    | Implementation                                                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AI Agent**            | Conversational actuator using Groq + Llama-3.3-70B with Structured In-Memory RAG and Action Tag routing (see [AI Architecture](#ai-agent-architecture))             |
+| **Security**            | Passkeys (WebAuthn), Meta HMAC-SHA256, 3-layer anti-spam, PII scrubbing, PostgreSQL RLS with 26 pgTAP tests                                                         |
+| **High Concurrency**    | Asynchronous message processing via **Upstash QStash**, decoupling the Meta webhook from heavy AI inference to prevent timeouts and message drops                   |
+| **Voice Support**       | Real-time voice note transcription via Groq Whisper (`whisper-large-v3-turbo`), converting spoken Spanish into scheduled appointments                               |
+| **Push & WA Alerts**    | Multi-channel notifications for business owners including direct WhatsApp alerts for new bookings, reschedules, and cancellations to keep their agenda synchronized |
+| **Event-Driven**        | Supabase Database Webhooks decoupling data transactions from push notifications                                                                                     |
+| **Serverless**          | 5 Supabase Edge Functions (Deno) + pg_cron for timezone-aware daily reminders                                                                                       |
+| **Error Monitoring**    | Full-stack Sentry integration (Next.js client/server/edge + Deno Edge Functions) with multi-tenant tags and breadcrumbs                                             |
+| **LLM Observability**   | Helicone Proxy Gateway tracking latency, token cost, threat monitoring, and prompts per tenant (`heliconeHeaders`)                                                  |
+| **Zero-Latency Opt-in** | B2B WhatsApp verification interceptor (`VINCULAR-[slug]`) enabling real-time secure admin alerts without LLM overhead                                               |
+| **Offline-First**       | PWA with custom Service Worker — installable on iOS, Android, and desktop                                                                                           |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 14 (App Router, Server Components, Server Actions) |
-| Language | TypeScript 5 — strict mode, zero `any` |
-| Database | PostgreSQL via Supabase (RLS, ENUMs, optimized indexes, 17 versioned migrations) |
-| Authentication | Supabase Auth + WebAuthn/Passkeys (biometrics) + Google OAuth |
-| Data Access | Supabase JS SDK with typed repositories |
-| Cache / Data Fetching | React Query v5 (`@tanstack/react-query`) with global cache |
-| Styles | Tailwind CSS 3 + CVA (class-variance-authority) |
-| Validation | Zod (shared schemas in client and server) |
-| Forms | React Hook Form + Zod resolvers |
-| Dates | date-fns v4 |
-| Icons | Lucide React |
-| Unit Testing | Vitest + jsdom |
-| DB Testing | pgTAP (RLS tests against real Postgres) |
-| Error Tracking | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions) |
-| WhatsApp | WhatsApp Cloud API v19.0 (Meta) — approved template |
-| Web Push | RFC 8291 — VAPID + AES-128-GCM, native Service Worker |
-| AI Observability | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant) |
-| AI Engine | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing) |
-| Voice Transcription | Groq Whisper (`whisper-large-v3-turbo`) |
-| Event Engine | Supabase Database Webhooks (pg_net) |
-| Edge Functions | Supabase (Deno) — `whatsapp-webhook`, `whatsapp-service`, `push-notify`, `cron-reminders` |
-| Scheduler | Supabase pg_cron — hourly trigger with per-timezone 8 PM targeting |
-| PWA | next-pwa — installable on iOS, Android, desktop |
-| Deploy | Vercel (auto-deploy from `main`) |
+| Layer                 | Technology                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Framework             | Next.js 14 (App Router, Server Components, Server Actions)                                                    |
+| Language              | TypeScript 5 — strict mode, zero `any`                                                                        |
+| Database              | PostgreSQL via Supabase (RLS, ENUMs, optimized indexes, 17 versioned migrations)                              |
+| Authentication        | Supabase Auth + WebAuthn/Passkeys (biometrics) + Google OAuth                                                 |
+| Data Access           | Supabase JS SDK with typed repositories                                                                       |
+| Cache / Data Fetching | React Query v5 (`@tanstack/react-query`) with global cache                                                    |
+| Styles                | Tailwind CSS 3 + CVA (class-variance-authority)                                                               |
+| Validation            | Zod (shared schemas in client and server)                                                                     |
+| Forms                 | React Hook Form + Zod resolvers                                                                               |
+| Dates                 | date-fns v4                                                                                                   |
+| Icons                 | Lucide React                                                                                                  |
+| Unit Testing          | Vitest + jsdom                                                                                                |
+| DB Testing            | pgTAP (RLS tests against real Postgres)                                                                       |
+| Error Tracking        | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions)                                                 |
+| WhatsApp              | WhatsApp Cloud API v19.0 (Meta) — approved template                                                           |
+| Message Queue         | Upstash QStash (Serverless background jobs with automatic retries)                                            |
+| Web Push              | RFC 8291 — VAPID + AES-128-GCM, native Service Worker                                                         |
+| AI Observability      | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant)                                 |
+| AI Engine             | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing)                                  |
+| Voice Transcription   | Groq Whisper (`whisper-large-v3-turbo`)                                                                       |
+| Event Engine          | Supabase Database Webhooks (pg_net)                                                                           |
+| Edge Functions        | Supabase (Deno) — `whatsapp-webhook`, `process-whatsapp`, `whatsapp-service`, `push-notify`, `cron-reminders` |
+| Scheduler             | Supabase pg_cron — hourly trigger with per-timezone 8 PM targeting                                            |
+| PWA                   | next-pwa — installable on iOS, Android, desktop                                                               |
+| Deploy                | Vercel (auto-deploy from `main`)                                                                              |
 
 ---
 
@@ -148,7 +150,7 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 │  │  Next.js 14   │    │  Supabase     │    │  Edge Functions (Deno)   │  │
 │  │  (Vercel)     │◄──►│  PostgreSQL   │◄──►│                          │  │
 │  │               │    │  + Auth + RLS │    │  ├─ whatsapp-webhook     │  │
-│  │  ├─ Dashboard │    │               │    │  ├─ whatsapp-service     │  │
+│  │  ├─ Dashboard │    │               │    │  ├─ process-whatsapp     │  │
 │  │  ├─ Auth      │    │  17 Migrations│    │  ├─ push-notify          │  │
 │  │  ├─ PWA/SW    │    │  26 pgTAP     │    │  └─ cron-reminders      │  │
 │  │  └─ API       │    │  Tests        │    │                          │  │
@@ -160,8 +162,8 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 │  │  (Monitoring)│    │  (Scheduler)  │    │                          │  │
 │  │              │    │               │    │  ├─ Meta WhatsApp API    │  │
 │  │  Full-stack  │    │  Hourly check │    │  ├─ Groq (LLM + Whisper)│  │
-│  │  Multi-tenant│    │  → 8 PM local │    │  ├─ Google OAuth        │  │
-│  │  PII scrub   │    │  per timezone │    │  └─ Web Push Services   │  │
+│  │  Multi-tenant│    │  → 8 PM local │    │  ├─ Upstash QStash       │  │
+│  │  PII scrub   │    │  per timezone │    │  ├─ Helicone Proxy       │  │
 │  └──────────────┘    └───────────────┘    └──────────────────────────┘  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -238,14 +240,14 @@ The WhatsApp AI Agent is the core differentiator of Cronix. It processes natural
 
 The agent implements a **Structured In-Memory RAG (Retrieval-Augmented Generation)** pattern. Before each AI call, the webhook fetches tenant-specific context from PostgreSQL and injects it into the system prompt:
 
-| Context Injected | Source |
-|-----------------|--------|
-| Business name, timezone, personality | `businesses` table |
-| Working hours and custom AI rules | `businesses.settings` JSONB |
-| Service catalog (names, prices, durations, IDs) | `services` table |
-| Client status (new vs. recurring) | `clients` via `fn_find_client_by_phone` RPC |
-| Active upcoming appointments | `appointments` table (pending/confirmed) |
-| Last 4 conversation turns | `wa_audit_logs` table |
+| Context Injected                                | Source                                      |
+| ----------------------------------------------- | ------------------------------------------- |
+| Business name, timezone, personality            | `businesses` table                          |
+| Working hours and custom AI rules               | `businesses.settings` JSONB                 |
+| Service catalog (names, prices, durations, IDs) | `services` table                            |
+| Client status (new vs. recurring)               | `clients` via `fn_find_client_by_phone` RPC |
+| Active upcoming appointments                    | `appointments` table (pending/confirmed)    |
+| Last 4 conversation turns                       | `wa_audit_logs` table                       |
 
 This ensures the AI **never hallucinates** services, prices, or schedules — every piece of information comes from the live database, scoped to the specific business.
 
@@ -262,20 +264,22 @@ Instead of forcing the LLM to output structured JSON (OpenAI Function Calling), 
 The backend parses these tags with a deterministic regex in O(1) time:
 
 ```typescript
-const CONFIRM_TAG_RE    = /\[CONFIRM_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const RESCHEDULE_TAG_RE = /\[RESCHEDULE_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const CANCEL_TAG_RE     = /\[CANCEL_BOOKING:\s*([a-f0-9-]{36})\]/i
+const CONFIRM_TAG_RE =
+  /\[CONFIRM_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i;
+const RESCHEDULE_TAG_RE =
+  /\[RESCHEDULE_BOOKING:\s*([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i;
+const CANCEL_TAG_RE = /\[CANCEL_BOOKING:\s*([a-f0-9-]{36})\]/i;
 ```
 
 **Why not JSON Function Calling?**
 
-| Criteria | JSON Function Calling | Action Tags (Cronix) |
-|----------|----------------------|---------------------|
+| Criteria            | JSON Function Calling                                         | Action Tags (Cronix)                                           |
+| ------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
 | Parser failure mode | `JSON.parse()` crashes on malformed output → **server error** | Regex silently skips malformed tags → **graceful degradation** |
-| Latency | Extra tokens for schema + JSON structure → **slower** | Minimal overhead → **ultra-fast** |
-| Model compatibility | Requires fine-tuned models (GPT-4, etc.) | Works with any text-generation model |
-| Debugging | Opaque JSON payloads in logs | Tags visible in natural conversation flow |
-| Cost | More tokens = higher inference cost | Fewer tokens = lower cost |
+| Latency             | Extra tokens for schema + JSON structure → **slower**         | Minimal overhead → **ultra-fast**                              |
+| Model compatibility | Requires fine-tuned models (GPT-4, etc.)                      | Works with any text-generation model                           |
+| Debugging           | Opaque JSON payloads in logs                                  | Tags visible in natural conversation flow                      |
+| Cost                | More tokens = higher inference cost                           | Fewer tokens = lower cost                                      |
 
 ### Silent Execution (Confirmación en Silencio)
 
@@ -313,32 +317,68 @@ Cronix supports voice-based appointment scheduling via WhatsApp voice notes:
 Voice Note → Meta CDN → Download Binary → Groq Whisper → Spanish Transcript → AI Agent → Action
 ```
 
-| Component | Detail |
-|-----------|--------|
-| Model | `whisper-large-v3-turbo` |
-| Provider | Groq API (same key as LLM) |
-| Language | Spanish (`es`) — hardcoded for Latin American businesses |
-| Cost | ~$0.001 per minute of audio |
-| Latency | < 3 seconds end-to-end |
+| Component | Detail                                                   |
+| --------- | -------------------------------------------------------- |
+| Model     | `whisper-large-v3-turbo`                                 |
+| Provider  | Groq API (same key as LLM)                               |
+| Language  | Spanish (`es`) — hardcoded for Latin American businesses |
+| Cost      | ~$0.001 per minute of audio                              |
+| Latency   | < 3 seconds end-to-end                                   |
 
-### AI Agent End-to-End Workflow
+### Dashboard Executive Voice Assistant (Luis)
+
+Cronix includes a native **Executive Voice Assistant** (codenamed "Luis") directly in the business dashboard. This allows business owners to manage their operations via real-time voice commands without typing.
+
+**Capabilities:**
+
+- **Today's Summary:** Total income, completed/pending/cancelled appointments.
+- **Gap Discovery:** Lists free time slots for the day.
+- **Client Debt Tracking:** Checks if a client has pending payments.
+- **Action Execution:** Book, cancel, or register payments via natural speech.
+
+**Technical Pipeline:**
+
+1. **Capture:** Browser `MediaRecorder` API (WebM/Opus) -> Next.js API Route.
+2. **STT:** Groq Whisper (`whisper-large-v3`) for ultra-low latency transcription.
+3. **LLM:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher) to interact with Supabase DB.
+4. **Fuzzy Matching:** Custom Levenshtein-based utility (`fuzzy-match.ts`) to resolve spoken client/service names to DB UUIDs even with transcription errors.
+5. **TTS:** ElevenLabs (`eleven_multilingual_v2`) for premium "Luis" identity voice, with a fallback to native Browser SpeechSynthesis.
+
+**Tools Schema:**
+Luis acts as a controller for the following backend functions (see `lib/ai/assistant-tools.ts`):
+
+```typescript
+-get_today_summary() -
+  get_upcoming_gaps() -
+  get_client_debt(client_name) -
+  cancel_appointment(client_name) -
+  book_appointment(client_name, service_name, date, time) -
+  register_payment(client_name, amount, method);
+```
+
+### AI Agent End-to-End Workflow & QStash Architecture
+
+To achieve high concurrency and prevent Meta from dropping messages due to timeout (Meta expects a 200 OK within 3 seconds), the AI architecture is explicitly decoupled using **Upstash QStash**:
 
 ```
 1.  User sends message/voice → WhatsApp
-2.  Meta webhook → whatsapp-webhook Edge Function
+2.  Meta webhook → whatsapp-webhook Edge Function (Receiver)
 3.  ✅ Verify Meta HMAC-SHA256 signature
-4.  ✅ Extract #slug from message (business routing)
-5.  ✅ Check message rate limit (10 msgs/60s per phone)
-6.  ✅ Sanitize message (anti prompt-injection)
-7.  📞 If voice note → Download from Meta CDN → Transcribe via Groq Whisper
-8.  🏢 Resolve business (slug → session → landing)
-9.  📊 Fetch RAG context in parallel (services, client, appointments, history)
-10. 🤖 Call Groq API (Llama-3.3-70B) with system prompt + context
-11. 🏷️ Parse Action Tags from AI response
-12. 💾 Execute database mutations (create/reschedule/cancel via RPC)
-13. 🔔 Send push notification to business owner (fire-and-forget)
-14. ✉️ Strip tags → Send clean message to customer via WhatsApp
-15. 📝 Log full interaction (including tags) to wa_audit_logs
+4.  ⚡ Return HTTP 200 OK to Meta immediately (< 50ms)
+5.  📤 Publish payload to Upstash QStash queue
+6.  📥 QStash triggers process-whatsapp Edge Function (Worker) asynchronously
+7.  ✅ Verify QStash signature (Receiver authorization)
+8.  ✅ Extract #slug from message (business routing)
+9.  ✅ Check message & booking rate limits (Atomic DB logic)
+10. 📞 If voice note → Download from Meta CDN → Transcribe via Groq Whisper
+11. 🏢 Resolve business (slug → session → landing)
+12. 📊 Fetch RAG context in parallel (services, booked slots, client history)
+13. 🤖 Call Groq API (Llama-3.3-70B) routed via Helicone Proxy
+14. 🏷️ Parse Action Tags from AI response
+15. 💾 Execute database mutations (create/reschedule/cancel via RPC)
+16. 🔔 Dispatch push/WhatsApp notifications to Business Owner (details new/freed slots)
+17. ✉️ Strip tags → Send clean message to customer via WhatsApp
+18. 📝 Log full interaction to wa_audit_logs
 ```
 
 ---
@@ -347,18 +387,19 @@ Voice Note → Meta CDN → Download Binary → Groq Whisper → Spanish Transcr
 
 ### Authentication & Identity
 
-| Method | Implementation |
-|--------|---------------|
-| Email/Password | Supabase Auth with email verification |
-| Google OAuth | One-click login with automatic account merging |
-| Passkeys (WebAuthn) | Face ID / fingerprint via `@simplewebauthn` v13 |
-| Session Management | 30-min inactivity timeout, 12-hour absolute limit |
-| Identity Linking | `enable_manual_linking = true` — email + Google merge automatically |
-| Route Protection | Middleware protects `/dashboard/*`; blocked users auto-logged out |
+| Method              | Implementation                                                      |
+| ------------------- | ------------------------------------------------------------------- |
+| Email/Password      | Supabase Auth with email verification                               |
+| Google OAuth        | One-click login with automatic account merging                      |
+| Passkeys (WebAuthn) | Face ID / fingerprint via `@simplewebauthn` v13                     |
+| Session Management  | 30-min inactivity timeout, 12-hour absolute limit                   |
+| Identity Linking    | `enable_manual_linking = true` — email + Google merge automatically |
+| Route Protection    | Middleware protects `/dashboard/*`; blocked users auto-logged out   |
 
 ### Zero-Latency Admin Verification (WhatsApp)
 
 To comply with Meta Business Opt-In policies without incurring LLM processing delays, an **Inversion of Flow Interceptor** is used to validate business owners securely. The merchant clicks a deep link (`wa.me/?text=VINCULAR-[slug]`), entirely bypassing the core RAG LLM. The edge function:
+
 1. Validates the unique cryptographic payload (`slug`) against the PostgreSQL tenant database.
 2. Irrevocably pairs the legitimate WhatsApp remote sender number to the `business` record.
 3. Automatically authenticates the owner to receive real-time automated AI booking alerts.
@@ -394,9 +435,19 @@ Every database query is scoped to the authenticated user's `business_id` via Pos
 - All tables enforce `business_id` isolation
 - Edge Functions use `SUPABASE_SERVICE_ROLE_KEY` with explicit `business_id` filtering
 
-### Meta HMAC Signature Verification
+### Meta HMAC Signature Verification & JWT Bypass
 
 Every incoming WhatsApp webhook is verified against Meta's `X-Hub-Signature-256` header using HMAC-SHA256 with the app secret. Unsigned or tampered requests are rejected with HTTP 401 before any processing occurs.
+
+**Security Decision: No-JWT Context**
+To allow Meta's servers to reach the Edge Functions, **Supabase JWT Verification is explicitly disabled** (`--no-verify-jwt`) for the `whatsapp-webhook` function. This is standard for external webhooks that cannot provide a Supabase-issued token. The security burden shifts completely to the HMAC verification layer, which is cryptographically superior for this use case as it verifies the sender identity (Meta) rather than a temporary user session.
+
+**Summary of WABA Opt-in Flow (`VINCULAR-[slug]`)**
+To comply with Meta Business policies and prevent spam blocks, Cronix implements an "Inversion of Flow" for merchant verification:
+
+1. Merchant clicks a `wa.me` deep-link from the dashboard with an encrypted business slug.
+2. Sending the system-generated message initiates a `user-initiated` conversation.
+3. The webhook intercepts the keyword millisecond-fast (bypassing LLM) and links the phone number to the business record securely.
 
 ### PII Scrubbing in Sentry
 
@@ -416,14 +467,15 @@ The shared Sentry wrapper (`_shared/sentry.ts`) implements a `beforeSend` hook t
 
 The `push-notify` Edge Function implements Web Push from scratch using the **Deno Web Crypto API** with zero npm dependencies:
 
-| Component | Implementation |
-|-----------|---------------|
-| Encryption | ECDH P-256 key agreement → HKDF → AES-128-GCM (aesgcm content encoding) |
-| Authentication | VAPID JWT signed with ES256 (ECDSA P-256 + SHA-256) |
-| Key wrapping | Raw 32-byte P-256 keys wrapped in PKCS#8 DER envelope (RFC 5915/5958) |
-| Expired cleanup | 410/404 responses trigger automatic subscription purge |
+| Component       | Implementation                                                          |
+| --------------- | ----------------------------------------------------------------------- |
+| Encryption      | ECDH P-256 key agreement → HKDF → AES-128-GCM (aesgcm content encoding) |
+| Authentication  | VAPID JWT signed with ES256 (ECDSA P-256 + SHA-256)                     |
+| Key wrapping    | Raw 32-byte P-256 keys wrapped in PKCS#8 DER envelope (RFC 5915/5958)   |
+| Expired cleanup | 410/404 responses trigger automatic subscription purge                  |
 
 **Two auth paths:**
+
 - **Browser → EF:** `Authorization: Bearer <JWT>` (user creates appointment in dashboard)
 - **Server → EF:** `x-internal-secret: <CRON_SECRET>` (cron-reminders or Database Webhooks)
 
@@ -446,22 +498,25 @@ pg_cron (hourly) → cron-reminders Edge Function
 ### Notification Flow Diagram
 
 ```
-┌─────────────────────────── TRIGGER EVENTS ──────────────────────────────┐
-│                                                                          │
-│  1. AI BOOKS APPOINTMENT (real-time)                                     │
-│     whatsapp-webhook → createAppointment() → fire-and-forget push-notify │
-│     → Owner gets: "¡Nueva Reserva! 📅 Luis · Corte — 2024-04-12 10:00"  │
-│                                                                          │
-│  2. DAILY REMINDER (8 PM local, per timezone)                            │
-│     pg_cron → cron-reminders EF                                          │
-│     → Client gets: WhatsApp template reminder for tomorrow's appointment │
-│     → Owner gets: "📋 4 citas para mañana" (consolidated push)           │
-│                                                                          │
-│  3. DASHBOARD ACTIONS (manual)                                           │
-│     Dashboard → push-notify EF (via JWT auth)                            │
-│     → Owner gets push for confirmed/cancelled appointments               │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────── TRIGGER EVENTS ─────────────────────────────┐
+│                                                                        │
+│  1. AI ACTIONS (real-time asynchronous via QStash)                     │
+│     process-whatsapp → executes mutation → triggers parallel alerts    │
+│     ├─ NEW BOOKING: "¡Nueva Reserva! 📅 Luis · Corte — 2024-04-12"     │
+│     ├─ RESCHEDULE: "❌ Liberado: 10:00 | ✅ Reservado: 11:00"          │
+│     └─ CANCELLATION: "Luis ha cancelado. Tienes un espacio libre..."   │
+│     (Sent to owner via Web Push & Direct WhatsApp Message)             │
+│                                                                        │
+│  2. DAILY REMINDER (8 PM local, per timezone)                          │
+│     pg_cron → cron-reminders EF                                        │
+│     → Client gets: WhatsApp template reminder for tomorrow             │
+│     → Owner gets: "📋 4 citas para mañana" (consolidated PWA push)     │
+│                                                                        │
+│  3. DASHBOARD ACTIONS (manual)                                         │
+│     Dashboard → push-notify EF (via JWT auth)                          │
+│     → Owner gets push for manually confirmed/cancelled appointments    │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -541,14 +596,15 @@ pg_cron (hourly) → cron-reminders Edge Function
 
 Full-stack Sentry integration across all execution environments:
 
-| Environment | Coverage |
-|-------------|----------|
-| **Next.js Client** | React error boundaries, component rendering errors |
-| **Next.js Server** | Server Actions, API Routes, server components |
-| **Next.js Edge** | Middleware errors |
+| Environment             | Coverage                                                  |
+| ----------------------- | --------------------------------------------------------- |
+| **Next.js Client**      | React error boundaries, component rendering errors        |
+| **Next.js Server**      | Server Actions, API Routes, server components             |
+| **Next.js Edge**        | Middleware errors                                         |
 | **Deno Edge Functions** | Custom `_shared/sentry.ts` wrapper with graceful fallback |
 
 **Edge Function instrumentation:**
+
 - `addBreadcrumb()` traces every step (HMAC verification → RAG fetch → AI call → tag parsing → DB mutation)
 - `setSentryTag('business_id', id)` enables per-tenant error filtering
 - `flushSentry()` called before every response (Deno workers can die before async tasks complete)
@@ -560,38 +616,38 @@ Full-stack Sentry integration across all execution environments:
 
 17 versioned migrations in `supabase/migrations/`:
 
-| Migration | Purpose |
-|-----------|---------|
-| `base_schema` | Core tables (businesses, users, clients, services, appointments, transactions, expenses) |
-| `appointment_reminders` | Reminder tracking table with status lifecycle |
-| `optimize_indexes` | Performance indexes for high-traffic queries |
-| `unique_email_constraint` | UNIQUE(email) on users table |
-| `unique_phone_per_business` | UNIQUE(business_id, phone) on clients |
-| `notification_subscriptions` | Web Push subscription storage |
-| `setup_pg_cron` | pg_cron configuration for hourly reminder trigger |
-| `fix_rls_passkey_users` | RLS policies for passkey challenges |
-| `professionalize_whatsapp_agent` | WhatsApp sessions, audit logs, booking RPC |
-| `whatsapp_final_hardening` | Slug-based routing, session management |
-| `fix_slots_timezone` | Timezone-aware available slots RPC |
-| `multi_service_appointments` | Junction table for multi-service appointments |
-| `performance_indexes_wa_sessions` | Indexes for WhatsApp sessions and audit logs |
-| `wa_rate_limiting` | Atomic message rate limiter (`fn_wa_check_rate_limit`) |
-| `wa_booking_rate_limit` | Atomic booking limiter (`fn_wa_check_booking_limit`) |
-| `fn_find_client_by_phone` | Client lookup by cleaned phone digits |
-| `wa_booking_auto_confirm` | Auto-confirmed bookings (Silent Execution pattern) |
+| Migration                         | Purpose                                                                                  |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `base_schema`                     | Core tables (businesses, users, clients, services, appointments, transactions, expenses) |
+| `appointment_reminders`           | Reminder tracking table with status lifecycle                                            |
+| `optimize_indexes`                | Performance indexes for high-traffic queries                                             |
+| `unique_email_constraint`         | UNIQUE(email) on users table                                                             |
+| `unique_phone_per_business`       | UNIQUE(business_id, phone) on clients                                                    |
+| `notification_subscriptions`      | Web Push subscription storage                                                            |
+| `setup_pg_cron`                   | pg_cron configuration for hourly reminder trigger                                        |
+| `fix_rls_passkey_users`           | RLS policies for passkey challenges                                                      |
+| `professionalize_whatsapp_agent`  | WhatsApp sessions, audit logs, booking RPC                                               |
+| `whatsapp_final_hardening`        | Slug-based routing, session management                                                   |
+| `fix_slots_timezone`              | Timezone-aware available slots RPC                                                       |
+| `multi_service_appointments`      | Junction table for multi-service appointments                                            |
+| `performance_indexes_wa_sessions` | Indexes for WhatsApp sessions and audit logs                                             |
+| `wa_rate_limiting`                | Atomic message rate limiter (`fn_wa_check_rate_limit`)                                   |
+| `wa_booking_rate_limit`           | Atomic booking limiter (`fn_wa_check_booking_limit`)                                     |
+| `fn_find_client_by_phone`         | Client lookup by cleaned phone digits                                                    |
+| `wa_booking_auto_confirm`         | Auto-confirmed bookings (Silent Execution pattern)                                       |
 
 ---
 
 ## Performance Metrics
 
-| Metric | Value |
-|--------|-------|
+| Metric                         | Value                                                  |
+| ------------------------------ | ------------------------------------------------------ |
 | WhatsApp message → AI response | < 2 seconds (Groq Llama latency ~1.2s, overhead ~0.8s) |
-| Voice note → transcription | < 3 seconds (Groq Whisper) |
-| Database RLS check | < 10ms per query |
-| Rate limit check | < 1ms (atomic SQL) |
-| Push notification delivery | < 500ms |
-| Throughput | ~1,000 concurrent users per Vercel instance |
+| Voice note → transcription     | < 3 seconds (Groq Whisper)                             |
+| Database RLS check             | < 10ms per query                                       |
+| Rate limit check               | < 1ms (atomic SQL)                                     |
+| Push notification delivery     | < 500ms                                                |
+| Throughput                     | ~1,000 concurrent users per Vercel instance            |
 
 ---
 
@@ -601,11 +657,43 @@ To switch LLM providers (e.g., Groq → OpenAI → Anthropic), edit **2 constant
 
 ```typescript
 // supabase/functions/whatsapp-webhook/ai-agent.ts (lines 27-28)
-const LLM_MODEL   = 'gpt-4-turbo'                                    // ← change model
-const LLM_API_URL = 'https://api.openai.com/v1/chat/completions'     // ← change URL
+const LLM_MODEL = "gpt-4-turbo"; // ← change model
+const LLM_API_URL = "https://api.openai.com/v1/chat/completions"; // ← change URL
 ```
 
 The `LLM_API_KEY` environment variable works with any OpenAI-compatible provider (Groq, OpenAI, Anthropic, Together, etc.) — no code changes needed.
+
+---
+
+## WhatsApp Cloud API Configuration Checklist
+
+For a production-ready setup (as detailed in the recent architecture postmortem):
+
+### 1. Meta Business Manager
+
+- **Phone Number ID:** Ensure you are using the ID for your production number, not the Test ID.
+- **WABA ID:** Note the WhatsApp Business Account ID.
+- **WABA Subscription:** Use the Graph API to subscribe your app to the WABA:
+  `POST /{waba_id}/subscribed_apps`
+
+### 2. Supabase Secrets Management
+
+```bash
+supabase secrets set WHATSAPP_ACCESS_TOKEN=...
+supabase secrets set WHATSAPP_APP_SECRET=...
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=...
+supabase secrets set WHATSAPP_VERIFY_TOKEN=...
+```
+
+**Critical:** Use quotes for tokens containing special characters (e.g., `?`, `*`).
+
+### 3. Edge Function Deployment
+
+Deploy the webhook function with the `--no-verify-jwt` flag to prevent anonymous requests from Meta being blocked:
+
+```bash
+npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+```
 
 ---
 
@@ -706,6 +794,7 @@ supabase test db --file supabase/tests/rls.test.sql
 ```
 
 **Database Webhooks** (Supabase Dashboard → Database → Webhooks):
+
 - **Table:** `appointments` | **Event:** `INSERT` | **Target:** `push-notify` EF
 - **Header:** `x-internal-secret: <CRON_SECRET>`
 
@@ -736,12 +825,12 @@ npm run build
 
 **Production URL:** [https://cronix-app.vercel.app](https://cronix-app.vercel.app)
 
-| Component | Platform | Trigger |
-|-----------|----------|---------|
-| Next.js App | Vercel | Push to `main` branch → auto-deploy |
-| Edge Functions | Supabase | `supabase functions deploy <name>` |
-| Database | Supabase | `supabase db push` |
-| Secrets | Vercel + Supabase | Dashboard → Environment Variables / Secrets |
+| Component      | Platform          | Trigger                                     |
+| -------------- | ----------------- | ------------------------------------------- |
+| Next.js App    | Vercel            | Push to `main` branch → auto-deploy         |
+| Edge Functions | Supabase          | `supabase functions deploy <name>`          |
+| Database       | Supabase          | `supabase db push`                          |
+| Secrets        | Vercel + Supabase | Dashboard → Environment Variables / Secrets |
 
 ```bash
 # Deploy Edge Functions
@@ -758,14 +847,14 @@ supabase db push
 
 ## Scalability & Future Roadmap
 
-| Area | Current State | Future |
-|------|--------------|--------|
-| Language | Spanish (hardcoded) | Dynamic language per business setting |
-| LLM Provider | Groq + Llama-3.3-70B | Helicone proxy for latency monitoring + semantic caching |
-| Voice | Spanish via Whisper | Dynamic language detection |
-| Reminders | WhatsApp only | SMS and email channels |
-| Analytics | Dashboard reports | CSV/PDF export |
-| AI Observability | Sentry breadcrumbs | Helicone for per-tenant cost tracking and threat detection |
+| Area              | Current State           | Future                                                        |
+| ----------------- | ----------------------- | ------------------------------------------------------------- |
+| Language          | Spanish (hardcoded)     | Dynamic language per business setting                         |
+| LLM Provider      | Groq + Llama-3.3-70B    | Helicone proxy for latency monitoring + semantic caching      |
+| Voice             | Spanish via Whisper     | Dynamic language detection                                    |
+| Reminders         | WhatsApp only           | SMS and email channels                                        |
+| Analytics         | Dashboard reports       | CSV/PDF export                                                |
+| AI Observability  | Sentry breadcrumbs      | Helicone for per-tenant cost tracking and threat detection    |
 | Booking Conflicts | Basic overlap detection | Staff-aware time-slot collision with working hours validation |
 
 ---
@@ -775,6 +864,7 @@ supabase db push
 **Luis C. — Full-Stack Developer**
 
 This project demonstrates:
+
 - Modern Next.js 14 architecture with Server Components and Server Actions
 - PostgreSQL RLS multi-tenancy at database level (26 pgTAP tests)
 - Real-time AI integration (Groq + Llama-3.3-70B) with a deliberate Action Tag architecture

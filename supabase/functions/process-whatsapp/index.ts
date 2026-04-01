@@ -36,6 +36,8 @@ import {
   createAppointment,
   rescheduleAppointment,
   cancelAppointmentById,
+  getAppointmentDetails,
+  getBookedSlots,
   checkMessageRateLimit,
   checkBookingRateLimit,
   logInteraction,
@@ -272,9 +274,10 @@ serve(async (req: Request) => {
         getClientByPhone(business.id, sender),
       ])
 
-      const [activeAppointments, history] = await Promise.all([
+      const [activeAppointments, history, bookedSlots] = await Promise.all([
         client ? getActiveAppointments(business.id, client.id) : Promise.resolve([]),
         getConversationHistory(business.id, sender, 4),
+        getBookedSlots(business.id, timezone),
       ])
 
       addBreadcrumb('Context fetched', 'database', 'info', {
@@ -294,6 +297,7 @@ serve(async (req: Request) => {
         client,
         activeAppointments,
         history,
+        bookedSlots,
       }
 
       addBreadcrumb('Sending prompt to AI model', 'llm', 'info', { model: 'llama-3.3-70b-versatile via Groq' })
@@ -339,7 +343,7 @@ serve(async (req: Request) => {
         }
 
         try {
-          await createAppointment(business.id, {
+          const bookingResult = await createAppointment(business.id, {
             client_phone: sender,
             client_name:  client?.name ?? customerName,
             service_id:   serviceId,
@@ -347,6 +351,16 @@ serve(async (req: Request) => {
             time,
             timezone,
           })
+
+          // Business-level failure (e.g. slot already taken): inform the user gracefully
+          if (!bookingResult?.success) {
+            const slotMsg = `Lo siento, ese horario ya no está disponible. ¿Te gustaría que te ofrezca otro horario libre para *${services.find(s => s.id === serviceId)?.name ?? 'el servicio'}*?`
+            await sendWhatsAppMessage(sender, slotMsg)
+            await logInteraction({ business_id: business.id, sender_phone: sender, message_text: text, ai_response: `SLOT_CONFLICT: ${bookingResult?.error ?? 'unknown'}` })
+            await flushSentry()
+            return json({ success: true })
+          }
+
           addBreadcrumb('Appointment created via WhatsApp AI', 'booking', 'info')
 
           // Notify business owner immediately — fire-and-forget (non-blocking)
@@ -391,6 +405,7 @@ serve(async (req: Request) => {
               .catch(err => captureException(err, { stage: 'wa_notify_owner', business_id: business.id }))
           }
         } catch (err) {
+          // Only true DB/network failures reach here
           captureException(err, { stage: 'create_appointment', service_id: serviceId, date })
         }
       }
@@ -401,9 +416,39 @@ serve(async (req: Request) => {
         addBreadcrumb('RESCHEDULE_BOOKING tag detected', 'booking', 'info', { date })
 
         try {
+          const aptDetails = await getAppointmentDetails(appointmentId)
           const newStartAt = localTimeToUTC(date, time, timezone)
           await rescheduleAppointment(appointmentId, newStartAt)
           addBreadcrumb('Appointment rescheduled via WhatsApp AI', 'booking', 'info')
+
+          if (aptDetails && business.phone) {
+            const svcName = aptDetails.services?.name ?? 'Servicio'
+            const clientName = aptDetails.clients?.name ?? customerName
+            
+            const oldDateObj = new Date(aptDetails.start_at)
+            const oldDateStr = new Intl.DateTimeFormat('es-ES', { timeZone: timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
+            const oldTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
+
+            const formattedNewTime = (() => {
+              const [h, m] = time.split(':');
+              let hour = parseInt(h, 10);
+              const ampm = hour >= 12 ? 'pm' : 'am';
+              hour = hour % 12;
+              hour = hour ? hour : 12;
+              return `${hour}:${m} ${ampm}`;
+            })();
+
+            const ownerPhone = business.phone.replace(/\D/g, '')
+            const waNotif = 
+              `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
+              `El cliente *${clientName}* ha *reagendado* su cita de *${svcName}*.\n\n` +
+              `❌ Espacio liberado: *${oldDateStr}* a las *${oldTimeStr}*\n` +
+              `✅ Nuevo espacio reservado: *${date}* a las *${formattedNewTime}*\n\n` +
+              `¡Tu agenda ha sido actualizada correctamente! 💪🚀`
+
+            sendWhatsAppMessage(ownerPhone, waNotif)
+              .catch(err => captureException(err, { stage: 'wa_notify_owner_reschedule', business_id: business.id }))
+          }
         } catch (err) {
           captureException(err, { stage: 'reschedule_appointment', appointment_id: appointmentId })
         }
@@ -415,8 +460,27 @@ serve(async (req: Request) => {
         addBreadcrumb('CANCEL_BOOKING tag detected', 'booking', 'info')
 
         try {
+          const aptDetails = await getAppointmentDetails(appointmentId)
           await cancelAppointmentById(appointmentId)
           addBreadcrumb('Appointment cancelled via WhatsApp AI', 'booking', 'info')
+
+          if (aptDetails && business.phone) {
+            const svcName = aptDetails.services?.name ?? 'Servicio'
+            const clientName = aptDetails.clients?.name ?? customerName
+            
+            const oldDateObj = new Date(aptDetails.start_at)
+            const oldDateStr = new Intl.DateTimeFormat('es-ES', { timeZone: timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
+            const oldTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
+
+            const ownerPhone = business.phone.replace(/\D/g, '')
+            const waNotif = 
+              `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
+              `El cliente *${clientName}* ha *cancelado* su cita, por lo que tienes un nuevo espacio libre el día *${oldDateStr}* a las *${oldTimeStr}* para el servicio: *${svcName}*.\n\n` +
+              `¡Sigo activo para atender y asignarle este nuevo espacio libre a otro cliente! 💪🚀`
+
+            sendWhatsAppMessage(ownerPhone, waNotif)
+              .catch(err => captureException(err, { stage: 'wa_notify_owner_cancel', business_id: business.id }))
+          }
         } catch (err) {
           captureException(err, { stage: 'cancel_appointment', appointment_id: appointmentId })
         }

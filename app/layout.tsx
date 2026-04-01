@@ -35,10 +35,6 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Cronix',
   },
-  icons: {
-    icon: '/icon-192x192.png',
-    apple: '/icon-192x192.png',
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -51,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         so the usePwaInstall hook can pick it up immediately on mount.
       */}
       <head>
+        <link rel="icon" href="/icon.png?v=2" />
         <script dangerouslySetInnerHTML={{ __html:
           `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__pwaDeferred=e;});`
         }} />

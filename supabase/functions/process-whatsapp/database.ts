@@ -283,6 +283,36 @@ export async function getConversationHistory(
 
 // ── Available slots ───────────────────────────────────────────────────────────
 
+/**
+ * Fetches upcoming booked time slots for the business (next 14 days).
+ * Used to inject into the AI prompt so it never suggests an already-taken slot.
+ */
+export async function getBookedSlots(
+  businessId: string,
+  timezone:   string
+): Promise<Array<{ start_at: string; end_at: string }>> {
+  const now      = new Date()
+  const in14days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+
+  const { data } = await supabase
+    .from('appointments')
+    .select('start_at, end_at')
+    .eq('business_id', businessId)
+    .not('status', 'in', '("cancelled","no_show")')
+    .gte('start_at', now.toISOString())
+    .lte('start_at', in14days.toISOString())
+    .order('start_at', { ascending: true })
+
+  if (!data) return []
+
+  // Convert to local time strings for the AI prompt
+  return (data as Array<{ start_at: string; end_at: string }>).map(row => {
+    const startLocal = new Date(row.start_at).toLocaleString('es-ES', { timeZone: timezone, hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: true })
+    const endLocal   = new Date(row.end_at).toLocaleString('es-ES', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: true })
+    return { start_at: startLocal, end_at: endLocal }
+  })
+}
+
 export async function getAvailableSlots(
   businessId: string,
   date:       string,
@@ -305,6 +335,10 @@ export async function getAvailableSlots(
 /**
  * Creates a new appointment via the secure RPC.
  * The RPC creates the client if they don't exist and enforces business rules.
+ *
+ * Throws only on true DB/network errors.
+ * Returns the BookingResult (with success=false and error key) for expected
+ * business failures like slot conflicts — callers must check result.success.
  */
 export async function createAppointment(
   businessId: string,
@@ -320,12 +354,29 @@ export async function createAppointment(
     p_start_at:     startAt,
   })
 
+  // True DB/network failure: surface it as an exception so Sentry catches it correctly
   if (error) throw new Error(`createAppointment RPC error: ${error.message}`)
 
-  const result = data as BookingResult
-  if (!result?.success) throw new Error(result?.error ?? 'fn_book_appointment_wa returned failure')
+  // Business logic failure (e.g. slot already taken): return as-is for the caller to handle gracefully
+  return data as BookingResult
+}
 
-  return result
+/**
+ * Fetches the full details of an appointment for notifications before it's mutated.
+ */
+export async function getAppointmentDetails(appointmentId: string): Promise<any> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(`
+      start_at,
+      services:service_id(name),
+      clients:client_id(name, phone)
+    `)
+    .eq('id', appointmentId)
+    .single()
+
+  if (error || !data) return null
+  return data
 }
 
 /**

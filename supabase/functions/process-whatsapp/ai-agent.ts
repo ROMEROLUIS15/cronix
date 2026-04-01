@@ -252,7 +252,20 @@ Sé CONCISO en tus respuestas. Máximo 2-3 oraciones por mensaje salvo que la si
   prompt += `Fecha/hora actual: ${currentTime} (AÑO: ${currentYear})\n`
   prompt += `Zona horaria: ${timezone}\n`
 
-  // ── Section 5: Conversation History Instructions ──
+  // ── Section 4b: Booked Slots ──
+  const { bookedSlots } = context
+  if (bookedSlots && bookedSlots.length > 0) {
+    prompt += `\n--- ⚠️ HORARIOS YA OCUPADOS (PRÓXIMOS 14 DÍAS) ---\n`
+    prompt += `REGLA CRÍTICA: NUNCA propongas ni confirmes un horario que aparezca en esta lista. Son citas ya confirmadas con otros clientes.\n`
+    for (const slot of bookedSlots) {
+      prompt += `• OCUPADO: ${slot.start_at} hasta ${slot.end_at}\n`
+    }
+    prompt += `Si el cliente pide un horario que coincide con alguno de estos, indícale que ya está ocupado y ofrécele el siguiente disponible.\n`
+  } else {
+    prompt += `\n--- HORARIOS OCUPADOS ---\n`
+    prompt += `No hay citas próximas registradas. Puedes ofrecer cualquier horario dentro del horario de atención.\n`
+  }
+
   prompt += `\n--- HISTORIAL ---\n`
   prompt += `Se te proporcionará el historial reciente de la conversación. Úsalo para:\n`
   prompt += `- Mantener coherencia (no repetir preguntas ya respondidas)\n`
