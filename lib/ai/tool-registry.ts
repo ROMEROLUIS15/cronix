@@ -147,11 +147,14 @@ class ToolRegistry {
         description: 'Envía un mensaje de reactivación por WhatsApp a un cliente inactivo.',
         parameters: {
           type: 'object',
-          properties: { client_name: { type: 'string' } },
-          required: ['client_name'],
+          properties: { 
+            client_id: { type: 'string' },
+            client_name: { type: 'string' } 
+          },
+          required: ['client_id', 'client_name'],
         },
       },
-      handler: (bizId, args) => tools.send_reactivation_message(bizId, args.client_name)
+      handler: (bizId, args) => tools.send_reactivation_message(bizId, args.client_id, args.client_name)
     })
   }
 

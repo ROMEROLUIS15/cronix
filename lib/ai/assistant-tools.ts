@@ -93,14 +93,13 @@ export async function get_client_debt(business_id: string, client_name: string):
 export async function cancel_appointment(business_id: string, client_name: string): Promise<string> {
   const supabase = await createClient()
 
-  const { data: clients } = await supabase
-    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null)
-
+  const { data: clients } = await supabase.from('clients').select('id, name, phone').eq('business_id', business_id).is('deleted_at', null)
   const result = fuzzyFind(clients ?? [], client_name)
-  if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-  if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿Cuál cancelo?`
 
-  const client = result.match
+  if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
+  if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+
+  const client = result.match as { id: string; name: string; phone?: string }
   const now = new Date().toISOString()
 
   const { data: appts, error } = await supabase
@@ -266,29 +265,36 @@ export async function get_revenue_stats(business_id: string): Promise<string> {
 export async function send_reactivation_message(business_id: string, client_id: string, client_name: string): Promise<string> {
   const supabase = await createClient()
   
-  // 🛑 SECURITY: Multi-tenant ownership check
+  // 🛑 SECURITY: Multi-tenant ownership check & Data Fetch
   const { data: client, error: clientErr } = await supabase
     .from('clients')
-    .select('id, business_id')
+    .select('id, name, phone, business_id')
     .eq('id', client_id)
     .single()
 
   if (clientErr || !client || client.business_id !== business_id) {
-    logger.error('S-TOOL', `Ownership breach attempt: Client ${client_id} vs Biz ${business_id}`)
-    return 'Error de permisos: El cliente no pertenece a este negocio.'
+    logger.error('S-TOOL', `Ownership breach or missing client: ${client_id} vs Biz ${business_id}`)
+    return 'Error de permisos o cliente no encontrado.'
   }
 
-  const [cliRes, busRes] = await Promise.all([
-    supabase.from('clients').select('name, phone').eq('business_id', business_id).eq('name', client_name).single(),
-    supabase.from('businesses').select('name').eq('id', business_id).single()
-  ])
+  const { data: busRes, error: busErr } = await supabase
+    .from('businesses')
+    .select('name')
+    .eq('id', business_id)
+    .single()
 
-  if (cliRes.error || !cliRes.data.phone || busRes.error) return `No pude completar el envío para ${client_name}.`
+  if (busErr || !busRes) return `No pude obtener los datos del negocio para ${client_name}.`
+  if (!client.phone) return `El cliente ${client.name} no tiene un número de teléfono registrado.`
 
-  const result = await sendReactivationMessage({ to: cliRes.data.phone, clientName: cliRes.data.name, businessName: busRes.data.name })
+  const result = await sendReactivationMessage({ 
+    to: client.phone, 
+    clientName: client.name, 
+    businessName: busRes.name 
+  })
+
   if (!result.success) return `Error al enviar WhatsApp: ${result.error}`
 
-  return `Listo. Envié el WhatsApp de reactivación a ${client_name}.`
+  return `Listo. Envié el WhatsApp de reactivación a ${client.name}.`
 }
 
 // ── STRATEGIC: Proyecciones Financieras (CFO Advanced) ───────────────────
