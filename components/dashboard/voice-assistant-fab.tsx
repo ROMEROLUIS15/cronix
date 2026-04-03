@@ -22,6 +22,39 @@ export function VoiceAssistantFab() {
       y.set(parseFloat(savedY))
     }
     setIsLoaded(true)
+
+    // ── PROACTIVE GREETING (Once per session) ──
+    const hasGreeted = sessionStorage.getItem('cronix-assistant-greeted')
+    const abortController = new AbortController()
+
+    if (!hasGreeted) {
+      const timer = setTimeout(async () => {
+        try {
+          const res = await fetch('/api/assistant/proactive', { signal: abortController.signal })
+          const data = await res.json()
+          if (data.text && !abortController.signal.aborted) {
+            setTranscript(data.text)
+            sessionStorage.setItem('cronix-assistant-greeted', 'true')
+            
+            if (data.audioUrl) {
+              const audio = new Audio(data.audioUrl)
+              setState('speaking')
+              audio.onended = () => setState('idle')
+              await audio.play()
+            }
+          }
+        } catch (e) {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            console.error('Proactive Assistant Error:', e)
+          }
+        }
+      }, 2000)
+
+      return () => {
+        clearTimeout(timer)
+        abortController.abort()
+      }
+    }
   }, [y])
 
   const handleDragEnd = () => {

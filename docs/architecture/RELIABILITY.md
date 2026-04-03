@@ -1,6 +1,10 @@
-# 🏛️ Cronix: Error Handling & Reliability Architecture (Blinded)
+This document outlines the **Platinum Architecture** implemented to transform Cronix into a bulletproof SaaS platform. We move from "Error Handling" to **Reliability Engineering** and **Provider Agnosticism**.
 
-This document outlines the professional resilience architecture implemented to transform Cronix into a bulletproof SaaS platform. We move from "Error Handling" to **Reliability Engineering**.
+## 🏛️ Platinum Architecture (DDD)
+The system is divided into three independent layers to ensure total separation of concerns:
+1. **Infrastructure (Providers)**: Vendor-agnostic implementations of STT, LLM, and TTS.
+2. **Domain (Orchestration)**: The `AssistantService` manages business logic and tool execution without knowing about the transport layer (API).
+3. **Transport (API)**: Clean routes that only handle authentication, rate-limiting, and service invocation.
 
 ## 🛡️ The 4-Layer Shield
 
@@ -32,10 +36,19 @@ Specialized layer for non-deterministic services (Groq, ElevenLabs):
 
 ### 6. Rate Limiting (Protección de Recursos)
 -   **Memory Sliding Window**: Implementado en `/api/assistant/voice`.
--   **Cuotas**: Limita a 10 solicitudes por minuto por usuario/IP para evitar agotamiento accidental de créditos de IA.
+-   **Rate Limiting**: El sistema protege contra el abuso mediante ventanas deslizantes de memoria (10 req/min por usuario).
 
-### 7. Health Check API
--   **Endpoint**: `/api/health` permite el monitoreo externo (UptimeRobot, Slack alerts) del estado de la base de datos, variables de entorno y estado de los circuitos de IA.
+### 7. Performance Shield (Indexing & RPC)
+- **Compound Indexing**: Implementación de índices en columnas de tiempo (`start_at`, `paid_at`) para acelerar el BI y los resúmenes financieros.
+- **RPC Encapsulation**: Las operaciones pesadas (ej: filtrado de clientes inactivos) se ejecutan nativamente en Postgres vía RPC para minimizar el uso de memoria en Deno.
+
+### 8. Contextual Telemetry
+- Todos los errores en las herramientas de IA (`assistant-tools.ts`) se loguean con el `business_id` del tenant, facilitando el soporte técnico en tiempo real ante problemas de agendamiento.
+
+### 9. AI Security Firewall (Hardening)
+- **Prompt Injection Defense**: Directivas estrictas en el `SYSTEM_PROMPT` para evitar la revelación de instrucciones internas.
+- **Input Sanitization**: Las herramientas validan rangos de fechas y montos para evitar cobros negativos o citas inválidas.
+- **Error Sanitization**: Los fallos técnicos se ocultan al usuario final en la capa de `AssistantService`, proporcionando una respuesta amable y segura.
 
 ## 📡 Traceability Flow
 

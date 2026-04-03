@@ -168,6 +168,7 @@ export async function safeTTS(
 
   } catch (err: any) {
     aiCircuit.reportFailure('TTS', err.message)
+    logger.error('AI-TTS', `Unexpected TTS failure: ${err.message}`, { stack: err.stack })
     return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
   }
 }

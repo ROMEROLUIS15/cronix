@@ -22,6 +22,13 @@ export interface ReminderMessageParams {
   time:         string
 }
 
+export interface ReactivationMessageParams {
+  to:           string
+  clientName:   string
+  businessName: string
+  template?:    string // Default to reactivation_promo
+}
+
 export interface WhatsAppResult {
   success: boolean
   error?:  string
@@ -59,6 +66,44 @@ export async function sendAppointmentReminder(
         'x-internal-secret': cronSecret,
       },
       body: JSON.stringify(params),
+    })
+
+    const raw: unknown = await res.json().catch(() => ({ success: false, error: 'Invalid response from Edge Function' }))
+    return isWhatsAppResult(raw) ? raw : { success: false, error: 'Unexpected response shape from Edge Function' }
+  } catch (e) {
+    return {
+      success: false,
+      error:   e instanceof Error ? e.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Sends a WhatsApp reactivation promo via the Supabase Edge Function.
+ */
+export async function sendReactivationMessage(
+  params: ReactivationMessageParams
+): Promise<WhatsAppResult> {
+  const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const cronSecret   = process.env.CRON_SECRET
+
+  if (!supabaseUrl || !cronSecret) {
+    return { success: false, error: 'NEXT_PUBLIC_SUPABASE_URL or CRON_SECRET not configured' }
+  }
+
+  const edgeUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
+
+  try {
+    const res = await fetch(edgeUrl, {
+      method:  'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-internal-secret': cronSecret,
+      },
+      body: JSON.stringify({
+        ...params,
+        template: params.template || 'reactivation_promo',
+      }),
     })
 
     const raw: unknown = await res.json().catch(() => ({ success: false, error: 'Invalid response from Edge Function' }))

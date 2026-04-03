@@ -87,7 +87,8 @@ function NewAppointmentForm() {
   const [saving,             setSaving]             = useState(false)
   const [msg,                setMsg]                = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isListening,        setIsListening]        = useState(false)
-  const [aiParsing,          setAiParsing]          = useState(false)
+  const [aiParsing,          setIsAiParsing]          = useState(false)
+  const [fetchError,         setFetchError]         = useState<string | null>(null)
 
   // ── Load form data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -96,20 +97,31 @@ function NewAppointmentForm() {
       return
     }
     async function init() {
-      const [clientsData, servicesData, membersData, bizSettings] = await Promise.all([
-        clientsRepo.getClients(supabase, businessId!),
-        servicesRepo.getActiveServices(supabase, businessId!),
-        usersRepo.getBusinessMembers(supabase, businessId!),
-        businessesRepo.getBusinessSettings(supabase, businessId!),
-      ])
-      setClients(clientsData as Client[])
-      setServices(servicesData as Service[])
-      setUsers(membersData as User[])
-      // Load business notification settings
-      const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
-      const hours  = notif?.reminderHours?.[0] ?? 24
-      setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
-      setLoadingData(false)
+      try {
+        setFetchError(null)
+        const [clientsData, servicesData, membersData, bizSettings] = await Promise.all([
+          clientsRepo.getClients(supabase, businessId!).catch(() => []),
+          servicesRepo.getActiveServices(supabase, businessId!).catch(() => []),
+          usersRepo.getBusinessMembers(supabase, businessId!).catch(() => []),
+          businessesRepo.getBusinessSettings(supabase, businessId!).catch(() => null),
+        ])
+
+        setClients((clientsData as Client[]) || [])
+        setServices((servicesData as Service[]) || [])
+        setUsers((membersData as User[]) || [])
+
+        // Load business notification settings
+        if (bizSettings) {
+          const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
+          const hours = notif?.reminderHours?.[0] ?? 24
+          setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
+        }
+      } catch (err) {
+        console.error('Error initializing appointment form:', err)
+        setFetchError('No pudimos cargar los datos necesarios. Revisa tu conexión.')
+      } finally {
+        setLoadingData(false)
+      }
     }
     init()
   }, [supabase, businessId, contextLoading])
@@ -130,7 +142,8 @@ function NewAppointmentForm() {
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
 
-    const dayApts = await appointmentsRepo.getDaySlots(supabase, businessId, start, end)
+    const rawApts = await appointmentsRepo.getDaySlots(supabase, businessId, start, end).catch(() => [])
+    const dayApts = Array.isArray(rawApts) ? rawApts : []
 
     // 1) Employee conflict — each employee can only handle one client at a time.
     if (form.assigned_user_id) {
@@ -357,9 +370,9 @@ function NewAppointmentForm() {
       const transcript = event.results[0]?.[0]?.transcript
       if (!transcript) return
 
-      setAiParsing(true)
+      setIsAiParsing(true)
       const parsed = await parseVoiceCommand(transcript, { services, clients })
-      setAiParsing(false)
+      setIsAiParsing(false)
 
       if (parsed) {
         setForm(f => ({
@@ -377,6 +390,22 @@ function NewAppointmentForm() {
     }
 
     recognition.start()
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 px-6 text-center animate-fade-in">
+        <div className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
+          style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)' }}>
+          <AlertCircle size={32} style={{ color: '#FF3B30' }} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-white">Error de conexión</h2>
+        <p className="text-sm mb-6 max-w-xs" style={{ color: '#909098' }}>{fetchError}</p>
+        <Button onClick={() => window.location.reload()} variant="secondary">
+          Reintentar carga
+        </Button>
+      </div>
+    )
   }
 
   if (loadingData) {

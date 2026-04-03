@@ -53,10 +53,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Parse payload ──────────────────────────────────────────────────────
-  let to: string, clientName: string, businessName: string, date: string, time: string
+  let to: string, clientName: string, businessName: string, date: string, time: string, template = 'appointment_reminder'
   try {
     const body = await req.json()
-    ;({ to, clientName, businessName, date, time } = body)
+    ;({ to, clientName, businessName, date, time, template = 'appointment_reminder' } = body)
     if (!to || !clientName) throw new Error('Missing required fields')
   } catch (e) {
     captureException(e, { stage: 'parse_body' })
@@ -82,8 +82,25 @@ Deno.serve(async (req: Request) => {
 
   addBreadcrumb('Calling Meta WhatsApp API', 'whatsapp', 'info', {
     phone_number_id: phoneNumberId,
-    // phone is PII — scrubbed by beforeSend in _shared/sentry.ts
+    template,
   })
+
+  // ── Template Configuration ─────────────────────────────────────────────
+  const components = [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: clientName   },
+        { type: 'text', text: businessName },
+      ],
+    },
+  ]
+
+  // Add specific params based on template
+  if (template === 'appointment_reminder') {
+    components[0].parameters.push({ type: 'text', text: date })
+    components[0].parameters.push({ type: 'text', text: time })
+  }
 
   // ── Call Meta API ──────────────────────────────────────────────────────
   try {
@@ -98,19 +115,9 @@ Deno.serve(async (req: Request) => {
         to:                phone,
         type:              'template',
         template: {
-          name:     'appointment_reminder',
+          name:     template,
           language: { code: 'es' },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: clientName   },
-                { type: 'text', text: businessName },
-                { type: 'text', text: date         },
-                { type: 'text', text: time         },
-              ],
-            },
-          ],
+          components,
         },
       }),
     })

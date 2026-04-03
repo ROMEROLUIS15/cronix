@@ -15,6 +15,7 @@ Deep technical dive into Cronix architecture, security implementation, AI agent 
 - [Performance Optimization](#performance-optimization)
 - [LLM Provider Abstraction](#llm-provider-abstraction)
 - [Error Handling & Logging](#error-handling--logging)
+- [Luis IA V4 — Strategic Evolution & Hardening](#luis-ia-v4--strategic-evolution--hardening)
 
 ---
 
@@ -1282,3 +1283,48 @@ LIMIT 100;
 **Last Updated:** 2026-03-29
 
 **Author:** Luis C.
+## Luis IA V4 — Strategic Evolution & Hardening
+
+The V4 evolution transforms Luis from a reactive assistant into a **Proactive Growth Agent**, implementing "Platinum Architecture" standards for resilience and security.
+
+### 1. AI Shielding & Hardening (Defense in Depth)
+
+We implement a 3-layer security system to protect the AI Orchestrator:
+
+#### Layer 1: Prompt Firewall (Alignment)
+The `SYSTEM_PROMPT` (managed in `assistant-prompt-helper.ts`) includes non-negotiable security directives:
+- **Instruction Protection**: Explicitly forbids revealing internal prompts or system rules.
+- **Jailbreak Resistance**: Ignores common injection patterns like "ignore previous instructions".
+- **Purpose Alignment**: Refuses any request outside the scope of business management.
+
+#### Layer 2: Domain Guardrails (Execution)
+Every tool in `assistant-tools.ts` now features strict input validation:
+- **Amount Validation**: `register_payment` rejects non-positive or suspiciously high amounts.
+- **Date validation**: `book_appointment` validates dates to prevent ghost bookings in the far past or future.
+- **Multi-tenant Verification**: Tools perform an explicit ownership check (client belongs to business) before execution.
+
+#### Layer 3: Response Sanitization (Transport)
+- **Error Masking**: Database or technical errors are caught at the `AssistantService` level. 
+- **Friendly Fallback**: The user receives a polite "Technical difficulty" message instead of raw SQL or system traces, preventing architectural leakage.
+
+### 2. CFO Advanced: Monthly Forecasting
+
+Luis can now project revenue based on real-time data:
+- **Logic**: Aggregates confirmed transactions + projected income from future appointments (based on service price).
+- **Tool**: `get_monthly_forecast`.
+- **Business Rule**: Only accounts for the current calendar month to maintain focus.
+
+### 3. Active CRM: WhatsApp Reactivation
+
+A strategic tool to recover "sleeping" revenue:
+- **Inactive Detection**: Identifies clients without appointments in >60 days via `get_inactive_clients_rpc` (optimized at the DB level).
+- **One-Click Reactivation**: A voice command ("Who hasn't come lately? ... Send them a message") triggers a template-based WhatsApp message via the `whatsapp-service` Edge Function.
+
+### 4. Performance Shield (Platinum Infrastructure)
+
+To ensure the "Executive Assistant" experience feels premium and lag-free:
+- **DB Indexing**: Compound indexes on `start_at` and `paid_at` for sub-second BI queries.
+- **RPC Migration**: Heavy data processing (like client filtering) moved from Node/Deno memory to PostgreSQL RPCs for maximum efficiency.
+- **AbortController UX**: The dashboard voice greeting handles component unmounting professionally to avoid resource leaks.
+
+---

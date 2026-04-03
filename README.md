@@ -107,10 +107,23 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 
 ---
 
-## ⚖️ Confiabilidad y Observabilidad (Reliability Engineering)
+## 🎙️ Luis IA: Asistente Ejecutivo V4 (Platinum & Strategy)
+Luis ha evolucionado a un Agente Proactivo de Crecimiento. Esta versión introduce:
 
-Cronix está diseñado con una arquitectura de **Blindaje Global**:
+### 1. Inteligencia Multi-Staff (Equipo)
+Agenda citas con empleados específicos. Luis realiza **Fuzzy Matching** contra la tabla de `users` (role=employee) para asignar automáticamente el `staff_id`.
+*Comando: "Agenda un corte con Carlos para mañana a las 3rd"*
 
+### 2. CRM Activo (Reactivación por WhatsApp)
+Identifica clientes que no han asistido en 60+ días y permite enviar mensajes de reactivación directos.
+*Comando: "¿Quién no ha venido hace meses? ... ok, envíale el WhatsApp a Juan"*
+
+### 3. CFO Advanced (Forecasting)
+Proyección de ingresos al cierre de mes basada en transacciones reales y citas futuras.
+- **AI Shielding (Hardening)**: Luis está blindado contra prompt injection y manipulación, con validaciones estrictas en cada herramienta (Date/Amount validation).
+- **Proactividad en el Dashboard**: Saludo inicial y resumen de voz automático (una vez por sesión).
+
+---
 1.  **Observabilidad**: Integración profunda con Sentry y Logger Centralizado.
 2.  **Traceability**: Sistema de `x-request-id` para trazabilidad de errores entre servicios.
 3.  **Webhook Resilience**: Dead Letter Queue (DLQ) para garantizar **Zero Data Loss** en integraciones críticas.
@@ -169,7 +182,7 @@ Consulta la [Documentación Técnica de Confiabilidad](file:///c:/Users/luisc.DE
 │  │  ├─ Auth      │    │  17 Migrations│    │  ├─ push-notify          │  │
 │  │  ├─ PWA/SW    │    │  45+ pgTAP    │    │  └─ cron-reminders      │  │
 │  │  └─ API       │    │  Tests        │    │                          │  │
-│  └──────┬───────┘    └───────┬───────┘    └───────────┬──────────────┘  │
+│  └──────┬───────┘    └──────┬───────┘    └───────────┬──────────────┘  │
 │         │                    │                        │                  │
 │         ▼                    ▼                        ▼                  │
 │  ┌──────────────┐    ┌───────────────┐    ┌──────────────────────────┐  │
@@ -178,7 +191,7 @@ Consulta la [Documentación Técnica de Confiabilidad](file:///c:/Users/luisc.DE
 │  │              │    │               │    │  ├─ Meta WhatsApp API    │  │
 │  │  Full-stack  │    │  Hourly check │    │  ├─ Groq (LLM + Whisper)│  │
 │  │  Multi-tenant│    │  → 8 PM local │    │  ├─ Upstash QStash       │  │
-│  │  PII scrub   │    │  per timezone │    │  ├─ Helicone Proxy       │  │
+│  │  PII scrub   │    │  per timezone │    │  └─ Helicone Proxy       │  │
 │  └──────────────┘    └───────────────┘    └──────────────────────────┘  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘

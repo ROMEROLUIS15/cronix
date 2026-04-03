@@ -86,7 +86,7 @@ export function checkSlotOverlap(params: {
   existing: Array<{ start_at: string; end_at: string; id?: string }>
   excludeId?:    string
 }): { overlaps: boolean; conflictTime?: string } {
-  const { proposedStart, proposedEnd, existing, excludeId } = params
+  const { proposedStart, proposedEnd, existing = [], excludeId } = params
 
   for (const apt of existing) {
     if (excludeId && apt.id === excludeId) continue
@@ -128,10 +128,10 @@ export function checkEmployeeConflict(params: {
   proposedStart: Date
   proposedEnd:   Date
   existing: Array<{ start_at: string; end_at: string; id?: string; assigned_user_id?: string | null }>
-  employeeId:    string
+  employeeId:    string,
   excludeId?:    string
 }): { conflicts: boolean; conflictTime?: string; availableFrom?: string } {
-  const { proposedStart, proposedEnd, existing, employeeId, excludeId } = params
+  const { proposedStart, proposedEnd, existing = [], employeeId, excludeId } = params
   const fmt = (d: Date) => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 
   const employeeApts = existing.filter(
@@ -167,10 +167,10 @@ export function checkClientConflict(params: {
   proposedStart: Date
   proposedEnd:   Date
   existing: Array<{ start_at: string; end_at: string; id?: string; client_id?: string; assigned_user_id?: string | null }>
-  clientId:      string
+  clientId:      string,
   excludeId?:    string
 }): { conflicts: boolean; conflictTime?: string; availableFrom?: string; assignedUserId?: string | null } {
-  const { proposedStart, proposedEnd, existing, clientId, excludeId } = params
+  const { proposedStart, proposedEnd, existing = [], clientId, excludeId } = params
   const fmt = (d: Date) => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 
   const clientApts = existing.filter(

@@ -1,0 +1,10 @@
+- `[/]` Database Indexing (Phase 1)
+    - `[ ]` Index on `appointments(business_id, start_at)`
+    - `[ ]` Index on `transactions(business_id, paid_at)`
+    - `[ ]` Index on `clients(business_id)` – Partial index `deleted_at IS NULL`
+- `[ ]` Tool Refactoring (Phase 2)
+    - `[ ]` Optimize `get_inactive_clients` (SQL-level filtering)
+    - `[ ]` Refine `get_revenue_stats`
+- `[ ]` Frontend Hardening (Phase 3)
+    - `[ ]` Add AbortController to Proactive Greeting
+- `[ ]` Verification & Walkthrough

@@ -618,7 +618,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_inactive_clients_rpc: {
+        Args: {
+          biz_id: string
+          sixty_days_ago: string
+        }
+        Returns: {
+          id: string
+          name: string
+          last_appt: string
+        }[]
+      }
     }
     Enums: {
       appointment_status:

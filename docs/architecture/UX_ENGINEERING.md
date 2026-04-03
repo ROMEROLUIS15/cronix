@@ -14,7 +14,16 @@ To prevent the Floating Action Button (FAB) from obstructing critical dashboard 
     - **Spring Animation**: Uses a spring physics engine (stiffness: 300, damping: 30) for natural movement without "jitter".
     - **Draggable Handle**: A subtle visual indicator at the top of the button suggests it can be moved.
 
-## ⚙️ Persistent UI State
+## 🎙️ Proactive Luis IA (Engagement)
+
+To transform the assistant into a proactive growth agent, we implemented a non-intrusive greeting system.
+
+### Interaction Pattern: Delayed Proactive Greeting
+- **Timing**: Luis waits 2 seconds after the Dashboard mounts before speaking.
+- **Persistence**: Using `sessionStorage: cronix-assistant-greeted` to ensure the user is only greeted once per session, avoiding auditory fatigue.
+- **Safety**: Implementation of `AbortController` in the `useEffect` hook to prevent API calls or audio playback from continuing if the user navigates away mid-greeting.
+
+## ⚙️ Persistent UI State & Feedback
 
 Using **UX Persistence** techniques, we ensure the interface respects user intent across sessions.
 
@@ -22,6 +31,12 @@ Using **UX Persistence** techniques, we ensure the interface respects user inten
 - **Key**: `cronix-assistant-y`
 - **Behavior**: Every time a drag operation ends, the new `y` coordinate is persisted.
 - **Hydration**: On mount, the component checks for a stored position. We use a "Hydration Guard" (`isLoaded` state) to prevent visual "jumps" during initial render.
+
+### Visual Feedback Loop
+El FAB de Luis IA comunica su estado interno mediante micro-animaciones:
+- **Idle**: Pulso sutil y respiración de color.
+- **Speaking/Processing**: Animación circular de carga (spinning) sincronizada con el estado `speaking`.
+- **Native Fallback**: Sincronización de eventos de finalización de audio nativo para restaurar el estado `idle` automáticamente.
 
 ## 🛠️ Technology Stack
 - **Framer Motion**: Used for motion-driven logic and physics-based animations.
