@@ -26,9 +26,10 @@ export function VoiceAssistantFab() {
     // ── PROACTIVE GREETING (Once per session) ──
     const hasGreeted = sessionStorage.getItem('cronix-assistant-greeted')
     const abortController = new AbortController()
+    let timer: NodeJS.Timeout | null = null
 
     if (!hasGreeted) {
-      const timer = setTimeout(async () => {
+      timer = setTimeout(async () => {
         try {
           const res = await fetch('/api/assistant/proactive', { signal: abortController.signal })
           const data = await res.json()
@@ -49,11 +50,11 @@ export function VoiceAssistantFab() {
           }
         }
       }, 2000)
+    }
 
-      return () => {
-        clearTimeout(timer)
-        abortController.abort()
-      }
+    return () => {
+      if (timer) clearTimeout(timer)
+      abortController.abort()
     }
   }, [y])
 
