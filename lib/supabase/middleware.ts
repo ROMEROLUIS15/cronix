@@ -9,6 +9,25 @@ const ACTIVITY_COOKIE      = 'cronix_last_activity'
 const SESSION_START_COOKIE = 'cronix_session_start'
 const STATUS_CACHE_COOKIE  = 'cronix_user_status'
 const STATUS_CACHE_TTL_S   = 5 * 60                   // 5 minutes
+const AUTH_RATE_LIMIT_MS   = 60 * 1000                // 1 minute window
+const MAX_AUTH_ATTEMPTS    = 5                        // 5 attempts/min
+const API_RATE_LIMIT_MS    = 60 * 1000                // 1 minute window
+const MAX_API_REQUESTS     = 60                       // 60 requests/min
+
+// ── Rate limit target paths ──────────────────────────────────────────────────
+function isAuthPath(pathname: string): boolean {
+  return [
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+  ].includes(pathname)
+}
+
+function isAPIPath(pathname: string): boolean {
+  // Protect all API routes except the activity heartbeat
+  return pathname.startsWith('/api/') && pathname !== '/api/activity/ping'
+}
 
 // ── Paths where activity is tracked ──────────────────────────────────────────
 function isTrackedPath(pathname: string): boolean {
@@ -82,9 +101,49 @@ function hasSessionCookies(request: NextRequest): boolean {
   return request.cookies.getAll().some(c => c.name.startsWith('sb-'))
 }
 
+// ── Extract Client IP ─────────────────────────────────────────────────────────
+function getClientIP(request: NextRequest): string {
+  const xForwardedFor = request.headers.get('x-forwarded-for')
+  if (xForwardedFor) {
+    return xForwardedFor.split(',')[0] ?? 'unknown'
+  }
+  return '127.0.0.1'
+}
+
 // ── Main session updater ──────────────────────────────────────────────────────
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // ── 0. Web Rate Limiting (Security Layer) ───────────────────────────────
+  const isAuth = isAuthPath(pathname)
+  const isApi  = isAPIPath(pathname)
+
+  if (isAuth || isApi) {
+    const ip = getClientIP(request)
+    const limit = isAuth ? MAX_AUTH_ATTEMPTS  : MAX_API_REQUESTS
+    const window = isAuth ? AUTH_RATE_LIMIT_MS : API_RATE_LIMIT_MS
+
+    const tempClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll() { return [] }, setAll() {} } }
+    )
+
+    const { data: allowed, error: rateError } = await tempClient.rpc('fn_web_check_rate_limit', {
+      p_identifier:  ip,
+      p_window_secs: window / 1000,
+      p_max_req:     limit
+    })
+
+    if (rateError) {
+      console.error('[Middleware] Rate limit RPC error:', rateError)
+    } else if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again in a minute.' },
+        { status: 429 }
+      )
+    }
+  }
 
   // Fast path — no Supabase cookies means unauthenticated user.
   // Skip the network round-trip to auth server entirely.

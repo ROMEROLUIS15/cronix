@@ -628,26 +628,35 @@ export default function SettingsPage() {
               </p>
             </div>
             
-            {(biz?.settings as unknown as BusinessSettingsJson)?.wa_verified && biz?.phone ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20 self-start sm:self-center">
-                <CheckCircle2 size={16} className="text-[#22C55E]" />
-                <span className="text-sm font-medium text-[#22C55E]">
-                  Verificado: {biz.phone}
-                </span>
-              </div>
-            ) : (
-              <a
-                href={`https://wa.me/${WA_NUMBER}?text=VINCULAR-${biz?.slug || ''}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#22C55E] hover:bg-[#16a34a] transition-colors self-start sm:self-center whitespace-nowrap"
-              >
-                <Smartphone size={16} className="text-white" />
-                <span className="text-sm font-semibold text-white">
-                  Vincular mi WhatsApp
-                </span>
-              </a>
-            )}
+            {(() => {
+              const settings = (biz?.settings as unknown as BusinessSettingsJson) || {};
+              const isVerified = settings.wa_verified === true;
+              
+              if (isVerified && biz?.phone) {
+                return (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20 self-start sm:self-center">
+                    <CheckCircle2 size={16} className="text-[#22C55E]" />
+                    <span className="text-sm font-medium text-[#22C55E]">
+                      Verificado: {biz.phone}
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <a
+                  href={`https://wa.me/${WA_NUMBER}?text=VINCULAR-${biz?.slug || ''}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#22C55E] hover:bg-[#16a34a] transition-colors self-start sm:self-center whitespace-nowrap"
+                >
+                  <Smartphone size={16} className="text-white" />
+                  <span className="text-sm font-semibold text-white">
+                    Vincular mi WhatsApp
+                  </span>
+                </a>
+              );
+            })()}
           </div>
         </div>
       </Card>

@@ -21,6 +21,11 @@
 
 import type { BusinessRagContext } from "./types.ts"
 import { addBreadcrumb }         from "../_shared/sentry.ts"
+import {
+  checkCircuitBreaker,
+  reportServiceFailure,
+  reportServiceSuccess,
+}                                from "./database.ts"
 
 // ── LLM Provider Configuration ────────────────────────────────────────────────
 // Change these two values + LLM_API_KEY in .env to swap providers at any time.
@@ -55,6 +60,7 @@ function heliconeHeaders(properties: Record<string, string> = {}): Record<string
 
 interface LlmResponse {
   choices?: Array<{ message?: { content?: string } }>
+  usage?:   { total_tokens: number }
   error?:   { message?: string; type?: string; code?: string }
 }
 
@@ -73,6 +79,16 @@ export class LlmRateLimitError extends Error {
   }
 }
 
+/**
+ * Thrown when the circuit breaker is OPEN (service is down).
+ */
+export class CircuitBreakerError extends Error {
+  constructor(serviceName: string) {
+    super(`Service ${serviceName} is currently unavailable (Circuit OPEN)`)
+    this.name = 'CircuitBreakerError'
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -81,9 +97,9 @@ export class LlmRateLimitError extends Error {
  *
  * @param buffer   - Raw audio bytes (ogg/mp4/webm — whatever Meta sends)
  * @param mimeType - MIME type from Meta (e.g. 'audio/ogg; codecs=opus')
- * @returns Transcribed text, or null if Whisper returns empty
+ * @returns Object with transcribed text (or null) and estimated tokens
  */
-export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<string | null> {
+export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<{ text: string | null; tokens: number }> {
   // @ts-ignore — Deno runtime global
   const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
   if (!apiKey) throw new Error('LLM_API_KEY no configurada')
@@ -99,14 +115,28 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   form.append('response_format', 'text')
 
   addBreadcrumb('Calling Whisper API', 'llm', 'info', { model: WHISPER_MODEL, mimeType })
-  const res = await fetch(WHISPER_API_URL, {
-    method:  'POST',
-    headers: { 
-      'Authorization': `Bearer ${apiKey}`,
-      ...heliconeHeaders({ type: 'audio-transcription' })
-    },
-    body:    form,
-  })
+  
+  // ── Circuit Breaker Check ──
+  const serviceName = 'GROQ_WHISPER'
+  if (!(await checkCircuitBreaker(serviceName))) {
+    addBreadcrumb('Whisper Circuit is OPEN', 'llm', 'error')
+    throw new CircuitBreakerError(serviceName)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(WHISPER_API_URL, {
+      method:  'POST',
+      headers: { 
+        'Authorization': `Bearer ${apiKey}`,
+        ...heliconeHeaders({ type: 'audio-transcription' })
+      },
+      body:    form,
+    })
+  } catch (err) {
+    await reportServiceFailure(serviceName)
+    throw err
+  }
 
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get('retry-after') ?? '60', 10)
@@ -114,17 +144,29 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
     throw new LlmRateLimitError(isNaN(retryAfter) ? 60 : retryAfter)
   }
 
-  if (!res.ok) throw new Error(`Whisper API error: ${await res.text()}`)
+  if (!res.ok) {
+    // 5xx errors or server-side issues count as failures for the breaker
+    if (res.status >= 500) await reportServiceFailure(serviceName)
+    throw new Error(`Whisper API error: ${await res.text()}`)
+  }
+
+  // If we got here, the service is healthy
+  await reportServiceSuccess(serviceName)
 
   const transcript = (await res.text()).trim()
-  return transcript || null
+  
+  // Whisper on Groq doesn't return tokens in the text response_format.
+  // We estimate 50 tokens base + 1 token per word as a conservative cost measure.
+  const estimatedTokens = transcript ? 50 + transcript.split(/\s+/).length : 0
+  
+  return { text: transcript || null, tokens: estimatedTokens }
 }
 
 export async function processConversation(
   prompt:       string,
   context:      BusinessRagContext,
   customerName: string
-): Promise<string> {
+): Promise<{ text: string; tokens: number }> {
   // @ts-ignore — Deno runtime global
   const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
   if (!apiKey) throw new Error('LLM_API_KEY no configurada')
@@ -148,18 +190,31 @@ export async function processConversation(
     business: context.business.name
   })
 
-  const res = await fetch(LLM_API_URL, {
-    method:  'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type':  'application/json',
-      ...heliconeHeaders({ 
-        tenant: context.business.slug,
-        customer: customerName
-      })
-    },
-    body: JSON.stringify(payload),
-  })
+  // ── Circuit Breaker Check ──
+  const serviceName = 'GROQ_LLM'
+  if (!(await checkCircuitBreaker(serviceName))) {
+    addBreadcrumb('LLM Circuit is OPEN', 'llm', 'error')
+    throw new CircuitBreakerError(serviceName)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(LLM_API_URL, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+        ...heliconeHeaders({ 
+          tenant: context.business.slug,
+          customer: customerName
+        })
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    await reportServiceFailure(serviceName)
+    throw err
+  }
 
   const data: LlmResponse = await res.json()
 
@@ -169,9 +224,16 @@ export async function processConversation(
       const retryAfter = parseInt(res.headers.get('retry-after') ?? '60', 10)
       throw new LlmRateLimitError(isNaN(retryAfter) ? 60 : retryAfter)
     }
+    
+    // 5xx errors or server-side issues count as failures for the breaker
+    if (res.status >= 500) await reportServiceFailure(serviceName)
+
     const errPayload = data.error ?? data
     throw new Error(`LLM API Error: ${JSON.stringify(errPayload)}`)
   }
+
+  // If we got here, the service is healthy
+  await reportServiceSuccess(serviceName)
 
   const textResponse = data.choices?.[0]?.message?.content
   if (!textResponse) {
@@ -179,8 +241,15 @@ export async function processConversation(
     throw new Error(`Respuesta vacía del LLM: ${JSON.stringify(data)}`)
   }
 
-  addBreadcrumb('LLM response received', 'llm', 'info', { response_length: textResponse.length })
-  return textResponse.trim()
+  addBreadcrumb('LLM response received', 'llm', 'info', { 
+    response_length: textResponse.length,
+    tokens:          data.usage?.total_tokens ?? 0
+  })
+  
+  return { 
+    text:   textResponse.trim(), 
+    tokens: data.usage?.total_tokens ?? 0 
+  }
 }
 
 // ── Private: System Instruction Builder ───────────────────────────────────────

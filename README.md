@@ -69,8 +69,8 @@
   - [Environment Variables](#environment-variables)
   - [Database Setup](#database-setup)
   - [Running Locally](#running-locally)
+- [Technical Documentation & Deep Dives](#-technical-documentation--deep-dives)
 - [Deployment](#deployment)
-- [Scalability & Future Roadmap](#scalability--future-roadmap)
 - [Author](#author)
 - [License](#license)
 
@@ -80,7 +80,9 @@
 
 Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) still manage appointments via paper, personal WhatsApp chats, or generic tools not designed for the region. Cronix solves this with:
 
-- **A WhatsApp AI Agent** that books, reschedules, and cancels appointments in natural Spanish — including voice notes
+-   **⚙️ UX Persistence**: Movable assistant FAB with remembered position. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/UX_ENGINEERING.md)
+-   **⚡ Resilience Layer (Groq/ElevenLabs)**: Automatic model fallback (70b -> 8b) and browser-TTS fallback. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md)
+- **🛡️ Global Reliability (Blindaje)**: Centralized Error Handler (HOF), Request ID traceability, and Dead Letter Queue (DLQ) for webhooks.
 - **A full business dashboard** (PWA) for managing clients, team, finances, and analytics
 - **Multi-tenant architecture** where multiple businesses share infrastructure securely — each one fully isolated at the database level via PostgreSQL Row Level Security
 - **Zero-password authentication** with Passkeys (Face ID / fingerprint) for frictionless mobile access
@@ -92,7 +94,7 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 | Area                    | Implementation                                                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **AI Agent**            | Conversational actuator using Groq + Llama-3.3-70B with Structured In-Memory RAG and Action Tag routing (see [AI Architecture](#ai-agent-architecture))             |
-| **Security**            | Passkeys (WebAuthn), Meta HMAC-SHA256, 3-layer anti-spam, PII scrubbing, PostgreSQL RLS with 26 pgTAP tests                                                         |
+| **Security**            | Passkeys (WebAuthn), Meta HMAC-SHA256, 7-layer security suite, PII scrubbing, PostgreSQL RLS with **45+ pgTAP tests**                                                        |
 | **High Concurrency**    | Asynchronous message processing via **Upstash QStash**, decoupling the Meta webhook from heavy AI inference to prevent timeouts and message drops                   |
 | **Voice Support**       | Real-time voice note transcription via Groq Whisper (`whisper-large-v3-turbo`), converting spoken Spanish into scheduled appointments                               |
 | **Push & WA Alerts**    | Multi-channel notifications for business owners including direct WhatsApp alerts for new bookings, reschedules, and cancellations to keep their agenda synchronized |
@@ -102,6 +104,19 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 | **LLM Observability**   | Helicone Proxy Gateway tracking latency, token cost, threat monitoring, and prompts per tenant (`heliconeHeaders`)                                                  |
 | **Zero-Latency Opt-in** | B2B WhatsApp verification interceptor (`VINCULAR-[slug]`) enabling real-time secure admin alerts without LLM overhead                                               |
 | **Offline-First**       | PWA with custom Service Worker — installable on iOS, Android, and desktop                                                                                           |
+
+---
+
+## ⚖️ Confiabilidad y Observabilidad (Reliability Engineering)
+
+Cronix está diseñado con una arquitectura de **Blindaje Global**:
+
+1.  **Observabilidad**: Integración profunda con Sentry y Logger Centralizado.
+2.  **Traceability**: Sistema de `x-request-id` para trazabilidad de errores entre servicios.
+3.  **Webhook Resilience**: Dead Letter Queue (DLQ) para garantizar **Zero Data Loss** en integraciones críticas.
+4.  **AI Orchestrator**: Fallbacks automáticos de modelos y servicios de voz para garantizar operatividad 24/7.
+
+Consulta la [Documentación Técnica de Confiabilidad](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md) para más detalles.
 
 ---
 
@@ -152,7 +167,7 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 │  │               │    │  + Auth + RLS │    │  ├─ whatsapp-webhook     │  │
 │  │  ├─ Dashboard │    │               │    │  ├─ process-whatsapp     │  │
 │  │  ├─ Auth      │    │  17 Migrations│    │  ├─ push-notify          │  │
-│  │  ├─ PWA/SW    │    │  26 pgTAP     │    │  └─ cron-reminders      │  │
+│  │  ├─ PWA/SW    │    │  45+ pgTAP    │    │  └─ cron-reminders      │  │
 │  │  └─ API       │    │  Tests        │    │                          │  │
 │  └──────┬───────┘    └───────┬───────┘    └───────────┬──────────────┘  │
 │         │                    │                        │                  │
@@ -220,12 +235,17 @@ cronix/
 │   │   ├── whatsapp-service/   #   Template message sender
 │   │   ├── push-notify/        #   Web Push (RFC 8291, zero npm deps)
 │   │   └── cron-reminders/     #   Timezone-aware daily reminders
-│   ├── migrations/             #   17 versioned SQL migrations
-│   └── tests/                  #   pgTAP RLS tests (26 tests)
+│   ├── docs/                   # Organized technical documentation
+│   │   ├── architecture/       # AI, System, and ADRs
+│   │   ├── security/           # Security and Rate Limits
+│   │   ├── operations/         # Fixes and Postmortems
+│   │   └── requirements/       # Product requirements
+│   ├── migrations/             # 17 versioned SQL migrations
+│   └── tests/                  # pgTAP RLS tests (45 tests)
 ├── __tests__/                  # Unit tests (Vitest)
 ├── worker/                     # Custom Service Worker (merged by next-pwa)
 ├── public/                     # PWA manifest, icons, SW output
-└── AI_ARCHITECTURE.md          # AI design decision document
+└── docs/                       # Project Documentation Folder
 ```
 
 ---
@@ -234,7 +254,22 @@ cronix/
 
 The WhatsApp AI Agent is the core differentiator of Cronix. It processes natural language (text and voice) from WhatsApp and executes real database transactions — booking, rescheduling, and canceling appointments — without the customer ever leaving their chat.
 
-> 📖 For a deep dive into the architectural rationale, see [AI_ARCHITECTURE.md](./AI_ARCHITECTURE.md).
+> 📖 For a deep dive into the architectural rationale, see [AI_ARCHITECTURE.md](./docs/architecture/AI_ARCHITECTURE.md).
+
+## 📚 Technical Documentation & Deep Dives
+
+For technical leads and recruiters, the following documents provide a deep dive into specific areas of the platform:
+
+- **[Architecture Decisions](./docs/architecture/ARCHITECTURE_DECISIONS.md):** Rationale behind core infrastructure choices.
+- **[A.I. Architecture](./docs/architecture/AI_ARCHITECTURE.md):** Design of the WhatsApp AI Agent and Action Tag system.
+- **[Security & Rate Limits](./docs/security/SECURITY_AND_RATE_LIMITS.md):** Detailed guide on the 7-layer defense suite.
+- **[Database Security Testing](./docs/architecture/DATABASE_SECURITY_TESTING.md):** Deep dive into **pgTAP** and RLS isolation verification.
+- **[Web Push Standards](./docs/architecture/WEB_PUSH_STANDARDS_DEEP_DIVE.md):** Technical implementation of **RFC 8291** with zero-dependencies.
+- **[Passkey & WebAuthn](./docs/architecture/PASSKEY_WEBAUTHN_IMPLEMENTATION.md):** Cryptographic flow of biometric (passwordless) authentication.
+- **[Dashboard Assistant AI](./docs/architecture/DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md):** Technical overview of "Luis" (Tools, matching, STT/TTS).
+- **[Frontend Architecture](./docs/architecture/FRONTEND_ARCHITECTURE_AND_STATE.md):** Repository Pattern, TanStack Query, and Zod validation.
+- **[WhatsApp Fix Postmortem](./docs/operations/WHATSAPP_FIX_POSTMORTEM.md):** A detailed technical retrospective on a critical production fix.
+- **[Product Requirements](./docs/requirements/REQUIREMENTS_SPECIFICATION.md):** Full PRD covering brand identity, features, and database schema.
 
 ### Structured In-Memory RAG
 
@@ -404,34 +439,59 @@ To comply with Meta Business Opt-In policies without incurring LLM processing de
 2. Irrevocably pairs the legitimate WhatsApp remote sender number to the `business` record.
 3. Automatically authenticates the owner to receive real-time automated AI booking alerts.
 
-### 3-Layer Anti-Spam Defense
+### 7-layer Security & Resilience Suite (WhatsApp)
+
+The AI Agent is protected by a multi-tier defense system designed for production-grade reliability and cost control:
 
 ```
-Layer 1: MESSAGE RATE LIMIT
+Layer 1: HMAC SIGNATURE VERIFICATION
+├── Validates payload integrity via X-Hub-Signature-256 (SHA256)
+└── Rejects non-Meta traffic at the edge before processing
+
+Layer 2: MESSAGE RATE LIMIT (User)
 ├── 10 messages / 60 seconds per phone number
-├── Atomic PostgreSQL function (fn_wa_check_rate_limit)
-├── Fail-open on DB error (never blocks legitimate users)
-└── Silent drop — no error message to spammer
+├── Atomic PostgreSQL logic (fn_wa_check_rate_limit)
+└── Prevents single-user bot exhaustion
 
-Layer 2: MESSAGE SANITIZATION
-├── 500 character limit
-├── Strip injected Action Tags ([CONFIRM_BOOKING...])
-├── Strip prompt injection patterns ("ignore previous instructions")
-├── Strip HTML/XML tags
-└── Normalize whitespace
+Layer 3: MESSAGE RATE LIMIT (Business)
+├── 50 messages / 60 seconds per business (Tenant)
+├── Atomic PostgreSQL logic (fn_wa_check_business_limit)
+└── Protects platform throughput from localized spikes
 
-Layer 3: BOOKING RATE LIMIT
-├── 2 bookings / 24 hours per phone per business
-├── Atomic PostgreSQL function (fn_wa_check_booking_limit)
-├── User-friendly message when exceeded
-└── Prevents calendar flooding
+Layer 4: CIRCUIT BREAKER (Resilience)
+├── Trips after 3 consecutive Groq/AI provider failures
+├── Auto-recovers after 2 minutes of "Open" state
+└── Prevents cascading failures and provides user-friendly fallback
+
+Layer 5: TOKEN QUOTA (Cost Control)
+├── Daily token consumption limit per business (e.g., 50k tokens)
+├── Real-time tracking of completions and transcriptions
+└── Hard financial ceiling to protect platform profitability
+
+Layer 6: MEDIA PROTECTION (Infrastructure)
+├── 5.0 MB hard limit on voice notes and media downloads
+├── Header-level check (Content-Length) before downloading binary
+└── Prevents "Denial of Wallet" via massive file ingestion
+
+Layer 7: MESSAGE SANITIZATION
+├── 500 character limit + Regex scrubbing
+├── Strips prompt injection attempts and malformed Action Tags
+└── Fail-safe against model manipulation
 ```
+
+### Web & API Rate Limiting
+
+The administrative dashboard implements IP-based protection at the middleware level:
+
+- **Login Protection:** 5 attempts / minute per IP to prevent brute-force attacks.
+- **Global API Limit:** 60 requests / minute per IP for all `/api/*` routes.
+- **Monitoring:** Suspicious activity is logged and visible via `v_web_suspicious_activity`.
 
 ### Multi-Tenant Data Isolation (RLS)
 
 Every database query is scoped to the authenticated user's `business_id` via PostgreSQL Row Level Security. This is enforced at the database level — not application level — meaning even a compromised server cannot read another tenant's data.
 
-- **26 pgTAP tests** verify RLS policies against real PostgreSQL
+- **45+ pgTAP tests** verify RLS policies against real PostgreSQL
 - All tables enforce `business_id` isolation
 - Edge Functions use `SUPABASE_SERVICE_ROLE_KEY` with explicit `business_id` filtering
 
@@ -448,6 +508,7 @@ To comply with Meta Business policies and prevent spam blocks, Cronix implements
 1. Merchant clicks a `wa.me` deep-link from the dashboard with an encrypted business slug.
 2. Sending the system-generated message initiates a `user-initiated` conversation.
 3. The webhook intercepts the keyword millisecond-fast (bypassing LLM) and links the phone number to the business record securely.
+4. **Already Verified Guard:** AI intelligently recognizes if the sender is already linked, responding with a specialized confirmation instead of redundant writes.
 
 ### PII Scrubbing in Sentry
 
@@ -614,7 +675,7 @@ Full-stack Sentry integration across all execution environments:
 
 ## Database Design
 
-17 versioned migrations in `supabase/migrations/`:
+24 versioned migrations in `supabase/migrations/`:
 
 | Migration                         | Purpose                                                                                  |
 | --------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -635,6 +696,11 @@ Full-stack Sentry integration across all execution environments:
 | `wa_booking_rate_limit`           | Atomic booking limiter (`fn_wa_check_booking_limit`)                                     |
 | `fn_find_client_by_phone`         | Client lookup by cleaned phone digits                                                    |
 | `wa_booking_auto_confirm`         | Auto-confirmed bookings (Silent Execution pattern)                                       |
+| `wa_business_usage`            | Aggregated usage tracking per business                                                   |
+| `web_rate_limiting`            | IP-based rate limiting for Web & API                                                     |
+| `web_monitoring`               | View and logic for suspicious activity monitoring                                        |
+| `circuit_breaker`              | Service health tracking and auto-recovery logic                                          |
+| `token_quota`                  | Precision cost control via daily token usage tracking                                    |
 
 ---
 

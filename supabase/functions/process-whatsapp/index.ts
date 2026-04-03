@@ -7,16 +7,18 @@
  * Security layers:
  *  1. Serverless queue protection (QStash Receiver Header Verification).
  *  2. Message rate limiting — 10 msgs / 60s per phone (fn_wa_check_rate_limit)
- *  3. Message sanitization — strips prompt injection patterns
- *  4. Booking rate limiting — 2 bookings / 24h per phone (fn_wa_check_booking_limit)
- *  5. Action tag regex parsing — LLM cannot self-execute
+ *  3. Business usage quota — 50 msgs / 60s per business (fn_wa_check_business_limit)
+ *  4. Message sanitization — strips prompt injection patterns
+ *  5. Booking rate limiting — 2 bookings / 24h per phone (fn_wa_check_booking_limit)
+ *  6. Action tag regex parsing — LLM cannot self-execute
  */
 
 import { serve }                   from "https://deno.land/std@0.168.0/http/server.ts"
 import { Receiver }                from "https://esm.sh/@upstash/qstash@2.7.20"
 import { processConversation,
          transcribeAudio,
-         LlmRateLimitError }       from "./ai-agent.ts"
+         LlmRateLimitError,
+         CircuitBreakerError }     from "./ai-agent.ts"
 import { sendWhatsAppMessage,
          downloadMediaBuffer }     from "./whatsapp.ts"
 import type {
@@ -38,7 +40,13 @@ import {
   cancelAppointmentById,
   getAppointmentDetails,
   getBookedSlots,
+  checkCircuitBreaker,
+  reportServiceFailure,
+  reportServiceSuccess,
+  checkTokenQuota,
+  trackTokenUsage,
   checkMessageRateLimit,
+  checkBusinessUsageLimit,
   checkBookingRateLimit,
   logInteraction,
   localTimeToUTC,
@@ -50,6 +58,7 @@ import {
   setSentryTag,
   flushSentry,
 }                                  from "../_shared/sentry.ts"
+import { logToDLQ }                from "../_shared/supabase.ts"
 
 initSentry('process-whatsapp')
 
@@ -193,7 +202,14 @@ serve(async (req: Request) => {
         try {
           const { buffer, mimeType } = await downloadMediaBuffer(msg.audio.id)
           addBreadcrumb('Media downloaded, transcribing with Whisper', 'llm', 'info')
-          rawText = await transcribeAudio(buffer, mimeType)
+          
+          const result = await transcribeAudio(buffer, mimeType)
+          rawText = result.text
+
+          // Track Whisper usage immediately
+          if (business?.id && result.tokens > 0) {
+            await trackTokenUsage(business.id, result.tokens)
+          }
         } catch (err) {
           if (err instanceof LlmRateLimitError) throw err
           captureException(err, { stage: 'voice_transcription', sender })
@@ -201,6 +217,14 @@ serve(async (req: Request) => {
           await sendWhatsAppMessage(sender, "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?")
           await flushSentry()
           return json({ success: true, message: 'Voice transcription failed — user notified' })
+        } catch (err) {
+          if (err instanceof CircuitBreakerError) {
+            addBreadcrumb('Whisper Circuit open hit', 'llm', 'error')
+            await sendWhatsAppMessage(sender, "🤖 Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?")
+            await flushSentry()
+            return json({ success: true })
+          }
+          throw err
         }
       }
 
@@ -213,10 +237,12 @@ serve(async (req: Request) => {
       const textUpper = rawText.toUpperCase().trim()
       if (textUpper.startsWith('VINCULAR-')) {
         const slug = textUpper.replace('VINCULAR-', '').toLowerCase()
-        const businessName = await verifyBusinessPhone(slug, sender)
+        const result = await verifyBusinessPhone(slug, sender)
         
-        if (businessName) {
-          const successMsg = `✅ *¡WhatsApp vinculado exitosamente!*\n\nTu número ha sido registrado para el negocio *${businessName}*.\nA partir de ahora recibirás alertas instantáneas cuando la Inteligencia Artificial agende nuevas citas.\n\n_Seguridad Cronix_ 🛡️`
+        if (result === 'ALREADY_VERIFIED') {
+          await sendWhatsAppMessage(sender, `✅ *¡WhatsApp ya verificado!*\n\nEste número ya se encuentra vinculado correctamente al negocio. No es necesario realizar la vinculación de nuevo.\n\n_Seguridad Cronix_ 🛡️`)
+        } else if (result) {
+          const successMsg = `✅ *¡WhatsApp vinculado exitosamente!*\n\nTu número ha sido registrado para el negocio *${result}*.\nA partir de ahora recibirás alertas instantáneas cuando la Inteligencia Artificial agende nuevas citas.\n\n_Seguridad Cronix_ 🛡️`
           await sendWhatsAppMessage(sender, successMsg)
         } else {
           const errMsg = `❌ *Error de vinculación*\n\nNo se encontró ningún negocio con el identificador "${slug}". Verifica que el enlace sea correcto.`
@@ -293,6 +319,28 @@ serve(async (req: Request) => {
       setSentryTag('business_name', business.name)
       setSentryTag('business_slug', business.slug || 'unknown')
       addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
+      
+      // Layer 3: Business aggregate rate limit
+      const withinBusinessQuota = await checkBusinessUsageLimit(business.id)
+      if (!withinBusinessQuota) {
+        addBreadcrumb('Business rate limited', 'rate-limit', 'warning', { business_id: business.id })
+        // Silent drop to avoid confirming attack success, or generic "busy" message
+        await flushSentry()
+        return json({ success: true, message: 'Business quota exceeded — silent drop' })
+      }
+
+      // Layer 5: Token Quota (Precision cost control)
+      // We use a default of 50,000 tokens/day if not specified in settings.
+      const dailyTokenLimit = context.business.settings.wa_daily_token_limit ?? 50000
+      const withinTokenQuota = await checkTokenQuota(business.id, dailyTokenLimit)
+      
+      if (!withinTokenQuota) {
+        addBreadcrumb('Token quota exceeded', 'rate-limit', 'warning', { business_id: business.id })
+        const quotaMsg = "🤖 Lo siento, este negocio ha alcanzado su límite de procesamiento diario. Por favor intenta de nuevo mañana o contacta al administrador."
+        await sendWhatsAppMessage(sender, quotaMsg)
+        await flushSentry()
+        return json({ success: true, message: 'Token quota exceeded — user notified' })
+      }
 
       const timezone = business.timezone ?? 'UTC'
 
@@ -333,7 +381,13 @@ serve(async (req: Request) => {
       // ── AI call ───────────────────────────────────────────────────────────
       let aiResponse: string
       try {
-        aiResponse = await processConversation(text, context, customerName)
+        const result = await processConversation(text, context, customerName)
+        aiResponse = result.text
+        
+        // Track LLM usage
+        if (result.tokens > 0) {
+          await trackTokenUsage(business.id, result.tokens)
+        }
       } catch (err) {
         if (err instanceof LlmRateLimitError) {
           addBreadcrumb('LLM Rate limit hit', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
@@ -345,6 +399,14 @@ serve(async (req: Request) => {
           await flushSentry()
           return json({ success: true })
         }
+        
+        if (err instanceof CircuitBreakerError) {
+          addBreadcrumb('LLM Circuit open hit', 'llm', 'error')
+          await sendWhatsAppMessage(sender, "🤖 Lo siento, mi cerebro de IA está en mantenimiento breve. Por favor, intenta de nuevo en un minuto.")
+          await flushSentry()
+          return json({ success: true })
+        }
+
         captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text.length })
         throw err
       }
@@ -545,9 +607,13 @@ serve(async (req: Request) => {
     } catch (error) {
       captureException(error, { stage: 'webhook_post_handler_qstash' })
       
+      // 🛡️ DEAD LETTER QUEUE (Autopsy)
+      await logToDLQ(rawBody, error, 'process-whatsapp')
+
       // Notify user of technical failure instead of silence
       try {
-        const sender = (JSON.parse(rawBody) as MetaWebhookPayload).entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from
+        const payload = JSON.parse(rawBody) as MetaWebhookPayload
+        const sender  = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from
         if (sender) {
           await sendWhatsAppMessage(sender, "⚠️ Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento.")
         }

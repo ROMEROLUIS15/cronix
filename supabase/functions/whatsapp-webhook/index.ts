@@ -15,6 +15,7 @@ import {
   addBreadcrumb,
   flushSentry,
 } from "../_shared/sentry.ts"
+import { logToDLQ } from "../_shared/supabase.ts"
 
 initSentry('whatsapp-webhook')
 
@@ -165,8 +166,16 @@ serve(async (req: Request) => {
 
     } catch (error) {
       captureException(error, { stage: 'webhook_post_handler' })
+      
+      // 🛡️ DEAD LETTER QUEUE (Zero Data Loss)
+      // Save the raw payload even if our logic failed so we can audit/retry later.
+      await logToDLQ(rawBody, error, 'whatsapp-webhook')
+
       await flushSentry()
-      return json({ error: 'Internal Server Error' }, 500)
+      
+      // Return 202 (Accepted) to Meta so they don't retry a known-broken internal state, 
+      // but we have it saved for autopsy.
+      return json({ error: 'Internal logic failed, saved to DLQ' }, 202)
     }
   }
 

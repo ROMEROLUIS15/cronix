@@ -59,11 +59,20 @@ export async function downloadMediaBuffer(mediaId: string): Promise<{ buffer: Ar
 
   const { url, mime_type } = await metaRes.json() as { url: string; mime_type: string }
 
-  // 2. Download binary
+  // 2. Download binary (with 5MB safety limit)
   const cdnRes = await fetch(url, {
     headers: { 'Authorization': `Bearer ${accessToken}` },
   })
+  
   if (!cdnRes.ok) throw new Error(`Meta CDN download error: ${await cdnRes.text()}`)
+
+  // Check Content-Length to avoid downloading massive assets
+  const contentLength = parseInt(cdnRes.headers.get('content-length') ?? '0', 10)
+  const MAX_SIZE      = 5 * 1024 * 1024 // 5MB
+  
+  if (contentLength > MAX_SIZE) {
+    throw new Error(`Media file too large: ${contentLength} bytes (Max: 5MB)`)
+  }
 
   return { buffer: await cdnRes.arrayBuffer(), mimeType: mime_type ?? 'audio/ogg' }
 }

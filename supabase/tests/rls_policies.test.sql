@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(33);
+SELECT plan(45);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -273,6 +273,35 @@ BEGIN
   VALUES
     (reminder_a, appt_a, biz_a, NOW() + INTERVAL '23 hours', 60, 'pending', 'whatsapp')
   ON CONFLICT DO NOTHING;
+
+  -- ── New Fixtures for Financial and Log Tests ───────────────────────────────
+  
+  -- Expenses
+  INSERT INTO public.expenses (id, business_id, category, amount, description, expense_date)
+  VALUES 
+    ('11111111-0000-0000-0000-000000000001', biz_a, 'rent', 1000, 'Renta A', NOW()),
+    ('22222222-0000-0000-0000-000000000001', biz_b, 'utilities', 500, 'Luz B', NOW())
+  ON CONFLICT DO NOTHING;
+
+  -- Transactions
+  INSERT INTO public.transactions (id, business_id, amount, net_amount, method)
+  VALUES
+    ('33333333-0000-0000-0000-000000000001', biz_a, 100, 95, 'cash'),
+    ('44444444-0000-0000-0000-000000000001', biz_b, 200, 190, 'card')
+  ON CONFLICT DO NOTHING;
+
+  -- Audit Logs
+  INSERT INTO public.wa_audit_logs (id, business_id, sender_phone, message_text, ai_response)
+  VALUES
+    ('55555555-0000-0000-0000-000000000001', biz_a, '584140000000', 'hola', 'hola soy luis')
+  ON CONFLICT DO NOTHING;
+
+  -- Passkeys
+  INSERT INTO public.user_passkeys (id, user_id, credential_id, public_key)
+  VALUES
+    ('66666666-0000-0000-0000-000000000001', uid_a, 'cred_a', 'pubkey_a'),
+    ('77777777-0000-0000-0000-000000000001', uid_b, 'cred_b', 'pubkey_b')
+  ON CONFLICT DO NOTHING;
 END $$;
 
 -- Owner A can see their reminder
@@ -421,6 +450,88 @@ SELECT lives_ok(
     VALUES ('No Phone 2', NULL, 'aaaaaaaa-0000-0000-0000-000000000001')
   $q$,
   'multiple NULL phones in same business are allowed'
+);
+
+-- ── 13. Financial Isolation (Expenses & Transactions) ────────────────────────
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.expenses WHERE business_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can see own expenses'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.expenses WHERE business_id = 'bbbbbbbb-0000-0000-0000-000000000002'),
+  0,
+  'Owner A cannot see Owner B expenses'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.transactions WHERE business_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can see own transactions'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.transactions WHERE business_id = 'bbbbbbbb-0000-0000-0000-000000000002'),
+  0,
+  'Owner A cannot see Owner B transactions'
+);
+
+RESET ROLE;
+
+-- ── 14. Audit Log Privacy (Owner cannot see raw logs) ─────────────────────────
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_audit_logs),
+  0,
+  'Owner A cannot see wa_audit_logs (Privacy layer)'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE service_role;
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_audit_logs WHERE id = '55555555-0000-0000-0000-000000000001'),
+  1,
+  'service_role can see wa_audit_logs'
+);
+RESET ROLE;
+
+-- ── 15. Passkey Isolation ────────────────────────────────────────────────────
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.user_passkeys WHERE user_id = '00000000-0000-0000-0000-000000000001'),
+  1,
+  'User A can see own passkeys'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.user_passkeys WHERE user_id = '00000000-0000-0000-0000-000000000002'),
+  0,
+  'User A cannot see User B passkeys'
+);
+
+RESET ROLE;
+
+-- ── 16. Additional Policy Checks ─────────────────────────────────────────────
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='expenses'),
+  'policy exists on expenses'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='transactions'),
+  'policy exists on transactions'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_passkeys'),
+  'policy exists on user_passkeys'
 );
 
 SELECT * FROM finish();

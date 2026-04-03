@@ -330,44 +330,50 @@ export default function DashboardPage() {
               Mobile:  two rows — tabs on top, action buttons below (full width)
               sm+:     single compact row — all 4 buttons together, no spreading
           */}
-          {/* — Mobile: stacked — */}
-          <div className="flex items-center gap-2 sm:hidden">
+          {/* — Mobile: 2x2 symmetrical grid — */}
+          <div className="grid grid-cols-2 gap-2.5 sm:hidden">
+            {/* Agenda */}
             <button
               onClick={() => setTab("agenda")}
-              className="flex-1 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+              className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
               style={
                 tab === "agenda"
-                  ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF" }
-                  : { background: "rgba(0,98,255,0.1)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
+                  ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }
+                  : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.15)" }
               }
             >
-              <CalendarDays size={15} /><span>Agenda</span>
+              <CalendarDays size={16} /><span>Agenda</span>
             </button>
-            <Link href="/dashboard/finances/new" className="flex-1 block">
+
+            {/* Cobros */}
+            <Link href="/dashboard/finances/new" className="w-full">
               <button
-                className="w-full h-full px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-                style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.2)" }}
+                className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.15)" }}
               >
-                <DollarSign size={15} /><span>Cobros</span>
+                <DollarSign size={16} /><span>Cobros</span>
               </button>
             </Link>
-          </div>
-          <div className="flex items-center gap-2 sm:hidden">
-            <Link href="/dashboard/clients/new" className="flex-1">
+
+            {/* Nuevo Cliente */}
+            <Link href="/dashboard/clients/new" className="w-full">
               <Button
-                variant="secondary"
-                className="w-full justify-center text-sm px-3 py-2 rounded-xl font-semibold"
-                style={{ background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
-                leftIcon={<User size={15} />}
+                variant="primary"
+                className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
+                style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
+                leftIcon={<User size={16} />}
               >
                 Nuevo Cliente
               </Button>
             </Link>
-            <Link href="/dashboard/appointments/new" className="flex-1">
+
+            {/* Nueva Cita */}
+            <Link href="/dashboard/appointments/new" className="w-full">
               <Button
                 variant="primary"
-                className="w-full justify-center text-sm px-3 py-2 rounded-xl font-semibold"
-                leftIcon={<Plus size={15} />}
+                className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
+                style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
+                leftIcon={<Plus size={16} />}
               >
                 Nueva Cita
               </Button>

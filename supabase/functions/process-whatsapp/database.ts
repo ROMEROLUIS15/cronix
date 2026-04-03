@@ -72,6 +72,77 @@ export async function checkBookingRateLimit(
   return data as boolean
 }
 
+/**
+ * Returns true if the business is within its allowed message quota.
+ * Protects against aggregate floods per tenant. Fails open on DB error.
+ */
+export async function checkBusinessUsageLimit(businessId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('fn_wa_check_business_limit', {
+    p_business_id: business_id,
+    p_window_secs: 60,
+    p_max_msgs:    50,
+  })
+  if (error) return true  // fail-open
+  return data as boolean
+}
+
+// ── Circuit Breaker (Third-party protection) ──────────────────────────────────
+
+/**
+ * Returns true if the service is allowed to be called (circuit is CLOSED).
+ */
+export async function checkCircuitBreaker(serviceName: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('fn_wa_check_circuit_breaker', {
+    p_service_name: service_name,
+    p_reset_mins:   2
+  })
+  if (error) return true  // fail-open
+  return data as boolean
+}
+
+/**
+ * Reports a service failure to the circuit breaker.
+ */
+export async function reportServiceFailure(serviceName: string): Promise<void> {
+  await supabase.rpc('fn_wa_report_service_failure', {
+    p_service_name: service_name,
+    p_threshold:    3
+  })
+}
+
+/**
+ * Reports a service success to the circuit breaker.
+ */
+export async function reportServiceSuccess(serviceName: string): Promise<void> {
+  await supabase.rpc('fn_wa_report_service_success', {
+    p_service_name: service_name
+  })
+}
+
+// ── Token Quota (Cost control) ────────────────────────────────────────────────
+
+/**
+ * Returns true if the business is within its allowed token quota for today.
+ */
+export async function checkTokenQuota(businessId: string, dailyLimit: number): Promise<boolean> {
+  const { data, error } = await supabase.rpc('fn_wa_check_token_quota', {
+    p_business_id: businessId,
+    p_daily_limit: dailyLimit,
+  })
+  if (error) return true // fail-open
+  return data as boolean
+}
+
+/**
+ * Updates the token consumption for a business today.
+ */
+export async function trackTokenUsage(businessId: string, tokens: number): Promise<void> {
+  await supabase.rpc('fn_wa_track_token_usage', {
+    p_business_id: businessId,
+    p_tokens:      tokens,
+  })
+}
+
 // ── Business routing (single shared number → slug + session) ─────────────────
 
 /**
@@ -142,12 +213,18 @@ export async function getBusinessByPhone(waIdentifier: string): Promise<Business
  * Updates the business phone number and sets wa_verified to true in settings.
  * Returns the business name if successful, null otherwise.
  */
-export async function verifyBusinessPhone(slug: string, phone: string): Promise<string | null> {
+export async function verifyBusinessPhone(slug: string, phone: string): Promise<string | 'ALREADY_VERIFIED' | null> {
   const business = await getBusinessBySlug(slug)
   if (!business) return null
 
+  // Check if it's already verified with the SAME or different phone
+  const settings = (business.settings ?? {}) as Record<string, any>
+  if (settings.wa_verified === true && business.phone === phone) {
+    return 'ALREADY_VERIFIED'
+  }
+
   const newSettings = {
-    ...business.settings,
+    ...settings,
     wa_verified: true
   }
 
@@ -171,7 +248,7 @@ export async function verifyBusinessPhone(slug: string, phone: string): Promise<
     business_id:  business.id,
     sender_phone: phone,
     message_text: `[SYSTEM] VINCULAR-${slug}`,
-    ai_response:  `Business verified: ${data.name}`,
+    ai_response:  `Business verified/updated: ${data.name}`,
   })
   
   return data.name

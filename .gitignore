@@ -1,5 +1,4 @@
 # Postmortem interno
-WHATSAPP_FIX_POSTMORTEM.md
 
 # Dependencias (¡Pesadísimas!)
 node_modules/
@@ -65,4 +64,3 @@ coverage/
 supabase/.temp/
 
 # Archivos de documentación no publicables
-TECHNICAL_DOCUMENTATION.md

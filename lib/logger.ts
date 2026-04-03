@@ -10,28 +10,44 @@
  *   logger.error('getSession', 'DB fetch failed', dbError)
  *   logger.warn('push-notify', 'invoke error', error.message)
  *
+/**
+ * Centralized logger — single point of control for all app logging.
+ *
+ * Why: Eliminates scattered console.* calls. In production, errors can be
+ * routed to an observability service (Sentry, Datadog, etc.) by modifying
+ * only this file. User-facing messages remain generic and safe.
+ *
+ * Usage:
+ *   import { logger } from '@/lib/logger'
+ *   logger.error('getSession', 'DB fetch failed', dbError)
+ *   logger.warn('push-notify', 'invoke error', error.message)
+ *
  * NOTE: Edge Functions (supabase/functions/) run on Deno and cannot import
  * from this file — they keep their own console.* calls.
  */
 
 type LogLevel = 'error' | 'warn' | 'info'
 
-function log(level: LogLevel, tag: string, message: string, detail?: unknown): void {
-  // In production, replace this block with your observability SDK:
-  //   Sentry.captureException(detail instanceof Error ? detail : new Error(message), { tags: { tag } })
-  //   return
+import * as Sentry from '@sentry/nextjs'
 
+function log(level: LogLevel, tag: string, message: string, detail?: unknown): void {
   const prefix = `[${tag}]`
 
+  // 1. Console logging (Development/Debug)
   if (level === 'error') {
-    // eslint-disable-next-line no-console
     console.error(prefix, message, detail ?? '')
   } else if (level === 'warn') {
-    // eslint-disable-next-line no-console
     console.warn(prefix, message, detail ?? '')
   } else {
-    // eslint-disable-next-line no-console
     console.log(prefix, message, detail ?? '')
+  }
+
+  // 2. Production Observability (Sentry)
+  if (level === 'error' && process.env.NODE_ENV === 'production') {
+    Sentry.captureException(detail instanceof Error ? detail : new Error(`${prefix} ${message}`), {
+      tags: { tag, component: 'logger' },
+      extra: { detail: JSON.stringify(detail) }
+    })
   }
 }
 
