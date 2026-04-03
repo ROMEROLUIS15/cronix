@@ -130,6 +130,7 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }, [fetchMonthApts, contextLoading, businessId]);
+
   useEffect(() => {
     if (businessId) {
       fetchStats();
@@ -138,6 +139,18 @@ export default function DashboardPage() {
         .catch(err => logger.error('dashboard', 'Error checking services', err));
     }
   }, [fetchStats, businessId, supabase]);
+
+  // 🌟 MASTER TOUCH: Listen for assistant actions and refresh data in real-time
+  useEffect(() => {
+    const handleAssistantAction = () => {
+      console.log('🌟 Master Touch: Refreshing dashboard data...');
+      fetchMonthApts();
+      fetchStats();
+    };
+
+    window.addEventListener('cronix:refresh-data', handleAssistantAction);
+    return () => window.removeEventListener('cronix:refresh-data', handleAssistantAction);
+  }, [fetchMonthApts, fetchStats]);
 
   // ── Helpers ───────────────────────────────────────────────────
   const getAptsForDay = (day: Date) =>

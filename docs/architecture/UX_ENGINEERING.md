@@ -33,10 +33,10 @@ Using **UX Persistence** techniques, we ensure the interface respects user inten
 - **Hydration**: On mount, the component checks for a stored position. We use a "Hydration Guard" (`isLoaded` state) to prevent visual "jumps" during initial render.
 
 ### Visual Feedback Loop
-El FAB de Luis IA comunica su estado interno mediante micro-animaciones:
-- **Idle**: Pulso sutil y respiración de color.
-- **Speaking/Processing**: Animación circular de carga (spinning) sincronizada con el estado `speaking`.
-- **Native Fallback**: Sincronización de eventos de finalización de audio nativo para restaurar el estado `idle` automáticamente.
+The Luis IA FAB communicates its internal state through micro-animations:
+- **Idle**: Subtle pulse and color breathing.
+- **Speaking/Processing**: Circular loading animation (spinning) synchronized with the `speaking` state.
+- **Native Fallback**: Synchronization of native audio completion events to restore the `idle` state automatically.
 
 ## 🛠️ Technology Stack
 - **Framer Motion**: Used for motion-driven logic and physics-based animations.

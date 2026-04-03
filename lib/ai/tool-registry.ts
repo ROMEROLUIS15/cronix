@@ -29,7 +29,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_today_summary',
-        description: 'Muestra un resumen de facturación y citas agendadas para hoy.',
+        description: 'Shows a billing summary and scheduled appointments for today.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_today_summary(bizId)
@@ -39,7 +39,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_upcoming_gaps',
-        description: 'Consulta los bloques de tiempo ocupados hoy para identificar huecos libres.',
+        description: 'Queries occupied time blocks today to identify free slots.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_upcoming_gaps(bizId)
@@ -49,7 +49,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_client_debt',
-        description: 'Consulta si un cliente tiene deudas o citas completadas sin pago registrado.',
+        description: 'Queries if a client has debts or completed appointments without recorded payment.',
         parameters: {
           type: 'object',
           properties: { client_name: { type: 'string' } },
@@ -63,7 +63,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'cancel_appointment',
-        description: 'Cancela la próxima cita activa de un cliente.',
+        description: 'Cancels the next active appointment for a client.',
         parameters: {
           type: 'object',
           properties: { client_name: { type: 'string' } },
@@ -77,14 +77,14 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'book_appointment',
-        description: 'Agenda una nueva cita para un cliente, servicio y fecha específica. Opcionalmente con un empleado.',
+        description: 'Schedules a new appointment for a client, service, and specific date. Optionally with a staff member.',
         parameters: {
           type: 'object',
           properties: {
             client_name:  { type: 'string' },
             service_name: { type: 'string' },
-            date:         { type: 'string', description: 'Formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)' },
-            staff_name:   { type: 'string', description: 'Opcional. Nombre del barbero/estilista/médico.' },
+            date:         { type: 'string', description: 'ISO 8601 format (YYYY-MM-DDTHH:mm:ss)' },
+            staff_name:   { type: 'string', description: 'Optional. Name of the barber/stylist/doctor.' },
           },
           required: ['client_name', 'service_name', 'date'],
         },
@@ -96,7 +96,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'register_payment',
-        description: 'Registra un pago o abono realizado por un cliente.',
+        description: 'Registers a payment or deposit made by a client.',
         parameters: {
           type: 'object',
           properties: {
@@ -114,7 +114,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_inactive_clients',
-        description: 'Identifica clientes que no han tenido citas en más de 60 días para reactivación.',
+        description: 'Identifies clients who haven\'t had appointments in more than 60 days for reactivation.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_inactive_clients(bizId)
@@ -124,7 +124,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_revenue_stats',
-        description: 'Muestra un resumen de facturación de esta semana comparado con la anterior.',
+        description: 'Shows a billing summary for this week compared to the previous one.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_revenue_stats(bizId)
@@ -134,7 +134,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_monthly_forecast',
-        description: 'Proyecta los ingresos totales al final del mes actual basándose en citas confirmadas y facturación actual.',
+        description: 'Projects total revenue at the end of the current month based on confirmed appointments and current billing.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_monthly_forecast(bizId)
@@ -144,7 +144,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'send_reactivation_message',
-        description: 'Envía un mensaje de reactivación por WhatsApp a un cliente inactivo.',
+        description: 'Sends a reactivation message via WhatsApp to an inactive client.',
         parameters: {
           type: 'object',
           properties: { 
@@ -155,6 +155,48 @@ class ToolRegistry {
         },
       },
       handler: (bizId, args) => tools.send_reactivation_message(bizId, args.client_id, args.client_name)
+    })
+    
+    this.register({
+      type: 'function',
+      function: {
+        name: 'get_clients',
+        description: 'Queries the client list or searches for a specific one by name/phone.',
+        parameters: {
+          type: 'object',
+          properties: { 
+            query: { type: 'string', description: 'Name or name fragment to filter (optional).' } 
+          },
+          required: [],
+        },
+      },
+      handler: (bizId, args) => tools.get_clients(bizId, args.query)
+    })
+
+    this.register({
+      type: 'function',
+      function: {
+        name: 'get_staff',
+        description: 'Shows the staff list or searches for a specific one by name.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Name or name fragment to filter (optional).' }
+          },
+          required: [],
+        },
+      },
+      handler: (bizId, args) => tools.get_staff(bizId, args.query)
+    })
+
+    this.register({
+      type: 'function',
+      function: {
+        name: 'get_services',
+        description: 'Queries the available services catalog, including prices and durations.',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+      handler: (bizId) => tools.get_services(bizId)
     })
   }
 

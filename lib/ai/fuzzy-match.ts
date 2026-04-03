@@ -69,9 +69,30 @@ export function fuzzyFind<T extends NamedEntity>(
   spokenName: string
 ): FuzzyResult<T> {
   const needle = normalize(spokenName)
+  if (!needle) return { status: 'not_found' }
 
   const scored = entities
-    .map(e => ({ entity: e, score: similarity(normalize(e.name), needle) }))
+    .map(e => {
+      const target = normalize(e.name)
+      const targetWords = target.split(' ')
+      
+      // 1. Exact substring match (highest priority)
+      if (target.includes(needle)) {
+        return { entity: e, score: 0.98 }
+      }
+
+      // 2. Word-by-word similarity (handles "Alaysa" vs "Alaisa")
+      let bestWordScore = 0
+      for (const word of targetWords) {
+        const s = similarity(word, needle)
+        if (s > bestWordScore) bestWordScore = s
+      }
+
+      // 3. Global similarity as fallback
+      const globalScore = similarity(target, needle)
+      
+      return { entity: e, score: Math.max(bestWordScore, globalScore) }
+    })
     .filter(x => x.score >= MATCH_THRESHOLD)
     .sort((a, b) => b.score - a.score)
 

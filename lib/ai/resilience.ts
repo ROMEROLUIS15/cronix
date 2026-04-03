@@ -36,7 +36,7 @@ export async function safeSTT(
       const formData = new FormData()
       const ext = audioBlob.type.includes('mp4') || audioBlob.type.includes('m4a') ? 'm4a' : 'webm'
       formData.append('file', audioBlob, `voice.${ext}`)
-      formData.append('model', 'whisper-large-v3')
+      formData.append('model', 'whisper-large-v3-turbo')
       formData.append('language', language)
 
       const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -48,7 +48,7 @@ export async function safeSTT(
       if (res.ok) {
         aiCircuit.reportSuccess('STT')
         const data = await res.json()
-        return { data, latency: Date.now() - start, retries: retryCount, modelUsed: 'whisper-large-v3' }
+        return { data, latency: Date.now() - start, retries: retryCount, modelUsed: 'whisper-large-v3-turbo' }
       }
 
       const errText = await res.text()
@@ -145,7 +145,7 @@ export async function safeTTS(
       body: JSON.stringify({
         text,
         model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true },
+        voice_settings: { stability: 0.8, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
       }),
     })
 
@@ -169,6 +169,59 @@ export async function safeTTS(
   } catch (err: any) {
     aiCircuit.reportFailure('TTS', err.message)
     logger.error('AI-TTS', `Unexpected TTS failure: ${err.message}`, { stack: err.stack })
+    return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
+  }
+}
+/**
+ * 🛠️ Safe Deepgram TTS (Aura)
+ */
+export async function safeDeepgramTTS(
+  text: string, 
+  apiKey: string, 
+  model: string = 'aura-2-nestor-es' // REVERTED TO NESTOR (STABLE SPANISH MALE)
+): Promise<AIResponse<{ audioUrl: string | null; useNativeFallback: boolean }>> {
+  const start = Date.now()
+  logger.info('AI-TTS-DEEPGRAM', `Attempting synthesis with model: ${model}`)
+  
+  if (!apiKey || !aiCircuit.isAvailable('TTS')) {
+    logger.warn('AI-TTS-DEEPGRAM', 'API Key missing or Circuit Tripped')
+    return { data: { audioUrl: null, useNativeFallback: true }, latency: 0, retries: 0, circuitTripped: !apiKey ? false : true }
+  }
+
+  try {
+    const res = await fetch(`https://api.deepgram.com/v1/speak?model=${model}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    })
+
+    if (!res.ok) {
+       const err = await res.text()
+       aiCircuit.reportFailure('TTS', err)
+       logger.error('AI-TTS-DEEPGRAM', `API Failure (${res.status}): ${err}`, { 
+          model, 
+          status: res.status 
+       })
+       return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
+    }
+
+    aiCircuit.reportSuccess('TTS')
+    const buffer = await res.arrayBuffer()
+    const audioUrl = `data:audio/mpeg;base64,${Buffer.from(buffer).toString('base64')}`
+    
+    return { 
+      data: { audioUrl, useNativeFallback: false }, 
+      latency: Date.now() - start, 
+      retries: 0, 
+      modelUsed: model 
+    }
+
+  } catch (err: any) {
+    aiCircuit.reportFailure('TTS', err.message)
+    logger.error('AI-TTS-DEEPGRAM', `Unexpected failure: ${err.message}`)
     return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
   }
 }

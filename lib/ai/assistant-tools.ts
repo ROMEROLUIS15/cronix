@@ -11,6 +11,23 @@ import { sendReactivationMessage } from '@/lib/services/whatsapp.service'
  * V4 Evolution: Multi-staff support & Actionable CRM.
  */
 
+// ── READ: Obtener servicios (Para identificar qué se ofrece) ──────────────────
+export async function get_services(business_id: string): Promise<string> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('services')
+    .select('id, name, price, duration_min')
+    .eq('business_id', business_id)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+
+  if (error) return 'Error al obtener la lista de servicios.'
+  if (!data || data.length === 0) return 'No hay servicios registrados en este negocio.'
+
+  const list = data.map(s => `- ${s.name} ($${s.price}, ${s.duration_min} min)`).join('\n')
+  return `Servicios disponibles:\n${list}`
+}
+
 // ── READ: Resumen del día ──────────────────────────────────────────────────
 export async function get_today_summary(business_id: string): Promise<string> {
   const supabase = await createClient()
@@ -102,11 +119,11 @@ export async function cancel_appointment(business_id: string, client_name: strin
   const client = result.match as { id: string; name: string; phone?: string }
   const now = new Date().toISOString()
 
-  const { data: appts, error } = await supabase
+  const { data: appts, error: apptErr } = await supabase
     .from('appointments').select('id, start_at').eq('business_id', business_id).eq('client_id', client.id)
     .in('status', ['pending', 'confirmed']).gte('start_at', now).order('start_at', { ascending: true }).limit(1)
 
-  if (error || !appts[0]) return `${client.name} no tiene citas próximas activas.`
+  if (apptErr || !appts?.[0]) return `${client.name} no tiene citas próximas activas.`
   const apt = appts[0]
 
   const { error: updErr } = await supabase
@@ -130,7 +147,13 @@ export async function book_appointment(
 ): Promise<string> {
   const supabase = await createClient()
 
-  // 🛑 SECURITY: Date range validation
+  // 🛑 SECURITY & PRECISION: Check if the date string contains a time (e.g. "T10:00" or similar)
+  // Regular dates (YYYY-MM-DD) result in 00:00:00 which is often an error for a business appointment.
+  const hasTime = date.includes('T') || date.includes(':') || /\d\s?(am|pm)/i.test(date)
+  if (!hasTime) {
+    return 'Error: No proporcionaste una hora específica. Por favor, pregunta al usuario a qué hora desea la cita antes de agendar.'
+  }
+
   const apptDate = parseISO(date)
   if (isNaN(apptDate.getTime())) return 'La fecha proporcionada no es válida.'
   
@@ -153,26 +176,39 @@ export async function book_appointment(
   const client = clientResult.match
   const service = serviceResult.match as { id: string; name: string; duration_min: number }
 
-  let staff_id: string | null = null
+  let staff: { id: string; name: string } | null = null
   if (staff_name) {
     const { data: team } = await supabase
-      .from('users').select('id, name').eq('business_id', business_id).eq('role', 'employee').eq('is_active', true)
+      .from('users')
+      .select('id, name, role')
+      .eq('business_id', business_id)
+      .in('role', ['owner', 'employee'])
+      .eq('is_active', true)
     const staffMatch = fuzzyFind(team ?? [], staff_name)
-    if (staffMatch.status === 'found') staff_id = staffMatch.match.id
+    if (staffMatch.status === 'found') staff = staffMatch.match as { id: string; name: string }
   }
 
   const startISO = date
   const startMs  = new Date(startISO).getTime()
   const endISO   = new Date(startMs + (service.duration_min ?? 60) * 60_000).toISOString()
 
-  const { data: row, error } = await supabase.from('appointments').insert({
-    business_id, client_id: client.id, service_id: service.id, staff_id,
-    start_at: startISO, end_at: endISO, status: 'pending', is_dual_booking: false,
-  }).select('id').single()
+  const { data: row, error } = await supabase
+    .from('appointments')
+    .insert({
+      business_id,
+      client_id:        client.id,
+      service_id:       service.id,
+      assigned_user_id: staff?.id || null, 
+      start_at:         startISO,
+      end_at:           endISO,
+      status:           'pending' 
+    })
+    .select()
+    .single()
 
   if (error || !row) {
     logger.error('TOOL-DB', `book_appointment failed: ${error?.message}`, { business_id, client_id: client.id })
-    return 'No pude crear la cita.'
+    return 'Hubo un error técnico al crear la cita en la base de datos.'
   }
 
   await supabase.from('appointment_services').insert({ appointment_id: row.id, service_id: service.id, sort_order: 0 })
@@ -237,6 +273,73 @@ export async function get_inactive_clients(business_id: string): Promise<string>
   
   const names = inactive.map(c => c.name).join(', ')
   return `He identificado a ${inactive.length} clientes inactivos por más de 60 días: ${names}. Podrías enviarles un WhatsApp de reactivación.`
+}
+
+// ── READ: Listar Clientes (NUEVO) ──────────────────────────────────────────
+export async function get_clients(business_id: string, query?: string): Promise<string> {
+  const supabase = await createClient()
+  let dbQuery = supabase.from('clients').select('id, name, phone, email').eq('business_id', business_id).is('deleted_at', null)
+  
+  if (query) {
+    dbQuery = dbQuery.ilike('name', `%${query}%`)
+  }
+
+  const { data, error: cliErr } = await dbQuery.order('name', { ascending: true })
+
+  if (cliErr) return `Error al consultar la lista de clientes: ${cliErr.message}`
+  if (!data?.length) return 'No tienes clientes registrados aún.'
+
+  const clients = data as Array<{ id: string; name: string; phone: string | null }>
+
+  // 🌟 SENIOR FIX: If there's a query, use our smart fuzzyFind instead of strict SQL
+  if (query) {
+    const result = fuzzyFind(clients, query)
+    if (result.status === 'found') {
+      const c = result.match
+      return `He encontrado a ${c.name}${c.phone ? ` (Tel: ${c.phone})` : ''}. ¿Es a quien te refieres?`
+    }
+    if (result.status === 'ambiguous') {
+      const candidates = result.candidates.map(c => `- ${c.name}`).join('\n')
+      return `Encontré varios clientes parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`
+    }
+    return `No encontré ningún cliente llamado "${query}". ¿Te gustaría que lo registre?`
+  }
+
+  const list = clients.map(c => `- ${c.name}${c.phone ? ` (Tel: ${c.phone})` : ''}`).join('\n')
+  return `Aquí tienes a tus clientes registrados:\n${list}`
+}
+
+// ── READ: Listar Empleados/Staff (NUEVO) ─────────────────────────────────────
+export async function get_staff(business_id: string, query?: string): Promise<string> {
+  const supabase = await createClient()
+  const { data: staff, error } = await supabase
+    .from('users')
+    .select('id, name, role')
+    .eq('business_id', business_id)
+    .in('role', ['owner', 'employee'])
+    .order('name', { ascending: true })
+
+  if (error) return `Error al consultar la lista de empleados: ${error.message}`
+  if (!staff?.length) return 'No tienes empleados registrados aún.'
+
+  const team = staff as Array<{ id: string; name: string; role: string }>
+
+  // 🌟 SENIOR FIX: Fuzzy search for staff too
+  if (query) {
+    const result = fuzzyFind(team, query)
+    if (result.status === 'found') {
+      const s = result.match
+      return `He encontrado a ${s.name} (${s.role === 'owner' ? 'Dueño' : 'Empleado'}). ¿Es a quien buscas?`
+    }
+    if (result.status === 'ambiguous') {
+      const candidates = result.candidates.map(c => `- ${c.name}`).join('\n')
+      return `Encontré varios empleados parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`
+    }
+    return `No encontré ningún empleado llamado "${query}".`
+  }
+
+  const list = team.map(s => `- ${s.name} (${s.role === 'owner' ? 'Dueño' : 'Empleado'})`).join('\n')
+  return `Aquí tienes al equipo de trabajo:\n${list}`
 }
 
 // ── STRATEGIC: Estadísticas ──────────────────────────────────────────────

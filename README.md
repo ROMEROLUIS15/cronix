@@ -35,7 +35,7 @@
 - [AI Agent Architecture](#ai-agent-architecture)
   - [Structured In-Memory RAG](#structured-in-memory-rag)
   - [Action Tags vs JSON Function Calling](#action-tags-vs-json-function-calling)
-  - [Silent Execution (Confirmación en Silencio)](#silent-execution-confirmación-en-silencio)
+  - [Silent Execution](#silent-execution)
   - [Two-Turn Safety Flow](#two-turn-safety-flow)
   - [Voice Notes & Transcription](#voice-notes--transcription)
   - [AI Agent End-to-End Workflow](#ai-agent-end-to-end-workflow)
@@ -81,7 +81,7 @@
 Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) still manage appointments via paper, personal WhatsApp chats, or generic tools not designed for the region. Cronix solves this with:
 
 -   **⚙️ UX Persistence**: Movable assistant FAB with remembered position. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/UX_ENGINEERING.md)
--   **⚡ Resilience Layer (Groq/ElevenLabs)**: Automatic model fallback (70b -> 8b) and browser-TTS fallback. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md)
+-   **⚡ Resilience Layer (Groq/Deepgram)**: Automatic model fallback (70b -> 8b) and browser-TTS fallback. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md)
 - **🛡️ Global Reliability (Blindaje)**: Centralized Error Handler (HOF), Request ID traceability, and Dead Letter Queue (DLQ) for webhooks.
 - **A full business dashboard** (PWA) for managing clients, team, finances, and analytics
 - **Multi-tenant architecture** where multiple businesses share infrastructure securely — each one fully isolated at the database level via PostgreSQL Row Level Security
@@ -107,29 +107,31 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 
 ---
 
-## 🎙️ Luis IA: Asistente Ejecutivo V4 (Platinum & Strategy)
-Luis ha evolucionado a un Agente Proactivo de Crecimiento. Esta versión introduce:
+## 🎙️ Luis IA: Executive Assistant v6.5 (Elite Executive)
+Luis has evolved into a **Professional-Grade Executive Assistant**. This version introduces:
 
-### 1. Inteligencia Multi-Staff (Equipo)
-Agenda citas con empleados específicos. Luis realiza **Fuzzy Matching** contra la tabla de `users` (role=employee) para asignar automáticamente el `staff_id`.
-*Comando: "Agenda un corte con Carlos para mañana a las 3rd"*
+### 1. Multi-Tenant Security (RLS Shield)
+Luis accesses ONLY the data of the authenticated business, thanks to the PostgreSQL `get_my_business_id()` + RLS function. It is mathematically impossible for Luis to view data from another tenant.
 
-### 2. CRM Activo (Reactivación por WhatsApp)
-Identifica clientes que no han asistido en 60+ días y permite enviar mensajes de reactivación directos.
-*Comando: "¿Quién no ha venido hace meses? ... ok, envíale el WhatsApp a Juan"*
+### 2. Real-Time Service Visibility
+Luis queries the business's actual service catalog using the `get_services` tool. He never hallucinates prices or durations.
 
-### 3. CFO Advanced (Forecasting)
-Proyección de ingresos al cierre de mes basada en transacciones reales y citas futuras.
-- **AI Shielding (Hardening)**: Luis está blindado contra prompt injection y manipulación, con validaciones estrictas en cada herramienta (Date/Amount validation).
-- **Proactividad en el Dashboard**: Saludo inicial y resumen de voz automático (una vez por sesión).
+### 3. 4-Point Validation for Bookings
+Luis is prohibited from scheduling without confirming 4 data points: **Client, Service, Date, and exact Time**. This eliminates booking hallucinations.
+
+### 4. Master Touch (Real-Time Sync)
+Every successful booking triggers a `cronix:refresh-data` event that instantly updates the Dashboard calendar without a page reload.
+
+### 5. Dynamic Timezone (Multi-country)
+Luis automatically detects the user's browser timezone (`Intl.DateTimeFormat`) and uses it to record appointments in the correct local time, whether in Colombia, Spain, Mexico, or any other country.
 
 ---
-1.  **Observabilidad**: Integración profunda con Sentry y Logger Centralizado.
-2.  **Traceability**: Sistema de `x-request-id` para trazabilidad de errores entre servicios.
-3.  **Webhook Resilience**: Dead Letter Queue (DLQ) para garantizar **Zero Data Loss** en integraciones críticas.
-4.  **AI Orchestrator**: Fallbacks automáticos de modelos y servicios de voz para garantizar operatividad 24/7.
+1.  **Observability**: Deep integration with Sentry and a Centralized Logger.
+2.  **Traceability**: `x-request-id` system for error traceability across services.
+3.  **Webhook Resilience**: Dead Letter Queue (DLQ) to guarantee **Zero Data Loss** in critical integrations.
+4.  **AI Orchestrator**: Automatic model and voice service fallbacks to guarantee 24/7 service.
 
-Consulta la [Documentación Técnica de Confiabilidad](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md) para más detalles.
+Check the [Reliability Technical Documentation](./docs/architecture/RELIABILITY.md) for more details.
 
 ---
 
@@ -279,7 +281,9 @@ For technical leads and recruiters, the following documents provide a deep dive 
 - **[Database Security Testing](./docs/architecture/DATABASE_SECURITY_TESTING.md):** Deep dive into **pgTAP** and RLS isolation verification.
 - **[Web Push Standards](./docs/architecture/WEB_PUSH_STANDARDS_DEEP_DIVE.md):** Technical implementation of **RFC 8291** with zero-dependencies.
 - **[Passkey & WebAuthn](./docs/architecture/PASSKEY_WEBAUTHN_IMPLEMENTATION.md):** Cryptographic flow of biometric (passwordless) authentication.
-- **[Dashboard Assistant AI](./docs/architecture/DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md):** Technical overview of "Luis" (Tools, matching, STT/TTS).
+- **[Dashboard Assistant AI](./docs/architecture/DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md):** Technical overview of "Luis" (Tools, matching, STT/TTS pipeline v6.5).
+- **[Luis IA Integration Guide](./docs/architecture/LUIS_IA_INTEGRATION_GUIDE.md):** Step-by-step guide to configure and extend Luis IA (Deepgram, Groq, tools, timezone, security).
+- **[Luis IA Prompt Engineering](./docs/architecture/LUIS_IA_PROMPT_ENGINEERING.md):** Master prompt template, anti-patterns, future roadmap, and guide to extend Luis with new capabilities.
 - **[Frontend Architecture](./docs/architecture/FRONTEND_ARCHITECTURE_AND_STATE.md):** Repository Pattern, TanStack Query, and Zod validation.
 - **[WhatsApp Fix Postmortem](./docs/operations/WHATSAPP_FIX_POSTMORTEM.md):** A detailed technical retrospective on a critical production fix.
 - **[Product Requirements](./docs/requirements/REQUIREMENTS_SPECIFICATION.md):** Full PRD covering brand identity, features, and database schema.
@@ -350,9 +354,9 @@ The full AI response (including tags) is preserved in `wa_audit_logs` for audit 
 To prevent hallucinated bookings, the system prompt enforces a **mandatory two-turn confirmation flow**:
 
 ```
-Turn 1 (AI):     "Agendaré Corte de Cabello el martes a las 10:00 AM. ¿Es correcto?"  → NO TAG
-Turn 2 (Client): "Sí"
-Turn 3 (AI):     "¡Listo! Tu cita quedó agendada."  → [CONFIRM_BOOKING: ...]
+Turn 1 (AI):     "I'll schedule a Haircut for Tuesday at 10:00 AM. Is that correct?"  → NO TAG
+Turn 2 (Client): "Yes"
+Turn 3 (AI):     "Done! Your appointment has been scheduled."  → [CONFIRM_BOOKING: ...]
 ```
 
 The AI is explicitly prohibited from emitting a tag in the same message where it proposes an action. This structural constraint eliminates false positives.
@@ -384,24 +388,26 @@ Cronix includes a native **Executive Voice Assistant** (codenamed "Luis") direct
 - **Client Debt Tracking:** Checks if a client has pending payments.
 - **Action Execution:** Book, cancel, or register payments via natural speech.
 
-**Technical Pipeline:**
+**Technical Pipeline (v6.5):**
 
 1. **Capture:** Browser `MediaRecorder` API (WebM/Opus) -> Next.js API Route.
-2. **STT:** Groq Whisper (`whisper-large-v3`) for ultra-low latency transcription.
-3. **LLM:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher) to interact with Supabase DB.
-4. **Fuzzy Matching:** Custom Levenshtein-based utility (`fuzzy-match.ts`) to resolve spoken client/service names to DB UUIDs even with transcription errors.
-5. **TTS:** ElevenLabs (`eleven_multilingual_v2`) for premium "Luis" identity voice, with a fallback to native Browser SpeechSynthesis.
+2. **Timezone:** `Intl.DateTimeFormat().resolvedOptions().timeZone` detected client-side and sent with each request.
+3. **STT:** Groq Whisper (`whisper-large-v3`) for ultra-low latency transcription.
+4. **LLM:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher) to interact with Supabase DB.
+5. **Fuzzy Matching:** Custom Levenshtein-based utility (`fuzzy-match.ts`) to resolve spoken client/service names to DB UUIDs even with transcription errors.
+6. **TTS:** **Deepgram Aura 2** (`aura-2-nestor-es`) for ultra-low latency, natural Spanish male voice. Fallback: Browser `SpeechSynthesis`.
 
 **Tools Schema:**
 Luis acts as a controller for the following backend functions (see `lib/ai/assistant-tools.ts`):
 
 ```typescript
--get_today_summary() -
-  get_upcoming_gaps() -
-  get_client_debt(client_name) -
-  cancel_appointment(client_name) -
-  book_appointment(client_name, service_name, date, time) -
-  register_payment(client_name, amount, method);
+get_today_summary()
+get_upcoming_gaps()
+get_client_debt(client_name)
+get_services()                              // → catalog: name, price, duration
+cancel_appointment(client_name)
+book_appointment(client_name, service_name, date, time)
+register_payment(client_name, amount, method)
 ```
 
 ### AI Agent End-to-End Workflow & QStash Architecture
@@ -576,15 +582,15 @@ pg_cron (hourly) → cron-reminders Edge Function
 │                                                                        │
 │  1. AI ACTIONS (real-time asynchronous via QStash)                     │
 │     process-whatsapp → executes mutation → triggers parallel alerts    │
-│     ├─ NEW BOOKING: "¡Nueva Reserva! 📅 Luis · Corte — 2024-04-12"     │
-│     ├─ RESCHEDULE: "❌ Liberado: 10:00 | ✅ Reservado: 11:00"          │
-│     └─ CANCELLATION: "Luis ha cancelado. Tienes un espacio libre..."   │
+│     ├─ NEW BOOKING: "New Booking! 📅 Luis · Haircut — 2024-04-12"      │
+│     ├─ RESCHEDULE: "❌ Freed: 10:00 | ✅ Reserved: 11:00"              │
+│     └─ CANCELLATION: "Luis has cancelled. You have a free slot..."     │
 │     (Sent to owner via Web Push & Direct WhatsApp Message)             │
 │                                                                        │
 │  2. DAILY REMINDER (8 PM local, per timezone)                          │
 │     pg_cron → cron-reminders EF                                        │
 │     → Client gets: WhatsApp template reminder for tomorrow             │
-│     → Owner gets: "📋 4 citas para mañana" (consolidated PWA push)     │
+│     → Owner gets: "📋 4 appointments for tomorrow" (consolidated PWA push)     │
 │                                                                        │
 │  3. DASHBOARD ACTIONS (manual)                                         │
 │     Dashboard → push-notify EF (via JWT auth)                          │

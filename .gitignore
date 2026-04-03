@@ -64,6 +64,8 @@ coverage/
 supabase/.temp/
 
 # Archivos de documentación no publicables
+docs/architecture/LUIS_IA_PROMPT_ENGINEERING.md
+
 
 # TypeScript
 *.tsbuildinfo

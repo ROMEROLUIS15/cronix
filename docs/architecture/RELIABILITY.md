@@ -29,32 +29,32 @@ Specialized layer for non-deterministic services (Groq, ElevenLabs):
 - **Resilience**: Every incoming WhatsApp webhook is wrapped in a DLQ safeguard. If processing fails, the raw payload and error are saved for manual autopsy and retry.
 - **Privatization**: Raw payloads are protected by Service Role RLS.
 
-### 5. Circuit Breaker (Lógica de Autoprotección)
--   **AICircuitBreaker**: Monitorea fallos en tiempo real para STT, LLM y TTS.
--   **Tripping**: Si un servicio falla 5 veces seguidas, el circuito se "abre" durante 5 minutos.
--   **Fail-Fast**: Durante este tiempo, el sistema no intenta llamar a la API fallida, eliminando latencia innecesaria y activando los fallbacks de inmediato.
+### 5. Circuit Breaker (Self-Protection Logic)
+-   **AICircuitBreaker**: Monitors real-time failures for STT, LLM, and TTS.
+-   **Tripping**: If a service fails 5 consecutive times, the circuit "opens" for 5 minutes.
+-   **Fail-Fast**: During this time, the system avoids calling the failed API, eliminating unnecessary latency and activating fallbacks immediately.
 
-### 6. Rate Limiting (Protección de Recursos)
--   **Memory Sliding Window**: Implementado en `/api/assistant/voice`.
--   **Rate Limiting**: El sistema protege contra el abuso mediante ventanas deslizantes de memoria (10 req/min por usuario).
+### 6. Rate Limiting (Resource Protection)
+-   **Memory Sliding Window**: Implemented in `/api/assistant/voice`.
+-   **Rate Limiting**: The system protects against abuse through memory-based sliding windows (10 req/min per user).
 
 ### 7. Performance Shield (Indexing & RPC)
-- **Compound Indexing**: Implementación de índices en columnas de tiempo (`start_at`, `paid_at`) para acelerar el BI y los resúmenes financieros.
-- **RPC Encapsulation**: Las operaciones pesadas (ej: filtrado de clientes inactivos) se ejecutan nativamente en Postgres vía RPC para minimizar el uso de memoria en Deno.
+- **Compound Indexing**: Implementation of indexes on time columns (`start_at`, `paid_at`) to speed up BI and financial summaries.
+- **RPC Encapsulation**: Heavy operations (e.g., filtering inactive clients) are executed natively in Postgres via RPC to minimize memory usage in Deno.
 
 ### 8. Contextual Telemetry
-- Todos los errores en las herramientas de IA (`assistant-tools.ts`) se loguean con el `business_id` del tenant, facilitando el soporte técnico en tiempo real ante problemas de agendamiento.
+- All errors in the AI tools (`assistant-tools.ts`) are logged with the tenant's `business_id`, facilitating real-time technical support for scheduling issues.
 
 ### 9. AI Security Firewall (Hardening)
-- **Prompt Injection Defense**: Directivas estrictas en el `SYSTEM_PROMPT` para evitar la revelación de instrucciones internas.
-- **Input Sanitization**: Las herramientas validan rangos de fechas y montos para evitar cobros negativos o citas inválidas.
-- **Error Sanitization**: Los fallos técnicos se ocultan al usuario final en la capa de `AssistantService`, proporcionando una respuesta amable y segura.
+- **Prompt Injection Defense**: Strict directives in the `SYSTEM_PROMPT` to prevent the revelation of internal instructions.
+- **Input Sanitization**: Tools validate date ranges and amounts to prevent negative charges or invalid appointments.
+- **Error Sanitization**: Technical failures are hidden from the end-user in the `AssistantService` layer, providing a polite and secure response.
 
 ### 10. Development Quality Gate (Husky & CI/CD)
-Para garantizar que la **Platinum Architecture** se mantenga sólida durante el desarrollo, hemos implementado un sistema de "Aduana de Código" local:
-- **Pre-commit Hook (Husky)**: Antes de cada commit, el sistema ejecuta automáticamente `npm run lint` y `npm run typecheck`.
-- **Fail-Fast**: Si existe un error de tipos o de estilo, el commit se bloquea. Esto previene que código "roto" llegue a Vercel o GitHub, eliminando ciclos de despliegue fallidos.
-- **Full Verification**: A diferencia de revisiones parciales, se valida la integridad total del proyecto para asegurar que cambios en un módulo no rompan dependencias lejanas.
+To ensure the **Platinum Architecture** remains solid during development, we have implemented a local "Code Customs" system:
+- **Pre-commit Hook (Husky)**: Before each commit, the system automatically runs `npm run lint` and `npm run typecheck`.
+- **Fail-Fast**: If there is a type or style error, the commit is blocked. This prevents "broken" code from reaching Vercel or GitHub, eliminating failed deployment cycles.
+- **Full Verification**: Unlike partial reviews, the total integrity of the project is validated to ensure that changes in one module do not break distant dependencies.
 
 ---
 

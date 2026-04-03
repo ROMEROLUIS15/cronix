@@ -33,7 +33,7 @@ export async function GET() {
     }
 
     // 2. Check essential ENV vars
-    const requiredEnv = ['LLM_API_KEY', 'ELEVENLABS_API_KEY', 'NEXT_PUBLIC_SUPABASE_URL']
+    const requiredEnv = ['LLM_API_KEY', 'DEEPGRAM_AURA_API_KEY', 'NEXT_PUBLIC_SUPABASE_URL']
     const missing = requiredEnv.filter(key => !process.env[key])
     if (missing.length > 0) {
       status.status = 'degraded'
