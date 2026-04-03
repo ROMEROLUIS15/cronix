@@ -50,6 +50,14 @@ Specialized layer for non-deterministic services (Groq, ElevenLabs):
 - **Input Sanitization**: Las herramientas validan rangos de fechas y montos para evitar cobros negativos o citas inválidas.
 - **Error Sanitization**: Los fallos técnicos se ocultan al usuario final en la capa de `AssistantService`, proporcionando una respuesta amable y segura.
 
+### 10. Development Quality Gate (Husky & CI/CD)
+Para garantizar que la **Platinum Architecture** se mantenga sólida durante el desarrollo, hemos implementado un sistema de "Aduana de Código" local:
+- **Pre-commit Hook (Husky)**: Antes de cada commit, el sistema ejecuta automáticamente `npm run lint` y `npm run typecheck`.
+- **Fail-Fast**: Si existe un error de tipos o de estilo, el commit se bloquea. Esto previene que código "roto" llegue a Vercel o GitHub, eliminando ciclos de despliegue fallidos.
+- **Full Verification**: A diferencia de revisiones parciales, se valida la integridad total del proyecto para asegurar que cambios en un módulo no rompan dependencias lejanas.
+
+---
+
 ## 📡 Traceability Flow
 
 ```mermaid
