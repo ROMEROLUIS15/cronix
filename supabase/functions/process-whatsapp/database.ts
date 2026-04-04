@@ -87,7 +87,7 @@ export async function checkBookingRateLimit(
  */
 export async function checkBusinessUsageLimit(businessId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('fn_wa_check_business_limit', {
-    p_business_id: business_id,
+    p_business_id: businessId,
     p_window_secs: 60,
     p_max_msgs:    50,
   })
@@ -102,7 +102,7 @@ export async function checkBusinessUsageLimit(businessId: string): Promise<boole
  */
 export async function checkCircuitBreaker(serviceName: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('fn_wa_check_circuit_breaker', {
-    p_service_name: service_name,
+    p_service_name: serviceName,
     p_reset_mins:   2
   })
   if (error) return true  // fail-open
@@ -114,7 +114,7 @@ export async function checkCircuitBreaker(serviceName: string): Promise<boolean>
  */
 export async function reportServiceFailure(serviceName: string): Promise<void> {
   await supabase.rpc('fn_wa_report_service_failure', {
-    p_service_name: service_name,
+    p_service_name: serviceName,
     p_threshold:    3
   })
 }
@@ -124,7 +124,7 @@ export async function reportServiceFailure(serviceName: string): Promise<void> {
  */
 export async function reportServiceSuccess(serviceName: string): Promise<void> {
   await supabase.rpc('fn_wa_report_service_success', {
-    p_service_name: service_name
+    p_service_name: serviceName
   })
 }
 
