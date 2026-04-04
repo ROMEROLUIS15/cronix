@@ -351,6 +351,50 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          id: string
+          business_id: string
+          user_id: string | null
+          title: string
+          content: string
+          type: "info" | "success" | "warning" | "error"
+          is_read: boolean
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          user_id?: string | null
+          title: string
+          content: string
+          type?: "info" | "success" | "warning" | "error"
+          is_read?: boolean
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          user_id?: string | null
+          title?: string
+          content?: string
+          type?: "info" | "success" | "warning" | "error"
+          is_read?: boolean
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       services: {
         Row: {
           business_id: string
@@ -611,6 +655,56 @@ export type Database = {
         Update: {
           challenge?: string
         }
+      }
+      service_health: {
+        Row: {
+          service_name:  string
+          status:        "CLOSED" | "OPEN" | "HALF-OPEN"
+          failure_count: number
+          last_failure:  string | null
+        }
+        Insert: {
+          service_name:   string
+          status?:        "CLOSED" | "OPEN" | "HALF-OPEN"
+          failure_count?: number
+          last_failure?:  string | null
+        }
+        Update: {
+          service_name?:  string
+          status?:        "CLOSED" | "OPEN" | "HALF-OPEN"
+          failure_count?: number
+          last_failure?:  string | null
+        }
+        Relationships: []
+      }
+      wa_dead_letter_queue: {
+        Row: {
+          id:           string
+          payload:      Json
+          error:        string | null
+          service_type: string
+          retry_count:  number
+          created_at:   string
+          updated_at:   string
+        }
+        Insert: {
+          id?:           string
+          payload:      Json
+          error?:       string | null
+          service_type?: string
+          retry_count?: number
+          created_at?:  string
+          updated_at?:  string
+        }
+        Update: {
+          id?:           string
+          payload?:      Json
+          error?:       string | null
+          service_type?: string
+          retry_count?: number
+          created_at?:  string
+          updated_at?:  string
+        }
         Relationships: []
       }
     }
@@ -618,6 +712,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      fn_mark_all_notifications_as_read: {
+        Args: {
+          target_business_id: string
+        }
+        Returns: void
+      }
       get_inactive_clients_rpc: {
         Args: {
           biz_id: string

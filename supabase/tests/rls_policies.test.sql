@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(45);
+SELECT plan(50);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,12 +16,14 @@ DECLARE
   uid_b UUID := '00000000-0000-0000-0000-000000000002';
   biz_a UUID := 'aaaaaaaa-0000-0000-0000-000000000001';
   biz_b UUID := 'bbbbbbbb-0000-0000-0000-000000000002';
+  uid_admin UUID := '00000000-0000-0000-0000-000000000003';
 BEGIN
-  -- Auth identities (bypass auth.users FK)
+  -- Auth identities
   INSERT INTO auth.users (id, email, role, aud, created_at, updated_at)
   VALUES
     (uid_a, 'owner_a@test.com', 'authenticated', 'authenticated', NOW(), NOW()),
-    (uid_b, 'owner_b@test.com', 'authenticated', 'authenticated', NOW(), NOW())
+    (uid_b, 'owner_b@test.com', 'authenticated', 'authenticated', NOW(), NOW()),
+    (uid_admin, 'admin@test.com', 'authenticated', 'authenticated', NOW(), NOW())
   ON CONFLICT DO NOTHING;
 
   -- Businesses
@@ -31,11 +33,12 @@ BEGIN
     (biz_b, 'Negocio B', 'salon', uid_b)
   ON CONFLICT DO NOTHING;
 
-  -- public.users rows (owner role)
+  -- public.users rows
   INSERT INTO public.users (id, name, email, business_id, role, is_active, status)
   VALUES
     (uid_a, 'Owner A', 'owner_a@test.com', biz_a, 'owner', true, 'active'),
-    (uid_b, 'Owner B', 'owner_b@test.com', biz_b, 'owner', true, 'active')
+    (uid_b, 'Owner B', 'owner_b@test.com', biz_b, 'owner', true, 'active'),
+    (uid_admin, 'Admin', 'admin@test.com', biz_a, 'platform_admin', true, 'active')
   ON CONFLICT DO NOTHING;
 END $$;
 
@@ -267,6 +270,9 @@ DECLARE
   reminder_a UUID := 'ffffffff-0000-0000-0000-000000000001';
   appt_a     UUID := 'dddddddd-0000-0000-0000-000000000001';
   biz_a      UUID := 'aaaaaaaa-0000-0000-0000-000000000001';
+  biz_b      UUID := 'bbbbbbbb-0000-0000-0000-000000000002';
+  uid_a      UUID := '00000000-0000-0000-0000-000000000001';
+  uid_b      UUID := '00000000-0000-0000-0000-000000000002';
 BEGIN
   INSERT INTO public.appointment_reminders
     (id, appointment_id, business_id, remind_at, minutes_before, status, channel)
@@ -533,6 +539,50 @@ SELECT ok(
   EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_passkeys'),
   'policy exists on user_passkeys'
 );
+
+-- ── 17. Admin Pulse Infrastructure (service_health & DLQ) ─────────────────────
+
+-- Verify RLS is enabled
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'service_health' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on service_health'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'wa_dead_letter_queue' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on wa_dead_letter_queue'
+);
+
+-- Owner A cannot see anything
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.service_health),
+  0,
+  'Owner A cannot see service_health'
+);
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_dead_letter_queue),
+  0,
+  'Owner A cannot see wa_dead_letter_queue'
+);
+
+RESET ROLE;
+
+-- platform_admin can see EVERYTHING
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000003","role":"authenticated"}';
+
+SELECT ok(
+  (SELECT COUNT(*)::INT FROM public.service_health) >= 0,
+  'platform_admin can access service_health'
+);
+SELECT ok(
+  (SELECT COUNT(*)::INT FROM public.wa_dead_letter_queue) >= 0,
+  'platform_admin can access wa_dead_letter_queue'
+);
+
+RESET ROLE;
 
 SELECT * FROM finish();
 

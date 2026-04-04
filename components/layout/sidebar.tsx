@@ -14,6 +14,7 @@ import {
   LogOut,
   Wrench,
   UsersRound,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/app/login/actions";
@@ -25,6 +26,7 @@ interface NavItem {
   label: string
   icon: typeof CalendarDays
   ownerOnly?: boolean
+  adminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -35,6 +37,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/finances", label: "Finanzas", icon: DollarSign },
   { href: "/dashboard/reports", label: "Reportes", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Ajustes", icon: Settings },
+  { href: "/dashboard/admin/pulse", label: "System Pulse", icon: Activity, adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -159,7 +162,11 @@ export function Sidebar({
             Principal
           </p>
           {navItems
-            .filter((item) => !item.ownerOnly || user?.role === "owner")
+            .filter((item) => {
+              if (item.adminOnly && user?.role !== "platform_admin") return false;
+              if (item.ownerOnly && user?.role !== "owner" && user?.role !== "platform_admin") return false;
+              return true;
+            })
             .map((item) => {
             const Icon = item.icon;
             const isActive =

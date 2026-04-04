@@ -1,15 +1,52 @@
 "use client";
 
+import React, { useState, useRef, useEffect } from "react";
 import { Menu, Bell } from "lucide-react";
+import { NotificationPanel, type InAppNotification } from "./notification-panel";
 
 interface TopbarProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
   onMenuClick?: () => void;
+  notifications?: InAppNotification[];
+  onMarkAllRead?: () => void;
 }
 
-export function Topbar({ title, subtitle, actions, onMenuClick }: TopbarProps) {
+export function Topbar({ 
+  title, 
+  subtitle, 
+  actions, 
+  onMenuClick,
+  notifications = [],
+  onMarkAllRead
+}: TopbarProps) {
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsPanelOpen(false);
+      }
+    }
+
+    if (isPanelOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isPanelOpen]);
+
+  const handleTogglePanel = () => {
+    if (!isPanelOpen && unreadCount > 0 && onMarkAllRead) {
+      onMarkAllRead();
+    }
+    setIsPanelOpen(!isPanelOpen);
+  };
+
   return (
     <header
       className="relative z-10 flex h-14 sm:h-16 items-center gap-3 px-3 sm:px-6 flex-shrink-0"
@@ -49,22 +86,42 @@ export function Topbar({ title, subtitle, actions, onMenuClick }: TopbarProps) {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+      <div ref={containerRef} className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         {actions}
         <button
-          className="relative p-2 rounded-xl transition-all duration-200 hover:bg-white/5"
-          style={{ color: "#909098" }}
+          className="relative p-2 rounded-xl transition-all duration-200 hover:bg-white/5 active:scale-95"
+          style={{ 
+            color: isPanelOpen ? "#F2F2F2" : "#909098", 
+            background: isPanelOpen ? "rgba(255,255,255,0.05)" : "transparent" 
+          }}
           aria-label="Notificaciones"
+          onClick={handleTogglePanel}
         >
-          <Bell size={18} />
-          <span
-            className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full"
-            style={{
-              backgroundColor: "#0062FF",
-              boxShadow: "0 0 6px rgba(0,98,255,0.8)",
-            }}
-          />
+          <Bell size={24} />
+          {unreadCount > 0 && (
+            <div className="absolute top-1 right-1 pointer-events-none">
+              <span 
+                className="absolute inset-0 h-2.5 w-2.5 rounded-full animate-sonar"
+                style={{ backgroundColor: "#0062FF" }}
+              />
+              <span
+                className="relative block h-2.5 w-2.5 rounded-full"
+                style={{
+                  backgroundColor: "#0062FF",
+                  boxShadow: "0 0 10px rgba(0,98,255,0.9)",
+                  border: "2px solid #0F0F12"
+                }}
+              />
+            </div>
+          )}
         </button>
+
+        <NotificationPanel 
+          isOpen={isPanelOpen}
+          onClose={() => setIsPanelOpen(false)}
+          notifications={notifications}
+          onMarkAllRead={onMarkAllRead ?? (() => {})}
+        />
       </div>
     </header>
   );

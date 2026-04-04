@@ -518,5 +518,32 @@ export async function cancelAppointmentById(appointmentId: string): Promise<void
 // ── Audit log ─────────────────────────────────────────────────────────────────
 
 export async function logInteraction(data: AuditLogData): Promise<void> {
-  await supabase.from('wa_audit_logs').insert([data])
+  await supabase.from("wa_audit_logs").insert([data]);
 }
+
+/**
+ * Creates an in-app notification for the business dashboard.
+ * Used by Luis IA to report actions like bookings, cancellations, or issues.
+ */
+export async function createInternalNotification(
+  businessId: string,
+  title: string,
+  content: string,
+  type: "info" | "success" | "warning" | "error" = "info",
+  metadata: any = {}
+): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .insert([{
+      business_id: businessId,
+      title,
+      content,
+      type,
+      metadata
+    }]);
+
+  if (error) {
+    console.error("Error creating internal notification:", error);
+  }
+}
+

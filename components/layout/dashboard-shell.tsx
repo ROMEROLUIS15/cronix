@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { useInAppNotifications } from '@/lib/hooks/use-in-app-notifications'
 import { Tables } from '@/types/database.types'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ const PAGE_TITLES: Array<{
   { match: p => p.includes('/profile'),             title: 'Mi Perfil',             subtitle: 'Cuenta'               },
   { match: p => p.includes('/finances'),            title: 'Finanzas',              subtitle: 'Reportes financieros' },
   { match: p => p.includes('/reports'),             title: 'Reportes',              subtitle: 'Estadísticas'         },
+  { match: p => p.includes('/dashboard/admin/pulse'), title: 'Pulse',                 subtitle: 'SaaS Health Monitor'  },
   { match: p => p.includes('/setup'),               title: 'Configuración Inicial', subtitle: 'Bienvenido'           },
 ]
 
@@ -53,6 +55,8 @@ function getPageMeta(pathname: string): { title: string; subtitle?: string } {
 export function DashboardShell({ children, user, business }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  
+  const { notifications, markAllAsRead } = useInAppNotifications(user?.business_id ?? null)
   const { title, subtitle } = getPageMeta(pathname ?? '')
 
   // Lock body scroll when mobile sidebar is open
@@ -94,6 +98,8 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
           title={title}
           subtitle={subtitle}
           onMenuClick={() => setSidebarOpen(prev => !prev)}
+          notifications={notifications}
+          onMarkAllRead={markAllAsRead}
         />
         {/*
           SCROLL CONTRACT:

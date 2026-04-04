@@ -36,11 +36,32 @@ Sentry.init({
   environment: process.env.NODE_ENV,
 
   // 10% of transactions sampled in prod — enough for perf insights without cost
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0,
 
   // Session Replay disabled — avoids capturing sensitive form inputs and PII
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0,
 
+  // ── Noise Filtering (Best Practice) ─────────────────────────────────────────
+  // Ignore "ghost errors" coming from browser extensions or legacy scripts
+  // that are not part of the Cronix codebase.
+  ignoreErrors: [
+    "updateFrom", // Common in legacy Sentry scripts (raven.js)
+    /top\.GLOBALS/i,
+    /webkit/i,
+  ],
+
+  denyUrls: [
+    // Chrome extensions
+    /extensions\//i,
+    /^chrome:\/\//i,
+    /^chrome-extension:\/\//i,
+    // Firefox extensions
+    /^moz-extension:\/\//i,
+    // Legacy tracking scripts (unrelated to our stack)
+    /raven\.js/i,
+  ],
+
   beforeSend: scrubEvent,
-})
+});
+

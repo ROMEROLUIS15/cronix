@@ -397,3 +397,13 @@
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+
+@keyframes sonar {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.animate-sonar {
+  animation: sonar 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+

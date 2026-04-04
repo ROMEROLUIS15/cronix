@@ -49,6 +49,7 @@ import {
   checkBusinessUsageLimit,
   checkBookingRateLimit,
   logInteraction,
+  createInternalNotification,
   localTimeToUTC,
 }                                  from "./database.ts"
 import {
@@ -456,6 +457,15 @@ serve(async (req: Request) => {
 
           addBreadcrumb('Appointment created via WhatsApp AI', 'booking', 'info')
 
+          // Channel 0: In-App Notification (Dashboard Bell)
+          createInternalNotification(
+            business.id,
+            'Nueva Cita Agendada 📅',
+            `${client?.name ?? customerName} reservó ${svcName} para el ${date} a las ${formattedTime}`,
+            'success',
+            { appointment_id: bookingResult.appointment_id }
+          ).catch(err => console.error('Failed to create in-app notification:', err))
+
           // Notify business owner immediately — fire-and-forget (non-blocking)
           const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
           const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -549,6 +559,15 @@ serve(async (req: Request) => {
 
             sendWhatsAppMessage(ownerPhone, waNotif)
               .catch(err => captureException(err, { stage: 'wa_notify_owner_reschedule', business_id: business.id }))
+
+            // Channel 0: In-App Notification (Dashboard Bell)
+            createInternalNotification(
+              business.id,
+              'Cita Reagendada 🔄',
+              `${clientName} movió su cita de ${svcName} al ${date} a las ${formattedNewTime}`,
+              'info',
+              { appointment_id: appointmentId }
+            ).catch(err => console.error('Failed to create in-app notification:', err))
           }
         } catch (err) {
           captureException(err, { stage: 'reschedule_appointment', appointment_id: appointmentId })
@@ -581,6 +600,15 @@ serve(async (req: Request) => {
 
             sendWhatsAppMessage(ownerPhone, waNotif)
               .catch(err => captureException(err, { stage: 'wa_notify_owner_cancel', business_id: business.id }))
+
+            // Channel 0: In-App Notification (Dashboard Bell)
+            createInternalNotification(
+              business.id,
+              'Cita Cancelada ❌',
+              `${clientName} canceló su cita de ${svcName} del ${oldDateStr}`,
+              'warning',
+              { appointment_id: appointmentId }
+            ).catch(err => console.error('Failed to create in-app notification:', err))
           }
         } catch (err) {
           captureException(err, { stage: 'cancel_appointment', appointment_id: appointmentId })
