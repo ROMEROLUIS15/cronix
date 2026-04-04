@@ -201,10 +201,7 @@ export async function safeDeepgramTTS(
     if (!res.ok) {
        const err = await res.text()
        aiCircuit.reportFailure('TTS', err)
-       logger.error('AI-TTS-DEEPGRAM', `API Failure (${res.status}): ${err}`, { 
-          model, 
-          status: res.status 
-       })
+       logger.error('AI-TTS-DEEPGRAM', `API Failure: ${res.status} | Model: ${model} | Error: ${err}`)
        return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
     }
 
@@ -212,6 +209,8 @@ export async function safeDeepgramTTS(
     const buffer = await res.arrayBuffer()
     const audioUrl = `data:audio/mpeg;base64,${Buffer.from(buffer).toString('base64')}`
     
+    logger.info('AI-TTS-DEEPGRAM', 'Synthesis successful', { latency: Date.now() - start })
+
     return { 
       data: { audioUrl, useNativeFallback: false }, 
       latency: Date.now() - start, 
@@ -221,7 +220,7 @@ export async function safeDeepgramTTS(
 
   } catch (err: any) {
     aiCircuit.reportFailure('TTS', err.message)
-    logger.error('AI-TTS-DEEPGRAM', `Unexpected failure: ${err.message}`)
+    logger.error('AI-TTS-DEEPGRAM', `Critical Exception: ${err.message}`)
     return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
   }
 }

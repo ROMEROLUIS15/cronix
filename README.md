@@ -107,23 +107,35 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 
 ---
 
-## 🎙️ Luis IA: Executive Assistant v6.5 (Elite Executive)
-Luis has evolved into a **Professional-Grade Executive Assistant**. This version introduces:
+## 🎙️ Luis IA: Executive Assistant v7.0 (Senior)
+Luis has evolved into a **Senior-Grade AI Executive Assistant** with real-time intelligence and persistent memory. This version introduces:
 
-### 1. Multi-Tenant Security (RLS Shield)
-Luis accesses ONLY the data of the authenticated business, thanks to the PostgreSQL `get_my_business_id()` + RLS function. It is mathematically impossible for Luis to view data from another tenant.
+### 1. Real-time WebSocket Transcription ⚡
+Luis no longer waits for you to finish speaking. Words appear on screen word-by-word via a **Deepgram Nova-2 WebSocket** stream. The transcript vanishes the instant Luis starts thinking — zero UI clutter.
 
-### 2. Real-Time Service Visibility
-Luis queries the business's actual service catalog using the `get_services` tool. He never hallucinates prices or durations.
+### 2. Long-term Memory (RAG + pgvector) 🧠
+Luis permanently remembers facts, preferences, and context across sessions. Powered by Supabase `pgvector` + the native `embed-text` Edge Function (GTE-small, 384 dimensions, free).
 
-### 3. 4-Point Validation for Bookings
-Luis is prohibited from scheduling without confirming 4 data points: **Client, Service, Date, and exact Time**. This eliminates booking hallucinations.
+### 3. Multi-Tenant Security (RLS Shield)
+Luis accesses ONLY the data of the authenticated business. `ai_memories` are isolated per user and business at the database level.
 
-### 4. Master Touch (Real-Time Sync)
-Every successful booking triggers a `cronix:refresh-data` event that instantly updates the Dashboard calendar without a page reload.
+### 4. Executive Confirmation Mode (Micro-responses)
+For any tool-triggered action, Luis responds with a 1-3 word confirmation first ("Agendando..."), so TTS starts instantly while the system works in the background.
 
-### 5. Dynamic Timezone (Multi-country)
-Luis automatically detects the user's browser timezone (`Intl.DateTimeFormat`) and uses it to record appointments in the correct local time, whether in Colombia, Spain, Mexico, or any other country.
+### 5. 4-Point Validation for Bookings
+Luis is prohibited from scheduling without confirming 4 data points: **Client, Service, Date, and exact Time**.
+
+### 6. Master Touch (Real-Time Sync)
+Every successful action triggers a `cronix:refresh-data` event that instantly updates the Dashboard calendar.
+
+### 7. Dynamic Timezone (Multi-country)
+Luis detects the user's browser timezone (`Intl.DateTimeFormat`) and records everything in local time.
+
+### 8. Premium Voice Visualizer 🎨
+A reactive 5-bar Siri-style waveform (Blue → Purple → Pink gradient) dances with your voice in real-time. Switches to a breathing rhythm while Luis speaks.
+
+### 9. Secure Token Gateway 🔒
+The master Deepgram API key never leaves the server. The browser receives a short-lived (5-min) scoped token via `/api/assistant/token`.
 
 ---
 1.  **Observability**: Deep integration with Sentry and a Centralized Logger.
@@ -158,9 +170,10 @@ Check the [Reliability Technical Documentation](./docs/architecture/RELIABILITY.
 | Web Push              | RFC 8291 — VAPID + AES-128-GCM, native Service Worker                                                         |
 | AI Observability      | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant)                                 |
 | AI Engine             | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing)                                  |
-| Voice Transcription   | Groq Whisper (`whisper-large-v3-turbo`)                                                                       |
-| Event Engine          | Supabase Database Webhooks (pg_net)                                                                           |
-| Edge Functions        | Supabase (Deno) — `whatsapp-webhook`, `process-whatsapp`, `whatsapp-service`, `push-notify`, `cron-reminders` |
+| Voice Transcription   | Groq Whisper (`whisper-large-v3-turbo`) + **Deepgram Nova-2 WebSocket** (streaming STT)    |
+| Long-term Memory      | Supabase `pgvector` (384-dim GTE-small via `embed-text` Edge Function)                     |
+| Event Engine          | Supabase Database Webhooks (pg_net)                                                         |
+| Edge Functions        | Supabase (Deno) — `whatsapp-webhook`, `process-whatsapp`, `whatsapp-service`, `push-notify`, `cron-reminders`, `embed-text` |
 | Scheduler             | Supabase pg_cron — hourly trigger with per-timezone 8 PM targeting                                            |
 | PWA                   | next-pwa — installable on iOS, Android, desktop                                                               |
 | Deploy                | Vercel (auto-deploy from `main`)                                                                              |
@@ -388,14 +401,21 @@ Cronix includes a native **Executive Voice Assistant** (codenamed "Luis") direct
 - **Client Debt Tracking:** Checks if a client has pending payments.
 - **Action Execution:** Book, cancel, or register payments via natural speech.
 
-**Technical Pipeline (v6.5):**
+**Technical Pipeline (v7.0 — Senior):**
 
-1. **Capture:** Browser `MediaRecorder` API (WebM/Opus) -> Next.js API Route.
-2. **Timezone:** `Intl.DateTimeFormat().resolvedOptions().timeZone` detected client-side and sent with each request.
-3. **STT:** Groq Whisper (`whisper-large-v3`) for ultra-low latency transcription.
-4. **LLM:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher) to interact with Supabase DB.
-5. **Fuzzy Matching:** Custom Levenshtein-based utility (`fuzzy-match.ts`) to resolve spoken client/service names to DB UUIDs even with transcription errors.
-6. **TTS:** **Deepgram Aura 2** (`aura-2-nestor-es`) for ultra-low latency, natural Spanish male voice. Fallback: Browser `SpeechSynthesis`.
+1. **Streaming Capture:** Browser `MediaRecorder` + **Deepgram Nova-2 WebSocket** → Real-time transcription word-by-word.
+2. **Ghost Transcript:** Live text clears automatically when Luis starts processing.
+3. **Secure Token:** A short-lived Deepgram token fetched from `/api/assistant/token` keeps the master key off the client.
+4. **Timezone:** `Intl.DateTimeFormat().resolvedOptions().timeZone` detected and sent as JSON with the transcribed text.
+5. **RAG:** `memoryService.retrieve()` fetches top-3 relevant memories via `pgvector` cosine search.
+6. **LLM Pass 1:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher).
+7. **Tools:** One or more tools executed. Results collected.
+8. **LLM Pass 2:** Final natural-language response synthesized with tool results.
+9. **Memory Store:** If input > 25 chars and not a tool action, the message is stored as a new memory vector.
+10. **TTS:** **Deepgram Aura 2** (`aura-2-nestor-es`) → audio URL returned.
+11. **Visual Feedback:** `VoiceVisualizer` shows breathing bars while playing. `cronix:refresh-data` refreshes the calendar.
+
+**Fuzzy Matching:** Custom Levenshtein-based utility (`fuzzy-match.ts`) resolves spoken client/service names to DB UUIDs even with transcription errors.
 
 **Tools Schema:**
 Luis acts as a controller for the following backend functions (see `lib/ai/assistant-tools.ts`):
@@ -725,10 +745,12 @@ Full-stack Sentry integration across all execution environments:
 
 ## Performance Metrics
 
-| Metric                         | Value                                                  |
+| Metric                         | Value |
 | ------------------------------ | ------------------------------------------------------ |
 | WhatsApp message → AI response | < 2 seconds (Groq Llama latency ~1.2s, overhead ~0.8s) |
 | Voice note → transcription     | < 3 seconds (Groq Whisper)                             |
+| **Streaming STT latency**      | **Near-zero (word-by-word WebSocket)**                 |
+| **Memory retrieval (RAG)**     | **< 80ms (pgvector HNSW index)**                       |
 | Database RLS check             | < 10ms per query                                       |
 | Rate limit check               | < 1ms (atomic SQL)                                     |
 | Push notification delivery     | < 500ms                                                |
@@ -824,7 +846,10 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 # ── AI / LLM Provider ────────────────────────────────────────────────────
-LLM_API_KEY=gsk_...            # Groq API key (or OpenAI sk_..., etc.)
+LLM_API_KEY=gsk_...            # Groq API key (STT + LLM)
+
+# ── Voice Assistant (Luis IA) ─────────────────────────────────────────────
+DEEPGRAM_AURA_API_KEY=your-deepgram-key  # TTS Aura 2 + Real-time Nova-2 STT
 
 # ── WhatsApp ──────────────────────────────────────────────────────────────
 WHATSAPP_PHONE_NUMBER_ID=102048159999...
@@ -923,6 +948,7 @@ supabase functions deploy whatsapp-webhook
 supabase functions deploy whatsapp-service
 supabase functions deploy push-notify
 supabase functions deploy cron-reminders
+supabase functions deploy embed-text   # Luis IA long-term memory
 
 # Push migrations to production
 supabase db push
@@ -932,15 +958,16 @@ supabase db push
 
 ## Scalability & Future Roadmap
 
-| Area              | Current State           | Future                                                        |
-| ----------------- | ----------------------- | ------------------------------------------------------------- |
-| Language          | Spanish (hardcoded)     | Dynamic language per business setting                         |
-| LLM Provider      | Groq + Llama-3.3-70B    | Helicone proxy for latency monitoring + semantic caching      |
-| Voice             | Spanish via Whisper     | Dynamic language detection                                    |
-| Reminders         | WhatsApp only           | SMS and email channels                                        |
-| Analytics         | Dashboard reports       | CSV/PDF export                                                |
-| AI Observability  | Sentry breadcrumbs      | Helicone for per-tenant cost tracking and threat detection    |
-| Booking Conflicts | Basic overlap detection | Staff-aware time-slot collision with working hours validation |
+| Area              | Current State | Future |
+| ----------------- | ------------- | ------ |
+| Language          | Spanish (hardcoded) | Dynamic language per business setting |
+| LLM Provider      | Groq + Llama-3.3-8B | Helicone proxy for semantic caching |
+| Voice             | Spanish via Whisper + Deepgram Nova-2 | Dynamic language detection |
+| Memory            | pgvector (user-scoped) | Cross-tenant business knowledge base |
+| Reminders         | WhatsApp only | SMS and email channels |
+| Analytics         | Dashboard reports | CSV/PDF export |
+| AI Observability  | Sentry breadcrumbs | Helicone per-tenant cost & latency |
+| Booking Conflicts | Basic overlap detection | Staff-aware time-slot collision |
 
 ---
 

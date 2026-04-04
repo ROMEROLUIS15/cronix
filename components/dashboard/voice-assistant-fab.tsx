@@ -89,13 +89,14 @@ export function VoiceAssistantFab() {
   }
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const socketRef = useRef<WebSocket | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const rafIdRef = useRef<number | null>(null)
   const hasSpokenRef = useRef<boolean>(false)
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null) // To stop current playback
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const finalTranscriptRef = useRef<string>('')
 
   // ── Helper: Speak with Native Browser Voice (Fallback) ──
   const speakWithNativeFallback = (text: string) => {
@@ -139,11 +140,82 @@ export function VoiceAssistantFab() {
     }
   }
 
+  const [volume, setVolume] = useState(0)
+  
+  // ── Component: Voice Visualizer (Siri Style) ───────────────────────────
+  const VoiceVisualizer = ({ isActive, volume, isSpeaking }: { isActive: boolean, volume: number, isSpeaking: boolean }) => {
+    const bars = [0, 1, 2, 3, 4]
+    return (
+      <div className="flex items-center gap-0.5 h-4 px-1">
+        {bars.map((i) => (
+          <motion.div
+            key={i}
+            animate={{
+              height: isActive 
+                ? isSpeaking 
+                  ? [8, 16, 8] // Breathing rhythm
+                  : Math.max(4, volume * (1 + Math.sin(i * 45) * 0.5) * 20) // Dynamic reactive
+                : 4
+            }}
+            transition={{
+              type: 'spring',
+              stiffness: 260,
+              damping: 20,
+              repeat: isSpeaking ? Infinity : 0,
+              duration: isSpeaking ? 0.6 + i * 0.1 : 0
+            }}
+            className="w-1 rounded-full"
+            style={{
+              background: 'linear-gradient(to top, #3884FF, #A855F7, #EC4899)',
+              boxShadow: '0 0 8px rgba(56,132,255,0.4)'
+            }}
+          />
+        ))}
+      </div>
+    )
+  }
+
   const startRecording = async () => {
     try {
+      setState('listening')
+      setTranscript('')
+      setVolume(0)
+      finalTranscriptRef.current = ''
+      hasSpokenRef.current = false
+
+      // 1. Get Secure Temp Token
+      const tokenRes = await fetch('/api/assistant/token')
+      const { token } = await tokenRes.json()
+      if (!token) throw new Error('Could not get assistant token')
+
+      // 2. Initialize WebSocket to Deepgram
+      const socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2-general&language=es&smart_format=true&interim_results=true&endpointing=300')
+      socketRef.current = socket
+
+      socket.onopen = () => {
+        console.log('Luis IA | WebSocket Connected')
+      }
+
+      socket.onmessage = (message) => {
+        const received = JSON.parse(message.data)
+        const transcriptChunk = received.channel?.alternatives[0]?.transcript
+        
+        if (transcriptChunk && received.is_final) {
+           finalTranscriptRef.current += ' ' + transcriptChunk
+           setTranscript(finalTranscriptRef.current.trim())
+           hasSpokenRef.current = true
+        } else if (transcriptChunk) {
+           // Live interim feedback
+           setTranscript((finalTranscriptRef.current + ' ' + transcriptChunk).trim())
+        }
+      }
+
+      socket.onerror = (e) => console.error('Luis IA | WS Error:', e)
+      socket.onclose = () => console.log('Luis IA | WS Closed')
+
+      // 3. Audio Stream & MediaRecorder
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       
-      // Initialize AudioContext only once
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       }
@@ -156,86 +228,81 @@ export function VoiceAssistantFab() {
       source.connect(analyser)
       analyserRef.current = analyser
 
-      const mediaRecorder = new MediaRecorder(stream)
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
       mediaRecorderRef.current = mediaRecorder
-      chunksRef.current = []
-      hasSpokenRef.current = false // Reset speech detection
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
+        if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+          socket.send(e.data)
+        }
       }
 
       mediaRecorder.onstop = async () => {
-        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+        console.log('Luis IA | Recording stopped')
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'CloseStream' }))
+          socket.close()
+        }
         
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        const finalMessage = finalTranscriptRef.current.trim()
         
-        // Skip if nothing was heard or clip is too small
-        if (!hasSpokenRef.current || audioBlob.size < 1500) {
-          console.warn('Audio too short or no speech detected')
+        if (!hasSpokenRef.current || finalMessage.length < 2) {
+          console.warn('Luis IA | Nothing heard')
           setState('idle')
-          if (!hasSpokenRef.current) {
-            setTranscript('Lo siento, no escuché nada. Inténtalo de nuevo.')
-            setTimeout(() => setTranscript(''), 3000)
-          }
+          setTranscript('No te escuché bien...')
+          setTimeout(() => setTranscript(''), 2000)
           return
         }
 
-        await sendAudioToAssistant(audioBlob)
+        // 🌟 GHOST TRANSCRIPT: Clear as we start processing
+        setTranscript('') 
+        await sendTextToAssistant(finalMessage)
       }
 
-      mediaRecorder.start()
-      setState('listening')
-      setTranscript('')
+      mediaRecorder.start(250) // Send chunks every 250ms
 
-      // Monitoring Loop (VAD) - Two-Phase Logic
-      const SILENCE_THRESHOLD = 6 // Senior Fix: Higher sensitivity post-response
-      const SILENCE_DURATION = 2000 // 2s of silence to finalize
-      const MAX_LISTEN_WAIT = 5000 // Max 5s waiting for initial speech
+      // 4. VAD Monitoring (Local fallback for safety)
+      const SILENCE_THRESHOLD = 10
+      const SILENCE_DURATION = 2000
+      const MAX_LISTEN_WAIT = 8000
       const startTime = Date.now()
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
-      
+
       const monitor = () => {
-        if (!analyserRef.current || !mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
-          return
-        }
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') return
         
         analyser.getByteFrequencyData(dataArray)
-        const average = dataArray.reduce((prev, curr) => prev + curr, 0) / dataArray.length
+        const average = dataArray.reduce((p, c) => p + c, 0) / dataArray.length
         
-        // Phase 1: Wait for speech
+        // 🌟 Update visualizer height
+        setVolume(average / 128)
+
         if (!hasSpokenRef.current) {
           if (average > SILENCE_THRESHOLD) {
             hasSpokenRef.current = true
-            console.log('Voice activity detected!')
+            console.log('Luis IA | Voice detected')
           } else if (Date.now() - startTime > MAX_LISTEN_WAIT) {
-            console.warn('VAD: Initial timeout (no speech detected)')
             stopRecording()
             return
           }
         } 
-        
-        // Phase 2: Wait for silence (only after speech detected)
+
         if (hasSpokenRef.current) {
           if (average < SILENCE_THRESHOLD) {
             if (!silenceTimerRef.current) {
               silenceTimerRef.current = setTimeout(() => stopRecording(), SILENCE_DURATION)
             }
-          } else {
-            if (silenceTimerRef.current) {
-              clearTimeout(silenceTimerRef.current)
-              silenceTimerRef.current = null
-            }
+          } else if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current)
+            silenceTimerRef.current = null
           }
         }
-
         rafIdRef.current = requestAnimationFrame(monitor)
       }
       monitor()
 
     } catch (err) {
-      console.error('Error starting recording:', err)
+      console.error('Luis IA | Streaming Error:', err)
       setState('idle')
     }
   }
@@ -245,46 +312,42 @@ export function VoiceAssistantFab() {
       clearTimeout(silenceTimerRef.current)
       silenceTimerRef.current = null
     }
-
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
       setState('processing')
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop())
     }
   }
 
-  const sendAudioToAssistant = async (audioBlob: Blob) => {
+  const sendTextToAssistant = async (text: string) => {
     try {
-      const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.webm')
-      formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
+      // 🌟 Optimized: Sending TEXT instead of AUDIO for V5 speed
+      const res = await fetch('/api/assistant/voice', { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+          text, 
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
+        }),
+        headers: { 'Content-Type': 'application/json' }
+      })
 
-      const res = await fetch('/api/assistant/voice', { method: 'POST', body: formData })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || 'Error en servidor')
-      }
+      if (!res.ok) throw new Error('Servidor no disponible')
 
       const data = await res.json()
-      console.log('AI-REPLY:', { text: data.text, hasAudio: !!data.audioUrl, actionPerformed: data.actionPerformed })
       
-      // 🌟 MASTER TOUCH: Notify dashboard to refresh data if an action was taken
       if (data.actionPerformed) {
         window.dispatchEvent(new CustomEvent('cronix:refresh-data'))
       }
 
-      // Update UI transcript (discreet)
-      setTranscript(data.text.length > 60 ? data.text.slice(0, 57) + '...' : data.text)
-      
       if (data.audioUrl) {
         setState('speaking')
+        // GHOST TRANSCRIPT: Ensure it's clear while Luis speaks
+        setTranscript('')
         const audio = new Audio(data.audioUrl)
         currentAudioRef.current = audio
         audio.onended = () => {
           setState('idle')
           currentAudioRef.current = null
-          setTimeout(() => setTranscript(''), 4000)
         }
         audio.onerror = () => speakWithNativeFallback(data.text)
         await audio.play().catch(() => speakWithNativeFallback(data.text))
@@ -295,7 +358,7 @@ export function VoiceAssistantFab() {
     } catch (error: any) {
       console.error(error)
       setState('idle')
-      setTranscript(`❌ Error: ${error.message || 'Error desconocido'}`)
+      setTranscript(`❌ Error`)
       setTimeout(() => setTranscript(''), 3000)
     }
   }
@@ -356,9 +419,11 @@ export function VoiceAssistantFab() {
           className="relative flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-colors duration-300"
           style={
             state === 'listening'
-              ? { background: '#EF4444', boxShadow: '0 0 25px rgba(239,68,68,0.6)' }
-              : state === 'processing' || state === 'speaking'
+              ? { background: '#09090b', border: '2px solid rgba(168,85,247,0.8)', boxShadow: '0 0 28px rgba(168,85,247,0.5)' }
+              : state === 'processing'
               ? { background: '#2563EB', boxShadow: '0 0 25px rgba(37,99,235,0.6)' }
+              : state === 'speaking'
+              ? { background: '#09090b', border: '2px solid rgba(56,132,255,0.8)', boxShadow: '0 0 26px rgba(56,132,255,0.5)' }
               : {
                   background: '#09090b',
                   border: '2px solid rgba(56,132,255,0.7)',
@@ -366,13 +431,14 @@ export function VoiceAssistantFab() {
                 }
           }
         >
-          {state === 'listening' && (
-            <span className="absolute inset-0 rounded-full bg-red-400 opacity-50 animate-ping" />
-          )}
           {state === 'idle' && <Mic className="w-6 h-6" style={{ color: '#3884FF' }} />}
-          {state === 'listening' && <Square className="w-5 h-5 text-white fill-current" />}
-          {(state === 'processing' || state === 'speaking') && <Loader2 className="w-6 h-6 text-white animate-spin" />}
-          
+          {state === 'listening' && (
+            <VoiceVisualizer isActive={true} volume={volume} isSpeaking={false} />
+          )}
+          {state === 'processing' && <Loader2 className="w-6 h-6 text-white animate-spin" />}
+          {state === 'speaking' && (
+            <VoiceVisualizer isActive={true} volume={0.5} isSpeaking={true} />
+          )}
           <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-zinc-700 rounded-full opacity-30" />
         </motion.button>
       </motion.div>
@@ -387,16 +453,30 @@ export function VoiceAssistantFab() {
           title="Asistente Ejecutivo IA — Mantén presionado o clic para hablar"
           className={`relative flex items-center gap-2.5 h-10 px-4 rounded-full transition-all duration-300 font-semibold text-sm select-none ${
             state === 'listening'
-              ? 'shadow-[0_0_24px_rgba(239,68,68,0.7)] scale-105'
+              ? 'scale-105'
               : state === 'processing' || state === 'speaking'
-              ? 'shadow-[0_0_24px_rgba(37,99,235,0.7)]'
+              ? ''
               : 'hover:scale-105'
           }`}
           style={
             state === 'listening'
-              ? { background: '#EF4444', color: '#fff', border: '1.5px solid rgba(239,68,68,0.8)' }
-              : state === 'processing' || state === 'speaking'
+              ? {
+                  background: 'rgba(5,5,10,0.9)',
+                  color: '#fff',
+                  border: '1.5px solid rgba(168,85,247,0.8)',
+                  boxShadow: '0 0 22px rgba(168,85,247,0.45), 0 0 50px rgba(236,72,153,0.15)',
+                  backdropFilter: 'blur(12px)',
+                }
+              : state === 'processing'
               ? { background: 'rgba(37,99,235,0.9)', color: '#fff', border: '1.5px solid rgba(37,99,235,0.8)' }
+              : state === 'speaking'
+              ? {
+                  background: 'rgba(5,5,10,0.9)',
+                  color: '#fff',
+                  border: '1.5px solid rgba(56,132,255,0.8)',
+                  boxShadow: '0 0 22px rgba(56,132,255,0.4)',
+                  backdropFilter: 'blur(12px)',
+                }
               : {
                   background: 'rgba(5,5,10,0.85)',
                   color: '#3884FF',
@@ -406,14 +486,16 @@ export function VoiceAssistantFab() {
                 }
           }
         >
-          {state === 'listening' && (
-            <span className="absolute inset-0 rounded-full bg-red-400 opacity-30 animate-ping" />
-          )}
           {state === 'idle' && <Mic className="w-4 h-4 flex-shrink-0" />}
-          {state === 'listening' && <Square className="w-3.5 h-3.5 fill-current flex-shrink-0" />}
-          {(state === 'processing' || state === 'speaking') && <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />}
+          {state === 'listening' && (
+            <VoiceVisualizer isActive={true} volume={volume} isSpeaking={false} />
+          )}
+          {state === 'processing' && <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />}
+          {state === 'speaking' && (
+            <VoiceVisualizer isActive={true} volume={0.5} isSpeaking={true} />
+          )}
 
-          <span>
+          <span className="leading-none">
             {state === 'idle' && '✦ Luis IA'}
             {state === 'listening' && 'Escuchando...'}
             {state === 'processing' && 'Procesando...'}
@@ -422,7 +504,7 @@ export function VoiceAssistantFab() {
 
           <span
             className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-              state === 'idle' ? 'bg-[#3884FF]' : state === 'listening' ? 'bg-white animate-pulse' : 'bg-white'
+              state === 'idle' ? 'bg-[#3884FF]' : 'bg-white animate-pulse'
             }`}
           />
         </button>
