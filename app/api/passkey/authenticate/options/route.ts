@@ -15,8 +15,15 @@ export async function POST(request: NextRequest) {
     userVerification: 'required',
   })
 
+  interface PasskeyChallenge {
+    id: string;
+    challenge: string;
+    user_id?: string;
+    created_at: string;
+  }
+
   // Store challenge without user_id (login flow — user unknown yet)
-  await (admin as any).from('passkey_challenges').insert({ challenge: options.challenge })
+  await (admin.from('passkey_challenges') as any).insert({ challenge: options.challenge })
 
   return NextResponse.json(options)
 }

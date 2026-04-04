@@ -57,5 +57,11 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
     "vitest": "^4.1.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "next lint --fix",
+      "tsc --noEmit"
+    ]
   }
 }

@@ -13,12 +13,29 @@ export async function POST(request: NextRequest) {
   const protocol = rpID === 'localhost' ? 'http' : 'https'
   const origin = `${protocol}://${host}`
 
+  // 🛰️ Define interfaces for Passkey Auth
+  interface UserPasskey {
+    id: string;
+    user_id: string;
+    credential_id: string;
+    public_key: string;
+    counter: number;
+    transports: string[] | null;
+  }
+
+  interface PasskeyChallenge {
+    id: string;
+    challenge: string;
+  }
+
   // Find credential in DB by ID
-  const { data: storedCred } = await admin
+  const { data: storedCredRaw } = await admin
     .from('user_passkeys')
     .select('id, user_id, credential_id, public_key, counter, transports')
     .eq('credential_id', credential.id)
-    .single()
+    .single();
+  
+  const storedCred = storedCredRaw as unknown as UserPasskey | null;
 
   if (!storedCred) {
     return NextResponse.json({ error: 'Credencial no encontrada' }, { status: 400 })
@@ -35,11 +52,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'clientDataJSON inválido' }, { status: 400 })
   }
 
-  const { data: challengeRow } = await admin
-    .from('passkey_challenges')
+  const { data: challengeRowRaw } = await (admin.from('passkey_challenges') as any)
     .select('id, challenge')
     .eq('challenge', clientChallenge)
-    .single()
+    .single();
+  
+  const challengeRow = challengeRowRaw as unknown as PasskeyChallenge | null;
 
   if (!challengeRow) {
     return NextResponse.json({ error: 'Challenge no encontrado' }, { status: 400 })
@@ -68,13 +86,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Update counter to prevent replay attacks
-  await admin
-    .from('user_passkeys')
+  await (admin.from('user_passkeys') as any)
     .update({ counter: verification.authenticationInfo.newCounter })
     .eq('id', storedCred.id)
 
   // Delete used challenge
-  await admin.from('passkey_challenges').delete().eq('id', challengeRow.id)
+  await (admin.from('passkey_challenges') as any).delete().eq('id', challengeRow.id)
 
   // Get user email to generate a magic-link token (admin API does NOT send email)
   const { data: userData, error: userError } = await admin.auth.admin.getUserById(storedCred.user_id)
