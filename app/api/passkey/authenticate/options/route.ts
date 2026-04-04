@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   })
 
   // Store challenge without user_id (login flow — user unknown yet)
-  await admin.from('passkey_challenges').insert({ challenge: options.challenge })
+  await (admin as any).from('passkey_challenges').insert({ challenge: options.challenge })
 
   return NextResponse.json(options)
 }
