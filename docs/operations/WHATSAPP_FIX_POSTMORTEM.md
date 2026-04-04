@@ -326,10 +326,31 @@ npx supabase functions deploy whatsapp-webhook --no-verify-jwt
 
 ---
 
+### 10. QStash Credential Duplication & Silent Failures (April 2026 - Incident 2)
+
+**Problem:** Following an attempt to change QStash zones (US East to EU Central), the AI stopped responding completely. Meta received 200 OK from the Webhook, but no messages reached the AI agent.
+
+**Root Causes:**
+1.  **Duplicate Environment Variables:** `.env.local` contained both EU Central configurations (incorrectly formatted) and US East 1 configurations, causing deployment misalignment.
+2.  **Signature Mismatch:** Because the `QSTASH_CURRENT_SIGNING_KEY` on Supabase did not correspond to the actual active project, `process-whatsapp`'s `verifyQStash` function rejected all incoming QStash payloads with a 401 Unauthorized error.
+3.  **Silent Security Block:** `verifyQStash` explicitly returns a `401` and exits BEFORE the core logic runs. This means `logToDLQ` is never triggered (to prevent database bloat from unauthorized attackers), causing a "silent drop" from the developer's perspective. 
+
+**Solution:**
+1.  **Environment Cleanup:** Removed the legacy/commented EU zone credentials from `.env.local` to strictly maintain a single source of truth for the active US East 1 QStash instance.
+2.  **CLI Synchronization:** Re-pushed the correct US East 1 credentials directly using the CLI:
+    ```bash
+    npx supabase secrets set QSTASH_URL="https://qstash-us-east-1.upstash.io" QSTASH_TOKEN="..." QSTASH_CURRENT_SIGNING_KEY="..." QSTASH_NEXT_SIGNING_KEY="..."
+    ```
+
+**Lesson Learned:** When dealing with dual-service webhooks (Meta -> Supabase -> QStash -> Supabase), signature mismatches will silently drop traffic. Always keep `.env.local` absolutely clean from legacy regions, and actively push changes specifically to `supabase secrets` as Supabase Deno Deploy does not auto-sync local files.
+
+---
+
 ## New Configuration Checklist Steps
 
 ### QStash (Upstash)
 - [ ] **QSTASH_URL** configured based on the chosen region (e.g., `qstash-us-east-1.upstash.io`).
 - [ ] **QSTASH_TOKEN** updated.
 - [ ] **QSTASH_CURRENT_SIGNING_KEY** and **QSTASH_NEXT_SIGNING_KEY** extracted from the "APIs" tab in Upstash.
+- [ ] **Verify `.env.local` has exactly ONE block of QStash keys** to prevent deployment confusion.
 - [ ] Verify the destination in the webhook (`PROCESS_WHATSAPP_URL`) points to the correct Supabase function.

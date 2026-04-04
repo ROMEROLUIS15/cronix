@@ -14,6 +14,7 @@ import {
   Link as LinkIcon,
   ShieldCheck,
   Smartphone,
+  Sparkles,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,8 +73,9 @@ export default function SettingsPage() {
     useState<Record<string, DayHours>>(buildDefaultHours);
   const [notifSettings, setNotifSettings] = useState<{
     whatsapp: boolean
-    email:    boolean
-  }>({ whatsapp: false, email: false });
+  }>({ whatsapp: false });
+  const [showLuisFab, setShowLuisFab] = useState(true);
+  const [savingFab, setSavingFab] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
   const notif = useNotifications(bizId);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -144,8 +146,12 @@ export default function SettingsPage() {
         if (notifData) {
           setNotifSettings({
             whatsapp: notifData.whatsapp ?? false,
-            email:    notifData.email    ?? false,
           });
+        }
+        
+        const uiData = (business.settings as unknown as BusinessSettingsJson)?.uiSettings;
+        if (uiData && typeof uiData.showLuisFab === "boolean") {
+          setShowLuisFab(uiData.showLuisFab);
         }
       }
       setLoading(false);
@@ -229,6 +235,33 @@ export default function SettingsPage() {
     error
       ? showMsg("error", "Error al guardar notificaciones: " + error.message)
       : showMsg("success", "Preferencias de recordatorio guardadas");
+  };
+
+  const handleSaveLuisFab = async (newVal: boolean) => {
+    if (!bizId || !biz) return;
+    setShowLuisFab(newVal);
+    setSavingFab(true);
+    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
+    const { error } = await supabase
+      .from("businesses")
+      .update({ settings: { ...currentSettings, uiSettings: { showLuisFab: newVal } } })
+      .eq("id", bizId);
+    
+    setSavingFab(false);
+    
+    if (!error) {
+      setBiz(prev => prev ? {
+        ...prev,
+        settings: { ...(prev.settings as BusinessSettingsJson), uiSettings: { showLuisFab: newVal } } as unknown as Business['settings'],
+      } : prev);
+      
+      // Real-time UI sync without refresh
+      window.dispatchEvent(new CustomEvent('cronix:toggle-fab', { detail: newVal }));
+      showMsg("success", newVal ? "Asistente activado en pantalla" : "Asistente ocultado");
+    } else {
+      showMsg("error", "Error al cambiar visibilidad");
+      setShowLuisFab(!newVal); // revert
+    }
   };
 
   const copyHoursToAll = (sourceKey: string) => {
@@ -661,6 +694,61 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* Smart Assistant */}
+      <Card>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(168,85,247,0.1)" }}
+          >
+            <Sparkles size={18} style={{ color: "#A855F7" }} />
+          </div>
+          <div>
+            <h2
+              className="text-base font-semibold"
+              style={{ color: "#F2F2F2" }}
+            >
+              Asistente Inteligente
+            </h2>
+            <p className="text-xs" style={{ color: "#909098" }}>
+              Preferencias de IA y automatización
+            </p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div
+            className="flex items-center justify-between p-4 rounded-xl"
+            style={{ background: "#212125", border: "1px solid #2E2E33" }}
+          >
+            <div>
+              <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
+                Botón flotante de Luis IA
+              </p>
+              <p className="text-xs" style={{ color: "#909098" }}>
+                Muestra u oculta el botón walkie-talkie en todas tus pantallas
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {savingFab && <Loader2 size={16} className="animate-spin text-[#909098]" />}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showLuisFab}
+                  onChange={(e) => handleSaveLuisFab(e.target.checked)}
+                  disabled={savingFab}
+                  className="sr-only peer"
+                />
+                <div
+                  className="w-10 h-5 rounded-full transition-colors"
+                  style={{ background: showLuisFab ? "#A855F7" : "#3A3A3F" }}
+                />
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Notifications */}
       <Card>
         <div className="flex items-center gap-3 mb-5">
@@ -685,8 +773,7 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {(
             [
-              { key: "whatsapp", label: "WhatsApp", desc: "Recordatorios por WhatsApp" },
-              { key: "email",    label: "Email",    desc: "Recordatorios por correo electrónico" },
+              { key: "whatsapp", label: "WhatsApp", desc: "Recordatorios automáticos a clientes por WhatsApp" },
             ] as const
           ).map(({ key, label, desc }) => (
             <div

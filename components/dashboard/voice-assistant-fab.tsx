@@ -3,13 +3,17 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useSpring } from 'framer-motion'
+import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import type { BusinessSettingsJson } from '@/types'
 
 type AssistantState = 'idle' | 'listening' | 'processing' | 'speaking'
 
 export function VoiceAssistantFab() {
+  const { supabase, businessId } = useBusinessContext()
   const [state, setState] = useState<AssistantState>('idle')
   const [transcript, setTranscript] = useState<string>('')
   const [isLoaded, setIsLoaded] = useState(false)
+  const [showLuisFab, setShowLuisFab] = useState(true)
   
   // ── Drag & Persistence ──────────────────────────────────────────────────
   const y = useMotionValue(0)
@@ -21,7 +25,28 @@ export function VoiceAssistantFab() {
     if (savedY) {
       y.set(parseFloat(savedY))
     }
-    setIsLoaded(true)
+    
+    // Cloud Visibility Sync
+    if (businessId) {
+      const syncVisibility = async () => {
+        try {
+          const { data } = await supabase.from('businesses').select('settings').eq('id', businessId).single()
+          const ui = (data?.settings as unknown as BusinessSettingsJson)?.uiSettings
+          if (ui?.showLuisFab === false) setShowLuisFab(false)
+        } catch (error) {
+          console.error('FAB Visibility Sync Error:', error)
+        } finally {
+          setIsLoaded(true)
+        }
+      }
+      syncVisibility()
+    } else {
+      setIsLoaded(true)
+    }
+
+    // Real-time Dashboard Toggle Sync
+    const handleToggle = (e: CustomEvent) => setShowLuisFab(e.detail)
+    window.addEventListener('cronix:toggle-fab', handleToggle as EventListener)
 
     // ── PROACTIVE GREETING (Once per session) ──
     const hasGreeted = sessionStorage.getItem('cronix-assistant-greeted')
@@ -55,8 +80,9 @@ export function VoiceAssistantFab() {
     return () => {
       if (timer) clearTimeout(timer)
       abortController.abort()
+      window.removeEventListener('cronix:toggle-fab', handleToggle as EventListener)
     }
-  }, [y])
+  }, [y, businessId, supabase])
 
   const handleDragEnd = () => {
     localStorage.setItem('cronix-assistant-y', y.get().toString())
@@ -305,28 +331,21 @@ export function VoiceAssistantFab() {
   }, [state])
 
   const isClient = typeof window !== 'undefined'
-  if (!isClient || !isLoaded) return null
+  
+  if (!isClient || !isLoaded || !showLuisFab) return null
 
   return (
     <>
       {/* ── MOBILE: Draggable Vertical Circle ── */}
       <motion.div 
         drag="y"
-        dragConstraints={{ top: -300, bottom: 20 }}
+        dragConstraints={{ top: -(typeof window !== 'undefined' ? window.innerHeight - 150 : 800), bottom: 20 }}
         dragElastic={0.1}
         onDragEnd={handleDragEnd}
         style={{ y: springY }}
         className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 sm:hidden touch-none"
       >
-        {transcript && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-zinc-950/90 border border-zinc-800 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl max-w-[200px] backdrop-blur-md"
-          >
-            <p className="leading-snug">{transcript}</p>
-          </motion.div>
-        )}
+
         
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -360,19 +379,7 @@ export function VoiceAssistantFab() {
 
       {/* ── DESKTOP: Premium Pill design ── */}
       <div className="hidden sm:flex fixed top-[72px] right-6 z-50 flex-col items-end gap-3">
-        {transcript && (
-          <div
-            className="text-white text-sm px-4 py-3 rounded-2xl shadow-2xl max-w-sm animate-in slide-in-from-top-2 fade-in duration-300"
-            style={{
-              background: 'rgba(10,10,15,0.92)',
-              border: '1px solid rgba(56,132,255,0.25)',
-              backdropFilter: 'blur(16px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(56,132,255,0.1)',
-            }}
-          >
-            <p className="leading-snug text-zinc-100">{transcript}</p>
-          </div>
-        )}
+
 
         <button
           type="button"

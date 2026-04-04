@@ -128,8 +128,10 @@ export interface BusinessSettingsJson {
   workingHours?: Record<string, [string, string] | null>
   notifications?: {
     whatsapp: boolean
-    email: boolean
     reminderHours?: number[]  // legacy
+  }
+  uiSettings?: {
+    showLuisFab?: boolean
   }
   wa_verified?: boolean
   maxDailyBookingsPerClient?: number

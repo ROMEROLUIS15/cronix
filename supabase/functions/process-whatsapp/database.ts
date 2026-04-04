@@ -26,16 +26,25 @@ const supabase = createClient(
 
 /**
  * Converts a local date + time string to a UTC ISO timestamp.
- * Uses the current moment's UTC offset for the given IANA timezone.
- * NOTE: DST-unaware; accurate for fixed-offset timezones (most of LatAm).
+ * Uses Intl.DateTimeFormat to reliably find the exact offset for the target timezone,
+ * avoiding historical timezone drift bugs (e.g. Venezuela's old -04:30 offset).
  */
 export function localTimeToUTC(dateStr: string, timeStr: string, timezone: string): string {
-  const now      = new Date()
-  const utcMs    = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' })).getTime()
-  const tzMs     = new Date(now.toLocaleString('en-US', { timeZone: timezone })).getTime()
-  const offsetMs = tzMs - utcMs
-  const localMs  = new Date(`${dateStr}T${timeStr}:00Z`).getTime()
-  return new Date(localMs - offsetMs).toISOString()
+  // Anchor the time as if it were UTC to extract the target timezone's exact GMT offset
+  const targetDate = new Date(`${dateStr}T${timeStr}:00Z`)
+  
+  const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'longOffset' })
+  const parts = formatter.formatToParts(targetDate)
+  const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value // e.g. "GMT-04:00"
+  
+  if (offsetPart && offsetPart.startsWith('GMT')) {
+    const offsetStr = offsetPart.replace('GMT', '') // Yields "-04:00", "+02:00", or "" (if UTC)
+    if (!offsetStr) return `${dateStr}T${timeStr}:00Z`
+    return new Date(`${dateStr}T${timeStr}:00${offsetStr}`).toISOString()
+  }
+  
+  // Fallback if parsing fails
+  return new Date(`${dateStr}T${timeStr}:00Z`).toISOString()
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────

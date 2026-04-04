@@ -212,19 +212,17 @@ serve(async (req: Request) => {
           }
         } catch (err) {
           if (err instanceof LlmRateLimitError) throw err
-          captureException(err, { stage: 'voice_transcription', sender })
-          // Notify user instead of silent failure
-          await sendWhatsAppMessage(sender, "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?")
-          await flushSentry()
-          return json({ success: true, message: 'Voice transcription failed — user notified' })
-        } catch (err) {
           if (err instanceof CircuitBreakerError) {
             addBreadcrumb('Whisper Circuit open hit', 'llm', 'error')
             await sendWhatsAppMessage(sender, "🤖 Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?")
             await flushSentry()
             return json({ success: true })
           }
-          throw err
+          captureException(err, { stage: 'voice_transcription', sender })
+          // Notify user instead of silent failure
+          await sendWhatsAppMessage(sender, "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?")
+          await flushSentry()
+          return json({ success: true, message: 'Voice transcription failed — user notified' })
         }
       }
 
@@ -321,7 +319,13 @@ serve(async (req: Request) => {
       addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
       
       // Layer 3: Business aggregate rate limit
-      const withinBusinessQuota = await checkBusinessUsageLimit(business.id)
+      // Layer 3 & 4: Business aggregate rate limit & Token Quota (Precision cost control)
+      const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 50000
+      const [withinBusinessQuota, withinTokenQuota] = await Promise.all([
+        checkBusinessUsageLimit(business.id),
+        checkTokenQuota(business.id, dailyTokenLimit)
+      ])
+
       if (!withinBusinessQuota) {
         addBreadcrumb('Business rate limited', 'rate-limit', 'warning', { business_id: business.id })
         // Silent drop to avoid confirming attack success, or generic "busy" message
@@ -329,11 +333,6 @@ serve(async (req: Request) => {
         return json({ success: true, message: 'Business quota exceeded — silent drop' })
       }
 
-      // Layer 5: Token Quota (Precision cost control)
-      // We use a default of 50,000 tokens/day if not specified in settings.
-      const dailyTokenLimit = context.business.settings.wa_daily_token_limit ?? 50000
-      const withinTokenQuota = await checkTokenQuota(business.id, dailyTokenLimit)
-      
       if (!withinTokenQuota) {
         addBreadcrumb('Token quota exceeded', 'rate-limit', 'warning', { business_id: business.id })
         const quotaMsg = "🤖 Lo siento, este negocio ha alcanzado su límite de procesamiento diario. Por favor intenta de nuevo mañana o contacta al administrador."
