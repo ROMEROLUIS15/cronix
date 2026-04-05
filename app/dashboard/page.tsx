@@ -27,6 +27,8 @@ import Image from "next/image";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import * as appointmentsRepo from "@/lib/repositories/appointments.repo";
 import * as servicesRepo from "@/lib/repositories/services.repo";
+import * as notificationsRepo from "@/lib/repositories/notifications.repo";
+import { notificationForAppointmentCancelled, notificationForAppointmentConfirmed } from "@/lib/use-cases/notifications.use-case";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { ServicesOnboardingBanner } from "@/components/dashboard/services-onboarding-banner";
 import { AppointmentStatusBadge } from "@/components/ui/badge";
@@ -177,11 +179,26 @@ export default function DashboardPage() {
   };
 
   const updateStatus = async (status: AppointmentStatus) => {
-    if (!selectedApt) return;
+    if (!selectedApt || !businessId) return;
     setUpdatingStatus(true);
     try {
       await appointmentsRepo.updateAppointmentStatus(supabase, selectedApt.id, status);
       setSelectedApt((prev) => (prev ? { ...prev, status } : null));
+
+      // Create in-app notification for status changes
+      if (status === 'confirmed' && selectedApt.status !== 'confirmed') {
+        const clientName = selectedApt.client?.name ?? 'cliente';
+        const serviceName = selectedApt.service?.name ?? 'servicio';
+        const timeStr = new Date(selectedApt.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        const notifPayload = notificationForAppointmentConfirmed(businessId, clientName, serviceName, timeStr);
+        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+      } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
+        const clientName = selectedApt.client?.name ?? 'cliente';
+        const serviceName = selectedApt.service?.name ?? 'servicio';
+        const notifPayload = notificationForAppointmentCancelled(businessId, clientName, serviceName);
+        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+      }
+
       await Promise.all([fetchMonthApts(), fetchStats()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'No se pudo actualizar el estado');

@@ -263,7 +263,13 @@ class ToolRegistry {
   async execute(name: string, args: any, businessId: string, timezone?: string): Promise<string> {
     const tool = this.tools.get(name)
     if (!tool) throw new Error(`Tool ${name} not found`)
-    return await tool.handler(businessId, args, timezone)
+
+    // Sanitize args: remove null/undefined values to prevent schema validation errors
+    const sanitized = Object.fromEntries(
+      Object.entries(args || {}).filter(([_, v]) => v !== null && v !== undefined)
+    )
+
+    return await tool.handler(businessId, sanitized, timezone)
   }
 }
 

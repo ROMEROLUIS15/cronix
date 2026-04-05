@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
+import * as notificationsRepo from "@/lib/repositories/notifications.repo";
+import { notificationForNewClient } from "@/lib/use-cases/notifications.use-case";
 import {
   PhoneInputFlags,
   parsePhone,
@@ -87,6 +89,10 @@ export default function NewClientPage() {
     if (insertError) {
       setError("Error al crear el cliente: " + insertError.message);
     } else {
+      // In-app notification for new client
+      const notifPayload = notificationForNewClient(businessId, form.name.trim(), fullPhone);
+      notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+
       router.push("/dashboard/clients");
       router.refresh();
     }

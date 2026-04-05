@@ -24,6 +24,35 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
 
+// ── Notification helpers ────────────────────────────────────────────────────
+function buildReminderNotification(
+  businessId: string,
+  appointments: AppointmentWithClient[]
+): { title: string; content: string; type: string; metadata: Record<string, unknown> } {
+  const MAX_LISTED = 5
+  const listed = appointments.slice(0, MAX_LISTED).map(apt => {
+    const clientName  = apt.clients?.name  ?? 'Cliente'
+    const serviceName = apt.services?.name ?? 'Servicio'
+    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
+      hour: '2-digit', minute: '2-digit'
+    })
+    return `${time} · ${clientName} — ${serviceName}`
+  })
+
+  const overflow = appointments.length > MAX_LISTED ? `\n+${appointments.length - MAX_LISTED} más` : ''
+  const content = listed.join('\n') + overflow
+
+  return {
+    title: `📋 ${appointments.length} recordatorio${appointments.length > 1 ? 's' : ''} enviado${appointments.length > 1 ? 's' : ''}`,
+    content,
+    type: 'info',
+    metadata: {
+      event: 'reminder.sent',
+      totalAppointments: appointments.length,
+    },
+  }
+}
+
 // Initialize once per cold start
 initSentry('cron-reminders')
 
@@ -259,11 +288,14 @@ Deno.serve(async (req: Request) => {
         })
       )
 
-      for (const result of waResults) {
+      const failedAppointments: AppointmentWithClient[] = []
+      for (let i = 0; i < waResults.length; i++) {
+        const result = waResults[i]!
         if (result.status === 'fulfilled' && result.value) {
           results.wa_sent++
         } else {
           results.wa_failed++
+          failedAppointments.push(sendableApts[i]!)
           // Capture individual delivery failures as non-fatal exceptions
           if (result.status === 'rejected') {
             captureException(result.reason, {
@@ -273,9 +305,64 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
+
+      // Create notification for WhatsApp failures
+      if (failedAppointments.length > 0) {
+        try {
+          const failureNotif = failedAppointments.length === 1
+            ? {
+                title: '❌ Fallo al enviar recordatorio',
+                content: `No se pudo enviar recordatorio a ${failedAppointments[0]!.clients?.name || 'cliente'}`,
+                type: 'error',
+                metadata: { event: 'whatsapp.failed', failureCount: 1 },
+              }
+            : {
+                title: `❌ ${failedAppointments.length} recordatorios no enviados`,
+                content: `No se pudieron entregar ${failedAppointments.length} recordatorios por WhatsApp. Verifica la configuración.`,
+                type: 'error',
+                metadata: { event: 'whatsapp.multiple_failed', failureCount: failedAppointments.length },
+              }
+
+          await supabase.from('notifications').insert([
+            {
+              business_id: biz.id,
+              title: failureNotif.title,
+              content: failureNotif.content,
+              type: failureNotif.type,
+              metadata: failureNotif.metadata,
+              is_read: false,
+            },
+          ])
+        } catch (err) {
+          captureException(err, {
+            stage: 'create_whatsapp_failure_notification',
+            business_id: biz.id,
+          })
+        }
+      }
     }
 
-    // ── 2. Send consolidated push to business owner ───────────────────────
+    // ── 2. Create in-app notification ──────────────────────────────────────
+    const notifPayload = buildReminderNotification(biz.id, apts)
+    try {
+      await supabase.from('notifications').insert([
+        {
+          business_id: biz.id,
+          title:       notifPayload.title,
+          content:     notifPayload.content,
+          type:        notifPayload.type,
+          metadata:    notifPayload.metadata,
+          is_read:     false,
+        },
+      ])
+    } catch (err) {
+      captureException(err, {
+        stage:       'create_in_app_notification',
+        business_id: biz.id,
+      })
+    }
+
+    // ── 3. Send consolidated push to business owner ───────────────────────
     const MAX_LISTED = 5
     const listed = apts.slice(0, MAX_LISTED).map(apt => {
       const clientName  = apt.clients?.name  ?? 'Cliente'
@@ -314,8 +401,24 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // ── Cleanup: Delete notifications older than 30 days ─────────────────────
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - 30)
+
+  const { error: cleanupErr, count: cleanedCount } = await supabase
+    .from('notifications')
+    .delete()
+    .lt('created_at', cutoffDate.toISOString())
+    .select('id', { count: 'exact' })
+
+  if (cleanupErr) {
+    captureException(cleanupErr, { stage: 'cleanup_old_notifications' })
+  } else {
+    addBreadcrumb('Old notifications cleaned', 'database', 'info', { count: cleanedCount })
+  }
+
   addBreadcrumb('Cron run complete', 'cron', 'info', { ...results })
 
   await flushSentry()
-  return json({ ok: true, ...results })
+  return json({ ok: true, ...results, notifications_cleaned: cleanedCount ?? 0 })
 })

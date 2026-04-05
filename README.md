@@ -635,11 +635,13 @@ pg_cron (hourly) → cron-reminders Edge Function
 - **Status Flow:** `pending` → `confirmed` → `completed` | `cancelled` | `no_show`
 - **Quick Resolution:** One-click buttons for expired appointments ("Attended" / "No-show")
 - **WhatsApp AI Booking:** Auto-confirmed via Silent Execution — owner can cancel from dashboard
+- **Voice AI Booking:** Luis IA can register new clients and book in a single command (e.g., "Schedule Maria González, new client, 0412-555-1234, for a haircut tomorrow at 3pm")
 
 ### Client Management
 
 - **Full CRUD** with phone (international format + country flags), email, address, avatar, tags, notes
 - **Contact Picker:** Native Contact Picker API integration — tap to auto-fill name and phone
+- **AI Auto-Registration:** Luis IA auto-registers new clients with phone numbers + duplicate detection via fuzzy matching
 - **Debt Tracking:** Real-time debt = sum of unpaid appointment costs
 - **Payment Distribution:** Single payment distributed across multiple unpaid appointments
 - **Appointment History:** All appointments linked to client with filters

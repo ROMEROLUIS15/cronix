@@ -20,8 +20,10 @@ import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
 import * as usersRepo from '@/lib/repositories/users.repo'
 import * as businessesRepo from '@/lib/repositories/businesses.repo'
 import { upsertReminder } from '@/lib/repositories/reminders.repo'
+import * as notificationsRepo from '@/lib/repositories/notifications.repo'
 import { notifyOwner } from '@/lib/services/push-notify.service'
 import { parseVoiceCommand } from '@/lib/actions/voice-assistant'
+import { notificationForAppointmentCreated } from '@/lib/use-cases/notifications.use-case'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
@@ -323,10 +325,14 @@ function NewAppointmentForm() {
         }
       }
 
-      // Web Push al dueño: notificación inmediata de nueva cita
+      // In-app notification
       const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
       const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
       const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
+      notificationsRepo.createNotification(supabase, notifPayload).catch(() => null)
+
+      // Web Push al dueño: notificación inmediata de nueva cita
       notifyOwner({
         title: '📅 Nueva cita agendada',
         body:  `${clientName} · ${serviceName} · ${timeStr}`,

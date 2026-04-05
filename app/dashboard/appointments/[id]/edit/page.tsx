@@ -18,6 +18,7 @@ import * as servicesRepo from '@/lib/repositories/services.repo'
 import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
 import * as usersRepo from '@/lib/repositories/users.repo'
 import * as businessesRepo from '@/lib/repositories/businesses.repo'
+import * as notificationsRepo from '@/lib/repositories/notifications.repo'
 import {
   upsertReminder,
   cancelRemindersByAppointment,
@@ -348,6 +349,25 @@ export default function EditAppointmentPage({ params }: Props) {
             channel:        'whatsapp',
           }).then(() => null, () => null)
         }
+      }
+
+      // In-app notification for appointment update
+      if (businessId) {
+        const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
+        const serviceName = services.filter(s => form.service_ids.includes(s.id)).map(s => s.name).join(', ') || 'servicio'
+        const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+
+        const notifPayload = {
+          business_id: businessId,
+          title: '📝 Cita actualizada',
+          content: `${clientName} • ${serviceName} a las ${timeStr}`,
+          type: 'info' as const,
+          metadata: {
+            event: 'appointment.updated',
+            appointmentId: params.id,
+          },
+        }
+        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null)
       }
     }
 

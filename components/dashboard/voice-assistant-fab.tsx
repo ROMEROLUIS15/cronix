@@ -477,7 +477,7 @@ export function VoiceAssistantFab() {
         className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 sm:hidden touch-none"
       >
 
-        {transcript && (
+        {transcript && state !== 'speaking' && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -588,7 +588,7 @@ export function VoiceAssistantFab() {
           />
         </button>
 
-        {transcript && (
+        {transcript && state !== 'speaking' && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
