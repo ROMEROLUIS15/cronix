@@ -78,11 +78,11 @@ export async function safeSTT(
  * 🛠️ Safe LLM (Large Language Model)
  */
 export async function safeLLM(
-  messages: any[], 
-  tools: any[], 
-  apiKey: string, 
-  primaryModel: string = 'llama-3.3-70b-versatile',
-  fallbackModel: string = 'llama-3-8b-8192'
+  messages: any[],
+  tools: any[],
+  apiKey: string,
+  primaryModel: string = 'llama-3.1-8b-instant',
+  fallbackModel: string = 'llama-3.3-70b-versatile'
 ): Promise<AIResponse<any>> {
   const start = Date.now()
   if (!aiCircuit.isAvailable('LLM')) {
@@ -93,9 +93,11 @@ export async function safeLLM(
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        model, 
-        messages, 
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 256,
+        temperature: 0.7,
         tools: tools.length ? tools : undefined,
         tool_choice: tools.length ? 'auto' : undefined
       }),

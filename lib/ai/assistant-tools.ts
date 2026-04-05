@@ -6,6 +6,26 @@ import { logger } from '@/lib/logger'
 import { sendReactivationMessage } from '@/lib/services/whatsapp.service'
 
 /**
+ * Converts a UTC ISO string to a Date object that, when formatted with date-fns
+ * (which ignores timezone), displays the correct local time for the given IANA timezone.
+ * Uses native Intl — no extra packages needed.
+ */
+function toUserDate(isoString: string, timezone: string): Date {
+  try {
+    const utc = new Date(isoString)
+    const utcMs = new Date(utc.toLocaleString('en-US', { timeZone: 'UTC' })).getTime()
+    const tzMs  = new Date(utc.toLocaleString('en-US', { timeZone: timezone })).getTime()
+    return new Date(utc.getTime() + (tzMs - utcMs))
+  } catch {
+    return new Date(isoString)
+  }
+}
+
+function fmtUserDate(isoString: string, timezone: string, fmt: string): string {
+  return format(toUserDate(isoString, timezone), fmt, { locale: es })
+}
+
+/**
  * assistant-tools.ts — Server-side tools for the "Luis" AI Executive Assistant.
  * 
  * V4 Evolution: Multi-staff support & Actionable CRM.
@@ -41,11 +61,11 @@ export async function get_today_summary(business_id: string): Promise<string> {
 
   if (incomeRes.error) {
     logger.error('TOOL-DB', `get_today_summary income failed: ${incomeRes.error.message}`, { business_id })
-    return `Error al consultar ingresos: ${incomeRes.error.message}`
+    return 'Error al consultar los ingresos de hoy. Intenta de nuevo en un momento.'
   }
   if (apptRes.error) {
     logger.error('TOOL-DB', `get_today_summary appointments failed: ${apptRes.error.message}`, { business_id })
-    return `Error al consultar citas: ${apptRes.error.message}`
+    return 'Error al consultar las citas de hoy. Intenta de nuevo en un momento.'
   }
 
   const totalIncome = (incomeRes.data ?? []).reduce((acc, r) => acc + Number(r.net_amount), 0)
@@ -59,7 +79,7 @@ export async function get_today_summary(business_id: string): Promise<string> {
 }
 
 // ── READ: Huecos libres hoy ────────────────────────────────────────────────
-export async function get_upcoming_gaps(business_id: string): Promise<string> {
+export async function get_upcoming_gaps(business_id: string, timezone: string = 'UTC'): Promise<string> {
   const supabase = await createClient()
   const todayStart = startOfDay(new Date()).toISOString()
   const todayEnd = endOfDay(new Date()).toISOString()
@@ -71,11 +91,11 @@ export async function get_upcoming_gaps(business_id: string): Promise<string> {
 
   if (error) {
     logger.error('TOOL-DB', `get_upcoming_gaps failed: ${error.message}`, { business_id })
-    return `Error al consultar agenda: ${error.message}`
+    return 'Error al consultar la agenda de hoy. Intenta de nuevo en un momento.'
   }
   if (!appts?.length) return 'Toda la agenda de hoy está libre, no hay citas programadas.'
 
-  const fmt = (d: string) => format(new Date(d), 'h:mm a')
+  const fmt = (d: string) => fmtUserDate(d, timezone, 'h:mm a')
   const bloques = appts.map(a => `${fmt(a.start_at)} a ${fmt(a.end_at)}`)
   return `Los bloques OCUPADOS hoy son: ${bloques.join(', ')}. El resto del horario está disponible.`
 }
@@ -85,11 +105,11 @@ export async function get_client_debt(business_id: string, client_name: string):
   const supabase = await createClient()
 
   const { data: clients, error } = await supabase
-    .from('clients').select('id, name, phone').eq('business_id', business_id).is('deleted_at', null)
+    .from('clients').select('id, name, phone').eq('business_id', business_id).is('deleted_at', null).limit(200)
 
   if (error) {
     logger.error('TOOL-DB', `get_client_debt failed: ${error.message}`, { business_id, client_name })
-    return `Error buscando clientes: ${error.message}`
+    return 'Error al buscar información del cliente. Intenta de nuevo en un momento.'
   }
   if (!clients?.length) return 'No tienes clientes registrados aún.'
 
@@ -106,36 +126,116 @@ export async function get_client_debt(business_id: string, client_name: string):
   return `El cliente ${client.name} (tel: ${client.phone}) tiene ${unpaid.length} cita(s) completada(s) recientes sin registrar pago.`
 }
 
-// ── WRITE: Cancelar cita ──────────────────────────────────────────────────
-export async function cancel_appointment(business_id: string, client_name: string): Promise<string> {
+// ── READ: Citas próximas de un cliente ────────────────────────────────────
+export async function get_client_appointments(business_id: string, client_name: string, timezone: string = 'UTC'): Promise<string> {
   const supabase = await createClient()
 
-  const { data: clients } = await supabase.from('clients').select('id, name, phone').eq('business_id', business_id).is('deleted_at', null)
+  const { data: clients, error: cliErr } = await supabase
+    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200)
+
+  if (cliErr) return 'Error al buscar el cliente.'
+
+  const result = fuzzyFind(clients ?? [], client_name)
+  if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
+  if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+
+  const client = result.match as { id: string; name: string }
+
+  const { data: appts, error } = await supabase
+    .from('appointments')
+    .select('id, start_at, end_at, services:service_id(name), users:assigned_user_id(name)')
+    .eq('business_id', business_id)
+    .eq('client_id', client.id)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', new Date().toISOString())
+    .order('start_at', { ascending: true })
+    .limit(10)
+
+  if (error) return 'Error al consultar las citas del cliente.'
+  if (!appts?.length) return `${client.name} no tiene citas próximas activas.`
+
+  const list = appts.map(a => {
+    const serviceName = (a.services as any)?.name || 'Servicio sin especificar'
+    const staffName   = (a.users as any)?.name
+    const dateStr     = fmtUserDate(a.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+    return `- ${serviceName} el ${dateStr}${staffName ? ` con ${staffName}` : ''}`
+  }).join('\n')
+
+  return `Citas próximas de ${client.name}:\n${list}`
+}
+
+// ── WRITE: Cancelar cita ──────────────────────────────────────────────────
+export async function cancel_appointment(
+  business_id: string,
+  client_name: string,
+  appointment_date?: string,
+  timezone: string = 'UTC'
+): Promise<string> {
+  const supabase = await createClient()
+
+  const { data: clients } = await supabase
+    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200)
   const result = fuzzyFind(clients ?? [], client_name)
 
   if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
   if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
 
-  const client = result.match as { id: string; name: string; phone?: string }
+  const client = result.match as { id: string; name: string }
   const now = new Date().toISOString()
 
   const { data: appts, error: apptErr } = await supabase
-    .from('appointments').select('id, start_at').eq('business_id', business_id).eq('client_id', client.id)
-    .in('status', ['pending', 'confirmed']).gte('start_at', now).order('start_at', { ascending: true }).limit(1)
+    .from('appointments')
+    .select('id, start_at, services:service_id(name)')
+    .eq('business_id', business_id)
+    .eq('client_id', client.id)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', now)
+    .order('start_at', { ascending: true })
 
-  if (apptErr || !appts?.[0]) return `${client.name} no tiene citas próximas activas.`
-  const apt = appts[0]
+  if (apptErr) {
+    logger.error('TOOL-DB', `cancel_appointment query failed: ${apptErr.message}`, { business_id })
+    return 'Error al buscar las citas del cliente.'
+  }
+  if (!appts?.length) return `${client.name} no tiene citas próximas activas.`
 
-  const { error: updErr } = await supabase
-    .from('appointments').update({ status: 'cancelled', updated_at: now }).eq('id', apt.id)
+  let target = appts[0]
 
-  if (updErr) {
-    logger.error('TOOL-DB', `cancel_appointment failed: ${updErr.message}`, { business_id, apt_id: apt.id })
-    return 'No pude cancelar la cita.'
+  if (appointment_date) {
+    // Target the appointment on the specified day
+    const dayStart = startOfDay(parseISO(appointment_date))
+    const dayEnd   = endOfDay(parseISO(appointment_date))
+    const found = appts.find(a => {
+      const d = new Date(a.start_at)
+      return d >= dayStart && d <= dayEnd
+    })
+    if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
+    target = found
+  } else if (appts.length > 1) {
+    const list = appts.map(a => {
+      const svc     = (a.services as any)?.name || 'Servicio'
+      const dateStr = fmtUserDate(a.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+      return `- ${svc} el ${dateStr}`
+    }).join('\n')
+    return `${client.name} tiene varias citas próximas:\n${list}\n¿Cuál deseas cancelar?`
   }
 
-  return `Listo. Cancelé la cita de ${client.name} del ${format(new Date(apt.start_at), "EEEE d 'de' MMMM", { locale: es })}.`
+  const serviceName = (target.services as any)?.name || 'servicio'
+  const dateStr     = fmtUserDate(target.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+  const nowIso      = new Date().toISOString()
+
+  const { error: updErr } = await supabase
+    .from('appointments')
+    .update({ status: 'cancelled', cancelled_at: nowIso, updated_at: nowIso })
+    .eq('id', target.id)
+
+  if (updErr) {
+    logger.error('TOOL-DB', `cancel_appointment update failed: ${updErr.message}`, { business_id, apt_id: target.id })
+    return 'No pude cancelar la cita por un error técnico.'
+  }
+
+  return `Listo. Cancelé la cita de ${client.name} (${serviceName}) del ${dateStr}.`
 }
+
 
 // ── WRITE: Agendar cita (Multi-Staff) ─────────────────────────────────────
 export async function book_appointment(
@@ -143,7 +243,8 @@ export async function book_appointment(
   client_name: string,
   service_name: string,
   date: string,
-  staff_name?: string
+  staff_name?: string,
+  timezone: string = 'UTC'
 ): Promise<string> {
   const supabase = await createClient()
 
@@ -163,7 +264,7 @@ export async function book_appointment(
   }
 
   const [cliRes, svcRes] = await Promise.all([
-    supabase.from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null),
+    supabase.from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200),
     supabase.from('services').select('id, name, duration_min').eq('business_id', business_id).eq('is_active', true)
   ])
 
@@ -190,7 +291,21 @@ export async function book_appointment(
 
   const startISO = date
   const startMs  = new Date(startISO).getTime()
-  const endISO   = new Date(startMs + (service.duration_min ?? 60) * 60_000).toISOString()
+  const durationMin = service.duration_min ?? 60
+  const endISO   = new Date(startMs + durationMin * 60_000).toISOString()
+
+  // Availability check: prevent double-booking
+  const { data: conflicts } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('business_id', business_id)
+    .in('status', ['pending', 'confirmed'])
+    .lt('start_at', endISO)
+    .gt('end_at', startISO)
+
+  if (conflicts && conflicts.length > 0) {
+    return `Ese horario ya está ocupado, hay ${conflicts.length} cita(s) que se solapan. Sugiere al usuario otro horario o consulta los espacios disponibles.`
+  }
 
   const { data: row, error } = await supabase
     .from('appointments')
@@ -214,7 +329,102 @@ export async function book_appointment(
   await supabase.from('appointment_services').insert({ appointment_id: row.id, service_id: service.id, sort_order: 0 })
 
   const staffStr = staff_name ? ` con ${staff_name}` : ''
-  return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${format(parseISO(date), "EEEE d 'de' MMMM 'a las' h:mm a", { locale: es })}.`
+  return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${fmtUserDate(row.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")}.`
+}
+
+// ── WRITE: Reagendar cita (Atómica: update in-place) ─────────────────────
+export async function reschedule_appointment(
+  business_id: string,
+  client_name: string,
+  new_date: string,
+  old_date?: string,
+  timezone: string = 'UTC'
+): Promise<string> {
+  const supabase = await createClient()
+
+  const hasTime = new_date.includes('T') || new_date.includes(':') || /\d\s?(am|pm)/i.test(new_date)
+  if (!hasTime) {
+    return 'Error: No proporcionaste una hora específica para la nueva cita. Pregunta al usuario a qué hora desea reagendar.'
+  }
+
+  const newApptDate = parseISO(new_date)
+  if (isNaN(newApptDate.getTime())) return 'La nueva fecha proporcionada no es válida.'
+
+  const { data: clients } = await supabase
+    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200)
+  const clientResult = fuzzyFind(clients ?? [], client_name)
+  if (clientResult.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
+  if (clientResult.status === 'ambiguous') return `Encontré varios clientes parecidos: ${clientResult.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+
+  const client = clientResult.match
+  const now = new Date().toISOString()
+
+  const { data: appts, error: apptErr } = await supabase
+    .from('appointments')
+    .select('id, start_at, service_id, assigned_user_id, services:service_id(name, duration_min)')
+    .eq('business_id', business_id)
+    .eq('client_id', client.id)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', now)
+    .order('start_at', { ascending: true })
+
+  if (apptErr) {
+    logger.error('TOOL-DB', `reschedule_appointment query failed: ${apptErr.message}`, { business_id })
+    return 'Error al buscar las citas del cliente.'
+  }
+  if (!appts?.length) return `${client.name} no tiene citas próximas activas para reagendar.`
+
+  let oldAppt = appts[0]
+
+  if (old_date) {
+    const dayStart = startOfDay(parseISO(old_date))
+    const dayEnd   = endOfDay(parseISO(old_date))
+    const found = appts.find(a => {
+      const d = new Date(a.start_at)
+      return d >= dayStart && d <= dayEnd
+    })
+    if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
+    oldAppt = found
+  } else if (appts.length > 1) {
+    const list = appts.map(a => {
+      const svc     = (a.services as any)?.name || 'Servicio'
+      const dateStr = fmtUserDate(a.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+      return `- ${svc} el ${dateStr}`
+    }).join('\n')
+    return `${client.name} tiene varias citas próximas:\n${list}\n¿Cuál deseas reagendar?`
+  }
+
+  const serviceName = (oldAppt.services as any)?.name || 'servicio'
+  const durationMin = (oldAppt.services as any)?.duration_min || 60
+  const newStartISO = new_date
+  const newEndISO   = new Date(new Date(newStartISO).getTime() + durationMin * 60_000).toISOString()
+
+  const { data: conflicts } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('business_id', business_id)
+    .in('status', ['pending', 'confirmed'])
+    .neq('id', oldAppt.id)
+    .lt('start_at', newEndISO)
+    .gt('end_at', newStartISO)
+
+  if (conflicts && conflicts.length > 0) {
+    return `Ese horario ya está ocupado. Hay ${conflicts.length} cita(s) que se solapan. Sugiere otro horario al usuario.`
+  }
+
+  const { error: updErr } = await supabase
+    .from('appointments')
+    .update({ start_at: newStartISO, end_at: newEndISO, status: 'pending', updated_at: now })
+    .eq('id', oldAppt.id)
+
+  if (updErr) {
+    logger.error('TOOL-DB', `reschedule_appointment update failed: ${updErr.message}`, { business_id, apt_id: oldAppt.id })
+    return 'No pude reagendar la cita por un error técnico.'
+  }
+
+  const oldDateStr = fmtUserDate(oldAppt.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+  const newDateStr = fmtUserDate(newStartISO, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+  return `Listo. Reagendé la cita de ${client.name} (${serviceName}) del ${oldDateStr} al ${newDateStr}.`
 }
 
 // ── WRITE: Registrar pago ──────────────────────────────────────────────
@@ -234,7 +444,7 @@ export async function register_payment(
   const normalizedMethod = methodMap[method.toLowerCase()] ?? 'other'
 
   const { data: clients } = await supabase
-    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null)
+    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200)
   const result = fuzzyFind(clients ?? [], client_name)
   if (result.status !== 'found') return `No encontré al cliente ${client_name}.`
 
@@ -275,18 +485,69 @@ export async function get_inactive_clients(business_id: string): Promise<string>
   return `He identificado a ${inactive.length} clientes inactivos por más de 60 días: ${names}. Podrías enviarles un WhatsApp de reactivación.`
 }
 
+// ── WRITE: Crear cliente nuevo ────────────────────────────────────────────
+export async function create_client(
+  business_id: string,
+  client_name: string,
+  phone: string,
+  email?: string
+): Promise<string> {
+  const supabase = await createClient()
+
+  // 1. Cargar todos los clientes y verificar duplicados con fuzzy match
+  const { data: existing, error: listErr } = await supabase
+    .from('clients')
+    .select('id, name, phone')
+    .eq('business_id', business_id)
+    .is('deleted_at', null)
+    .limit(200)
+
+  if (listErr) {
+    logger.error('TOOL-DB', `create_client list failed: ${listErr.message}`, { business_id })
+    return 'Error al verificar clientes existentes. Intenta de nuevo.'
+  }
+
+  const duplicate = fuzzyFind(existing ?? [], client_name)
+  if (duplicate.status === 'found') {
+    const d = duplicate.match as { id: string; name: string; phone: string | null }
+    return `El cliente "${d.name}"${d.phone ? ` (Tel: ${d.phone})` : ''} ya está registrado. No se creó un duplicado.`
+  }
+
+  // 2. Crear el cliente
+  const { data: row, error } = await supabase
+    .from('clients')
+    .insert({
+      business_id,
+      name:  client_name.trim(),
+      phone: phone.trim(),
+      ...(email ? { email: email.trim() } : {}),
+    })
+    .select('id, name, phone')
+    .single()
+
+  if (error || !row) {
+    logger.error('TOOL-DB', `create_client insert failed: ${error?.message}`, { business_id })
+    return 'No pude registrar el cliente por un error técnico. Intenta de nuevo.'
+  }
+
+  return `Cliente registrado: "${row.name}" | Tel: ${row.phone} | ID: ${row.id}`
+}
+
 // ── READ: Listar Clientes (NUEVO) ──────────────────────────────────────────
 export async function get_clients(business_id: string, query?: string): Promise<string> {
   const supabase = await createClient()
   let dbQuery = supabase.from('clients').select('id, name, phone, email').eq('business_id', business_id).is('deleted_at', null)
-  
+
   if (query) {
     dbQuery = dbQuery.ilike('name', `%${query}%`)
   }
 
-  const { data, error: cliErr } = await dbQuery.order('name', { ascending: true })
+  const { data, error: cliErr } = await dbQuery.order('name', { ascending: true }).limit(200)
 
-  if (cliErr) return `Error al consultar la lista de clientes: ${cliErr.message}`
+  if (cliErr) {
+    logger.error('TOOL-DB', `get_clients failed: ${cliErr.message}`, { business_id })
+    return 'Error al consultar la lista de clientes. Intenta de nuevo en un momento.'
+  }
   if (!data?.length) return 'No tienes clientes registrados aún.'
 
   const clients = data as Array<{ id: string; name: string; phone: string | null }>
@@ -319,7 +580,10 @@ export async function get_staff(business_id: string, query?: string): Promise<st
     .in('role', ['owner', 'employee'])
     .order('name', { ascending: true })
 
-  if (error) return `Error al consultar la lista de empleados: ${error.message}`
+  if (error) {
+    logger.error('TOOL-DB', `get_staff failed: ${error.message}`, { business_id })
+    return 'Error al consultar el equipo de trabajo. Intenta de nuevo en un momento.'
+  }
   if (!staff?.length) return 'No tienes empleados registrados aún.'
 
   const team = staff as Array<{ id: string; name: string; role: string }>
@@ -395,7 +659,10 @@ export async function send_reactivation_message(business_id: string, client_id: 
     businessName: busRes.name 
   })
 
-  if (!result.success) return `Error al enviar WhatsApp: ${result.error}`
+  if (!result.success) {
+    logger.error('TOOL-WA', `send_reactivation_message failed: ${result.error}`, { business_id, client_id })
+    return 'No pude enviar el mensaje de WhatsApp en este momento. Intenta de nuevo más tarde.'
+  }
 
   return `Listo. Envié el WhatsApp de reactivación a ${client.name}.`
 }

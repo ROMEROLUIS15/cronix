@@ -9,20 +9,50 @@ export interface Memory {
 }
 
 export class MemoryService {
+  private consecutiveFailures = 0
+  private disabledUntil = 0
+  private readonly FAILURE_THRESHOLD = 3
+  private readonly DISABLE_DURATION  = 15 * 60 * 1000 // 15 min
+
+  private isEmbeddingDisabled(): boolean {
+    if (this.disabledUntil > Date.now()) return true
+    if (this.disabledUntil > 0 && this.disabledUntil <= Date.now()) {
+      // Cool-down expired — give it one more chance
+      this.consecutiveFailures = 0
+      this.disabledUntil = 0
+    }
+    return false
+  }
+
   /**
    * Genera un embedding para un texto usando la Edge Function nativa.
+   * Se auto-desactiva por 15 min tras 3 fallos consecutivos.
    */
   private async generateEmbedding(text: string): Promise<number[] | null> {
+    if (this.isEmbeddingDisabled()) return null
+
     try {
       const supabase = await createClient()
-      const { data, error } = await supabase.functions.invoke('embed-text', {
-        body: { text: text.trim() }
-      })
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))
+      const embedPromise = supabase.functions.invoke('embed-text', { body: { text: text.trim() } })
+        .then(({ data, error }) => {
+          if (error) throw error
+          return data.embedding as number[]
+        })
+      const result = await Promise.race([embedPromise, timeoutPromise])
 
-      if (error) throw error
-      return data.embedding as number[]
+      if (result === null) throw new Error('Embedding timeout')
+
+      this.consecutiveFailures = 0
+      return result
     } catch (err: any) {
-      logger.error('MEMORY-SERVICE', `Embedding generation failed: ${err.message}`)
+      this.consecutiveFailures++
+      if (this.consecutiveFailures >= this.FAILURE_THRESHOLD) {
+        this.disabledUntil = Date.now() + this.DISABLE_DURATION
+        logger.warn('MEMORY-SERVICE', `Embedding disabled for 15 min after ${this.FAILURE_THRESHOLD} consecutive failures`)
+      } else {
+        logger.warn('MEMORY-SERVICE', `Embedding generation failed: ${err.message}`)
+      }
       return null
     }
   }
@@ -57,6 +87,7 @@ export class MemoryService {
 
   /**
    * Almacena una nueva memoria si el asistente lo considera relevante.
+   * Quota: max 500 memorias por usuario para evitar crecimiento ilimitado.
    */
   async store(userId: string, businessId: string, content: string, metadata: any = {}): Promise<boolean> {
     const embedding = await this.generateEmbedding(content)
@@ -64,6 +95,29 @@ export class MemoryService {
 
     try {
       const supabase = await createClient()
+
+      // Quota check: prevent unbounded growth per user
+      const { count } = await supabase
+        .from('ai_memories')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('business_id', businessId)
+
+      if ((count ?? 0) >= 500) {
+        // Evict the oldest memory to stay within quota (FIFO rotation)
+        const { data: oldest } = await supabase
+          .from('ai_memories')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('business_id', businessId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+
+        if (oldest?.[0]) {
+          await supabase.from('ai_memories').delete().eq('id', oldest[0].id)
+        }
+      }
+
       const { error } = await supabase
         .from('ai_memories')
         .insert({

@@ -1,17 +1,26 @@
 /**
- * Simple Memory-based Sliding Window Rate Limiter.
- * Useful for Vercel/Next.js protection when Redis is not available.
- * 
- * NOTE: On Serverless, this is partially shared across warm starts of the same Lambda.
+ * Sliding Window Rate Limiter — In-Memory with bounded cache.
+ *
+ * Limitation: In serverless environments (Vercel), each Lambda instance has its own
+ * in-memory state. Limits are enforced per-instance, not globally across instances.
+ * For global enforcement, migrate to Upstash Redis (@upstash/redis) and set
+ * UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN in your environment.
+ *
+ * Current behavior: effective against single-source burst abuse on warm instances.
+ * Adequate for most production traffic patterns; upgrade to Redis at >1k RPM.
  */
 interface RateLimitRecord {
   timestamps: number[]
 }
 
+// Safety cap: prevent unbounded Map growth if identifiers keep cycling (e.g. enumeration attacks)
+const MAX_CACHE_SIZE = 5_000
+
 class MemoryRateLimiter {
   private cache: Map<string, RateLimitRecord> = new Map()
   private readonly limit: number
   private readonly windowMs: number
+  private checkCount = 0
 
   constructor(limit: number, windowMs: number) {
     this.limit = limit
@@ -20,8 +29,20 @@ class MemoryRateLimiter {
 
   isRateLimited(identifier: string): { limited: boolean; retryAfter: number } {
     const now = Date.now()
-    let record = this.cache.get(identifier)
 
+    // Probabilistic cleanup: run full sweep every ~200 requests to evict stale entries
+    this.checkCount++
+    if (this.checkCount % 200 === 0) {
+      this._cleanup(now)
+    }
+
+    // Hard cap: evict oldest entry when cache is full (LRU-lite)
+    if (!this.cache.has(identifier) && this.cache.size >= MAX_CACHE_SIZE) {
+      const firstKey = this.cache.keys().next().value
+      if (firstKey !== undefined) this.cache.delete(firstKey)
+    }
+
+    let record = this.cache.get(identifier)
     if (!record) {
       record = { timestamps: [] }
       this.cache.set(identifier, record)
@@ -40,9 +61,7 @@ class MemoryRateLimiter {
     return { limited: false, retryAfter: 0 }
   }
 
-  // Cleanup to avoid memory leaks
-  cleanup() {
-    const now = Date.now()
+  private _cleanup(now: number) {
     for (const [key, record] of this.cache.entries()) {
       record.timestamps = record.timestamps.filter((t) => now - t < this.windowMs)
       if (record.timestamps.length === 0) {

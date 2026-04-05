@@ -36,8 +36,10 @@ export interface ISttProvider {
   transcribe(audio: Blob, options?: SttOptions): Promise<SttResult>
 }
 
+export type LlmTier = 'fast' | 'quality'
+
 export interface ILlmProvider {
-  chat(messages: LlmMessage[], tools?: any[]): Promise<LlmResult>
+  chat(messages: LlmMessage[], tools?: any[], tier?: LlmTier): Promise<LlmResult>
 }
 
 export interface ITtsProvider {

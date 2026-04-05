@@ -11,8 +11,6 @@ export type Enums = Database['public']['Enums']
 // ── Enums ──────────────────────────────────────────────────
 export type AppointmentStatus = Enums['appointment_status']
 export type PaymentMethod = Enums['payment_method']
-export type NotificationChannel = Enums['notification_channel']
-export type NotificationStatus = Enums['notification_status']
 export type UserRole = Enums['user_role']
 export type BusinessPlan = Enums['business_plan']
 export type ExpenseCategory = Enums['expense_category']

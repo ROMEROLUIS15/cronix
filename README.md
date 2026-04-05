@@ -122,8 +122,8 @@ Luis accesses ONLY the data of the authenticated business. `ai_memories` are iso
 ### 4. Executive Confirmation Mode (Micro-responses)
 For any tool-triggered action, Luis responds with a 1-3 word confirmation first ("Agendando..."), so TTS starts instantly while the system works in the background.
 
-### 5. 4-Point Validation for Bookings
-Luis is prohibited from scheduling without confirming 4 data points: **Client, Service, Date, and exact Time**.
+### 5. Intelligent Client Registration & 4-Point Booking Validation
+Luis auto-registers new clients with phone numbers (required for WhatsApp reminders), detecting duplicates to prevent data pollution. For bookings, Luis enforces 4 mandatory data points: **Client, Service, Date, and exact Time** — never scheduling without all 4.
 
 ### 6. Master Touch (Real-Time Sync)
 Every successful action triggers a `cronix:refresh-data` event that instantly updates the Dashboard calendar.
@@ -136,6 +136,9 @@ A reactive 5-bar Siri-style waveform (Blue → Purple → Pink gradient) dances 
 
 ### 9. Secure Token Gateway 🔒
 The master Deepgram API key never leaves the server. The browser receives a short-lived (5-min) scoped token via `/api/assistant/token`.
+
+### 10. Dual-Model Routing & Token Optimization ⚡
+Luis automatically selects the optimal LLM based on intent: fast reads (8b, 500k TPD) vs. write actions (70b, 100k TPD). This maximizes free-tier quotas while maintaining 70b precision for critical operations like client registration, appointment bookings, and payments.
 
 ---
 1.  **Observability**: Deep integration with Sentry and a Centralized Logger.

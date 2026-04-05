@@ -12,9 +12,24 @@ export function VoiceAssistantFab() {
   const { supabase, businessId } = useBusinessContext()
   const [state, setState] = useState<AssistantState>('idle')
   const [transcript, setTranscript] = useState<string>('')
+  const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = sessionStorage.getItem('cronix-assistant-history')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
   const [isLoaded, setIsLoaded] = useState(false)
+  const [processingLabel, setProcessingLabel] = useState('Procesando...')
   const [showLuisFab, setShowLuisFab] = useState(true)
   
+  // ── Persist chat history across page refreshes ──────────────────────────
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      sessionStorage.setItem('cronix-assistant-history', JSON.stringify(chatHistory))
+    }
+  }, [chatHistory])
+
   // ── Drag & Persistence ──────────────────────────────────────────────────
   const y = useMotionValue(0)
   // Spring for smooth snapping/movement
@@ -97,6 +112,7 @@ export function VoiceAssistantFab() {
   const hasSpokenRef = useRef<boolean>(false)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const finalTranscriptRef = useRef<string>('')
+  const audioChunksRef = useRef<Blob[]>([])
 
   // ── Helper: Speak with Native Browser Voice (Fallback) ──
   const speakWithNativeFallback = (text: string) => {
@@ -180,40 +196,10 @@ export function VoiceAssistantFab() {
       setState('listening')
       setTranscript('')
       setVolume(0)
-      finalTranscriptRef.current = ''
+      audioChunksRef.current = []
       hasSpokenRef.current = false
 
-      // 1. Get Secure Temp Token
-      const tokenRes = await fetch('/api/assistant/token')
-      const { token } = await tokenRes.json()
-      if (!token) throw new Error('Could not get assistant token')
-
-      // 2. Initialize WebSocket to Deepgram
-      const socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2-general&language=es&smart_format=true&interim_results=true&endpointing=300')
-      socketRef.current = socket
-
-      socket.onopen = () => {
-        console.log('Luis IA | WebSocket Connected')
-      }
-
-      socket.onmessage = (message) => {
-        const received = JSON.parse(message.data)
-        const transcriptChunk = received.channel?.alternatives[0]?.transcript
-        
-        if (transcriptChunk && received.is_final) {
-           finalTranscriptRef.current += ' ' + transcriptChunk
-           setTranscript(finalTranscriptRef.current.trim())
-           hasSpokenRef.current = true
-        } else if (transcriptChunk) {
-           // Live interim feedback
-           setTranscript((finalTranscriptRef.current + ' ' + transcriptChunk).trim())
-        }
-      }
-
-      socket.onerror = (e) => console.error('Luis IA | WS Error:', e)
-      socket.onclose = () => console.log('Luis IA | WS Closed')
-
-      // 3. Audio Stream & MediaRecorder
+      // 1. Audio Stream & MediaRecorder (Bypassing Deepgram Token issue entirely)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       
       if (!audioContextRef.current) {
@@ -232,21 +218,16 @@ export function VoiceAssistantFab() {
       mediaRecorderRef.current = mediaRecorder
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(e.data)
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
         }
       }
 
       mediaRecorder.onstop = async () => {
-        console.log('Luis IA | Recording stopped')
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'CloseStream' }))
-          socket.close()
-        }
+        console.log('Luis IA | Recording stopped. Bypassing Deepgram WS and uploading blob directly...')
+        setState('processing')
         
-        const finalMessage = finalTranscriptRef.current.trim()
-        
-        if (!hasSpokenRef.current || finalMessage.length < 2) {
+        if (!hasSpokenRef.current || audioChunksRef.current.length === 0) {
           console.warn('Luis IA | Nothing heard')
           setState('idle')
           setTranscript('No te escuché bien...')
@@ -254,17 +235,27 @@ export function VoiceAssistantFab() {
           return
         }
 
-        // 🌟 GHOST TRANSCRIPT: Clear as we start processing
-        setTranscript('') 
-        await sendTextToAssistant(finalMessage)
+        setProcessingLabel('Escuchando tu voz...')
+        setTranscript('')
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+
+        // Progressive feedback while processing
+        const feedbackTimer = setTimeout(() => setProcessingLabel('Luis está pensando...'), 2000)
+
+        try {
+          await sendAudioToAssistant(audioBlob)
+        } finally {
+          clearTimeout(feedbackTimer)
+        }
       }
 
       mediaRecorder.start(250) // Send chunks every 250ms
 
-      // 4. VAD Monitoring (Local fallback for safety)
+      // 2. VAD Monitoring (Local fallback for safety)
       const SILENCE_THRESHOLD = 10
-      const SILENCE_DURATION = 2000
-      const MAX_LISTEN_WAIT = 8000
+      const SILENCE_DURATION = 1800 // Balanced: enough for natural pauses but responsive
+      const MAX_LISTEN_WAIT = 10000
       const startTime = Date.now()
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
 
@@ -319,6 +310,67 @@ export function VoiceAssistantFab() {
     }
   }
 
+  const sendAudioToAssistant = async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'audio.webm')
+      formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
+      formData.append('history', JSON.stringify(chatHistory)) // Pass memory
+
+      const res = await fetch('/api/assistant/voice', { 
+        method: 'POST', 
+        body: formData
+      })
+
+      if (!res.ok) throw new Error('Servidor no disponible')
+
+      const data = await res.json()
+      
+      if (data.actionPerformed) {
+        window.dispatchEvent(new CustomEvent('cronix:refresh-data'))
+      }
+
+      // We seamlessly update local memory history
+      if (data.history) {
+        // 🔥 SENIOR FIX: The backend now returns the full trace including Tool Calls
+        setChatHistory(data.history.slice(-15))
+      } else {
+        // Fallback
+        setChatHistory(prev => {
+          const userTranscription = data.debug?.transcription || 'Audio enviado'
+          const updated = [...prev, { role: 'user', content: userTranscription }, { role: 'assistant', content: data.text || '' }]
+          return updated.slice(-15)
+        })
+      }
+
+      // Show Luis's response text while speaking
+      if (data.text) setTranscript(data.text)
+
+      if (data.audioUrl) {
+        setState('speaking')
+        const audio = new Audio(data.audioUrl)
+        currentAudioRef.current = audio
+        audio.onended = () => {
+          setState('idle')
+          setTimeout(() => setTranscript(''), 4000)
+        }
+        await audio.play()
+      } else if (data.useNativeFallback) {
+        setState('speaking')
+        speakWithNativeFallback(data.text)
+      } else {
+        setState('idle')
+        setTimeout(() => setTranscript(''), 4000)
+      }
+
+    } catch (err) {
+      console.error('Luis IA | Request Error:', err)
+      setState('idle')
+      setTranscript('Error de conexión')
+      setTimeout(() => setTranscript(''), 3000)
+    }
+  }
+
   const sendTextToAssistant = async (text: string) => {
     try {
       // 🌟 Optimized: Sending TEXT instead of AUDIO for V5 speed
@@ -326,6 +378,7 @@ export function VoiceAssistantFab() {
         method: 'POST', 
         body: JSON.stringify({ 
           text, 
+          history: chatHistory,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
         }),
         headers: { 'Content-Type': 'application/json' }
@@ -339,26 +392,41 @@ export function VoiceAssistantFab() {
         window.dispatchEvent(new CustomEvent('cronix:refresh-data'))
       }
 
+      // We seamlessly update local memory history to remember context across renders
+      if (data.history) {
+        // 🔥 SENIOR FIX: Backend synchronous memory
+        setChatHistory(data.history.slice(-15))
+      } else {
+        setChatHistory(prev => {
+          const updated = [...prev, { role: 'user', content: text }, { role: 'assistant', content: data.text || '' }]
+          return updated.slice(-15) // Keep last 15 entries approx for rich CRM tasks
+        })
+      }
+
+      // Show Luis's response text while speaking
+      if (data.text) setTranscript(data.text)
+
       if (data.audioUrl) {
         setState('speaking')
-        // GHOST TRANSCRIPT: Ensure it's clear while Luis speaks
-        setTranscript('')
         const audio = new Audio(data.audioUrl)
         currentAudioRef.current = audio
         audio.onended = () => {
           setState('idle')
-          currentAudioRef.current = null
+          setTimeout(() => setTranscript(''), 4000)
         }
-        audio.onerror = () => speakWithNativeFallback(data.text)
-        await audio.play().catch(() => speakWithNativeFallback(data.text))
-      } else {
+        await audio.play()
+      } else if (data.useNativeFallback) {
+        setState('speaking')
         speakWithNativeFallback(data.text)
+      } else {
+        setState('idle')
+        setTimeout(() => setTranscript(''), 4000)
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
       setState('idle')
-      setTranscript(`❌ Error`)
+      setTranscript('Error de conexión')
       setTimeout(() => setTranscript(''), 3000)
     }
   }
@@ -388,7 +456,7 @@ export function VoiceAssistantFab() {
       timer = setTimeout(() => {
         console.warn(`Safety timeout: Resetting assistant to idle from state: ${state}`)
         setState('idle')
-      }, 15000) // 15s max for any voice action
+      }, 30000) // 30s max — pipeline with tool calls can take longer
     }
     return () => clearTimeout(timer)
   }, [state])
@@ -409,7 +477,18 @@ export function VoiceAssistantFab() {
         className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 sm:hidden touch-none"
       >
 
-        
+        {transcript && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="max-w-[200px] px-3 py-2 rounded-xl text-xs text-white/90 leading-snug pointer-events-none"
+            style={{ background: 'rgba(5,5,10,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(56,132,255,0.3)' }}
+          >
+            {transcript.length > 120 ? transcript.slice(0, 120) + '...' : transcript}
+          </motion.div>
+        )}
+
         <motion.button
           whileTap={{ scale: 0.9 }}
           whileDrag={{ scale: 1.1, cursor: 'grabbing' }}
@@ -498,7 +577,7 @@ export function VoiceAssistantFab() {
           <span className="leading-none">
             {state === 'idle' && '✦ Luis IA'}
             {state === 'listening' && 'Escuchando...'}
-            {state === 'processing' && 'Procesando...'}
+            {state === 'processing' && processingLabel}
             {state === 'speaking' && 'Luis habla...'}
           </span>
 
@@ -508,6 +587,18 @@ export function VoiceAssistantFab() {
             }`}
           />
         </button>
+
+        {transcript && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="max-w-[320px] px-4 py-2.5 rounded-xl text-xs text-white/90 leading-relaxed"
+            style={{ background: 'rgba(5,5,10,0.88)', backdropFilter: 'blur(12px)', border: '1px solid rgba(56,132,255,0.25)' }}
+          >
+            {transcript.length > 200 ? transcript.slice(0, 200) + '...' : transcript}
+          </motion.div>
+        )}
       </div>
     </>
   )

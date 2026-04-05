@@ -128,12 +128,27 @@ async function verifyQStash(req: Request, rawBody: string): Promise<boolean> {
 function sanitizeMessage(text: string): string {
   return text
     .slice(0, 500)
+    // Normalize unicode homoglyphs and zero-width chars before pattern matching
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '') // zero-width & soft-hyphen
     // Strip fake action tags (prevent crafted commands from bypassing executor)
     .replace(/\[(CONFIRM|RESCHEDULE|CANCEL)_BOOKING[^\]]*\]/gi, '')
-    // Strip known prompt injection patterns
-    .replace(/ignore\s+previous\s+instructions?/gi, '')
-    .replace(/system\s+prompt:/gi, '')
+    // English injection patterns
+    .replace(/ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions?/gi, '')
+    .replace(/system\s+prompt\s*:/gi, '')
     .replace(/you\s+are\s+now/gi, '')
+    .replace(/act\s+as\s+(?:a\s+)?(?:different|new|another)/gi, '')
+    .replace(/disregard\s+(?:all\s+)?(?:previous|prior)\s+(?:instructions?|context)/gi, '')
+    .replace(/forget\s+(?:everything|your\s+rules)/gi, '')
+    // Spanish injection patterns
+    .replace(/ignora?\s+(?:todas?\s+)?(?:las?\s+)?instrucciones?\s*(?:anteriores?|previas?)?/gi, '')
+    .replace(/olvida\s+(?:todo|tus\s+reglas|las\s+instrucciones)/gi, '')
+    .replace(/(?:eres|actúa|actua|compórtate|comportate)\s+(?:como|ahora)\s+/gi, '')
+    .replace(/nuevo\s+rol\s*:/gi, '')
+    .replace(/a\s+partir\s+de\s+ahora\s+(?:eres|serás)/gi, '')
+    // Unicode-encoded bypass attempts (e.g. %69gnore, &#x69;gnore)
+    .replace(/&#?x?[0-9a-f]{1,6};/gi, '')
+    .replace(/%[0-9a-f]{2}/gi, '')
     // Strip markdown/XML that could confuse structured prompts
     .replace(/<[^>]+>/g, '')
     // Normalize whitespace

@@ -16,8 +16,8 @@ class MemoryStore {
     const history = this.getHistory(userId)
     history.push(message)
     
-    // Keep only last 6 messages (3 rotations) to avoid token bloat
-    this.sessions.set(userId, history.slice(-6))
+    // Keep last 8 messages (4 turns) — sufficient for voice assistant context
+    this.sessions.set(userId, history.slice(-8))
   }
 
   clear(userId: string) {

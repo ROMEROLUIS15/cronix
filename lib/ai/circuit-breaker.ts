@@ -41,6 +41,14 @@ class AICircuitBreaker {
   }
 
   reportFailure(service: ServiceName, error?: any) {
+    // Rate limit (429) is transient — do not count as a real failure.
+    // Tripping the circuit on 429 causes blackouts even when the service is healthy.
+    const errorStr = typeof error === 'string' ? error : JSON.stringify(error ?? '')
+    if (errorStr.includes('rate_limit_exceeded') || errorStr.includes('"code":"rate_limit')) {
+      logger.warn('CIRCUIT-BREAKER', `${service} rate limited — skipping failure count`)
+      return
+    }
+
     const currentFails = (this.failures.get(service) || 0) + 1
     this.failures.set(service, currentFails)
     this.lastFails.set(service, Date.now())
