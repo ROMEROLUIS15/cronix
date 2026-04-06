@@ -367,7 +367,8 @@ export default function EditAppointmentPage({ params }: Props) {
             appointmentId: params.id,
           },
         }
-        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null)
+        // Fire-and-forget: notification failures don't block the flow
+        notificationsRepo.createNotification(supabase, notifPayload)
       }
     }
 

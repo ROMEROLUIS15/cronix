@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useSpring } from 'framer-motion'
+import { captureException } from '@sentry/nextjs'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import type { BusinessSettingsJson } from '@/types'
 
@@ -49,7 +50,7 @@ export function VoiceAssistantFab() {
           const ui = (data?.settings as unknown as BusinessSettingsJson)?.uiSettings
           if (ui?.showLuisFab === false) setShowLuisFab(false)
         } catch (error) {
-          console.error('FAB Visibility Sync Error:', error)
+          captureException(error, { context: 'fab_visibility_sync' })
         } finally {
           setIsLoaded(true)
         }
@@ -63,38 +64,7 @@ export function VoiceAssistantFab() {
     const handleToggle = (e: CustomEvent) => setShowLuisFab(e.detail)
     window.addEventListener('cronix:toggle-fab', handleToggle as EventListener)
 
-    // ── PROACTIVE GREETING (Once per session) ──
-    const hasGreeted = sessionStorage.getItem('cronix-assistant-greeted')
-    const abortController = new AbortController()
-    let timer: NodeJS.Timeout | null = null
-
-    if (!hasGreeted) {
-      timer = setTimeout(async () => {
-        try {
-          const res = await fetch('/api/assistant/proactive', { signal: abortController.signal })
-          const data = await res.json()
-          if (data.text && !abortController.signal.aborted) {
-            setTranscript(data.text)
-            sessionStorage.setItem('cronix-assistant-greeted', 'true')
-            
-            if (data.audioUrl) {
-              const audio = new Audio(data.audioUrl)
-              setState('speaking')
-              audio.onended = () => setState('idle')
-              await audio.play()
-            }
-          }
-        } catch (e) {
-          if (e instanceof Error && e.name !== 'AbortError') {
-            console.error('Proactive Assistant Error:', e)
-          }
-        }
-      }, 2000)
-    }
-
     return () => {
-      if (timer) clearTimeout(timer)
-      abortController.abort()
       window.removeEventListener('cronix:toggle-fab', handleToggle as EventListener)
     }
   }, [y, businessId, supabase])
@@ -364,7 +334,7 @@ export function VoiceAssistantFab() {
       }
 
     } catch (err) {
-      console.error('Luis IA | Request Error:', err)
+      captureException(err, { context: 'send_audio_to_assistant' })
       setState('idle')
       setTranscript('Error de conexión')
       setTimeout(() => setTranscript(''), 3000)

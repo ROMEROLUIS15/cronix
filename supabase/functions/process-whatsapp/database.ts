@@ -9,6 +9,7 @@ import type {
   AuditLogData,
   BookingResult,
 } from "./types.ts"
+import { captureException } from "../_shared/sentry.ts"
 
 /**
  * Database operations for the WhatsApp AI Agent.
@@ -530,7 +531,7 @@ export async function createInternalNotification(
   title: string,
   content: string,
   type: "info" | "success" | "warning" | "error" = "info",
-  metadata: any = {}
+  metadata: Record<string, unknown> = {}
 ): Promise<void> {
   const { error } = await supabase
     .from("notifications")
@@ -543,7 +544,7 @@ export async function createInternalNotification(
     }]);
 
   if (error) {
-    console.error("Error creating internal notification:", error);
+    throw new Error(`Failed to create internal notification: ${error.message}`);
   }
 }
 

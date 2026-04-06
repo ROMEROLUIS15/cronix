@@ -79,13 +79,9 @@ function json(data: unknown, status = 200): Response {
 async function verifyQStash(req: Request, rawBody: string): Promise<boolean> {
   try {
     const signature = req.headers.get("Upstash-Signature");
-    
+
     if (!signature) {
-      console.error("[verifyQStash] No Upstash-Signature header found.");
-      // Log all headers for debugging (excluding secrets)
-      const headersRec: Record<string, string> = {};
-      req.headers.forEach((v, k) => { headersRec[k] = v; });
-      console.log("[verifyQStash] Available headers:", JSON.stringify(headersRec));
+      addBreadcrumb("No Upstash-Signature header found", 'security', 'error');
       return false;
     }
 
@@ -93,7 +89,7 @@ async function verifyQStash(req: Request, rawBody: string): Promise<boolean> {
     const nextKey    = Deno.env.get("QSTASH_NEXT_SIGNING_KEY");
 
     if (!currentKey || !nextKey) {
-      console.error("[verifyQStash] QStash signing keys are missing in env.");
+      captureException(new Error("QStash signing keys missing in env"), { stage: 'qstash_config' });
       return false;
     }
 
@@ -106,19 +102,19 @@ async function verifyQStash(req: Request, rawBody: string): Promise<boolean> {
       signature,
       body: rawBody,
     }).catch(err => {
-      console.error("[verifyQStash] receiver.verify catch:", err);
+      captureException(err, { stage: 'qstash_verify' });
       return false;
     });
 
     if (!isValid) {
-      console.warn("[verifyQStash] Signature is INVALID.");
+      addBreadcrumb("QStash signature verification failed", 'security', 'warning');
     } else {
-      console.log("[verifyQStash] Signature is VALID.");
+      addBreadcrumb("QStash signature valid", 'security', 'info');
     }
 
     return isValid;
   } catch (error) {
-    console.error("[verifyQStash] Global validation error:", error);
+    captureException(error, { stage: 'qstash_validation' });
     return false;
   }
 }
@@ -212,6 +208,7 @@ serve(async (req: Request) => {
 
       // Extract text from text message or transcribe voice note
       let rawText = msg.text?.body ?? null
+      let whisperTokens = 0
 
       if (!rawText && msg.audio?.id) {
         addBreadcrumb('Voice note received, downloading media', 'whatsapp', 'info')
@@ -221,11 +218,7 @@ serve(async (req: Request) => {
           
           const result = await transcribeAudio(buffer, mimeType)
           rawText = result.text
-
-          // Track Whisper usage immediately
-          if (business?.id && result.tokens > 0) {
-            await trackTokenUsage(business.id, result.tokens)
-          }
+          whisperTokens = result.tokens
         } catch (err) {
           if (err instanceof LlmRateLimitError) throw err
           if (err instanceof CircuitBreakerError) {
@@ -289,7 +282,25 @@ serve(async (req: Request) => {
 
       // Layer 3: Sanitize message (anti prompt-injection)
       const text = sanitizeMessage(rawTextWithoutSlug)
-      
+
+      // Handle slug-only messages: client opened the WhatsApp link and sent just #slug
+      if (!text && slug) {
+        const welcomeBiz = await getBusinessBySlug(slug)
+        if (welcomeBiz) {
+          await upsertSession(sender, welcomeBiz.id)
+          const welcomeMsg =
+            `¡Hola! 👋 Bienvenido/a a *${welcomeBiz.name}*.\n` +
+            `Soy tu asistente virtual de reservas. ¿En qué puedo ayudarte hoy?`
+          await sendWhatsAppMessage(sender, welcomeMsg)
+          addBreadcrumb('Slug-only message — welcome sent', 'routing', 'info', { slug, sender })
+        } else {
+          await sendWhatsAppMessage(sender, `❌ No se encontró ningún negocio con ese enlace.`)
+          addBreadcrumb('Slug not found on slug-only message', 'routing', 'warning', { slug })
+        }
+        await flushSentry()
+        return json({ success: true, message: 'Slug-only message — welcome sent' })
+      }
+
       if (!text) {
         addBreadcrumb('Message became empty after sanitization', 'security', 'info')
         await flushSentry()
@@ -333,7 +344,12 @@ serve(async (req: Request) => {
       setSentryTag('business_name', business.name)
       setSentryTag('business_slug', business.slug || 'unknown')
       addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
-      
+
+      // Track Whisper tokens if audio was transcribed
+      if (whisperTokens > 0) {
+        await trackTokenUsage(business.id, whisperTokens)
+      }
+
       // Layer 3: Business aggregate rate limit
       // Layer 3 & 4: Business aggregate rate limit & Token Quota (Precision cost control)
       const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 50000
@@ -452,6 +468,20 @@ serve(async (req: Request) => {
         }
 
         try {
+          // Define these early — needed for all notification channels
+          const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
+          const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+          const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
+
+          const formattedTime = (() => {
+            const [h, m] = time.split(':');
+            let hour = parseInt(h, 10);
+            const ampm = hour >= 12 ? 'pm' : 'am';
+            hour = hour % 12;
+            hour = hour ? hour : 12;
+            return `${hour}:${m} ${ampm}`;
+          })();
+
           const bookingResult = await createAppointment(business.id, {
             client_phone: sender,
             client_name:  client?.name ?? customerName,
@@ -463,7 +493,7 @@ serve(async (req: Request) => {
 
           // Business-level failure (e.g. slot already taken): inform the user gracefully
           if (!bookingResult?.success) {
-            const slotMsg = `Lo siento, ese horario ya no está disponible. ¿Te gustaría que te ofrezca otro horario libre para *${services.find(s => s.id === serviceId)?.name ?? 'el servicio'}*?`
+            const slotMsg = `Lo siento, ese horario ya no está disponible. ¿Te gustaría que te ofrezca otro horario libre para *${svcName}*?`
             await sendWhatsAppMessage(sender, slotMsg)
             await logInteraction({ business_id: business.id, sender_phone: sender, message_text: text, ai_response: `SLOT_CONFLICT: ${bookingResult?.error ?? 'unknown'}` })
             await flushSentry()
@@ -479,21 +509,7 @@ serve(async (req: Request) => {
             `${client?.name ?? customerName} reservó ${svcName} para el ${date} a las ${formattedTime}`,
             'success',
             { appointment_id: bookingResult.appointment_id }
-          ).catch(err => console.error('Failed to create in-app notification:', err))
-
-          // Notify business owner immediately — fire-and-forget (non-blocking)
-          const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
-          const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-          const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
-
-          const formattedTime = (() => {
-            const [h, m] = time.split(':');
-            let hour = parseInt(h, 10);
-            const ampm = hour >= 12 ? 'pm' : 'am';
-            hour = hour % 12;
-            hour = hour ? hour : 12;
-            return `${hour}:${m} ${ampm}`;
-          })();
+          ).catch(err => captureException(err, { stage: 'create_inapp_notification_booking', business_id: business.id, sender }))
 
           // Channel 1: Web Push notification (PWA)
           fetch(`${supabaseUrl}/functions/v1/push-notify`, {
@@ -513,22 +529,17 @@ serve(async (req: Request) => {
           // Channel 2: WhatsApp message to business owner
           if (business.phone) {
             const ownerPhone = business.phone.replace(/\D/g, '')
-            const waNotif = 
+            const waNotif =
               `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
               `Ha sido agendada una cita para *${client?.name ?? customerName}* el día *${date}* a las *${formattedTime}*\n` +
               `Servicio: *${svcName}*\n\n` +
               `¡Sigo trabajando a toda máquina para mantener tu agenda llena! 💪🚀`;
-              
+
             addBreadcrumb('Sending notification to business owner', 'notification', 'info', { ownerPhone })
             sendWhatsAppMessage(ownerPhone, waNotif)
-              .then(() => console.log(`[Notification] Sent to owner: ${ownerPhone}`))
-              .catch(err => {
-                console.error(`[Notification] Failed for ${ownerPhone}:`, err)
-                captureException(err, { stage: 'wa_notify_owner', business_id: business.id, ownerPhone })
-              })
+              .catch(err => captureException(err, { stage: 'wa_notify_owner', business_id: business.id, ownerPhone }))
           } else {
-            console.warn(`[Notification] Business ${business.name} has no phone configured.`)
-            addBreadcrumb('Owner notification skipped: no phone', 'notification', 'warning')
+            addBreadcrumb('Owner notification skipped: no phone', 'notification', 'warning', { business_id: business.id })
           }
         } catch (err) {
           // Only true DB/network failures reach here
@@ -582,7 +593,7 @@ serve(async (req: Request) => {
               `${clientName} movió su cita de ${svcName} al ${date} a las ${formattedNewTime}`,
               'info',
               { appointment_id: appointmentId }
-            ).catch(err => console.error('Failed to create in-app notification:', err))
+            ).catch(err => captureException(err, { stage: 'create_inapp_notification_reschedule', business_id: business.id, sender }))
           }
         } catch (err) {
           captureException(err, { stage: 'reschedule_appointment', appointment_id: appointmentId })
@@ -623,7 +634,7 @@ serve(async (req: Request) => {
               `${clientName} canceló su cita de ${svcName} del ${oldDateStr}`,
               'warning',
               { appointment_id: appointmentId }
-            ).catch(err => console.error('Failed to create in-app notification:', err))
+            ).catch(err => captureException(err, { stage: 'create_inapp_notification_cancel', business_id: business.id, sender }))
           }
         } catch (err) {
           captureException(err, { stage: 'cancel_appointment', appointment_id: appointmentId })
@@ -660,7 +671,7 @@ serve(async (req: Request) => {
           await sendWhatsAppMessage(sender, "⚠️ Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento.")
         }
       } catch (notifyErr) {
-        console.error("Failed to notify user of error:", notifyErr)
+        captureException(notifyErr, { stage: 'notify_user_of_error', sender })
       }
 
       await flushSentry()

@@ -91,7 +91,8 @@ export default function NewClientPage() {
     } else {
       // In-app notification for new client
       const notifPayload = notificationForNewClient(businessId, form.name.trim(), fullPhone);
-      notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+      // Fire-and-forget: notification failures don't block the flow
+      notificationsRepo.createNotification(supabase, notifPayload);
 
       router.push("/dashboard/clients");
       router.refresh();

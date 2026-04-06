@@ -330,14 +330,18 @@ function NewAppointmentForm() {
       const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
       const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
       const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
-      notificationsRepo.createNotification(supabase, notifPayload).catch(() => null)
+      notificationsRepo.createNotification(supabase, notifPayload).catch(err => {
+        logger.error('Failed to create in-app notification for new appointment', err)
+      })
 
       // Web Push al dueño: notificación inmediata de nueva cita
       notifyOwner({
         title: '📅 Nueva cita agendada',
         body:  `${clientName} · ${serviceName} · ${timeStr}`,
         url:   `/dashboard/appointments/${newApt.id}`,
-      }).catch(() => null)
+      }).catch(err => {
+        logger.error('Failed to send push notification to owner', err)
+      })
     }
 
     setSaving(false)

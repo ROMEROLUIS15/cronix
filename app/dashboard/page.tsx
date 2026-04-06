@@ -191,12 +191,16 @@ export default function DashboardPage() {
         const serviceName = selectedApt.service?.name ?? 'servicio';
         const timeStr = new Date(selectedApt.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
         const notifPayload = notificationForAppointmentConfirmed(businessId, clientName, serviceName, timeStr);
-        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+        notificationsRepo.createNotification(supabase, notifPayload).catch(err => {
+          logger.error('Failed to create confirmation notification', err);
+        });
       } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
         const clientName = selectedApt.client?.name ?? 'cliente';
         const serviceName = selectedApt.service?.name ?? 'servicio';
         const notifPayload = notificationForAppointmentCancelled(businessId, clientName, serviceName);
-        notificationsRepo.createNotification(supabase, notifPayload).catch(() => null);
+        notificationsRepo.createNotification(supabase, notifPayload).catch(err => {
+          logger.error('Failed to create cancellation notification', err);
+        });
       }
 
       await Promise.all([fetchMonthApts(), fetchStats()]);
