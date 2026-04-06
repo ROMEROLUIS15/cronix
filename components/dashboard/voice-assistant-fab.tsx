@@ -313,9 +313,6 @@ export function VoiceAssistantFab() {
         })
       }
 
-      // Show Luis's response text while speaking
-      if (data.text) setTranscript(data.text)
-
       if (data.audioUrl) {
         setState('speaking')
         const audio = new Audio(data.audioUrl)
@@ -373,9 +370,6 @@ export function VoiceAssistantFab() {
         })
       }
 
-      // Show Luis's response text while speaking
-      if (data.text) setTranscript(data.text)
-
       if (data.audioUrl) {
         setState('speaking')
         const audio = new Audio(data.audioUrl)
@@ -394,7 +388,7 @@ export function VoiceAssistantFab() {
       }
 
     } catch (error: unknown) {
-      console.error(error)
+      captureException(error, { context: 'send_text_to_assistant' })
       setState('idle')
       setTranscript('Error de conexión')
       setTimeout(() => setTranscript(''), 3000)
@@ -446,18 +440,6 @@ export function VoiceAssistantFab() {
         style={{ y: springY }}
         className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 sm:hidden touch-none"
       >
-
-        {transcript && state !== 'speaking' && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="max-w-[200px] px-3 py-2 rounded-xl text-xs text-white/90 leading-snug pointer-events-none"
-            style={{ background: 'rgba(5,5,10,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(56,132,255,0.3)' }}
-          >
-            {transcript.length > 120 ? transcript.slice(0, 120) + '...' : transcript}
-          </motion.div>
-        )}
 
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -557,18 +539,6 @@ export function VoiceAssistantFab() {
             }`}
           />
         </button>
-
-        {transcript && state !== 'speaking' && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="max-w-[320px] px-4 py-2.5 rounded-xl text-xs text-white/90 leading-relaxed"
-            style={{ background: 'rgba(5,5,10,0.88)', backdropFilter: 'blur(12px)', border: '1px solid rgba(56,132,255,0.25)' }}
-          >
-            {transcript.length > 200 ? transcript.slice(0, 200) + '...' : transcript}
-          </motion.div>
-        )}
       </div>
     </>
   )

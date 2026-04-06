@@ -242,7 +242,7 @@ class ToolRegistry {
       type: 'function',
       function: {
         name: 'get_services',
-        description: 'Catálogo de servicios con precios y duración.',
+        description: 'Obtiene el catálogo completo de servicios del negocio (tratamientos, cortes, masajes, etc.) con nombre, precio y duración. Llamar cuando el usuario pregunte qué servicios ofrece el negocio, qué opciones hay disponibles, cuánto cuesta un servicio o cuáles son los tratamientos.',
         parameters: { type: 'object', properties: {}, required: [] },
       },
       handler: (bizId) => tools.get_services(bizId)
