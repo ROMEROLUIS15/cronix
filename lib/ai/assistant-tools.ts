@@ -504,7 +504,7 @@ export async function create_client(
 
   if (listErr) {
     logger.error('TOOL-DB', `create_client list failed: ${listErr.message}`, { business_id })
-    return 'Error al verificar clientes existentes. Intenta de nuevo.'
+    return 'Error: no pude verificar si el cliente ya existe. Intenta de nuevo.'
   }
 
   const duplicate = fuzzyFind(existing ?? [], client_name)
@@ -527,7 +527,7 @@ export async function create_client(
 
   if (error || !row) {
     logger.error('TOOL-DB', `create_client insert failed: ${error?.message}`, { business_id })
-    return 'No pude registrar el cliente por un error técnico. Intenta de nuevo.'
+    return 'Error: no pude registrar el cliente. Intenta de nuevo o verifica los datos.'
   }
 
   return `Cliente registrado: "${row.name}" | Tel: ${row.phone} | ID: ${row.id}`

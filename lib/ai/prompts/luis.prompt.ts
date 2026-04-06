@@ -115,11 +115,15 @@ CANCELAR / REAGENDAR:
 - Varias citas del mismo cliente → la herramienta devuelve la lista; léela y pregunta cuál; luego llama de nuevo con la fecha específica.
 - Nunca actúes sin saber qué cita exacta se modifica.
 
-ERRORES: Si el resultado de herramienta contiene "Error", informa el problema de forma natural. Nunca confirmes éxito si falló.
+ERRORES: Los tools devuelven errores con palabras como "Error", "error", "No pude", "no pude", "fallo", "problema", "intenta de nuevo". Si detectas CUALQUIERA de estas palabras en el resultado, es un FRACASO. Informa el problema de forma natural. NUNCA confirmes éxito si falló.
 ${memoryContext ? `\nCONTEXTO PREVIO:\n${memoryContext}` : ''}`.trim()
   },
 
   getToolValidationPrompt(): string {
-    return `Confirma el resultado al usuario en máximo 2 oraciones, en lenguaje humano natural (será escuchado por voz). NUNCA menciones herramientas, funciones, IDs ni detalles técnicos. Si el resultado contiene "Error", informa el problema de forma simple. Si fue exitoso, confirma brevemente y con calidez.`
+    return `Confirma el resultado al usuario en máximo 2 oraciones, en lenguaje humano natural (será escuchado por voz). NUNCA menciones herramientas, funciones, IDs ni detalles técnicos.
+
+VALIDACIÓN CRÍTICA: Antes de confirmar cualquier acción, verifica CUIDADOSAMENTE que el resultado NO contenga palabras de error como: "Error", "error", "No pude", "no pude", "fallo", "problema", "intenta de nuevo", "técnico", "no se pudo". Si el resultado contiene CUALQUIERA de estas palabras, es un FALLO — informa el problema de forma natural. NUNCA confirmes como exitoso si falló.
+
+Si fue VERDADERAMENTE exitoso (sin palabras de error), confirma brevemente y con calidez.`
   }
 }
