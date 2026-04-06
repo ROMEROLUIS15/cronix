@@ -209,6 +209,7 @@ serve(async (req: Request) => {
       // Extract text from text message or transcribe voice note
       let rawText = msg.text?.body ?? null
       let whisperTokens = 0
+      const wasAudio = !rawText && !!msg.audio?.id
 
       if (!rawText && msg.audio?.id) {
         addBreadcrumb('Voice note received, downloading media', 'whatsapp', 'info')
@@ -220,7 +221,14 @@ serve(async (req: Request) => {
           rawText = result.text
           whisperTokens = result.tokens
         } catch (err) {
-          if (err instanceof LlmRateLimitError) throw err
+          if (err instanceof LlmRateLimitError) {
+            // Handle rate limit WITHOUT re-throwing to avoid QStash cascade
+            const mins = Math.ceil(err.retryAfterSecs / 60)
+            captureException(err, { stage: 'whisper_rate_limit', sender })
+            await sendWhatsAppMessage(sender, `Estoy atendiendo muchas consultas de voz. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`)
+            await flushSentry()
+            return json({ success: true })
+          }
           if (err instanceof CircuitBreakerError) {
             addBreadcrumb('Whisper Circuit open hit', 'llm', 'error')
             await sendWhatsAppMessage(sender, "🤖 Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?")
@@ -236,8 +244,12 @@ serve(async (req: Request) => {
       }
 
       if (!rawText) {
+        if (wasAudio) {
+          addBreadcrumb('Empty audio transcription — notifying user', 'whatsapp', 'warning')
+          await sendWhatsAppMessage(sender, 'No pude entender tu mensaje de voz. ¿Podrías hablar más claro, acercarte al micrófono, o escribirme tu consulta?')
+        }
         await flushSentry()
-        return json({ success: true, message: 'Non-text message or empty transcription' })
+        return json({ success: true, message: wasAudio ? 'Empty transcription — user notified' : 'Non-text message' })
       }
 
       // ── Business Owner Verification Webhook Interceptor ──
@@ -398,6 +410,7 @@ serve(async (req: Request) => {
           id:       business.id,
           name:     business.name,
           timezone,
+          slug:     business.slug ?? null,
           settings: (business.settings ?? {}) as WaBusinessSettings,
         },
         services,

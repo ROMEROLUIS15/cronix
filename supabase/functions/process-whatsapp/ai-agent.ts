@@ -204,8 +204,8 @@ export async function processConversation(
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type':  'application/json',
-        ...heliconeHeaders({ 
-          tenant: context.business.slug,
+        ...heliconeHeaders({
+          tenant: context.business.slug ?? 'unknown',
           customer: customerName
         })
       },

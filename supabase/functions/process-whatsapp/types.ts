@@ -24,6 +24,7 @@ export interface WaBusinessSettings {
   }
   wa_verified?: boolean
   maxDailyBookingsPerClient?: number
+  wa_daily_token_limit?:    number
 }
 
 // ── Database Row projections ─────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export interface BusinessRow {
   phone:    string | null
   timezone: string | null
   settings: WaBusinessSettings | null
+  slug:     string | null
 }
 
 export interface ServiceRow {
@@ -74,6 +76,7 @@ export interface BusinessRagContext {
     name:     string
     timezone: string
     settings: WaBusinessSettings
+    slug:     string | null
   }
   services:           ServiceRow[]
   client:             ClientRow | null

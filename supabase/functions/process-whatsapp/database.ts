@@ -162,7 +162,7 @@ export async function trackTokenUsage(businessId: string, tokens: number): Promi
 export async function getBusinessBySlug(slug: string): Promise<BusinessRow | null> {
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, phone, timezone, settings')
+    .select('id, name, phone, timezone, settings, slug')
     .eq('slug', slug)
     .single()
 
@@ -185,7 +185,7 @@ export async function getSessionBusiness(senderPhone: string): Promise<BusinessR
 
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, phone, timezone, settings')
+    .select('id, name, phone, timezone, settings, slug')
     .eq('id', (session as { business_id: string }).business_id)
     .single()
 
