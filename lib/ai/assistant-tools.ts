@@ -530,7 +530,7 @@ export async function create_client(
     return 'Error: no pude registrar el cliente. Intenta de nuevo o verifica los datos.'
   }
 
-  return `Cliente registrado: "${row.name}" | Tel: ${row.phone} | ID: ${row.id}`
+  return `Listo. Cliente "${row.name}" registrado correctamente.`
 }
 
 // ── READ: Listar Clientes (NUEVO) ──────────────────────────────────────────

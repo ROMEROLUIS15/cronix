@@ -464,6 +464,7 @@ export async function getAppointmentDetails(appointmentId: string): Promise<any>
     .from('appointments')
     .select(`
       start_at,
+      business_id,
       services:service_id(name),
       clients:client_id(name, phone)
     `)

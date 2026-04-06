@@ -72,5 +72,23 @@ class MemoryRateLimiter {
 }
 
 // Singletons for common limits
-export const assistantRateLimiter = new MemoryRateLimiter(10, 60 * 1000) // 10 per min
-export const generalRateLimiter   = new MemoryRateLimiter(30, 60 * 1000) // 30 per min
+export const assistantRateLimiter = new MemoryRateLimiter(10, 60 * 1000)  // 10 per min
+export const generalRateLimiter   = new MemoryRateLimiter(30, 60 * 1000)  // 30 per min
+
+// WRITE operations rate limiter: more strict than general.
+// Prevents automated abuse of state-mutating tools (booking, cancellation, payments).
+// Limits: 20 write operations per hour per authenticated user.
+export const writeToolRateLimiter = new MemoryRateLimiter(20, 60 * 60 * 1000) // 20 per hour
+
+/**
+ * Set of tool names that mutate state in the database.
+ * These tools are subject to stricter rate limiting than read-only tools.
+ */
+export const WRITE_TOOLS = new Set([
+  'book_appointment',
+  'cancel_appointment',
+  'reschedule_appointment',
+  'register_payment',
+  'create_client',
+  'send_reactivation_message',
+])

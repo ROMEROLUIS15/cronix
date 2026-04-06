@@ -9,13 +9,12 @@
  *  2. Message rate limiting — 10 msgs / 60s per phone (fn_wa_check_rate_limit)
  *  3. Business usage quota — 50 msgs / 60s per business (fn_wa_check_business_limit)
  *  4. Message sanitization — strips prompt injection patterns
- *  5. Booking rate limiting — 2 bookings / 24h per phone (fn_wa_check_booking_limit)
- *  6. Action tag regex parsing — LLM cannot self-execute
+ *  5. Booking rate limiting — 2 bookings / 24h per phone (handled inside runAgentLoop)
  */
 
 import { serve }                   from "https://deno.land/std@0.168.0/http/server.ts"
 import { Receiver }                from "https://esm.sh/@upstash/qstash@2.7.20"
-import { processConversation,
+import { runAgentLoop,
          transcribeAudio,
          LlmRateLimitError,
          CircuitBreakerError }     from "./ai-agent.ts"
@@ -35,22 +34,12 @@ import {
   getClientByPhone,
   getActiveAppointments,
   getConversationHistory,
-  createAppointment,
-  rescheduleAppointment,
-  cancelAppointmentById,
-  getAppointmentDetails,
   getBookedSlots,
-  checkCircuitBreaker,
-  reportServiceFailure,
-  reportServiceSuccess,
   checkTokenQuota,
   trackTokenUsage,
   checkMessageRateLimit,
   checkBusinessUsageLimit,
-  checkBookingRateLimit,
   logInteraction,
-  createInternalNotification,
-  localTimeToUTC,
 }                                  from "./database.ts"
 import {
   initSentry,
@@ -151,14 +140,6 @@ function sanitizeMessage(text: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
-
-// ── Action tag regexes ────────────────────────────────────────────────────────
-// These are the ONLY valid execution triggers — the LLM cannot self-execute.
-
-const CONFIRM_TAG_RE    = /\[CONFIRM_BOOKING:\s*(?:REF#)?([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const RESCHEDULE_TAG_RE = /\[RESCHEDULE_BOOKING:\s*(?:REF#)?([a-f0-9-]{36}),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/i
-const CANCEL_TAG_RE     = /\[CANCEL_BOOKING:\s*(?:REF#)?([a-f0-9-]{36})\]/i
-const ALL_TAGS_RE       = /\[(CONFIRM|RESCHEDULE|CANCEL)_BOOKING:[^\]]*\]/gi
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -420,30 +401,29 @@ serve(async (req: Request) => {
         bookedSlots,
       }
 
-      addBreadcrumb('Sending prompt to AI model', 'llm', 'info', { model: 'llama-3.3-70b-versatile via Groq' })
+      addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'llama-3.1-8b-instant + llama-3.3-70b-versatile' })
 
-      // ── AI call ───────────────────────────────────────────────────────────
-      let aiResponse: string
+      // ── ReAct Agent Loop ──────────────────────────────────────────────────
+      let agentResult: { text: string; tokens: number; toolCallsTrace: unknown[] }
       try {
-        const result = await processConversation(text, context, customerName)
-        aiResponse = result.text
-        
-        // Track LLM usage
-        if (result.tokens > 0) {
-          await trackTokenUsage(business.id, result.tokens)
+        agentResult = await runAgentLoop(text, context, customerName, sender)
+
+        // Track total LLM usage (loop + final pass)
+        if (agentResult.tokens > 0) {
+          await trackTokenUsage(business.id, agentResult.tokens)
         }
       } catch (err) {
         if (err instanceof LlmRateLimitError) {
           addBreadcrumb('LLM Rate limit hit', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
           captureException(err, { stage: 'ai_rate_limit', sender })
-          
+
           const mins = Math.ceil(err.retryAfterSecs / 60)
           const msg  = `Estoy atendiendo muchas consultas. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`
           await sendWhatsAppMessage(sender, msg)
           await flushSentry()
           return json({ success: true })
         }
-        
+
         if (err instanceof CircuitBreakerError) {
           addBreadcrumb('LLM Circuit open hit', 'llm', 'error')
           await sendWhatsAppMessage(sender, "🤖 Lo siento, mi cerebro de IA está en mantenimiento breve. Por favor, intenta de nuevo en un minuto.")
@@ -451,220 +431,26 @@ serve(async (req: Request) => {
           return json({ success: true })
         }
 
+        // Fallback for unexpected LLM errors (timeouts, 5xx, parse errors, etc.)
+        // User always gets a message, Sentry captures full error context
         captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text.length })
-        throw err
+        await sendWhatsAppMessage(sender, 'Hubo un problema técnico al procesar tu mensaje. Por favor, inténtalo de nuevo en un momento.')
+        await flushSentry()
+        return json({ success: true })
       }
 
-      addBreadcrumb('AI response received', 'llm', 'info', { length: aiResponse.length })
+      addBreadcrumb('Agent loop finished', 'llm', 'info', { response_length: agentResult.text.length, tokens: agentResult.tokens })
 
-      // ── Action tag parsing ─────────────────────────────────────────────────
-      // Tags in the LLM response trigger real DB mutations.
-      // The clean response (tags stripped) is what the user sees.
+      await sendWhatsAppMessage(sender, agentResult.text)
 
-      const confirmMatch    = CONFIRM_TAG_RE.exec(aiResponse)
-      const rescheduleMatch = RESCHEDULE_TAG_RE.exec(aiResponse)
-      const cancelMatch     = CANCEL_TAG_RE.exec(aiResponse)
-
-      if (confirmMatch) {
-        const [, serviceId, date, time] = confirmMatch
-
-        addBreadcrumb('CONFIRM_BOOKING tag detected', 'booking', 'info', { date })
-
-        // Layer 4: Booking rate limit
-        const bookingAllowed = await checkBookingRateLimit(sender, business.id)
-        if (!bookingAllowed) {
-          const limitMsg = 'Has alcanzado el límite de citas nuevas por hoy. Por favor contáctanos directamente para más ayuda.'
-          await sendWhatsAppMessage(sender, limitMsg)
-          await logInteraction({ business_id: business.id, sender_phone: sender, message_text: text, ai_response: 'BOOKING_RATE_LIMITED' })
-          await flushSentry()
-          return json({ success: true })
-        }
-
-        try {
-          // Define these early — needed for all notification channels
-          const svcName = services.find(s => s.id === serviceId)?.name ?? 'Servicio'
-          const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-          const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
-
-          const formattedTime = (() => {
-            const [h, m] = time.split(':');
-            let hour = parseInt(h, 10);
-            const ampm = hour >= 12 ? 'pm' : 'am';
-            hour = hour % 12;
-            hour = hour ? hour : 12;
-            return `${hour}:${m} ${ampm}`;
-          })();
-
-          const bookingResult = await createAppointment(business.id, {
-            client_phone: sender,
-            client_name:  client?.name ?? customerName,
-            service_id:   serviceId,
-            date,
-            time,
-            timezone,
-          })
-
-          // Business-level failure (e.g. slot already taken): inform the user gracefully
-          if (!bookingResult?.success) {
-            const slotMsg = `Lo siento, ese horario ya no está disponible. ¿Te gustaría que te ofrezca otro horario libre para *${svcName}*?`
-            await sendWhatsAppMessage(sender, slotMsg)
-            await logInteraction({ business_id: business.id, sender_phone: sender, message_text: text, ai_response: `SLOT_CONFLICT: ${bookingResult?.error ?? 'unknown'}` })
-            await flushSentry()
-            return json({ success: true })
-          }
-
-          addBreadcrumb('Appointment created via WhatsApp AI', 'booking', 'info')
-
-          // Channel 0: In-App Notification (Dashboard Bell)
-          createInternalNotification(
-            business.id,
-            'Nueva Cita Agendada 📅',
-            `${client?.name ?? customerName} reservó ${svcName} para el ${date} a las ${formattedTime}`,
-            'success',
-            { appointment_id: bookingResult.appointment_id }
-          ).catch(err => captureException(err, { stage: 'create_inapp_notification_booking', business_id: business.id, sender }))
-
-          // Channel 1: Web Push notification (PWA)
-          fetch(`${supabaseUrl}/functions/v1/push-notify`, {
-            method:  'POST',
-            headers: {
-              'Content-Type':      'application/json',
-              'x-internal-secret': cronSecret,
-            },
-            body: JSON.stringify({
-              business_id: business.id,
-              title:       '¡Nueva Reserva! 📅',
-              body:        `${client?.name ?? customerName} · ${svcName} — ${date} ${formattedTime} ✅`,
-              url:         '/dashboard',
-            }),
-          }).catch(err => captureException(err, { stage: 'push_new_booking', business_id: business.id }))
-
-          // Channel 2: WhatsApp message to business owner
-          if (business.phone) {
-            const ownerPhone = business.phone.replace(/\D/g, '')
-            const waNotif =
-              `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-              `Ha sido agendada una cita para *${client?.name ?? customerName}* el día *${date}* a las *${formattedTime}*\n` +
-              `Servicio: *${svcName}*\n\n` +
-              `¡Sigo trabajando a toda máquina para mantener tu agenda llena! 💪🚀`;
-
-            addBreadcrumb('Sending notification to business owner', 'notification', 'info', { ownerPhone })
-            sendWhatsAppMessage(ownerPhone, waNotif)
-              .catch(err => captureException(err, { stage: 'wa_notify_owner', business_id: business.id, ownerPhone }))
-          } else {
-            addBreadcrumb('Owner notification skipped: no phone', 'notification', 'warning', { business_id: business.id })
-          }
-        } catch (err) {
-          // Only true DB/network failures reach here
-          captureException(err, { stage: 'create_appointment', service_id: serviceId, date })
-        }
-      }
-
-      if (rescheduleMatch) {
-        const [, appointmentId, date, time] = rescheduleMatch
-
-        addBreadcrumb('RESCHEDULE_BOOKING tag detected', 'booking', 'info', { date })
-
-        try {
-          const aptDetails = await getAppointmentDetails(appointmentId)
-          const newStartAt = localTimeToUTC(date, time, timezone)
-          await rescheduleAppointment(appointmentId, newStartAt)
-          addBreadcrumb('Appointment rescheduled via WhatsApp AI', 'booking', 'info')
-
-          if (aptDetails && business.phone) {
-            const svcName = aptDetails.services?.name ?? 'Servicio'
-            const clientName = aptDetails.clients?.name ?? customerName
-            
-            const oldDateObj = new Date(aptDetails.start_at)
-            const oldDateStr = new Intl.DateTimeFormat('es-ES', { timeZone: timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
-            const oldTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
-
-            const formattedNewTime = (() => {
-              const [h, m] = time.split(':');
-              let hour = parseInt(h, 10);
-              const ampm = hour >= 12 ? 'pm' : 'am';
-              hour = hour % 12;
-              hour = hour ? hour : 12;
-              return `${hour}:${m} ${ampm}`;
-            })();
-
-            const ownerPhone = business.phone.replace(/\D/g, '')
-            const waNotif = 
-              `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-              `El cliente *${clientName}* ha *reagendado* su cita de *${svcName}*.\n\n` +
-              `❌ Espacio liberado: *${oldDateStr}* a las *${oldTimeStr}*\n` +
-              `✅ Nuevo espacio reservado: *${date}* a las *${formattedNewTime}*\n\n` +
-              `¡Tu agenda ha sido actualizada correctamente! 💪🚀`
-
-            sendWhatsAppMessage(ownerPhone, waNotif)
-              .catch(err => captureException(err, { stage: 'wa_notify_owner_reschedule', business_id: business.id }))
-
-            // Channel 0: In-App Notification (Dashboard Bell)
-            createInternalNotification(
-              business.id,
-              'Cita Reagendada 🔄',
-              `${clientName} movió su cita de ${svcName} al ${date} a las ${formattedNewTime}`,
-              'info',
-              { appointment_id: appointmentId }
-            ).catch(err => captureException(err, { stage: 'create_inapp_notification_reschedule', business_id: business.id, sender }))
-          }
-        } catch (err) {
-          captureException(err, { stage: 'reschedule_appointment', appointment_id: appointmentId })
-        }
-      }
-
-      if (cancelMatch) {
-        const [, appointmentId] = cancelMatch
-
-        addBreadcrumb('CANCEL_BOOKING tag detected', 'booking', 'info')
-
-        try {
-          const aptDetails = await getAppointmentDetails(appointmentId)
-          await cancelAppointmentById(appointmentId)
-          addBreadcrumb('Appointment cancelled via WhatsApp AI', 'booking', 'info')
-
-          if (aptDetails && business.phone) {
-            const svcName = aptDetails.services?.name ?? 'Servicio'
-            const clientName = aptDetails.clients?.name ?? customerName
-            
-            const oldDateObj = new Date(aptDetails.start_at)
-            const oldDateStr = new Intl.DateTimeFormat('es-ES', { timeZone: timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
-            const oldTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
-
-            const ownerPhone = business.phone.replace(/\D/g, '')
-            const waNotif = 
-              `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-              `El cliente *${clientName}* ha *cancelado* su cita, por lo que tienes un nuevo espacio libre el día *${oldDateStr}* a las *${oldTimeStr}* para el servicio: *${svcName}*.\n\n` +
-              `¡Sigo activo para atender y asignarle este nuevo espacio libre a otro cliente! 💪🚀`
-
-            sendWhatsAppMessage(ownerPhone, waNotif)
-              .catch(err => captureException(err, { stage: 'wa_notify_owner_cancel', business_id: business.id }))
-
-            // Channel 0: In-App Notification (Dashboard Bell)
-            createInternalNotification(
-              business.id,
-              'Cita Cancelada ❌',
-              `${clientName} canceló su cita de ${svcName} del ${oldDateStr}`,
-              'warning',
-              { appointment_id: appointmentId }
-            ).catch(err => captureException(err, { stage: 'create_inapp_notification_cancel', business_id: business.id, sender }))
-          }
-        } catch (err) {
-          captureException(err, { stage: 'cancel_appointment', appointment_id: appointmentId })
-        }
-      }
-
-      // Strip all tags before sending to the user
-      const cleanResponse = aiResponse.replace(ALL_TAGS_RE, '').replace(/\s{2,}/g, ' ').trim()
-
-      await sendWhatsAppMessage(sender, cleanResponse)
-
-      // Log full response (including tags) for audit trail
       await logInteraction({
         business_id:  business.id,
         sender_phone: sender,
         message_text: text,
-        ai_response:  aiResponse,
+        ai_response:  agentResult.text,
+        tool_calls:   agentResult.toolCallsTrace.length > 0
+          ? { steps: agentResult.toolCallsTrace }
+          : undefined,
       })
 
       await flushSentry()
