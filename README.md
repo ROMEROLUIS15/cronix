@@ -134,8 +134,8 @@ Luis detects the user's browser timezone (`Intl.DateTimeFormat`) and records eve
 ### 8. Premium Voice Visualizer 🎨
 A reactive 5-bar Siri-style waveform (Blue → Purple → Pink gradient) dances with your voice in real-time. Switches to a breathing rhythm while Luis speaks.
 
-### 9. Secure Token Gateway 🔒
-The master Deepgram API key never leaves the server. The browser receives a short-lived (5-min) scoped token via `/api/assistant/token`.
+### 9. Server-Side API Key Protection 🔒
+The master Deepgram API key never leaves the server. Audio processing (STT/TTS) occurs entirely on the backend.
 
 ### 10. Dual-Model Routing & Token Optimization ⚡
 Luis automatically selects the optimal LLM based on intent: fast reads (8b, 500k TPD) vs. write actions (70b, 100k TPD). This maximizes free-tier quotas while maintaining 70b precision for critical operations like client registration, appointment bookings, and payments.
@@ -406,10 +406,10 @@ Cronix includes a native **Executive Voice Assistant** (codenamed "Luis") direct
 
 **Technical Pipeline (v7.0 — Senior):**
 
-1. **Streaming Capture:** Browser `MediaRecorder` + **Deepgram Nova-2 WebSocket** → Real-time transcription word-by-word.
-2. **Ghost Transcript:** Live text clears automatically when Luis starts processing.
-3. **Secure Token:** A short-lived Deepgram token fetched from `/api/assistant/token` keeps the master key off the client.
-4. **Timezone:** `Intl.DateTimeFormat().resolvedOptions().timeZone` detected and sent as JSON with the transcribed text.
+1. **Blob Capture:** Browser `MediaRecorder` captures audio → sent as blob to `/api/assistant/voice`.
+2. **Ghost Transcript:** Live transcription displays in the UI, clears when Luis starts processing.
+3. **Server STT:** Backend decodes audio and performs transcription using the master Deepgram key — zero client-side token exposure.
+4. **Timezone:** Browser detects timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone` and sends it with the audio blob.
 5. **RAG:** `memoryService.retrieve()` fetches top-3 relevant memories via `pgvector` cosine search.
 6. **LLM Pass 1:** Groq Llama-3 8B with **Function Calling** (Tool Dispatcher).
 7. **Tools:** One or more tools executed. Results collected.

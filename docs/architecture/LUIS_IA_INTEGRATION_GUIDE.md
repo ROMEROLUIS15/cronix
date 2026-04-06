@@ -61,7 +61,7 @@ The result: zero interruption to the workflow. Zero screen time. The business ma
 │  │                     │       │                                    │   │
 │  │  VoiceVisualizer    │       │  POST /api/assistant/voice         │   │
 │  │  MediaRecorder      │◄─────►│  GET  /api/assistant/proactive     │   │
-│  │  VAD Monitor        │       │  GET  /api/assistant/token         │   │
+│  │  VAD Monitor        │       │                                    │   │
 │  │                     │       │                                    │   │
 │  └─────────────────────┘       └─────────────────┬──────────────────┘   │
 │                                                  │                      │
@@ -779,7 +779,7 @@ function sanitizePromptParam(value: string): string {
 
 ### Deepgram API Key Protection
 
-The Deepgram API key never reaches the browser. A dedicated endpoint (`/api/assistant/token`) generates short-lived, scoped tokens (TTL: 300s, scope: `usage:runtime`).
+The Deepgram API key never reaches the browser. The frontend streams audio blobs directly to the backend via `/api/assistant/voice`, where all STT/TTS processing occurs server-side using the master `DEEPGRAM_AURA_API_KEY`. Zero client-side token generation.
 
 ### Tool Execution Timeout
 
@@ -950,8 +950,7 @@ setTimeout(async () => {
 
 | File | Responsibility |
 |---|---|
-| [`app/api/assistant/voice/route.ts`](../../app/api/assistant/voice/route.ts) | Main voice endpoint — polymorphic input (audio/text), Zod validation, RLS, provider injection |
-| [`app/api/assistant/token/route.ts`](../../app/api/assistant/token/route.ts) | Short-lived Deepgram token generation (TTL 300s, scope: usage:runtime) |
+| [`app/api/assistant/voice/route.ts`](../../app/api/assistant/voice/route.ts) | Main voice endpoint — polymorphic input (audio/text), Zod validation, RLS, provider injection, server-side STT/TTS |
 | [`lib/ai/assistant-service.ts`](../../lib/ai/assistant-service.ts) | Core orchestrator — STT, intent detection, RAG, LLM multi-pass, tool dispatch, memory sync, audio fallback |
 | [`lib/ai/prompts/luis.prompt.ts`](../../lib/ai/prompts/luis.prompt.ts) | System prompt builder — timezone-aware, compact, injection-resistant |
 | [`lib/ai/tool-registry.ts`](../../lib/ai/tool-registry.ts) | Tool registry — maps schemas to handlers, passes businessId + timezone |
