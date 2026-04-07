@@ -1,0 +1,457 @@
+{
+  "meta": {
+    "title": "Cronix - Intelligent Management",
+    "description": "Manage appointments, clients, and finances for your business in one place. Built for professionals who don't settle.",
+    "ogTitle": "Cronix - Intelligent Management",
+    "ogDescription": "The platform that centralizes your appointments, clients, and finances in one app.",
+    "twitterDescription": "Centralize your business with the power of AI and WhatsApp."
+  },
+
+  "nav": {
+    "sectionLabel": "Main",
+    "agenda": "Calendar",
+    "clients": "Clients",
+    "services": "Services",
+    "team": "Team",
+    "finances": "Finances",
+    "reports": "Reports",
+    "settings": "Settings",
+    "activeBusiness": "Active business",
+    "defaultCategory": "Services",
+    "closeMenu": "Close menu",
+    "signOut": "Sign out",
+    "profile": "Profile"
+  },
+
+  "topbar": {
+    "openMenu": "Open menu",
+    "notifications": "Notifications"
+  },
+
+  "pageTitles": {
+    "dashboard": "Dashboard",
+    "dashboardSub": "General overview",
+    "newAppointment": "New Appointment",
+    "editAppointment": "Edit Appointment",
+    "appointments": "Calendar",
+    "appointmentsSub": "Appointment management",
+    "newClient": "New Client",
+    "editClient": "Edit Client",
+    "clientProfile": "Client Profile",
+    "clients": "Clients",
+    "clientsSub": "Database",
+    "services": "Services",
+    "servicesSub": "Catalog",
+    "settings": "Settings",
+    "settingsSub": "Preferences",
+    "myProfile": "My Profile",
+    "myProfileSub": "Account",
+    "finances": "Finances",
+    "financesSub": "Financial reports",
+    "reports": "Reports",
+    "reportsSub": "Analytics",
+    "setup": "Initial Setup",
+    "setupSub": "Welcome",
+    "agendaSub": "Calendar",
+    "systemPulseSub": "SaaS Health Monitor"
+  },
+
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "empty": "Empty inbox",
+    "emptyDesc": "You have no pending alerts at this time."
+  },
+
+  "landing": {
+    "badge": "INTELLIGENT MANAGEMENT PLATFORM",
+    "headline": "Manage your business in",
+    "headlineAccent": "one place.",
+    "tagline": "Manage appointments, clients, and finances for your business in one place. Built for professionals who don't settle.",
+    "ctaStart": "Get started free",
+    "ctaLogin": "Sign In",
+    "disclaimer": "No credit card required · Set up in 2 minutes · Cancel anytime",
+    "mockup": {
+      "todayAppointments": "Today's appts",
+      "clients": "Clients",
+      "revenue": "Revenue",
+      "pending": "Pending",
+      "march2026": "March 2026",
+      "agenda": "Calendar",
+      "clientsNav": "Clients",
+      "servicesNav": "Services",
+      "financesNav": "Finances",
+      "reportsNav": "Reports"
+    },
+    "features": {
+      "calendar": "Smart calendar",
+      "clients": "Client management",
+      "finances": "Financial control",
+      "reports": "Real-time reports"
+    }
+  },
+
+  "auth": {
+    "login": {
+      "platformBadge": "SaaS Platform",
+      "heroTitle": "Your business under",
+      "heroTitleAccent": "full control.",
+      "heroDesc": "Manage appointments, clients, and finances from a modern dashboard accessible from any device.",
+      "features": {
+        "smartAgenda": "Smart calendar",
+        "smartAgendaDesc": "Manage appointments and availability",
+        "autoReminders": "Automatic reminders",
+        "autoRemindersDesc": "WhatsApp and push notifications",
+        "financialReports": "Financial reports",
+        "financialReportsDesc": "Full income control",
+        "secure": "100% secure",
+        "secureDesc": "Encrypted and protected data"
+      },
+      "sessionInactive": "Your session was closed after 30 minutes of inactivity. Please sign in again.",
+      "sessionExpired": "Your 12-hour session has expired. Please sign in again.",
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "hello@yourcompany.com",
+      "passwordPlaceholder": "••••••••",
+      "forgotPassword": "Forgot your password?",
+      "submit": "Sign in",
+      "submitting": "Signing in...",
+      "divider": "or continue with",
+      "google": "Sign in with Google",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Sign up free",
+      "recoverPassword": "Recover password",
+      "upcomingAppointments": "Upcoming appointments"
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Start managing your business today",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "bizName": "Business name",
+      "bizCategory": "Business type",
+      "selectCategory": "Select your industry",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "submit": "Create free account",
+      "submitting": "Processing...",
+      "divider": "or sign up with",
+      "google": "Google",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "successTitle": "Account created!",
+      "successSubtitle": "Just one more step to get in",
+      "successStepsTitle": "What to do now?",
+      "successStep1": "Check your inbox",
+      "successStep2": "Open the confirmation email from Cronix",
+      "successStep3": "Click the link to activate your account",
+      "successSpamNote": "Don't see the email? Check your spam or junk folder.",
+      "successLoginLink": "Go to sign in",
+      "benefits": {
+        "grow": { "title": "Grow fast", "desc": "More bookings with less manual effort." },
+        "easy": { "title": "Easy to use", "desc": "No technical knowledge required." },
+        "all":  { "title": "All in one", "desc": "Appointments, clients, and finances integrated." }
+      },
+      "heroTitle": "Boost your business,",
+      "heroTitleAccent": "simplify your life.",
+      "heroDesc": "Join thousands of professionals who already automate their appointments and scale their revenue effortlessly.",
+      "heroCta": "Join free today",
+      "stats": {
+        "businesses": "Active businesses",
+        "satisfaction": "Satisfaction",
+        "setupTime": "To get started"
+      },
+      "oauthErrors": {
+        "google_not_registered": {
+          "title": "Your Google account is not registered",
+          "body": "To sign in with Google you must first create your Cronix account. Complete the form and then you can use Google to sign in."
+        }
+      }
+    },
+    "forgotPassword": {
+      "title": "Forgot your password?",
+      "desc": "Enter your email and we'll send you a link to reset it.",
+      "email": "Email",
+      "emailPlaceholder": "hello@yourcompany.com",
+      "submit": "Send link",
+      "submitting": "Sending...",
+      "back": "Back to sign in",
+      "successTitle": "Email sent",
+      "successDesc": "Check your inbox and follow the instructions.",
+      "logoAlt": "Cronix logo"
+    },
+    "resetPassword": {
+      "title": "Reset password",
+      "desc": "Enter your new password.",
+      "password": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Save password",
+      "submitting": "Saving...",
+      "successTitle": "Password updated!",
+      "successDesc": "You can now sign in with your new password.",
+      "loginLink": "Go to sign in"
+    }
+  },
+
+  "validation": {
+    "emailInvalid": "Invalid email",
+    "emailRequired": "Email is required",
+    "passwordRequired": "Password is required",
+    "passwordMin": "Password must be at least 8 characters",
+    "passwordUppercase": "Must contain at least one uppercase letter",
+    "passwordLowercase": "Must contain at least one lowercase letter",
+    "passwordNumber": "Must contain at least one number",
+    "passwordSpecial": "Must contain at least one special character",
+    "passwordsMismatch": "Passwords do not match",
+    "firstNameShort": "First name is too short",
+    "lastNameShort": "Last name is too short",
+    "bizNameShort": "Business name is too short",
+    "selectBizCategory": "Please select a business type"
+  },
+
+  "dashboard": {
+    "tabs": {
+      "agenda": "Calendar",
+      "summary": "Summary"
+    },
+    "weekHeaders": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "stats": {
+      "activeAppointments": "Active appointments",
+      "pending": "Pending",
+      "completed": "Completed",
+      "confirmed": "Confirmed",
+      "todayAppointments": "Today's appointments",
+      "totalClients": "Clients",
+      "monthRevenue": "Monthly revenue"
+    },
+    "actions": {
+      "newAppointment": "New appointment",
+      "newClient": "New client",
+      "registerPayment": "Register payment"
+    },
+    "table": {
+      "service": "Service",
+      "time": "Time",
+      "duration": "Duration",
+      "employee": "Employee",
+      "phone": "Phone"
+    },
+    "appointment": {
+      "statusPending": "Pending",
+      "statusConfirmed": "Confirmed",
+      "statusCompleted": "Completed",
+      "statusCancelled": "Cancelled",
+      "statusNoShow": "No show",
+      "confirmDelete": "Delete this appointment?",
+      "deleteCancel": "Cancel",
+      "deleteConfirm": "Delete",
+      "updateError": "Could not update status",
+      "cancelError": "Could not cancel appointment"
+    },
+    "errors": {
+      "loadFailed": "Could not load appointments for this month",
+      "statsFailed": "Could not load statistics"
+    },
+    "empty": {
+      "title": "No appointments",
+      "desc": "There are no appointments scheduled for this day."
+    }
+  },
+
+  "appointments": {
+    "title": "New Appointment",
+    "editTitle": "Edit Appointment",
+    "client": "Client",
+    "service": "Service",
+    "date": "Date",
+    "time": "Time",
+    "duration": "Duration",
+    "notes": "Notes",
+    "submit": "Schedule appointment",
+    "submitting": "Scheduling...",
+    "update": "Update appointment",
+    "updating": "Updating...",
+    "cancel": "Cancel",
+    "errors": {
+      "createFailed": "Could not create appointment",
+      "updateFailed": "Could not update appointment",
+      "loadFailed": "Could not load information"
+    }
+  },
+
+  "clients": {
+    "title": "Clients",
+    "newTitle": "New Client",
+    "editTitle": "Edit Client",
+    "search": "Search client...",
+    "name": "Name",
+    "phone": "Phone",
+    "email": "Email",
+    "notes": "Notes",
+    "submit": "Save client",
+    "submitting": "Saving...",
+    "cancel": "Cancel",
+    "empty": "No clients registered yet.",
+    "errors": {
+      "createFailed": "Could not create client",
+      "updateFailed": "Could not update client"
+    }
+  },
+
+  "services": {
+    "title": "Services",
+    "newTitle": "New Service",
+    "editTitle": "Edit Service",
+    "name": "Service name",
+    "duration": "Duration (min)",
+    "price": "Price",
+    "description": "Description",
+    "submit": "Save service",
+    "submitting": "Saving...",
+    "cancel": "Cancel",
+    "empty": "No services configured yet.",
+    "errors": {
+      "createFailed": "Could not create service",
+      "updateFailed": "Could not update service"
+    }
+  },
+
+  "finances": {
+    "title": "Finances",
+    "income": "Income",
+    "expenses": "Expenses",
+    "balance": "Balance",
+    "newTransaction": "New payment",
+    "newExpense": "New expense",
+    "period": "Period",
+    "amount": "Amount",
+    "description": "Description",
+    "category": "Category",
+    "date": "Date",
+    "submit": "Save",
+    "submitting": "Saving...",
+    "cancel": "Cancel",
+    "empty": "No transactions for this period.",
+    "errors": {
+      "loadFailed": "Could not load finances"
+    }
+  },
+
+  "reports": {
+    "title": "Reports",
+    "period": "Period",
+    "empty": "No data for this period.",
+    "errors": {
+      "loadFailed": "Could not load reports"
+    }
+  },
+
+  "settings": {
+    "title": "Settings",
+    "businessName": "Business name",
+    "businessCategory": "Category",
+    "timezone": "Timezone",
+    "workingHours": "Working hours",
+    "workingDays": "Working days",
+    "save": "Save changes",
+    "saving": "Saving...",
+    "successMsg": "Settings saved successfully.",
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "errors": {
+      "saveFailed": "Could not save settings"
+    }
+  },
+
+  "profile": {
+    "title": "My Profile",
+    "name": "First name",
+    "lastName": "Last name",
+    "email": "Email",
+    "role": "Role",
+    "avatar": "Profile photo",
+    "save": "Save changes",
+    "saving": "Saving...",
+    "successMsg": "Profile updated successfully.",
+    "errors": {
+      "saveFailed": "Could not update profile"
+    }
+  },
+
+  "team": {
+    "title": "Team",
+    "newMember": "Add member",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "empty": "No team members yet.",
+    "errors": {
+      "loadFailed": "Could not load team"
+    }
+  },
+
+  "setup": {
+    "title": "Initial Setup",
+    "welcome": "Welcome to Cronix",
+    "subtitle": "Configure your business to get started",
+    "next": "Continue",
+    "finish": "Finish",
+    "errors": {
+      "saveFailed": "Could not save settings"
+    }
+  },
+
+  "businessCategories": {
+    "barbershop": "Barbershop",
+    "beautySalon": "Beauty salon",
+    "hairSalon": "Hair salon",
+    "clinic": "Clinic",
+    "medicalOffice": "Medical office",
+    "spa": "Spa",
+    "personalTrainer": "Personal trainer",
+    "restaurant": "Restaurant",
+    "consulting": "Consulting",
+    "healthMedicine": "Health / Medicine",
+    "sportsGym": "Sports / Gym",
+    "tech": "Tech",
+    "appliances": "Appliances",
+    "other": "Other"
+  },
+
+  "languageSwitcher": {
+    "label": "Language",
+    "es": "Español",
+    "en": "English",
+    "pt": "Português",
+    "fr": "Français",
+    "de": "Deutsch",
+    "it": "Italiano"
+  },
+
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "new": "New",
+    "back": "Back",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "noResults": "No results",
+    "minutes": "min",
+    "of": "of",
+    "yes": "Yes",
+    "no": "No"
+  }
+}

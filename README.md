@@ -107,38 +107,28 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 
 ---
 
-## 🎙️ Luis IA: Executive Assistant v7.0 (Senior)
-Luis has evolved into a **Senior-Grade AI Executive Assistant** with real-time intelligence and persistent memory. This version introduces:
+## 🎙️ Luis IA: Executive Assistant v8.0 (Hardened)
+Luis has evolved into a **Production-Grade Agentic Orchestrator** with multi-step reasoning and deep security shields. This version introduces:
 
-### 1. Real-time WebSocket Transcription ⚡
-Luis no longer waits for you to finish speaking. Words appear on screen word-by-word via a **Deepgram Nova-2 WebSocket** stream. The transcript vanishes the instant Luis starts thinking — zero UI clutter.
+### 1. Agentic ReAct Orchestration (Reason + Act) 🧠
+Luis no longer just maps commands. He performs a **Reasoning Loop** to determine the best sequence of tools. If a tool fails, Luis can reason and attempt a correction or explain the failure in natural language.
 
-### 2. Long-term Memory (RAG + pgvector) 🧠
-Luis permanently remembers facts, preferences, and context across sessions. Powered by Supabase `pgvector` + the native `embed-text` Edge Function (GTE-small, 384 dimensions, free).
+### 2. Zero-Latency Intent Router ⚡
+Ultra-fast keyword-based interceptor that skips LLM inference for common administrative queries (gaps, summaries, prices), reducing latency to **< 500ms** and saving 100% of tokens for these requests.
 
-### 3. Multi-Tenant Security (RLS Shield)
-Luis accesses ONLY the data of the authenticated business. `ai_memories` are isolated per user and business at the database level.
+### 3. Output Shield & PII Protection 🛡️
+A dedicated security layer that intercepts LLM responses before they reach the user. It scrubs **Personally Identifiable Information (PII)** like phone numbers and UUIDs, and blocks **Prompt Injection** patterns or internal system leaks (tool names, table names).
 
-### 4. Executive Confirmation Mode (Micro-responses)
-For any tool-triggered action, Luis responds with a 1-3 word confirmation first ("Agendando..."), so TTS starts instantly while the system works in the background.
+### 4. Persistent Session Store (Upstash Redis) 💾
+Consolidated global session management. Luis maintains context across serverless instances using Redis, ensuring that long-term reasoning isn't lost during high-traffic horizontal scaling.
 
-### 5. Intelligent Client Registration & 4-Point Booking Validation
-Luis auto-registers new clients with phone numbers (required for WhatsApp reminders), detecting duplicates to prevent data pollution. For bookings, Luis enforces 4 mandatory data points: **Client, Service, Date, and exact Time** — never scheduling without all 4.
+### 5. Multi-Tier Model Routing (Groq LPU)
+Luis automatically balances cost and intelligence. He routes simple "Read" queries to **Llama-3.1-8B (500k TPD)** and critical "Write" actions to **Llama-3.3-70B (100k TPD)** with a 4-point validation firewall.
 
-### 6. Master Touch (Real-Time Sync)
-Every successful action triggers a `cronix:refresh-data` event that instantly updates the Dashboard calendar.
+### 6. Universal Executive Voice 🎨
+Powered by **Deepgram Aura 2** with a Siri-style visual waveform. If the high-performance synthesis fails, Luis gracefully falls back to native browser speech to ensure the business never stays silent.
 
-### 7. Dynamic Timezone (Multi-country)
-Luis detects the user's browser timezone (`Intl.DateTimeFormat`) and records everything in local time.
-
-### 8. Premium Voice Visualizer 🎨
-A reactive 5-bar Siri-style waveform (Blue → Purple → Pink gradient) dances with your voice in real-time. Switches to a breathing rhythm while Luis speaks.
-
-### 9. Server-Side API Key Protection 🔒
-The master Deepgram API key never leaves the server. Audio processing (STT/TTS) occurs entirely on the backend.
-
-### 10. Dual-Model Routing & Token Optimization ⚡
-Luis automatically selects the optimal LLM based on intent: fast reads (8b, 500k TPD) vs. write actions (70b, 100k TPD). This maximizes free-tier quotas while maintaining 70b precision for critical operations like client registration, appointment bookings, and payments.
+> 📖 **Deep Dive**: For the full technical breakdown, see the [AI Master Architecture Guide](./docs/architecture/AI_MASTER_GUIDE.md).
 
 ---
 1.  **Observability**: Deep integration with Sentry and a Centralized Logger.

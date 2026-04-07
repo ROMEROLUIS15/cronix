@@ -1,5 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { routing } from '@/i18n/routing'
+
+// ── Strip locale prefix from pathname ─────────────────────────────────────────
+// With localePrefix: 'as-needed', non-default locales arrive as /en/dashboard.
+// All path-matching logic in this file expects /dashboard — strip the prefix so
+// isAuthPath, isAPIPath, isTrackedPath and all direct comparisons work correctly.
+function stripLocalePrefix(pathname: string): string {
+  for (const locale of routing.locales) {
+    if (locale === routing.defaultLocale) continue
+    if (pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)) {
+      return pathname.slice(locale.length + 1) || '/'
+    }
+  }
+  return pathname
+}
 
 // ── Session timeout constants ─────────────────────────────────────────────────
 const INACTIVITY_LIMIT_MS  = 30 * 60 * 1000        // 30 minutes
@@ -112,7 +127,8 @@ function getClientIP(request: NextRequest): string {
 
 // ── Main session updater ──────────────────────────────────────────────────────
 export async function updateSession(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname: rawPathname } = request.nextUrl
+  const pathname = stripLocalePrefix(rawPathname)
 
   // ── 0. Web Rate Limiting (Security Layer) ───────────────────────────────
   const isAuth = isAuthPath(pathname)
@@ -248,7 +264,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ── Authenticated on a tracked path: enforce session limits ───────────────
-  if (user && isTrackedPath(request.nextUrl.pathname)) {
+  if (user && isTrackedPath(pathname)) {
 
     // 1. Hard 12-hour absolute limit — checked before inactivity
     if (isMaxSessionExpired(request)) {
@@ -279,8 +295,8 @@ export async function updateSession(request: NextRequest) {
   // ── Already authenticated: skip login/register ────────────────────────────
   if (
     user &&
-    (request.nextUrl.pathname === '/login' ||
-      request.nextUrl.pathname === '/register')
+    (pathname === '/login' ||
+      pathname === '/register')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'

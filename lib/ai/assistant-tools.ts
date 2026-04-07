@@ -4,6 +4,58 @@ import { es } from 'date-fns/locale'
 import { fuzzyFind } from './fuzzy-match'
 import { logger } from '@/lib/logger'
 import { sendReactivationMessage } from '@/lib/services/whatsapp.service'
+import { createNotification } from '@/lib/repositories/notifications.repo'
+import {
+  notificationForAppointmentCreated,
+  notificationForAppointmentCancelled,
+} from '@/lib/use-cases/notifications.use-case'
+
+// ── Private: fire in-app + web-push owner notifications ───────────────────
+// Non-blocking (fire-and-forget). Errors are logged, never thrown.
+async function fireToolNotification(
+  business_id: string,
+  title:       string,
+  content:     string,
+  type:        'success' | 'warning' | 'info' | 'error',
+): Promise<void> {
+  try {
+    const supabase = await createClient()
+    await createNotification(supabase, { business_id, title, content, type })
+  } catch (err: unknown) {
+    logger.error('TOOL-NOTIFY', 'createNotification failed', {
+      business_id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // Web Push via Edge Function (authenticated with CRON_SECRET)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const cronSecret  = process.env.CRON_SECRET
+  if (!supabaseUrl || !cronSecret) return
+
+  fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-internal-secret': cronSecret,
+    },
+    body: JSON.stringify({ business_id, title, body: content, url: '/dashboard' }),
+  }).catch((err: unknown) => {
+    logger.warn('TOOL-NOTIFY', 'push-notify fetch failed', {
+      business_id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
+}
+
+// ── Private: timezone-aware local date extractor ───────────────────────────
+// Converts a UTC ISO string to the YYYY-MM-DD date string in the given timezone.
+// Fixes the off-by-one bug caused by startOfDay(parseISO(date)) using UTC
+// boundaries while appointments are stored in UTC but displayed in local time.
+function toLocalDateString(isoUtc: string, timezone: string): string {
+  return new Date(isoUtc).toLocaleDateString('en-CA', { timeZone: timezone })
+  // en-CA locale formats as YYYY-MM-DD — matches the date strings the LLM sends
+}
 
 /**
  * Converts a UTC ISO string to a Date object that, when formatted with date-fns
@@ -201,13 +253,11 @@ export async function cancel_appointment(
   let target = appts[0]
 
   if (appointment_date) {
-    // Target the appointment on the specified day
-    const dayStart = startOfDay(parseISO(appointment_date))
-    const dayEnd   = endOfDay(parseISO(appointment_date))
-    const found = appts.find(a => {
-      const d = new Date(a.start_at)
-      return d >= dayStart && d <= dayEnd
-    })
+    // Use timezone-aware comparison: convert each appointment's UTC start_at to the
+    // local date string in the business timezone, then compare against the requested date.
+    // Fixes off-by-one errors for timezones that are UTC+ or UTC- (e.g. Colombia UTC-5).
+    const targetLocalDate = appointment_date.split('T')[0] // ensure YYYY-MM-DD
+    const found = appts.find(a => toLocalDateString(a.start_at, timezone) === targetLocalDate)
     if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
     target = found
   } else if (appts.length > 1) {
@@ -232,6 +282,10 @@ export async function cancel_appointment(
     logger.error('TOOL-DB', `cancel_appointment update failed: ${updErr.message}`, { business_id, apt_id: target.id })
     return 'No pude cancelar la cita por un error técnico.'
   }
+
+  // Notify owner: in-app bell + web push
+  const notifInput = notificationForAppointmentCancelled(business_id, client.name, serviceName)
+  fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
 
   return `Listo. Cancelé la cita de ${client.name} (${serviceName}) del ${dateStr}.`
 }
@@ -328,8 +382,15 @@ export async function book_appointment(
 
   await supabase.from('appointment_services').insert({ appointment_id: row.id, service_id: service.id, sort_order: 0 })
 
+  const apptTimeStr = fmtUserDate(row.start_at, timezone, 'h:mm a')
+  const apptDateStr = fmtUserDate(row.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+
+  // Notify owner: in-app bell + web push
+  const notifInput = notificationForAppointmentCreated(business_id, client.name, service.name, apptTimeStr)
+  fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
+
   const staffStr = staff_name ? ` con ${staff_name}` : ''
-  return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${fmtUserDate(row.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")}.`
+  return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${apptDateStr}.`
 }
 
 // ── WRITE: Reagendar cita (Atómica: update in-place) ─────────────────────
@@ -377,12 +438,9 @@ export async function reschedule_appointment(
   let oldAppt = appts[0]
 
   if (old_date) {
-    const dayStart = startOfDay(parseISO(old_date))
-    const dayEnd   = endOfDay(parseISO(old_date))
-    const found = appts.find(a => {
-      const d = new Date(a.start_at)
-      return d >= dayStart && d <= dayEnd
-    })
+    // Timezone-aware match: compare against the LOCAL date of each appointment.
+    const targetLocalDate = old_date.split('T')[0]
+    const found = appts.find(a => toLocalDateString(a.start_at, timezone) === targetLocalDate)
     if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
     oldAppt = found
   } else if (appts.length > 1) {
@@ -424,6 +482,15 @@ export async function reschedule_appointment(
 
   const oldDateStr = fmtUserDate(oldAppt.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
   const newDateStr = fmtUserDate(newStartISO, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+
+  // Notify owner: in-app bell + web push
+  fireToolNotification(
+    business_id,
+    'Cita Reagendada',
+    `${client.name} movió su cita de ${serviceName} del ${oldDateStr} al ${newDateStr}`,
+    'info',
+  )
+
   return `Listo. Reagendé la cita de ${client.name} (${serviceName}) del ${oldDateStr} al ${newDateStr}.`
 }
 

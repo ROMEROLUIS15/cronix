@@ -1,0 +1,295 @@
+{
+  "meta": {
+    "title": "Cronix - Gestion Intelligente",
+    "description": "Gérez vos rendez-vous, clients et finances en un seul endroit. Conçu pour les professionnels exigeants.",
+    "ogTitle": "Cronix - Gestion Intelligente",
+    "ogDescription": "La plateforme qui centralise vos rendez-vous, clients et finances en une seule app.",
+    "twitterDescription": "Centralisez votre activité avec la puissance de l'IA et WhatsApp."
+  },
+  "nav": {
+    "sectionLabel": "Principal",
+    "agenda": "Agenda",
+    "clients": "Clients",
+    "services": "Services",
+    "team": "Équipe",
+    "finances": "Finances",
+    "reports": "Rapports",
+    "settings": "Paramètres",
+    "activeBusiness": "Entreprise active",
+    "defaultCategory": "Services",
+    "closeMenu": "Fermer le menu",
+    "signOut": "Se déconnecter",
+    "profile": "Profil"
+  },
+  "topbar": {
+    "openMenu": "Ouvrir le menu",
+    "notifications": "Notifications"
+  },
+  "pageTitles": {
+    "dashboard": "Tableau de bord",
+    "dashboardSub": "Vue d'ensemble",
+    "newAppointment": "Nouveau Rendez-vous",
+    "editAppointment": "Modifier Rendez-vous",
+    "appointments": "Agenda",
+    "appointmentsSub": "Gestion des rendez-vous",
+    "newClient": "Nouveau Client",
+    "editClient": "Modifier Client",
+    "clientProfile": "Profil Client",
+    "clients": "Clients",
+    "clientsSub": "Base de données",
+    "services": "Services",
+    "servicesSub": "Catalogue",
+    "settings": "Paramètres",
+    "settingsSub": "Préférences",
+    "myProfile": "Mon Profil",
+    "myProfileSub": "Compte",
+    "finances": "Finances",
+    "financesSub": "Rapports financiers",
+    "reports": "Rapports",
+    "reportsSub": "Statistiques",
+    "setup": "Configuration Initiale",
+    "setupSub": "Bienvenue",
+    "agendaSub": "Agenda",
+    "systemPulseSub": "SaaS Health Monitor"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "empty": "Boîte vide",
+    "emptyDesc": "Vous n'avez aucune alerte en attente pour le moment."
+  },
+  "landing": {
+    "badge": "PLATEFORME DE GESTION INTELLIGENTE",
+    "headline": "Gérez votre activité en",
+    "headlineAccent": "un seul endroit.",
+    "tagline": "Gérez vos rendez-vous, clients et finances en un seul endroit. Conçu pour les professionnels exigeants.",
+    "ctaStart": "Commencer gratuitement",
+    "ctaLogin": "Se connecter",
+    "disclaimer": "Sans carte de crédit · Configuration en 2 minutes · Annulez à tout moment",
+    "mockup": {
+      "todayAppointments": "RDV aujourd'hui",
+      "clients": "Clients",
+      "revenue": "Revenus",
+      "pending": "En attente",
+      "march2026": "Mars 2026",
+      "agenda": "Agenda",
+      "clientsNav": "Clients",
+      "servicesNav": "Services",
+      "financesNav": "Finances",
+      "reportsNav": "Rapports"
+    },
+    "features": {
+      "calendar": "Agenda intelligent",
+      "clients": "Gestion des clients",
+      "finances": "Contrôle financier",
+      "reports": "Rapports en temps réel"
+    }
+  },
+  "auth": {
+    "login": {
+      "platformBadge": "Plateforme SaaS",
+      "heroTitle": "Votre activité sous",
+      "heroTitleAccent": "contrôle total.",
+      "heroDesc": "Gérez rendez-vous, clients et finances depuis un tableau de bord moderne accessible de n'importe quel appareil.",
+      "features": {
+        "smartAgenda": "Agenda intelligent",
+        "smartAgendaDesc": "Gérez les rendez-vous et la disponibilité",
+        "autoReminders": "Rappels automatiques",
+        "autoRemindersDesc": "WhatsApp et notifications push",
+        "financialReports": "Rapports financiers",
+        "financialReportsDesc": "Contrôle total des revenus",
+        "secure": "100% sécurisé",
+        "secureDesc": "Données chiffrées et protégées"
+      },
+      "sessionInactive": "Votre session a été fermée après 30 minutes d'inactivité. Veuillez vous reconnecter.",
+      "sessionExpired": "Votre session de 12 heures a expiré. Veuillez vous reconnecter.",
+      "email": "Email",
+      "password": "Mot de passe",
+      "emailPlaceholder": "bonjour@votreentreprise.com",
+      "passwordPlaceholder": "••••••••",
+      "forgotPassword": "Mot de passe oublié ?",
+      "submit": "Se connecter",
+      "submitting": "Connexion...",
+      "divider": "ou continuer avec",
+      "google": "Se connecter avec Google",
+      "noAccount": "Pas encore de compte ?",
+      "registerLink": "S'inscrire gratuitement",
+      "recoverPassword": "Récupérer le mot de passe",
+      "upcomingAppointments": "Prochains rendez-vous"
+    },
+    "register": {
+      "title": "Créez votre compte",
+      "subtitle": "Commencez à gérer votre activité dès aujourd'hui",
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "bizName": "Nom de l'entreprise",
+      "bizCategory": "Type d'activité",
+      "selectCategory": "Sélectionnez votre secteur",
+      "email": "Email",
+      "password": "Mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "submit": "Créer un compte gratuit",
+      "submitting": "Traitement...",
+      "divider": "ou s'inscrire avec",
+      "google": "Google",
+      "hasAccount": "Déjà un compte ?",
+      "loginLink": "Se connecter",
+      "successTitle": "Compte créé !",
+      "successSubtitle": "Plus qu'une étape pour entrer",
+      "successStepsTitle": "Que faire maintenant ?",
+      "successStep1": "Vérifiez votre boîte de réception",
+      "successStep2": "Ouvrez l'email de confirmation de Cronix",
+      "successStep3": "Cliquez sur le lien pour activer votre compte",
+      "successSpamNote": "Vous ne voyez pas l'email ? Vérifiez votre dossier spam.",
+      "successLoginLink": "Aller à la connexion",
+      "benefits": {
+        "grow": { "title": "Croissez vite", "desc": "Plus de réservations avec moins d'efforts." },
+        "easy": { "title": "Facile à utiliser", "desc": "Aucune connaissance technique requise." },
+        "all":  { "title": "Tout en un", "desc": "Rendez-vous, clients et finances intégrés." }
+      },
+      "heroTitle": "Boostez votre activité,",
+      "heroTitleAccent": "simplifiez votre vie.",
+      "heroDesc": "Rejoignez des milliers de professionnels qui automatisent déjà leurs rendez-vous et augmentent leurs revenus sans effort.",
+      "heroCta": "Rejoindre gratuitement",
+      "stats": {
+        "businesses": "Entreprises actives",
+        "satisfaction": "Satisfaction",
+        "setupTime": "Pour commencer"
+      },
+      "oauthErrors": {
+        "google_not_registered": {
+          "title": "Votre compte Google n'est pas enregistré",
+          "body": "Pour vous connecter avec Google, vous devez d'abord créer votre compte Cronix. Remplissez le formulaire puis vous pourrez utiliser Google."
+        }
+      }
+    },
+    "forgotPassword": {
+      "title": "Mot de passe oublié ?",
+      "desc": "Entrez votre email et nous vous enverrons un lien pour le réinitialiser.",
+      "email": "Email",
+      "emailPlaceholder": "bonjour@votreentreprise.com",
+      "submit": "Envoyer le lien",
+      "submitting": "Envoi...",
+      "back": "Retour à la connexion",
+      "successTitle": "Email envoyé",
+      "successDesc": "Vérifiez votre boîte de réception et suivez les instructions.",
+      "logoAlt": "Logo Cronix"
+    },
+    "resetPassword": {
+      "title": "Réinitialiser le mot de passe",
+      "desc": "Entrez votre nouveau mot de passe.",
+      "password": "Nouveau mot de passe",
+      "confirmPassword": "Confirmer le nouveau mot de passe",
+      "submit": "Enregistrer le mot de passe",
+      "submitting": "Enregistrement...",
+      "successTitle": "Mot de passe mis à jour !",
+      "successDesc": "Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+      "loginLink": "Aller à la connexion"
+    }
+  },
+  "validation": {
+    "emailInvalid": "Email invalide",
+    "emailRequired": "L'email est requis",
+    "passwordRequired": "Le mot de passe est requis",
+    "passwordMin": "Le mot de passe doit comporter au moins 8 caractères",
+    "passwordUppercase": "Doit contenir au moins une majuscule",
+    "passwordLowercase": "Doit contenir au moins une minuscule",
+    "passwordNumber": "Doit contenir au moins un chiffre",
+    "passwordSpecial": "Doit contenir au moins un caractère spécial",
+    "passwordsMismatch": "Les mots de passe ne correspondent pas",
+    "firstNameShort": "Le prénom est trop court",
+    "lastNameShort": "Le nom est trop court",
+    "bizNameShort": "Le nom de l'entreprise est trop court",
+    "selectBizCategory": "Veuillez sélectionner un type d'activité"
+  },
+  "dashboard": {
+    "tabs": { "agenda": "Agenda", "summary": "Résumé" },
+    "weekHeaders": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+    "stats": {
+      "activeAppointments": "Rendez-vous actifs", "pending": "En attente", "completed": "Terminés",
+      "confirmed": "Confirmés", "todayAppointments": "Rendez-vous aujourd'hui",
+      "totalClients": "Clients", "monthRevenue": "Revenus du mois"
+    },
+    "actions": { "newAppointment": "Nouveau rendez-vous", "newClient": "Nouveau client", "registerPayment": "Enregistrer paiement" },
+    "table": { "service": "Service", "time": "Heure", "duration": "Durée", "employee": "Employé", "phone": "Téléphone" },
+    "appointment": {
+      "statusPending": "En attente", "statusConfirmed": "Confirmé", "statusCompleted": "Terminé",
+      "statusCancelled": "Annulé", "statusNoShow": "Absent",
+      "confirmDelete": "Supprimer ce rendez-vous ?", "deleteCancel": "Annuler", "deleteConfirm": "Supprimer",
+      "updateError": "Impossible de mettre à jour le statut", "cancelError": "Impossible d'annuler le rendez-vous"
+    },
+    "errors": { "loadFailed": "Impossible de charger les rendez-vous", "statsFailed": "Impossible de charger les statistiques" },
+    "empty": { "title": "Aucun rendez-vous", "desc": "Aucun rendez-vous prévu pour ce jour." }
+  },
+  "appointments": {
+    "title": "Nouveau Rendez-vous", "editTitle": "Modifier Rendez-vous",
+    "client": "Client", "service": "Service", "date": "Date", "time": "Heure",
+    "duration": "Durée", "notes": "Notes", "submit": "Planifier", "submitting": "Planification...",
+    "update": "Mettre à jour", "updating": "Mise à jour...", "cancel": "Annuler",
+    "errors": { "createFailed": "Impossible de créer le rendez-vous", "updateFailed": "Impossible de mettre à jour", "loadFailed": "Impossible de charger les informations" }
+  },
+  "clients": {
+    "title": "Clients", "newTitle": "Nouveau Client", "editTitle": "Modifier Client",
+    "search": "Rechercher un client...", "name": "Nom", "phone": "Téléphone", "email": "Email", "notes": "Notes",
+    "submit": "Enregistrer le client", "submitting": "Enregistrement...", "cancel": "Annuler",
+    "empty": "Aucun client enregistré pour l'instant.",
+    "errors": { "createFailed": "Impossible de créer le client", "updateFailed": "Impossible de mettre à jour le client" }
+  },
+  "services": {
+    "title": "Services", "newTitle": "Nouveau Service", "editTitle": "Modifier Service",
+    "name": "Nom du service", "duration": "Durée (min)", "price": "Prix", "description": "Description",
+    "submit": "Enregistrer le service", "submitting": "Enregistrement...", "cancel": "Annuler",
+    "empty": "Aucun service configuré pour l'instant.",
+    "errors": { "createFailed": "Impossible de créer le service", "updateFailed": "Impossible de mettre à jour le service" }
+  },
+  "finances": {
+    "title": "Finances", "income": "Revenus", "expenses": "Dépenses", "balance": "Solde",
+    "newTransaction": "Nouveau paiement", "newExpense": "Nouvelle dépense",
+    "period": "Période", "amount": "Montant", "description": "Description", "category": "Catégorie", "date": "Date",
+    "submit": "Enregistrer", "submitting": "Enregistrement...", "cancel": "Annuler",
+    "empty": "Aucune transaction pour cette période.",
+    "errors": { "loadFailed": "Impossible de charger les finances" }
+  },
+  "reports": {
+    "title": "Rapports", "period": "Période", "empty": "Aucune donnée pour cette période.",
+    "errors": { "loadFailed": "Impossible de charger les rapports" }
+  },
+  "settings": {
+    "title": "Paramètres", "businessName": "Nom de l'entreprise", "businessCategory": "Catégorie",
+    "timezone": "Fuseau horaire", "workingHours": "Heures de travail", "workingDays": "Jours de travail",
+    "save": "Enregistrer les modifications", "saving": "Enregistrement...", "successMsg": "Paramètres enregistrés avec succès.",
+    "days": { "mon": "Lundi", "tue": "Mardi", "wed": "Mercredi", "thu": "Jeudi", "fri": "Vendredi", "sat": "Samedi", "sun": "Dimanche" },
+    "errors": { "saveFailed": "Impossible d'enregistrer les paramètres" }
+  },
+  "profile": {
+    "title": "Mon Profil", "name": "Prénom", "lastName": "Nom", "email": "Email", "role": "Rôle", "avatar": "Photo de profil",
+    "save": "Enregistrer les modifications", "saving": "Enregistrement...", "successMsg": "Profil mis à jour avec succès.",
+    "errors": { "saveFailed": "Impossible de mettre à jour le profil" }
+  },
+  "team": {
+    "title": "Équipe", "newMember": "Ajouter un membre", "name": "Nom", "email": "Email", "role": "Rôle",
+    "empty": "Aucun membre d'équipe pour l'instant.",
+    "errors": { "loadFailed": "Impossible de charger l'équipe" }
+  },
+  "setup": {
+    "title": "Configuration Initiale", "welcome": "Bienvenue sur Cronix", "subtitle": "Configurez votre activité pour commencer",
+    "next": "Continuer", "finish": "Terminer",
+    "errors": { "saveFailed": "Impossible d'enregistrer la configuration" }
+  },
+  "businessCategories": {
+    "barbershop": "Barbier", "beautySalon": "Institut de beauté", "hairSalon": "Salon de coiffure",
+    "clinic": "Clinique", "medicalOffice": "Cabinet médical", "spa": "Spa",
+    "personalTrainer": "Coach sportif", "restaurant": "Restaurant", "consulting": "Conseil",
+    "healthMedicine": "Santé / Médecine", "sportsGym": "Sport / Gym", "tech": "Tech",
+    "appliances": "Électroménager", "other": "Autre"
+  },
+  "languageSwitcher": {
+    "label": "Langue", "es": "Español", "en": "English", "pt": "Português", "fr": "Français", "de": "Deutsch", "it": "Italiano"
+  },
+  "common": {
+    "loading": "Chargement...", "error": "Erreur", "save": "Enregistrer", "cancel": "Annuler",
+    "delete": "Supprimer", "edit": "Modifier", "new": "Nouveau", "back": "Retour",
+    "confirm": "Confirmer", "close": "Fermer", "search": "Rechercher", "noResults": "Aucun résultat",
+    "minutes": "min", "of": "de", "yes": "Oui", "no": "Non"
+  }
+}

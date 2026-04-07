@@ -1,4 +1,8 @@
 const { withSentryConfig } = require('@sentry/nextjs')
+const createNextIntlPlugin = require('next-intl/plugin')
+
+// Points to the RSC request config — loaded server-side on every request
+const withIntl = createNextIntlPlugin('./i18n/request.ts')
 
 const withPWA = require("next-pwa")({
   dest: "public",
@@ -68,4 +72,7 @@ const sentryBuildOptions = {
   },
 }
 
-module.exports = withSentryConfig(withPWA(nextConfig), sentryBuildOptions)
+// Composition order matters:
+// - Sentry must be outermost: instruments webpack over everything
+// - withIntl wraps withPWA: PWA generates sw.js assets first, next-intl doesn't touch them
+module.exports = withSentryConfig(withIntl(withPWA(nextConfig)), sentryBuildOptions)

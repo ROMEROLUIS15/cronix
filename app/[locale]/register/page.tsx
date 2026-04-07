@@ -7,7 +7,7 @@ import Image from "next/image";
 import { AlertCircle, CheckCircle2, Rocket, Zap, Star, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { register } from "./actions";
-import { signUpWithGoogle } from "@/app/login/actions";
+import { signUpWithGoogle } from "@/lib/actions/auth";
 import { PasswordInput } from "@/components/ui/password-input";
 import { registerSchema } from "@/lib/validations/auth";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { usePathname } from '@/i18n/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { LanguageSwitcher } from '@/components/ui/language-switcher'
 import { useInAppNotifications } from '@/lib/hooks/use-in-app-notifications'
 import { Tables } from '@/types/database.types'
 
@@ -22,42 +24,43 @@ interface DashboardShellProps {
 }
 
 // ── Page title map ─────────────────────────────────────────────────────────────
-const PAGE_TITLES: Array<{
-  match:     (p: string) => boolean
-  title:     string
-  subtitle?: string
-}> = [
-  { match: p => p === '/dashboard',                 title: 'Dashboard',             subtitle: 'Resumen general'      },
-  { match: p => p.includes('/appointments/new'),    title: 'Nueva Cita',            subtitle: 'Agenda'               },
-  { match: p => /\/appointments\/.+\/edit/.test(p), title: 'Editar Cita',           subtitle: 'Agenda'               },
-  { match: p => p.includes('/appointments'),        title: 'Agenda',                subtitle: 'Gestión de citas'     },
-  { match: p => p.includes('/clients/new'),         title: 'Nuevo Cliente',         subtitle: 'Clientes'             },
-  { match: p => /\/clients\/.+\/edit/.test(p),      title: 'Editar Cliente',        subtitle: 'Clientes'             },
-  { match: p => /\/clients\/.+/.test(p),            title: 'Perfil del Cliente',    subtitle: 'Clientes'             },
-  { match: p => p.includes('/clients'),             title: 'Clientes',              subtitle: 'Base de datos'        },
-  { match: p => p.includes('/services'),            title: 'Servicios',             subtitle: 'Catálogo'             },
-  { match: p => p.includes('/settings'),            title: 'Configuración',         subtitle: 'Preferencias'         },
-  { match: p => p.includes('/profile'),             title: 'Mi Perfil',             subtitle: 'Cuenta'               },
-  { match: p => p.includes('/finances'),            title: 'Finanzas',              subtitle: 'Reportes financieros' },
-  { match: p => p.includes('/reports'),             title: 'Reportes',              subtitle: 'Estadísticas'         },
-  { match: p => p.includes('/dashboard/admin/pulse'), title: 'Pulse',                 subtitle: 'SaaS Health Monitor'  },
-  { match: p => p.includes('/setup'),               title: 'Configuración Inicial', subtitle: 'Bienvenido'           },
-]
-
-function getPageMeta(pathname: string): { title: string; subtitle?: string } {
-  for (const entry of PAGE_TITLES) {
-    if (entry.match(pathname)) return { title: entry.title, subtitle: entry.subtitle }
-  }
-  return { title: 'Dashboard' }
+// Returns translation keys — resolved via t() inside the component.
+// Match order matters: more specific patterns must come before broader ones.
+type PageTitleEntry = {
+  match:       (p: string) => boolean
+  titleKey:    string
+  subtitleKey: string
 }
+
+const PAGE_TITLE_ENTRIES: PageTitleEntry[] = [
+  { match: p => p === '/dashboard',                   titleKey: 'dashboard',       subtitleKey: 'dashboardSub'      },
+  { match: p => p.includes('/appointments/new'),      titleKey: 'newAppointment',  subtitleKey: 'agendaSub'         },
+  { match: p => /\/appointments\/.+\/edit/.test(p),   titleKey: 'editAppointment', subtitleKey: 'agendaSub'         },
+  { match: p => p.includes('/appointments'),          titleKey: 'appointments',    subtitleKey: 'appointmentsSub'   },
+  { match: p => p.includes('/clients/new'),           titleKey: 'newClient',       subtitleKey: 'clientsSub'        },
+  { match: p => /\/clients\/.+\/edit/.test(p),        titleKey: 'editClient',      subtitleKey: 'clientsSub'        },
+  { match: p => /\/clients\/.+/.test(p),              titleKey: 'clientProfile',   subtitleKey: 'clientsSub'        },
+  { match: p => p.includes('/clients'),               titleKey: 'clients',         subtitleKey: 'clientsSub'        },
+  { match: p => p.includes('/services'),              titleKey: 'services',        subtitleKey: 'servicesSub'       },
+  { match: p => p.includes('/settings'),              titleKey: 'settings',        subtitleKey: 'settingsSub'       },
+  { match: p => p.includes('/profile'),               titleKey: 'myProfile',       subtitleKey: 'myProfileSub'      },
+  { match: p => p.includes('/finances'),              titleKey: 'finances',        subtitleKey: 'financesSub'       },
+  { match: p => p.includes('/reports'),               titleKey: 'reports',         subtitleKey: 'reportsSub'        },
+  { match: p => p.includes('/dashboard/admin/pulse'), titleKey: 'dashboard',       subtitleKey: 'systemPulseSub'    },
+  { match: p => p.includes('/setup'),                 titleKey: 'setup',           subtitleKey: 'setupSub'          },
+]
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export function DashboardShell({ children, user, business }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const t = useTranslations('pageTitles')
   const pathname = usePathname()
-  
+
   const { notifications, markAllAsRead } = useInAppNotifications(user?.business_id ?? null)
-  const { title, subtitle } = getPageMeta(pathname ?? '')
+
+  const pageEntry = PAGE_TITLE_ENTRIES.find(e => e.match(pathname ?? ''))
+  const title    = pageEntry ? t(pageEntry.titleKey as Parameters<typeof t>[0])    : t('dashboard')
+  const subtitle = pageEntry ? t(pageEntry.subtitleKey as Parameters<typeof t>[0]) : undefined
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {
@@ -100,11 +103,12 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
           onMenuClick={() => setSidebarOpen(prev => !prev)}
           notifications={notifications}
           onMarkAllRead={markAllAsRead}
+          actions={<LanguageSwitcher />}
         />
         {/*
           SCROLL CONTRACT:
           overflow-y: scroll  — always-active; wheel events always reach this node.
-          overscroll-behavior: contain — no bounce propagation without blocking wheel.
+          overscrollBehavior: contain — no bounce propagation without blocking wheel.
           min-height: 0  — mandatory on flex children; prevents flex blowout.
           All three are set via inline style (never Tailwind) to prevent any class
           purge or specificity issue from breaking scroll at runtime.

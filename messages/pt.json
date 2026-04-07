@@ -1,0 +1,319 @@
+{
+  "meta": {
+    "title": "Cronix - Gestão Inteligente",
+    "description": "Gerencie agendamentos, clientes e finanças do seu negócio em um só lugar. Feito para profissionais que não se contentam com menos.",
+    "ogTitle": "Cronix - Gestão Inteligente",
+    "ogDescription": "A plataforma que centraliza seus agendamentos, clientes e finanças em um único app.",
+    "twitterDescription": "Centralize seu negócio com o poder da IA e WhatsApp."
+  },
+  "nav": {
+    "sectionLabel": "Principal",
+    "agenda": "Agenda",
+    "clients": "Clientes",
+    "services": "Serviços",
+    "team": "Equipe",
+    "finances": "Finanças",
+    "reports": "Relatórios",
+    "settings": "Configurações",
+    "activeBusiness": "Negócio ativo",
+    "defaultCategory": "Serviços",
+    "closeMenu": "Fechar menu",
+    "signOut": "Sair",
+    "profile": "Perfil"
+  },
+  "topbar": {
+    "openMenu": "Abrir menu",
+    "notifications": "Notificações"
+  },
+  "pageTitles": {
+    "dashboard": "Dashboard",
+    "dashboardSub": "Visão geral",
+    "newAppointment": "Novo Agendamento",
+    "editAppointment": "Editar Agendamento",
+    "appointments": "Agenda",
+    "appointmentsSub": "Gestão de agendamentos",
+    "newClient": "Novo Cliente",
+    "editClient": "Editar Cliente",
+    "clientProfile": "Perfil do Cliente",
+    "clients": "Clientes",
+    "clientsSub": "Base de dados",
+    "services": "Serviços",
+    "servicesSub": "Catálogo",
+    "settings": "Configurações",
+    "settingsSub": "Preferências",
+    "myProfile": "Meu Perfil",
+    "myProfileSub": "Conta",
+    "finances": "Finanças",
+    "financesSub": "Relatórios financeiros",
+    "reports": "Relatórios",
+    "reportsSub": "Estatísticas",
+    "setup": "Configuração Inicial",
+    "setupSub": "Bem-vindo",
+    "agendaSub": "Agenda",
+    "systemPulseSub": "SaaS Health Monitor"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "markAllRead": "Marcar tudo como lido",
+    "empty": "Caixa vazia",
+    "emptyDesc": "Você não tem alertas pendentes no momento."
+  },
+  "landing": {
+    "badge": "PLATAFORMA DE GESTÃO INTELIGENTE",
+    "headline": "Gerencie seu negócio em",
+    "headlineAccent": "um só lugar.",
+    "tagline": "Gerencie agendamentos, clientes e finanças do seu negócio em um só lugar. Feito para profissionais que não se contentam com menos.",
+    "ctaStart": "Começar grátis",
+    "ctaLogin": "Entrar",
+    "disclaimer": "Sem cartão de crédito · Configuração em 2 minutos · Cancele quando quiser",
+    "mockup": {
+      "todayAppointments": "Agend. hoje",
+      "clients": "Clientes",
+      "revenue": "Receita",
+      "pending": "Pendentes",
+      "march2026": "Março 2026",
+      "agenda": "Agenda",
+      "clientsNav": "Clientes",
+      "servicesNav": "Serviços",
+      "financesNav": "Finanças",
+      "reportsNav": "Relatórios"
+    },
+    "features": {
+      "calendar": "Calendário inteligente",
+      "clients": "Gestão de clientes",
+      "finances": "Controle financeiro",
+      "reports": "Relatórios em tempo real"
+    }
+  },
+  "auth": {
+    "login": {
+      "platformBadge": "Plataforma SaaS",
+      "heroTitle": "Seu negócio sob",
+      "heroTitleAccent": "controle total.",
+      "heroDesc": "Gerencie agendamentos, clientes e finanças em um painel moderno acessível de qualquer dispositivo.",
+      "features": {
+        "smartAgenda": "Agenda inteligente",
+        "smartAgendaDesc": "Gerencie agendamentos e disponibilidade",
+        "autoReminders": "Lembretes automáticos",
+        "autoRemindersDesc": "WhatsApp e notificações push",
+        "financialReports": "Relatórios financeiros",
+        "financialReportsDesc": "Controle total de receitas",
+        "secure": "100% seguro",
+        "secureDesc": "Dados criptografados e protegidos"
+      },
+      "sessionInactive": "Sua sessão foi encerrada após 30 minutos de inatividade. Por favor, faça login novamente.",
+      "sessionExpired": "Sua sessão de 12 horas expirou. Por favor, faça login novamente.",
+      "email": "Email",
+      "password": "Senha",
+      "emailPlaceholder": "ola@suaempresa.com",
+      "passwordPlaceholder": "••••••••",
+      "forgotPassword": "Esqueceu sua senha?",
+      "submit": "Entrar",
+      "submitting": "Entrando...",
+      "divider": "ou continue com",
+      "google": "Entrar com Google",
+      "noAccount": "Não tem conta?",
+      "registerLink": "Cadastre-se grátis",
+      "recoverPassword": "Recuperar senha",
+      "upcomingAppointments": "Próximos agendamentos"
+    },
+    "register": {
+      "title": "Crie sua conta",
+      "subtitle": "Comece a gerenciar seu negócio hoje",
+      "firstName": "Nome",
+      "lastName": "Sobrenome",
+      "bizName": "Nome do negócio",
+      "bizCategory": "Tipo de negócio",
+      "selectCategory": "Selecione seu setor",
+      "email": "Email",
+      "password": "Senha",
+      "confirmPassword": "Confirmar senha",
+      "submit": "Criar conta grátis",
+      "submitting": "Processando...",
+      "divider": "ou cadastre-se com",
+      "google": "Google",
+      "hasAccount": "Já tem conta?",
+      "loginLink": "Entrar",
+      "successTitle": "Conta criada!",
+      "successSubtitle": "Só mais um passo para entrar",
+      "successStepsTitle": "O que fazer agora?",
+      "successStep1": "Verifique sua caixa de entrada",
+      "successStep2": "Abra o email de confirmação da Cronix",
+      "successStep3": "Clique no link para ativar sua conta",
+      "successSpamNote": "Não vê o email? Verifique sua pasta de spam.",
+      "successLoginLink": "Ir para o login",
+      "benefits": {
+        "grow": { "title": "Cresça rápido", "desc": "Mais reservas com menos esforço manual." },
+        "easy": { "title": "Fácil de usar", "desc": "Sem conhecimento técnico necessário." },
+        "all":  { "title": "Tudo em um", "desc": "Agendamentos, clientes e finanças integrados." }
+      },
+      "heroTitle": "Impulsione seu negócio,",
+      "heroTitleAccent": "simplifique sua vida.",
+      "heroDesc": "Junte-se a milhares de profissionais que já automatizam seus agendamentos e escalam sua receita sem esforço.",
+      "heroCta": "Junte-se grátis hoje",
+      "stats": {
+        "businesses": "Negócios ativos",
+        "satisfaction": "Satisfação",
+        "setupTime": "Para começar"
+      },
+      "oauthErrors": {
+        "google_not_registered": {
+          "title": "Sua conta Google não está cadastrada",
+          "body": "Para entrar com Google, primeiro crie sua conta na Cronix. Preencha o formulário e depois poderá usar o Google para entrar."
+        }
+      }
+    },
+    "forgotPassword": {
+      "title": "Esqueceu sua senha?",
+      "desc": "Digite seu email e enviaremos um link para redefinição.",
+      "email": "Email",
+      "emailPlaceholder": "ola@suaempresa.com",
+      "submit": "Enviar link",
+      "submitting": "Enviando...",
+      "back": "Voltar ao login",
+      "successTitle": "Email enviado",
+      "successDesc": "Verifique sua caixa de entrada e siga as instruções.",
+      "logoAlt": "Logo Cronix"
+    },
+    "resetPassword": {
+      "title": "Redefinir senha",
+      "desc": "Digite sua nova senha.",
+      "password": "Nova senha",
+      "confirmPassword": "Confirmar nova senha",
+      "submit": "Salvar senha",
+      "submitting": "Salvando...",
+      "successTitle": "Senha atualizada!",
+      "successDesc": "Agora você pode entrar com sua nova senha.",
+      "loginLink": "Ir para o login"
+    }
+  },
+  "validation": {
+    "emailInvalid": "Email inválido",
+    "emailRequired": "O email é obrigatório",
+    "passwordRequired": "A senha é obrigatória",
+    "passwordMin": "A senha deve ter pelo menos 8 caracteres",
+    "passwordUppercase": "Deve conter pelo menos uma letra maiúscula",
+    "passwordLowercase": "Deve conter pelo menos uma letra minúscula",
+    "passwordNumber": "Deve conter pelo menos um número",
+    "passwordSpecial": "Deve conter pelo menos um caractere especial",
+    "passwordsMismatch": "As senhas não coincidem",
+    "firstNameShort": "O nome é muito curto",
+    "lastNameShort": "O sobrenome é muito curto",
+    "bizNameShort": "O nome do negócio é muito curto",
+    "selectBizCategory": "Selecione um tipo de negócio"
+  },
+  "dashboard": {
+    "tabs": { "agenda": "Agenda", "summary": "Resumo" },
+    "weekHeaders": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+    "stats": {
+      "activeAppointments": "Agendamentos ativos",
+      "pending": "Pendentes",
+      "completed": "Concluídos",
+      "confirmed": "Confirmados",
+      "todayAppointments": "Agendamentos hoje",
+      "totalClients": "Clientes",
+      "monthRevenue": "Receita do mês"
+    },
+    "actions": {
+      "newAppointment": "Novo agendamento",
+      "newClient": "Novo cliente",
+      "registerPayment": "Registrar pagamento"
+    },
+    "table": {
+      "service": "Serviço",
+      "time": "Hora",
+      "duration": "Duração",
+      "employee": "Funcionário",
+      "phone": "Telefone"
+    },
+    "appointment": {
+      "statusPending": "Pendente",
+      "statusConfirmed": "Confirmado",
+      "statusCompleted": "Concluído",
+      "statusCancelled": "Cancelado",
+      "statusNoShow": "Não compareceu",
+      "confirmDelete": "Excluir este agendamento?",
+      "deleteCancel": "Cancelar",
+      "deleteConfirm": "Excluir",
+      "updateError": "Não foi possível atualizar o status",
+      "cancelError": "Não foi possível cancelar o agendamento"
+    },
+    "errors": {
+      "loadFailed": "Não foi possível carregar os agendamentos",
+      "statsFailed": "Não foi possível carregar as estatísticas"
+    },
+    "empty": { "title": "Sem agendamentos", "desc": "Não há agendamentos para este dia." }
+  },
+  "appointments": {
+    "title": "Novo Agendamento", "editTitle": "Editar Agendamento",
+    "client": "Cliente", "service": "Serviço", "date": "Data", "time": "Hora",
+    "duration": "Duração", "notes": "Observações",
+    "submit": "Agendar", "submitting": "Agendando...",
+    "update": "Atualizar agendamento", "updating": "Atualizando...", "cancel": "Cancelar",
+    "errors": { "createFailed": "Não foi possível criar o agendamento", "updateFailed": "Não foi possível atualizar", "loadFailed": "Não foi possível carregar as informações" }
+  },
+  "clients": {
+    "title": "Clientes", "newTitle": "Novo Cliente", "editTitle": "Editar Cliente",
+    "search": "Buscar cliente...", "name": "Nome", "phone": "Telefone", "email": "Email", "notes": "Observações",
+    "submit": "Salvar cliente", "submitting": "Salvando...", "cancel": "Cancelar",
+    "empty": "Nenhum cliente cadastrado ainda.",
+    "errors": { "createFailed": "Não foi possível criar o cliente", "updateFailed": "Não foi possível atualizar o cliente" }
+  },
+  "services": {
+    "title": "Serviços", "newTitle": "Novo Serviço", "editTitle": "Editar Serviço",
+    "name": "Nome do serviço", "duration": "Duração (min)", "price": "Preço", "description": "Descrição",
+    "submit": "Salvar serviço", "submitting": "Salvando...", "cancel": "Cancelar",
+    "empty": "Nenhum serviço configurado ainda.",
+    "errors": { "createFailed": "Não foi possível criar o serviço", "updateFailed": "Não foi possível atualizar o serviço" }
+  },
+  "finances": {
+    "title": "Finanças", "income": "Receitas", "expenses": "Despesas", "balance": "Saldo",
+    "newTransaction": "Novo pagamento", "newExpense": "Nova despesa",
+    "period": "Período", "amount": "Valor", "description": "Descrição", "category": "Categoria", "date": "Data",
+    "submit": "Salvar", "submitting": "Salvando...", "cancel": "Cancelar",
+    "empty": "Nenhuma transação para este período.",
+    "errors": { "loadFailed": "Não foi possível carregar as finanças" }
+  },
+  "reports": {
+    "title": "Relatórios", "period": "Período", "empty": "Sem dados para este período.",
+    "errors": { "loadFailed": "Não foi possível carregar os relatórios" }
+  },
+  "settings": {
+    "title": "Configurações", "businessName": "Nome do negócio", "businessCategory": "Categoria",
+    "timezone": "Fuso horário", "workingHours": "Horário de trabalho", "workingDays": "Dias de trabalho",
+    "save": "Salvar alterações", "saving": "Salvando...", "successMsg": "Configurações salvas com sucesso.",
+    "days": { "mon": "Segunda", "tue": "Terça", "wed": "Quarta", "thu": "Quinta", "fri": "Sexta", "sat": "Sábado", "sun": "Domingo" },
+    "errors": { "saveFailed": "Não foi possível salvar as configurações" }
+  },
+  "profile": {
+    "title": "Meu Perfil", "name": "Nome", "lastName": "Sobrenome", "email": "Email", "role": "Função", "avatar": "Foto de perfil",
+    "save": "Salvar alterações", "saving": "Salvando...", "successMsg": "Perfil atualizado com sucesso.",
+    "errors": { "saveFailed": "Não foi possível atualizar o perfil" }
+  },
+  "team": {
+    "title": "Equipe", "newMember": "Adicionar membro", "name": "Nome", "email": "Email", "role": "Função",
+    "empty": "Nenhum membro de equipe ainda.",
+    "errors": { "loadFailed": "Não foi possível carregar a equipe" }
+  },
+  "setup": {
+    "title": "Configuração Inicial", "welcome": "Bem-vindo ao Cronix", "subtitle": "Configure seu negócio para começar",
+    "next": "Continuar", "finish": "Finalizar",
+    "errors": { "saveFailed": "Não foi possível salvar as configurações" }
+  },
+  "businessCategories": {
+    "barbershop": "Barbearia", "beautySalon": "Estética / Beleza", "hairSalon": "Salão de beleza",
+    "clinic": "Clínica", "medicalOffice": "Consultório médico", "spa": "Spa",
+    "personalTrainer": "Personal trainer", "restaurant": "Restaurante", "consulting": "Consultoria",
+    "healthMedicine": "Saúde / Medicina", "sportsGym": "Esportes / Academia", "tech": "Tech",
+    "appliances": "Eletrodomésticos", "other": "Outros"
+  },
+  "languageSwitcher": {
+    "label": "Idioma", "es": "Español", "en": "English", "pt": "Português", "fr": "Français", "de": "Deutsch", "it": "Italiano"
+  },
+  "common": {
+    "loading": "Carregando...", "error": "Erro", "save": "Salvar", "cancel": "Cancelar",
+    "delete": "Excluir", "edit": "Editar", "new": "Novo", "back": "Voltar",
+    "confirm": "Confirmar", "close": "Fechar", "search": "Buscar", "noResults": "Sem resultados",
+    "minutes": "min", "of": "de", "yes": "Sim", "no": "Não"
+  }
+}

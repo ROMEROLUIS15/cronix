@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Menu, Bell } from "lucide-react";
 import { NotificationPanel, type InAppNotification } from "./notification-panel";
 
@@ -13,14 +14,15 @@ interface TopbarProps {
   onMarkAllRead?: () => void;
 }
 
-export function Topbar({ 
-  title, 
-  subtitle, 
-  actions, 
+export function Topbar({
+  title,
+  subtitle,
+  actions,
   onMenuClick,
   notifications = [],
   onMarkAllRead
 }: TopbarProps) {
+  const t = useTranslations('topbar');
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -61,7 +63,7 @@ export function Topbar({
       <button
         className="p-2 rounded-xl transition-colors hover:bg-white/5 lg:hidden flex-shrink-0"
         onClick={onMenuClick}
-        aria-label="Abrir menú"
+        aria-label={t('openMenu')}
         style={{ color: "#909098" }}
       >
         <Menu size={20} />
@@ -90,17 +92,17 @@ export function Topbar({
         {actions}
         <button
           className="relative p-2 rounded-xl transition-all duration-200 hover:bg-white/5 active:scale-95"
-          style={{ 
-            color: isPanelOpen ? "#F2F2F2" : "#909098", 
-            background: isPanelOpen ? "rgba(255,255,255,0.05)" : "transparent" 
+          style={{
+            color: isPanelOpen ? "#F2F2F2" : "#909098",
+            background: isPanelOpen ? "rgba(255,255,255,0.05)" : "transparent"
           }}
-          aria-label="Notificaciones"
+          aria-label={t('notifications')}
           onClick={handleTogglePanel}
         >
           <Bell size={24} />
           {unreadCount > 0 && (
             <div className="absolute top-1 right-1 pointer-events-none">
-              <span 
+              <span
                 className="absolute inset-0 h-2.5 w-2.5 rounded-full animate-sonar"
                 style={{ backgroundColor: "#0062FF" }}
               />
@@ -116,7 +118,7 @@ export function Topbar({
           )}
         </button>
 
-        <NotificationPanel 
+        <NotificationPanel
           isOpen={isPanelOpen}
           onClose={() => setIsPanelOpen(false)}
           notifications={notifications}

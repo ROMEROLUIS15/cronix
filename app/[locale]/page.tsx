@@ -1,16 +1,42 @@
-import Link from "next/link";
 import Image from "next/image";
+import { getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { PwaInstallFloating } from "@/components/ui/pwa-install-floating";
 
-export default function RootPage() {
+export default async function RootPage() {
+  const t = await getTranslations('landing');
+
+  const FEATURE_PILLS = [
+    { icon: "📅", key: "calendar" as const },
+    { icon: "👥", key: "clients" as const },
+    { icon: "💰", key: "finances" as const },
+    { icon: "📊", key: "reports" as const },
+  ] as const;
+
+  const MOCKUP_SIDEBAR_ITEMS = [
+    t('mockup.agenda'),
+    t('mockup.clientsNav'),
+    t('mockup.servicesNav'),
+    t('mockup.financesNav'),
+    t('mockup.reportsNav'),
+  ];
+
+  const MOCKUP_STATS = [
+    { label: t('mockup.todayAppointments'), val: "8",    color: "#0062FF" },
+    { label: t('mockup.clients'),           val: "124",  color: "#30D158" },
+    { label: t('mockup.revenue'),           val: "$4.2k",color: "#FFD60A" },
+    { label: t('mockup.pending'),           val: "3",    color: "#FF3B30" },
+  ];
+
   return (
     <div
       style={{
         minHeight: "100vh",
         backgroundColor: "#0F0F12",
         fontFamily: "'Inter', system-ui, sans-serif",
-        overflowX: "hidden",         position: "relative",
+        overflowX: "hidden",
+        position: "relative",
       }}
     >
       {/* ── Ambient background effects ── */}
@@ -28,9 +54,10 @@ export default function RootPage() {
             position: "absolute",
             top: "-20%",
             right: "-10%",
-            width: "min(600px, 150vw)",             height: "min(600px, 150vw)",             borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(0,98,255,0.12) 0%, transparent 70%)",
+            width: "min(600px, 150vw)",
+            height: "min(600px, 150vw)",
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,98,255,0.12) 0%, transparent 70%)",
             filter: "blur(40px)",
           }}
         />
@@ -40,9 +67,10 @@ export default function RootPage() {
             position: "absolute",
             bottom: "-10%",
             left: "-5%",
-            width: "min(500px, 120vw)",             height: "min(500px, 120vw)",             borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%)",
+            width: "min(500px, 120vw)",
+            height: "min(500px, 120vw)",
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%)",
             filter: "blur(60px)",
           }}
         />
@@ -66,15 +94,15 @@ export default function RootPage() {
             left: 0,
             right: 0,
             height: "1px",
-            background:
-              "linear-gradient(90deg, transparent, rgba(0,98,255,0.15), rgba(0,209,255,0.1), transparent)",
+            background: "linear-gradient(90deg, transparent, rgba(0,98,255,0.15), rgba(0,209,255,0.1), transparent)",
           }}
         />
       </div>
 
       {/* ── Top nav ── */}
       <nav
-        className="px-5 sm:px-8 md:px-12 py-5 sm:py-6"         style={{
+        className="px-5 sm:px-8 md:px-12 py-5 sm:py-6"
+        style={{
           position: "relative",
           zIndex: 10,
           display: "flex",
@@ -178,7 +206,7 @@ export default function RootPage() {
               textOverflow: "ellipsis",
             }}
           >
-            PLATAFORMA DE GESTIÓN INTELIGENTE
+            {t('badge')}
           </span>
         </div>
 
@@ -188,8 +216,7 @@ export default function RootPage() {
           style={{
             overflow: "hidden",
             flexShrink: 0,
-            boxShadow:
-              "0 0 40px rgba(0,98,255,0.3), 0 0 80px rgba(0,98,255,0.1)",
+            boxShadow: "0 0 40px rgba(0,98,255,0.3), 0 0 80px rgba(0,98,255,0.1)",
             border: "1px solid rgba(0,98,255,0.2)",
           }}
         >
@@ -228,11 +255,7 @@ export default function RootPage() {
             maxWidth: "520px",
           }}
         >
-          Gestiona citas, clientes y finanzas de tu negocio en{" "}
-          <span style={{ color: "#F2F2F2", fontWeight: 600 }}>
-            un solo lugar
-          </span>
-          . Diseñado para profesionales que no se conforman.
+          {t('tagline')}
         </p>
 
         {/* CTAs */}
@@ -246,11 +269,7 @@ export default function RootPage() {
             maxWidth: "320px",
           }}
         >
-          {/* Row: primary + login side by side on sm+ */}
-          <div
-            className="flex flex-col sm:flex-row"
-            style={{ gap: "10px" }}
-          >
+          <div className="flex flex-col sm:flex-row" style={{ gap: "10px" }}>
             <Link
               href="/register"
               className="flex-1 sm:flex-none"
@@ -266,12 +285,11 @@ export default function RootPage() {
                 color: "#fff",
                 textDecoration: "none",
                 background: "linear-gradient(135deg, #0062FF 0%, #0041AB 100%)",
-                boxShadow:
-                  "0 0 30px rgba(0,98,255,0.4), 0 4px 20px rgba(0,98,255,0.3)",
+                boxShadow: "0 0 30px rgba(0,98,255,0.4), 0 4px 20px rgba(0,98,255,0.3)",
                 transition: "transform 0.2s, box-shadow 0.2s",
               }}
             >
-              Comenzar gratis
+              {t('ctaStart')}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M3 8h10M9 4l4 4-4 4"
@@ -301,29 +319,19 @@ export default function RootPage() {
                 transition: "border-color 0.2s, box-shadow 0.2s",
               }}
             >
-              Iniciar Sesión
+              {t('ctaLogin')}
             </Link>
           </div>
-
         </div>
 
         {/* Feature pills — hidden on mobile to keep CTAs in viewport */}
         <div
           className="hidden sm:flex mb-10 sm:mb-14"
-          style={{
-            gap: "10px",
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
+          style={{ gap: "10px", flexWrap: "wrap", justifyContent: "center" }}
         >
-          {[
-            { icon: "📅", text: "Calendario inteligente" },
-            { icon: "👥", text: "Gestión de clientes" },
-            { icon: "💰", text: "Control financiero" },
-            { icon: "📊", text: "Reportes en tiempo real" },
-          ].map((f) => (
+          {FEATURE_PILLS.map((f) => (
             <div
-              key={f.text}
+              key={f.key}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -337,7 +345,7 @@ export default function RootPage() {
                 color: "#909098",
               }}
             >
-              <span>{f.icon}</span> {f.text}
+              <span>{f.icon}</span> {t(`features.${f.key}`)}
             </div>
           ))}
         </div>
@@ -346,10 +354,9 @@ export default function RootPage() {
         <div
           className="hidden sm:block w-full max-w-[860px] rounded-[20px]"
           style={{
-            overflow: "hidden", // this is fine since it's the mockup container
+            overflow: "hidden",
             border: "1px solid rgba(0,98,255,0.15)",
-            boxShadow:
-              "0 0 80px rgba(0,98,255,0.1), 0 40px 100px rgba(0,0,0,0.6)",
+            boxShadow: "0 0 80px rgba(0,98,255,0.1), 0 40px 100px rgba(0,0,0,0.6)",
             background: "#141417",
             position: "relative",
           }}
@@ -365,30 +372,9 @@ export default function RootPage() {
               borderBottom: "1px solid #272729",
             }}
           >
-            <span
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: "#FF3B30",
-              }}
-            />
-            <span
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: "#FFD60A",
-              }}
-            />
-            <span
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: "#30D158",
-              }}
-            />
+            <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#FF3B30" }} />
+            <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#FFD60A" }} />
+            <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#30D158" }} />
             <div
               style={{
                 flex: 1,
@@ -406,7 +392,7 @@ export default function RootPage() {
           </div>
 
           {/* Dashboard UI mockup */}
-          <div className="p-3 sm:p-5 flex gap-4 overflow-x-auto"> {/* FIXED: Responsive padding and horizontal scroll */}
+          <div className="p-3 sm:p-5 flex gap-4 overflow-x-auto">
             {/* Sidebar mock */}
             <div
               style={{
@@ -417,48 +403,29 @@ export default function RootPage() {
                 gap: "6px",
               }}
             >
-              {["Agenda", "Clientes", "Servicios", "Finanzas", "Reportes"].map(
-                (item, i) => (
-                  <div
-                    key={item}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "10px",
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      background:
-                        i === 0 ? "rgba(0,98,255,0.12)" : "transparent",
-                      color: i === 0 ? "#4D83FF" : "#909098",
-                      border:
-                        i === 0
-                          ? "1px solid rgba(0,98,255,0.2)"
-                          : "1px solid transparent",
-                    }}
-                  >
-                    {item}
-                  </div>
-                ),
-              )}
+              {MOCKUP_SIDEBAR_ITEMS.map((item, i) => (
+                <div
+                  key={item}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    background: i === 0 ? "rgba(0,98,255,0.12)" : "transparent",
+                    color: i === 0 ? "#4D83FF" : "#909098",
+                    border: i === 0 ? "1px solid rgba(0,98,255,0.2)" : "1px solid transparent",
+                  }}
+                >
+                  {item}
+                </div>
+              ))}
             </div>
 
             {/* Content mock */}
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-              }}
-            >
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
               {/* Stats row */}
-              <div
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2"               >
-                {[
-                  { label: "Citas hoy", val: "8", color: "#0062FF" },
-                  { label: "Clientes", val: "124", color: "#30D158" },
-                  { label: "Ingresos", val: "$4.2k", color: "#FFD60A" },
-                  { label: "Pendientes", val: "3", color: "#FF3B30" },
-                ].map((s) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {MOCKUP_STATS.map((s) => (
                   <div
                     key={s.label}
                     style={{
@@ -468,23 +435,10 @@ export default function RootPage() {
                       border: "1px solid #272729",
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: 800,
-                        color: s.color,
-                      }}
-                    >
+                    <div style={{ fontSize: "16px", fontWeight: 800, color: s.color }}>
                       {s.val}
                     </div>
-                    <div
-                      style={{
-                        fontSize: "9px",
-                        color: "#909098",
-                        fontWeight: 600,
-                        marginTop: "2px",
-                      }}
-                    >
+                    <div style={{ fontSize: "9px", color: "#909098", fontWeight: 600, marginTop: "2px" }}>
                       {s.label}
                     </div>
                   </div>
@@ -500,23 +454,10 @@ export default function RootPage() {
                   border: "1px solid #272729",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: 800,
-                    color: "#F2F2F2",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Marzo 2026
+                <div style={{ fontSize: "10px", fontWeight: 800, color: "#F2F2F2", marginBottom: "8px" }}>
+                  {t('mockup.march2026')}
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(7,1fr)",
-                    gap: "3px",
-                  }}
-                >
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px" }}>
                   {Array.from({ length: 35 }, (_, i) => {
                     const day = i - 5;
                     const hasApt = [9, 16, 22, 28].includes(day);
@@ -532,20 +473,9 @@ export default function RootPage() {
                           justifyContent: "center",
                           fontSize: "9px",
                           fontWeight: 700,
-                          background: isToday
-                            ? "#0062FF"
-                            : hasApt
-                              ? "rgba(0,98,255,0.12)"
-                              : "transparent",
-                          color: isToday
-                            ? "#fff"
-                            : day > 0 && day <= 31
-                              ? "#F2F2F2"
-                              : "#3A3A3F",
-                          border:
-                            hasApt && !isToday
-                              ? "1px solid rgba(0,98,255,0.2)"
-                              : "1px solid transparent",
+                          background: isToday ? "#0062FF" : hasApt ? "rgba(0,98,255,0.12)" : "transparent",
+                          color: isToday ? "#fff" : day > 0 && day <= 31 ? "#F2F2F2" : "#3A3A3F",
+                          border: hasApt && !isToday ? "1px solid rgba(0,98,255,0.2)" : "1px solid transparent",
                         }}
                       >
                         {day > 0 && day <= 31 ? day : ""}
@@ -573,16 +503,13 @@ export default function RootPage() {
         {/* Bottom tagline */}
         <p
           className="hidden sm:block"
-          style={{
-            marginTop: "40px",
-            fontSize: "12px",
-            color: "#3A3A3F",
-            fontWeight: 500,
-          }}
+          style={{ marginTop: "40px", fontSize: "12px", color: "#3A3A3F", fontWeight: 500 }}
         >
-          Sin tarjeta de crédito · Configuración en 2 minutos · Cancela cuando
-          quieras
+          {t('disclaimer')}
         </p>
+
+        {/* PWA floating install prompt */}
+        <PwaInstallFloating />
       </main>
 
       <style>{`
@@ -592,7 +519,6 @@ export default function RootPage() {
         }
         a:hover { opacity: 0.9; }
       `}</style>
-
     </div>
   );
 }

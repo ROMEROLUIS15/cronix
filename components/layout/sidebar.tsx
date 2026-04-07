@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, usePathname } from "@/i18n/navigation";
 import {
   CalendarDays,
   Users,
@@ -17,27 +17,29 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { signout } from "@/app/login/actions";
+import { signout } from "@/lib/actions/auth";
 import { InstallPwaButton } from "@/components/ui/install-pwa-button";
 import type { User, Business } from "@/types";
 
 interface NavItem {
   href: string
-  label: string
+  labelKey: string
   icon: typeof CalendarDays
   ownerOnly?: boolean
   adminOnly?: boolean
 }
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Agenda", icon: CalendarDays },
-  { href: "/dashboard/clients", label: "Clientes", icon: Users },
-  { href: "/dashboard/services", label: "Servicios", icon: Wrench },
-  { href: "/dashboard/team", label: "Equipo", icon: UsersRound, ownerOnly: true },
-  { href: "/dashboard/finances", label: "Finanzas", icon: DollarSign },
-  { href: "/dashboard/reports", label: "Reportes", icon: BarChart3 },
-  { href: "/dashboard/settings", label: "Ajustes", icon: Settings },
-  { href: "/dashboard/admin/pulse", label: "System Pulse", icon: Activity, adminOnly: true },
+// Static keys — labels are resolved via t(item.labelKey) inside the component
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard",             labelKey: "agenda",    icon: CalendarDays },
+  { href: "/dashboard/clients",     labelKey: "clients",   icon: Users },
+  { href: "/dashboard/services",    labelKey: "services",  icon: Wrench },
+  { href: "/dashboard/team",        labelKey: "team",      icon: UsersRound, ownerOnly: true },
+  { href: "/dashboard/finances",    labelKey: "finances",  icon: DollarSign },
+  { href: "/dashboard/reports",     labelKey: "reports",   icon: BarChart3 },
+  { href: "/dashboard/settings",    labelKey: "settings",  icon: Settings },
+  // System Pulse: label kept in English — internal admin tool, locale-agnostic
+  { href: "/dashboard/admin/pulse", labelKey: "__pulse",   icon: Activity, adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -53,7 +55,9 @@ export function Sidebar({
   user,
   business,
 }: SidebarProps) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
+
   const initials =
     user?.name
       ?.split(" ")
@@ -74,9 +78,7 @@ export function Sidebar({
 
       <aside
         className={cn(
-          // w-64 on lg+; cap to 85vw on tiny phones to prevent overflow
           "flex flex-col h-full w-64 max-w-[85vw] flex-shrink-0",
-          // Mobile: fixed overlay
           "fixed top-0 left-0 z-40 lg:static lg:z-auto",
           "transition-transform duration-300 ease-in-out",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
@@ -119,7 +121,7 @@ export function Sidebar({
               className="p-2.5 rounded-lg lg:hidden transition-colors hover:bg-white/5 flex-shrink-0"
               style={{ color: "#8A8A90" }}
               onClick={onClose}
-              aria-label="Cerrar menú"
+              aria-label={t('closeMenu')}
             >
               <X size={20} />
             </button>
@@ -139,7 +141,7 @@ export function Sidebar({
               className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
               style={{ color: "#0062FF" }}
             >
-              Negocio activo
+              {t('activeBusiness')}
             </p>
             <p
               className="text-sm font-bold truncate"
@@ -148,7 +150,7 @@ export function Sidebar({
               {business.name}
             </p>
             <p className="text-xs truncate" style={{ color: "#8A8A90" }}>
-              {business.category || "Servicios"}
+              {business.category || t('defaultCategory')}
             </p>
           </div>
         )}
@@ -159,41 +161,42 @@ export function Sidebar({
             className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest"
             style={{ color: "#8A8A90" }}
           >
-            Principal
+            {t('sectionLabel')}
           </p>
-          {navItems
+          {NAV_ITEMS
             .filter((item) => {
               if (item.adminOnly && user?.role !== "platform_admin") return false;
               if (item.ownerOnly && user?.role !== "owner" && user?.role !== "platform_admin") return false;
               return true;
             })
             .map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => onClose?.()}
-                className={cn(
-                  "nav-item",
-                  isActive ? "nav-item-active" : "nav-item-inactive",
-                )}
-              >
-                <Icon size={18} className="flex-shrink-0" />
-                <span className="flex-1 truncate">{item.label}</span>
-                {isActive && (
-                  <ChevronRight
-                    size={14}
-                    style={{ color: "#0062FF" }}
-                    className="flex-shrink-0"
-                  />
-                )}
-              </Link>
-            );
-          })}
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              const label = item.labelKey === '__pulse' ? 'System Pulse' : t(item.labelKey as Parameters<typeof t>[0]);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => onClose?.()}
+                  className={cn(
+                    "nav-item",
+                    isActive ? "nav-item-active" : "nav-item-inactive",
+                  )}
+                >
+                  <Icon size={18} className="flex-shrink-0" />
+                  <span className="flex-1 truncate">{label}</span>
+                  {isActive && (
+                    <ChevronRight
+                      size={14}
+                      style={{ color: "#0062FF" }}
+                      className="flex-shrink-0"
+                    />
+                  )}
+                </Link>
+              );
+            })}
         </nav>
 
         {/* Install PWA button — only visible on Android Chrome before install */}
@@ -258,7 +261,7 @@ export function Sidebar({
                   className="text-[10px] uppercase tracking-wider"
                   style={{ color: "#8A8A90" }}
                 >
-                  {user.role === 'owner' ? 'Perfil' : user.role}
+                  {user.role === 'owner' ? t('profile') : user.role}
                 </p>
               </div>
             </Link>
@@ -274,7 +277,7 @@ export function Sidebar({
                 }}
               >
                 <LogOut size={15} />
-                Cerrar sesión
+                {t('signOut')}
               </button>
             </form>
           </div>

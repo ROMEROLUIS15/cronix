@@ -39,7 +39,9 @@ export class AssistantService {
     userId: string,
     businessName: string,
     userTimezone: string = 'UTC',
-    clientHistory: LlmMessage[] = []
+    clientHistory: LlmMessage[] = [],
+    userRole: string = 'employee',
+    userName: string = 'Usuario'
   ): Promise<AssistantResponse> {
 
     // 1. Transcription (STT) - Skip if input is already text (Streaming Mode)
@@ -95,7 +97,7 @@ export class AssistantService {
         ).join('\n')}`
       : ''
 
-    const systemPrompt = LUIS_PROMPT_CONFIG.buildPrimaryPrompt(businessName, userTimezone, memoryContext)
+    const systemPrompt = LUIS_PROMPT_CONFIG.buildPrimaryPrompt(businessName, userTimezone, memoryContext, userRole, userName)
 
     const messages: LlmMessage[] = [
       { role: 'system', content: systemPrompt },

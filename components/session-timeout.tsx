@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useRef, useState } from 'react'
-import { signout } from '@/app/login/actions'
+import { signout } from '@/lib/actions/auth'
 
 // ── Constants ───────────────────────────────────────────────────────────────
 /** Sign out after 30 min of inactivity */

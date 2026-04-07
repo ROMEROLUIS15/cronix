@@ -42,16 +42,18 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     )
   }
 
-  // 2. Context: Business Isolation & Identity
+  // 2. Context: Business Isolation & Identity + Role
   const { data: dbUser } = await supabase
     .from('users')
-    .select('business_id, business:businesses(name)')
+    .select('business_id, name, role, business:businesses(name)')
     .eq('id', user.id)
     .single()
-  
-  const businessId = dbUser?.business_id
-  const businessName = (dbUser?.business as any)?.name || 'tu negocio'
-  
+
+  const businessId   = dbUser?.business_id
+  const businessName = (dbUser?.business as { name: string } | null)?.name || 'tu negocio'
+  const userName     = dbUser?.name || 'Usuario'
+  const userRole     = (dbUser?.role as string) || 'employee'
+
   if (!businessId) return NextResponse.json({ error: 'No business attached' }, { status: 403 })
 
   // 3. Payload Extraction & Input Switch
@@ -112,12 +114,14 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
 
   // 6. Execution (Business Layer)
   const result = await assistant.processVoiceRequest(
-    audioFile || text!, 
-    businessId, 
-    user.id, 
-    businessName, 
+    audioFile || text!,
+    businessId,
+    user.id,
+    businessName,
     timezone,
-    clientHistory
+    clientHistory,
+    userRole,
+    userName
   )
 
   // 7. Transparent Response

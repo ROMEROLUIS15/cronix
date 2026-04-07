@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
+import { getLocale, getTranslations } from 'next-intl/server'
 import './globals.css'
 import { PwaUpdateToast } from '@/components/ui/pwa-update-toast'
 
@@ -32,49 +33,67 @@ const baseUrl = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_URL}`
     : 'https://cronix-app.vercel.app' // Fallback oficial de producción
 
-// ── Metadata ──────────────────────────────────────────────────────────────────
-export const metadata: Metadata = {
-  title: {
-    default: 'Cronix - Gestión Inteligente',
-    template: '%s | Cronix'
-  },
-  description: 'Gestiona citas, clientes y finanzas de tu negocio en un solo lugar. Diseñado para profesionales que no se conforman.',
-  manifest: '/manifest.json',
-  keywords: ['agenda', 'citas', 'gestión de clientes', 'crm', 'finanzas', 'supabase', 'whatsapp bot', 'pwa'],
-  authors: [{ name: 'Cronix Team' }],
-  metadataBase: new URL(baseUrl),
-  openGraph: {
-    type: 'website',
-    locale: 'es_ES',
-    url: baseUrl,
-    title: 'Cronix - Gestión Inteligente',
-    description: 'La plataforma que centraliza tus citas, clientes y finanzas en una sola App.',
-    siteName: 'Cronix',
-    images: [
-      {
-        url: '/og-cronix.png',
-        width: 1200,
-        height: 630,
-        alt: 'Cronix - Gestión Inteligente Dashboard',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Cronix - Gestión Inteligente',
-    description: 'Centraliza tu negocio con el poder de la IA y WhatsApp.',
-    images: ['/og-cronix.png'],
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Cronix',
-  },
+// ── Dynamic per-locale metadata ───────────────────────────────────────────────
+// OG locale format mapping: next-intl locale → OpenGraph locale string
+const OG_LOCALE_MAP: Record<string, string> = {
+  es: 'es_ES',
+  en: 'en_US',
+  pt: 'pt_BR',
+  fr: 'fr_FR',
+  de: 'de_DE',
+  it: 'it_IT',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale()
+  const t = await getTranslations({ locale, namespace: 'meta' })
+  const ogLocale = OG_LOCALE_MAP[locale] ?? locale
+
+  return {
+    title: {
+      default: t('title'),
+      template: '%s | Cronix'
+    },
+    description: t('description'),
+    manifest: '/manifest.json',
+    keywords: ['agenda', 'appointments', 'citas', 'gestión de clientes', 'crm', 'finanzas', 'supabase', 'whatsapp bot', 'pwa'],
+    authors: [{ name: 'Cronix Team' }],
+    metadataBase: new URL(baseUrl),
+    openGraph: {
+      type: 'website',
+      locale: ogLocale,
+      url: baseUrl,
+      title: t('ogTitle'),
+      description: t('ogDescription'),
+      siteName: 'Cronix',
+      images: [
+        {
+          url: '/og-cronix.png',
+          width: 1200,
+          height: 630,
+          alt: 'Cronix - Gestión Inteligente Dashboard',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: t('title'),
+      description: t('twitterDescription'),
+      images: ['/og-cronix.png'],
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: 'Cronix',
+    },
+  }
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale()
+
   return (
-    <html lang="es" className={`dark ${inter.className}`} suppressHydrationWarning>
+    <html lang={locale} className={`dark ${inter.className}`} suppressHydrationWarning>
       {/*
         Capture beforeinstallprompt before any JS bundle loads.
         Chrome fires this event very early in the page lifecycle — before

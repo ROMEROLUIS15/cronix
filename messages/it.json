@@ -1,0 +1,295 @@
+{
+  "meta": {
+    "title": "Cronix - Gestione Intelligente",
+    "description": "Gestisci appuntamenti, clienti e finanze della tua attività in un unico posto. Progettato per professionisti che non si accontentano.",
+    "ogTitle": "Cronix - Gestione Intelligente",
+    "ogDescription": "La piattaforma che centralizza appuntamenti, clienti e finanze in un'unica app.",
+    "twitterDescription": "Centralizza la tua attività con la potenza dell'IA e di WhatsApp."
+  },
+  "nav": {
+    "sectionLabel": "Principale",
+    "agenda": "Agenda",
+    "clients": "Clienti",
+    "services": "Servizi",
+    "team": "Team",
+    "finances": "Finanze",
+    "reports": "Report",
+    "settings": "Impostazioni",
+    "activeBusiness": "Attività attiva",
+    "defaultCategory": "Servizi",
+    "closeMenu": "Chiudi menu",
+    "signOut": "Esci",
+    "profile": "Profilo"
+  },
+  "topbar": {
+    "openMenu": "Apri menu",
+    "notifications": "Notifiche"
+  },
+  "pageTitles": {
+    "dashboard": "Dashboard",
+    "dashboardSub": "Panoramica generale",
+    "newAppointment": "Nuovo Appuntamento",
+    "editAppointment": "Modifica Appuntamento",
+    "appointments": "Agenda",
+    "appointmentsSub": "Gestione appuntamenti",
+    "newClient": "Nuovo Cliente",
+    "editClient": "Modifica Cliente",
+    "clientProfile": "Profilo Cliente",
+    "clients": "Clienti",
+    "clientsSub": "Database",
+    "services": "Servizi",
+    "servicesSub": "Catalogo",
+    "settings": "Impostazioni",
+    "settingsSub": "Preferenze",
+    "myProfile": "Il Mio Profilo",
+    "myProfileSub": "Account",
+    "finances": "Finanze",
+    "financesSub": "Report finanziari",
+    "reports": "Report",
+    "reportsSub": "Statistiche",
+    "setup": "Configurazione Iniziale",
+    "setupSub": "Benvenuto",
+    "agendaSub": "Agenda",
+    "systemPulseSub": "SaaS Health Monitor"
+  },
+  "notifications": {
+    "title": "Notifiche",
+    "markAllRead": "Segna tutto come letto",
+    "empty": "Nessuna notifica",
+    "emptyDesc": "Non hai avvisi in sospeso al momento."
+  },
+  "landing": {
+    "badge": "PIATTAFORMA DI GESTIONE INTELLIGENTE",
+    "headline": "Gestisci la tua attività in",
+    "headlineAccent": "un unico posto.",
+    "tagline": "Gestisci appuntamenti, clienti e finanze della tua attività in un unico posto. Progettato per professionisti che non si accontentano.",
+    "ctaStart": "Inizia gratuitamente",
+    "ctaLogin": "Accedi",
+    "disclaimer": "Senza carta di credito · Configurazione in 2 minuti · Annulla quando vuoi",
+    "mockup": {
+      "todayAppointments": "Appt. oggi",
+      "clients": "Clienti",
+      "revenue": "Ricavi",
+      "pending": "In attesa",
+      "march2026": "Marzo 2026",
+      "agenda": "Agenda",
+      "clientsNav": "Clienti",
+      "servicesNav": "Servizi",
+      "financesNav": "Finanze",
+      "reportsNav": "Report"
+    },
+    "features": {
+      "calendar": "Calendario intelligente",
+      "clients": "Gestione clienti",
+      "finances": "Controllo finanziario",
+      "reports": "Report in tempo reale"
+    }
+  },
+  "auth": {
+    "login": {
+      "platformBadge": "Piattaforma SaaS",
+      "heroTitle": "La tua attività sotto",
+      "heroTitleAccent": "pieno controllo.",
+      "heroDesc": "Gestisci appuntamenti, clienti e finanze da una dashboard moderna accessibile da qualsiasi dispositivo.",
+      "features": {
+        "smartAgenda": "Agenda intelligente",
+        "smartAgendaDesc": "Gestisci appuntamenti e disponibilità",
+        "autoReminders": "Promemoria automatici",
+        "autoRemindersDesc": "WhatsApp e notifiche push",
+        "financialReports": "Report finanziari",
+        "financialReportsDesc": "Controllo totale delle entrate",
+        "secure": "100% sicuro",
+        "secureDesc": "Dati crittografati e protetti"
+      },
+      "sessionInactive": "La tua sessione è stata chiusa dopo 30 minuti di inattività. Accedi di nuovo.",
+      "sessionExpired": "La tua sessione di 12 ore è scaduta. Accedi di nuovo.",
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "ciao@tuaattivita.it",
+      "passwordPlaceholder": "••••••••",
+      "forgotPassword": "Password dimenticata?",
+      "submit": "Accedi",
+      "submitting": "Accesso in corso...",
+      "divider": "oppure continua con",
+      "google": "Accedi con Google",
+      "noAccount": "Non hai un account?",
+      "registerLink": "Registrati gratis",
+      "recoverPassword": "Recupera password",
+      "upcomingAppointments": "Prossimi appuntamenti"
+    },
+    "register": {
+      "title": "Crea il tuo account",
+      "subtitle": "Inizia a gestire la tua attività oggi",
+      "firstName": "Nome",
+      "lastName": "Cognome",
+      "bizName": "Nome dell'attività",
+      "bizCategory": "Tipo di attività",
+      "selectCategory": "Seleziona il tuo settore",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Conferma password",
+      "submit": "Crea account gratuito",
+      "submitting": "Elaborazione...",
+      "divider": "oppure registrati con",
+      "google": "Google",
+      "hasAccount": "Hai già un account?",
+      "loginLink": "Accedi",
+      "successTitle": "Account creato!",
+      "successSubtitle": "Manca solo un passaggio",
+      "successStepsTitle": "Cosa fare ora?",
+      "successStep1": "Controlla la tua casella di posta",
+      "successStep2": "Apri l'email di conferma di Cronix",
+      "successStep3": "Clicca sul link per attivare il tuo account",
+      "successSpamNote": "Non vedi l'email? Controlla la cartella spam.",
+      "successLoginLink": "Vai all'accesso",
+      "benefits": {
+        "grow": { "title": "Cresci veloce", "desc": "Più prenotazioni con meno sforzo manuale." },
+        "easy": { "title": "Facile da usare", "desc": "Nessuna competenza tecnica richiesta." },
+        "all":  { "title": "Tutto in uno", "desc": "Appuntamenti, clienti e finanze integrati." }
+      },
+      "heroTitle": "Potenzia la tua attività,",
+      "heroTitleAccent": "semplifica la tua vita.",
+      "heroDesc": "Unisciti a migliaia di professionisti che automatizzano già i loro appuntamenti e aumentano i ricavi senza sforzo.",
+      "heroCta": "Unisciti gratis oggi",
+      "stats": {
+        "businesses": "Attività attive",
+        "satisfaction": "Soddisfazione",
+        "setupTime": "Per iniziare"
+      },
+      "oauthErrors": {
+        "google_not_registered": {
+          "title": "Il tuo account Google non è registrato",
+          "body": "Per accedere con Google devi prima creare il tuo account Cronix. Compila il modulo e poi potrai usare Google per accedere."
+        }
+      }
+    },
+    "forgotPassword": {
+      "title": "Password dimenticata?",
+      "desc": "Inserisci la tua email e ti invieremo un link per reimpostarla.",
+      "email": "Email",
+      "emailPlaceholder": "ciao@tuaattivita.it",
+      "submit": "Invia link",
+      "submitting": "Invio...",
+      "back": "Torna all'accesso",
+      "successTitle": "Email inviata",
+      "successDesc": "Controlla la tua casella di posta e segui le istruzioni.",
+      "logoAlt": "Logo Cronix"
+    },
+    "resetPassword": {
+      "title": "Reimposta password",
+      "desc": "Inserisci la tua nuova password.",
+      "password": "Nuova password",
+      "confirmPassword": "Conferma nuova password",
+      "submit": "Salva password",
+      "submitting": "Salvataggio...",
+      "successTitle": "Password aggiornata!",
+      "successDesc": "Ora puoi accedere con la tua nuova password.",
+      "loginLink": "Vai all'accesso"
+    }
+  },
+  "validation": {
+    "emailInvalid": "Email non valida",
+    "emailRequired": "L'email è obbligatoria",
+    "passwordRequired": "La password è obbligatoria",
+    "passwordMin": "La password deve avere almeno 8 caratteri",
+    "passwordUppercase": "Deve contenere almeno una lettera maiuscola",
+    "passwordLowercase": "Deve contenere almeno una lettera minuscola",
+    "passwordNumber": "Deve contenere almeno un numero",
+    "passwordSpecial": "Deve contenere almeno un carattere speciale",
+    "passwordsMismatch": "Le password non coincidono",
+    "firstNameShort": "Il nome è troppo corto",
+    "lastNameShort": "Il cognome è troppo corto",
+    "bizNameShort": "Il nome dell'attività è troppo corto",
+    "selectBizCategory": "Seleziona un tipo di attività"
+  },
+  "dashboard": {
+    "tabs": { "agenda": "Agenda", "summary": "Riepilogo" },
+    "weekHeaders": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
+    "stats": {
+      "activeAppointments": "Appuntamenti attivi", "pending": "In attesa", "completed": "Completati",
+      "confirmed": "Confermati", "todayAppointments": "Appuntamenti oggi",
+      "totalClients": "Clienti", "monthRevenue": "Ricavi del mese"
+    },
+    "actions": { "newAppointment": "Nuovo appuntamento", "newClient": "Nuovo cliente", "registerPayment": "Registra pagamento" },
+    "table": { "service": "Servizio", "time": "Ora", "duration": "Durata", "employee": "Dipendente", "phone": "Telefono" },
+    "appointment": {
+      "statusPending": "In attesa", "statusConfirmed": "Confermato", "statusCompleted": "Completato",
+      "statusCancelled": "Annullato", "statusNoShow": "Non presentato",
+      "confirmDelete": "Eliminare questo appuntamento?", "deleteCancel": "Annulla", "deleteConfirm": "Elimina",
+      "updateError": "Impossibile aggiornare lo stato", "cancelError": "Impossibile annullare l'appuntamento"
+    },
+    "errors": { "loadFailed": "Impossibile caricare gli appuntamenti", "statsFailed": "Impossibile caricare le statistiche" },
+    "empty": { "title": "Nessun appuntamento", "desc": "Non ci sono appuntamenti per questo giorno." }
+  },
+  "appointments": {
+    "title": "Nuovo Appuntamento", "editTitle": "Modifica Appuntamento",
+    "client": "Cliente", "service": "Servizio", "date": "Data", "time": "Ora",
+    "duration": "Durata", "notes": "Note", "submit": "Pianifica appuntamento", "submitting": "Pianificazione...",
+    "update": "Aggiorna appuntamento", "updating": "Aggiornamento...", "cancel": "Annulla",
+    "errors": { "createFailed": "Impossibile creare l'appuntamento", "updateFailed": "Impossibile aggiornare", "loadFailed": "Impossibile caricare le informazioni" }
+  },
+  "clients": {
+    "title": "Clienti", "newTitle": "Nuovo Cliente", "editTitle": "Modifica Cliente",
+    "search": "Cerca cliente...", "name": "Nome", "phone": "Telefono", "email": "Email", "notes": "Note",
+    "submit": "Salva cliente", "submitting": "Salvataggio...", "cancel": "Annulla",
+    "empty": "Nessun cliente registrato ancora.",
+    "errors": { "createFailed": "Impossibile creare il cliente", "updateFailed": "Impossibile aggiornare il cliente" }
+  },
+  "services": {
+    "title": "Servizi", "newTitle": "Nuovo Servizio", "editTitle": "Modifica Servizio",
+    "name": "Nome del servizio", "duration": "Durata (min)", "price": "Prezzo", "description": "Descrizione",
+    "submit": "Salva servizio", "submitting": "Salvataggio...", "cancel": "Annulla",
+    "empty": "Nessun servizio configurato ancora.",
+    "errors": { "createFailed": "Impossibile creare il servizio", "updateFailed": "Impossibile aggiornare il servizio" }
+  },
+  "finances": {
+    "title": "Finanze", "income": "Entrate", "expenses": "Uscite", "balance": "Saldo",
+    "newTransaction": "Nuovo pagamento", "newExpense": "Nuova spesa",
+    "period": "Periodo", "amount": "Importo", "description": "Descrizione", "category": "Categoria", "date": "Data",
+    "submit": "Salva", "submitting": "Salvataggio...", "cancel": "Annulla",
+    "empty": "Nessuna transazione per questo periodo.",
+    "errors": { "loadFailed": "Impossibile caricare le finanze" }
+  },
+  "reports": {
+    "title": "Report", "period": "Periodo", "empty": "Nessun dato per questo periodo.",
+    "errors": { "loadFailed": "Impossibile caricare i report" }
+  },
+  "settings": {
+    "title": "Impostazioni", "businessName": "Nome dell'attività", "businessCategory": "Categoria",
+    "timezone": "Fuso orario", "workingHours": "Orario di lavoro", "workingDays": "Giorni lavorativi",
+    "save": "Salva modifiche", "saving": "Salvataggio...", "successMsg": "Impostazioni salvate con successo.",
+    "days": { "mon": "Lunedì", "tue": "Martedì", "wed": "Mercoledì", "thu": "Giovedì", "fri": "Venerdì", "sat": "Sabato", "sun": "Domenica" },
+    "errors": { "saveFailed": "Impossibile salvare le impostazioni" }
+  },
+  "profile": {
+    "title": "Il Mio Profilo", "name": "Nome", "lastName": "Cognome", "email": "Email", "role": "Ruolo", "avatar": "Foto profilo",
+    "save": "Salva modifiche", "saving": "Salvataggio...", "successMsg": "Profilo aggiornato con successo.",
+    "errors": { "saveFailed": "Impossibile aggiornare il profilo" }
+  },
+  "team": {
+    "title": "Team", "newMember": "Aggiungi membro", "name": "Nome", "email": "Email", "role": "Ruolo",
+    "empty": "Nessun membro del team ancora.",
+    "errors": { "loadFailed": "Impossibile caricare il team" }
+  },
+  "setup": {
+    "title": "Configurazione Iniziale", "welcome": "Benvenuto su Cronix", "subtitle": "Configura la tua attività per iniziare",
+    "next": "Continua", "finish": "Fine",
+    "errors": { "saveFailed": "Impossibile salvare le impostazioni" }
+  },
+  "businessCategories": {
+    "barbershop": "Barbiere", "beautySalon": "Salone di bellezza / Estetica", "hairSalon": "Parrucchiere",
+    "clinic": "Clinica", "medicalOffice": "Studio medico", "spa": "Spa",
+    "personalTrainer": "Personal trainer", "restaurant": "Ristorante", "consulting": "Consulenza",
+    "healthMedicine": "Salute / Medicina", "sportsGym": "Sport / Palestra", "tech": "Tech",
+    "appliances": "Elettrodomestici", "other": "Altro"
+  },
+  "languageSwitcher": {
+    "label": "Lingua", "es": "Español", "en": "English", "pt": "Português", "fr": "Français", "de": "Deutsch", "it": "Italiano"
+  },
+  "common": {
+    "loading": "Caricamento...", "error": "Errore", "save": "Salva", "cancel": "Annulla",
+    "delete": "Elimina", "edit": "Modifica", "new": "Nuovo", "back": "Indietro",
+    "confirm": "Conferma", "close": "Chiudi", "search": "Cerca", "noResults": "Nessun risultato",
+    "minutes": "min", "of": "di", "yes": "Sì", "no": "No"
+  }
+}
