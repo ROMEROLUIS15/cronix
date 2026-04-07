@@ -62,6 +62,7 @@ export async function createTransaction(
   supabase: Client,
   data: {
     business_id: string
+    client_id?: string
     appointment_id?: string | null
     amount: number
     net_amount: number
@@ -100,4 +101,27 @@ export async function createExpense(
     .insert(data)
 
   if (error) throw new Error(`Error creating expense: ${error.message}`)
+}
+
+/**
+ * Returns transactions for a date range (for revenue stats + forecast).
+ */
+export async function findByPaidAtRange(
+  supabase: Client,
+  businessId: string,
+  from: string,
+  to: string
+): Promise<{ net_amount: number; paid_at: string }[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('net_amount, paid_at')
+    .eq('business_id', businessId)
+    .gte('paid_at', from)
+    .lte('paid_at', to)
+
+  if (error) throw new Error(`findByPaidAtRange: ${error.message}`)
+  return (data ?? []).map(row => ({
+    net_amount: row.net_amount,
+    paid_at: row.paid_at ?? new Date().toISOString()
+  }))
 }

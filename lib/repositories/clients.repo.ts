@@ -86,3 +86,55 @@ export async function getClientAppointments(
   if (error) throw new Error(`Error fetching client appointments: ${error.message}`)
   return (data as unknown as ClientAppointmentWithDetails[]) ?? []
 }
+
+/**
+ * Returns minimal client rows for AI fuzzy-name matching (limit 200).
+ */
+export async function findActiveForAI(
+  supabase: SupaClient,
+  businessId: string
+): Promise<{ id: string; name: string; phone: string | null }[]> {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id, name, phone')
+    .eq('business_id', businessId)
+    .is('deleted_at', null)
+    .limit(200)
+
+  if (error) throw new Error(`findActiveForAI: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Inserts a new client and returns the created row.
+ */
+export async function insertClient(
+  supabase: SupaClient,
+  data: { business_id: string; name: string; phone: string; email?: string }
+): Promise<{ id: string; name: string; phone: string | null }> {
+  const { data: row, error } = await supabase
+    .from('clients')
+    .insert(data)
+    .select('id, name, phone')
+    .single()
+
+  if (error || !row) throw new Error(`insertClient: ${error?.message}`)
+  return row
+}
+
+/**
+ * Calls the get_inactive_clients_rpc function.
+ */
+export async function callInactiveClientsRpc(
+  supabase: SupaClient,
+  businessId: string,
+  sixtyDaysAgo: string
+): Promise<{ name: string }[]> {
+  const { data, error } = await supabase.rpc('get_inactive_clients_rpc', {
+    biz_id: businessId,
+    sixty_days_ago: sixtyDaysAgo,
+  })
+
+  if (error) throw new Error(`callInactiveClientsRpc: ${error.message}`)
+  return (data ?? []) as { name: string }[]
+}

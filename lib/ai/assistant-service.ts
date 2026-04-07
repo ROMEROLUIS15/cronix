@@ -1,4 +1,5 @@
 import { ISttProvider, ILlmProvider, ITtsProvider, LlmMessage, SttResult } from './providers/types'
+import type { VoiceAssistantContext } from './types'
 import { toolRegistry } from './tool-registry'
 import { sessionStore } from './session-store'
 import { routeIntent } from './intent-router'
@@ -35,14 +36,9 @@ export class AssistantService {
 
   async processVoiceRequest(
     input: Blob | string,
-    businessId: string,
-    userId: string,
-    businessName: string,
-    userTimezone: string = 'UTC',
-    clientHistory: LlmMessage[] = [],
-    userRole: string = 'employee',
-    userName: string = 'Usuario'
+    context: VoiceAssistantContext
   ): Promise<AssistantResponse> {
+    const { businessId, userId, businessName, userTimezone, userRole, userName } = context
 
     // 1. Transcription (STT) - Skip if input is already text (Streaming Mode)
     let sttRes: SttResult

@@ -10,6 +10,25 @@ import {
   notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
 
+// Repository imports for Clean Architecture
+import {
+  findActiveForAI,
+  insertClient,
+  callInactiveClientsRpc,
+} from '@/lib/repositories/clients.repo'
+import {
+  findUpcomingByClient,
+  findByDateRange,
+  findConflicts,
+  rescheduleAppointment,
+  cancelAppointment,
+  createAppointment,
+} from '@/lib/repositories/appointments.repo'
+import { getActiveServices } from '@/lib/repositories/services.repo'
+import { createTransaction, findByPaidAtRange } from '@/lib/repositories/finances.repo'
+import { findActiveStaff } from '@/lib/repositories/users.repo'
+import { getBusinessName } from '@/lib/repositories/businesses.repo'
+
 // ── Private: fire in-app + web-push owner notifications ───────────────────
 // Non-blocking (fire-and-forget). Errors are logged, never thrown.
 async function fireToolNotification(
@@ -85,49 +104,43 @@ function fmtUserDate(isoString: string, timezone: string, fmt: string): string {
 
 // ── READ: Obtener servicios (Para identificar qué se ofrece) ──────────────────
 export async function get_services(business_id: string): Promise<string> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('services')
-    .select('id, name, price, duration_min')
-    .eq('business_id', business_id)
-    .eq('is_active', true)
-    .order('name', { ascending: true })
+  try {
+    const supabase = await createClient()
+    const data = await getActiveServices(supabase, business_id)
 
-  if (error) return 'Error al obtener la lista de servicios.'
-  if (!data || data.length === 0) return 'No hay servicios registrados en este negocio.'
+    if (!data || data.length === 0) return 'No hay servicios registrados en este negocio.'
 
-  const list = data.map(s => `- ${s.name} ($${s.price}, ${s.duration_min} min)`).join('\n')
-  return `Servicios disponibles:\n${list}`
+    const list = data.map(s => `- ${s.name} ($${s.price}, ${s.duration_min} min)`).join('\n')
+    return `Servicios disponibles:\n${list}`
+  } catch (err: any) {
+    logger.error('TOOL-DB', `get_services failed: ${err.message}`, { business_id })
+    return 'Error al obtener la lista de servicios.'
+  }
 }
 
 // ── READ: Resumen del día ──────────────────────────────────────────────────
 export async function get_today_summary(business_id: string): Promise<string> {
-  const supabase = await createClient()
-  const todayStart = startOfDay(new Date()).toISOString()
-  const todayEnd = endOfDay(new Date()).toISOString()
+  try {
+    const supabase = await createClient()
+    const todayStart = startOfDay(new Date()).toISOString()
+    const todayEnd = endOfDay(new Date()).toISOString()
 
-  const [incomeRes, apptRes] = await Promise.all([
-    supabase.from('transactions').select('net_amount').eq('business_id', business_id).gte('paid_at', todayStart).lte('paid_at', todayEnd),
-    supabase.from('appointments').select('status').eq('business_id', business_id).gte('start_at', todayStart).lte('start_at', todayEnd),
-  ])
+    const [transactions, appts] = await Promise.all([
+      findByPaidAtRange(supabase, business_id, todayStart, todayEnd),
+      findByDateRange(supabase, business_id, todayStart, todayEnd),
+    ])
 
-  if (incomeRes.error) {
-    logger.error('TOOL-DB', `get_today_summary income failed: ${incomeRes.error.message}`, { business_id })
-    return 'Error al consultar los ingresos de hoy. Intenta de nuevo en un momento.'
+    const totalIncome = transactions.reduce((acc, r) => acc + Number(r.net_amount), 0)
+    const completed = appts.filter(a => a.status === 'completed').length
+    const pending = appts.filter(a => a.status === 'pending' || a.status === 'confirmed').length
+    const cancelled = appts.filter(a => a.status === 'cancelled' || a.status === 'no_show').length
+    const todayStr = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
+
+    return `Resumen para hoy ${todayStr}: facturado hoy $${totalIncome.toLocaleString('es-CO')}. Citas: ${appts.length} en total, ${completed} atendidas, ${pending} pendientes, ${cancelled} canceladas.`
+  } catch (err: any) {
+    logger.error('TOOL-DB', `get_today_summary failed: ${err.message}`, { business_id })
+    return 'Error al consultar el resumen del día. Intenta de nuevo en un momento.'
   }
-  if (apptRes.error) {
-    logger.error('TOOL-DB', `get_today_summary appointments failed: ${apptRes.error.message}`, { business_id })
-    return 'Error al consultar las citas de hoy. Intenta de nuevo en un momento.'
-  }
-
-  const totalIncome = (incomeRes.data ?? []).reduce((acc, r) => acc + Number(r.net_amount), 0)
-  const appts = apptRes.data ?? []
-  const completed = appts.filter(a => a.status === 'completed').length
-  const pending    = appts.filter(a => a.status === 'pending' || a.status === 'confirmed').length
-  const cancelled  = appts.filter(a => a.status === 'cancelled' || a.status === 'no_show').length
-  const todayStr   = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
-
-  return `Resumen para hoy ${todayStr}: facturado hoy $${totalIncome.toLocaleString('es-CO')}. Citas: ${appts.length} en total, ${completed} atendidas, ${pending} pendientes, ${cancelled} canceladas.`
 }
 
 // ── READ: Huecos libres hoy ────────────────────────────────────────────────
@@ -223,71 +236,50 @@ export async function cancel_appointment(
   appointment_date?: string,
   timezone: string = 'UTC'
 ): Promise<string> {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  const { data: clients } = await supabase
-    .from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200)
-  const result = fuzzyFind(clients ?? [], client_name)
+    const clients = await findActiveForAI(supabase, business_id)
+    const result = fuzzyFind(clients, client_name)
 
-  if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-  if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+    if (result.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
+    if (result.status === 'ambiguous') return `Encontré varios clientes parecidos: ${result.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
 
-  const client = result.match as { id: string; name: string }
-  const now = new Date().toISOString()
+    const client = result.match
+    const appts = await findUpcomingByClient(supabase, business_id, client.id)
 
-  const { data: appts, error: apptErr } = await supabase
-    .from('appointments')
-    .select('id, start_at, services:service_id(name)')
-    .eq('business_id', business_id)
-    .eq('client_id', client.id)
-    .in('status', ['pending', 'confirmed'])
-    .gte('start_at', now)
-    .order('start_at', { ascending: true })
+    if (!appts?.length) return `${client.name} no tiene citas próximas activas.`
 
-  if (apptErr) {
-    logger.error('TOOL-DB', `cancel_appointment query failed: ${apptErr.message}`, { business_id })
-    return 'Error al buscar las citas del cliente.'
-  }
-  if (!appts?.length) return `${client.name} no tiene citas próximas activas.`
+    let target = appts[0]
 
-  let target = appts[0]
+    if (appointment_date) {
+      const targetLocalDate = appointment_date.split('T')[0]
+      const found = appts.find(a => toLocalDateString(a.start_at, timezone) === targetLocalDate)
+      if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
+      target = found
+    } else if (appts.length > 1) {
+      const list = appts.map(a => {
+        const svc = (a.services as any)?.name || 'Servicio'
+        const dateStr = fmtUserDate(a.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+        return `- ${svc} el ${dateStr}`
+      }).join('\n')
+      return `${client.name} tiene varias citas próximas:\n${list}\n¿Cuál deseas cancelar?`
+    }
 
-  if (appointment_date) {
-    // Use timezone-aware comparison: convert each appointment's UTC start_at to the
-    // local date string in the business timezone, then compare against the requested date.
-    // Fixes off-by-one errors for timezones that are UTC+ or UTC- (e.g. Colombia UTC-5).
-    const targetLocalDate = appointment_date.split('T')[0] // ensure YYYY-MM-DD
-    const found = appts.find(a => toLocalDateString(a.start_at, timezone) === targetLocalDate)
-    if (!found) return `No encontré una cita de ${client.name} para esa fecha. Consulta sus citas próximas para confirmar la fecha correcta.`
-    target = found
-  } else if (appts.length > 1) {
-    const list = appts.map(a => {
-      const svc     = (a.services as any)?.name || 'Servicio'
-      const dateStr = fmtUserDate(a.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
-      return `- ${svc} el ${dateStr}`
-    }).join('\n')
-    return `${client.name} tiene varias citas próximas:\n${list}\n¿Cuál deseas cancelar?`
-  }
+    const serviceName = (target.services as any)?.name || 'servicio'
+    const dateStr = fmtUserDate(target.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
 
-  const serviceName = (target.services as any)?.name || 'servicio'
-  const dateStr     = fmtUserDate(target.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
-  const nowIso      = new Date().toISOString()
+    await cancelAppointment(supabase, target.id)
 
-  const { error: updErr } = await supabase
-    .from('appointments')
-    .update({ status: 'cancelled', cancelled_at: nowIso, updated_at: nowIso })
-    .eq('id', target.id)
+    // Notify owner: in-app bell + web push
+    const notifInput = notificationForAppointmentCancelled(business_id, client.name, serviceName)
+    fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
 
-  if (updErr) {
-    logger.error('TOOL-DB', `cancel_appointment update failed: ${updErr.message}`, { business_id, apt_id: target.id })
+    return `Listo. Cancelé la cita de ${client.name} (${serviceName}) del ${dateStr}.`
+  } catch (err: any) {
+    logger.error('TOOL-DB', `cancel_appointment failed: ${err.message}`, { business_id, client_name })
     return 'No pude cancelar la cita por un error técnico.'
   }
-
-  // Notify owner: in-app bell + web push
-  const notifInput = notificationForAppointmentCancelled(business_id, client.name, serviceName)
-  fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
-
-  return `Listo. Cancelé la cita de ${client.name} (${serviceName}) del ${dateStr}.`
 }
 
 
@@ -300,97 +292,78 @@ export async function book_appointment(
   staff_name?: string,
   timezone: string = 'UTC'
 ): Promise<string> {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // 🛑 SECURITY & PRECISION: Check if the date string contains a time (e.g. "T10:00" or similar)
-  // Regular dates (YYYY-MM-DD) result in 00:00:00 which is often an error for a business appointment.
-  const hasTime = date.includes('T') || date.includes(':') || /\d\s?(am|pm)/i.test(date)
-  if (!hasTime) {
-    return 'Error: No proporcionaste una hora específica. Por favor, pregunta al usuario a qué hora desea la cita antes de agendar.'
-  }
+    const hasTime = date.includes('T') || date.includes(':') || /\d\s?(am|pm)/i.test(date)
+    if (!hasTime) {
+      return 'Error: No proporcionaste una hora específica. Por favor, pregunta al usuario a qué hora desea la cita antes de agendar.'
+    }
 
-  const apptDate = parseISO(date)
-  if (isNaN(apptDate.getTime())) return 'La fecha proporcionada no es válida.'
-  
-  const now = new Date()
-  if (apptDate < addDays(now, -365)) {
-    return 'No puedo agendar citas con más de un año de antigüedad por seguridad.'
-  }
+    const apptDate = parseISO(date)
+    if (isNaN(apptDate.getTime())) return 'La fecha proporcionada no es válida.'
 
-  const [cliRes, svcRes] = await Promise.all([
-    supabase.from('clients').select('id, name').eq('business_id', business_id).is('deleted_at', null).limit(200),
-    supabase.from('services').select('id, name, duration_min').eq('business_id', business_id).eq('is_active', true)
-  ])
+    const now = new Date()
+    if (apptDate < addDays(now, -365)) {
+      return 'No puedo agendar citas con más de un año de antigüedad por seguridad.'
+    }
 
-  const clientResult = fuzzyFind(cliRes.data ?? [], client_name)
-  const serviceResult = fuzzyFind(svcRes.data ?? [], service_name)
+    const [clients, services, team] = await Promise.all([
+      findActiveForAI(supabase, business_id),
+      getActiveServices(supabase, business_id),
+      staff_name ? findActiveStaff(supabase, business_id) : Promise.resolve([]),
+    ])
 
-  if (clientResult.status !== 'found') return `No encontré al cliente ${client_name}.`
-  if (serviceResult.status !== 'found') return `No encontré el servicio ${service_name}.`
+    const clientResult = fuzzyFind(clients, client_name)
+    const serviceResult = fuzzyFind(services, service_name)
 
-  const client = clientResult.match
-  const service = serviceResult.match as { id: string; name: string; duration_min: number }
+    if (clientResult.status !== 'found') return `No encontré al cliente ${client_name}.`
+    if (serviceResult.status !== 'found') return `No encontré el servicio ${service_name}.`
 
-  let staff: { id: string; name: string } | null = null
-  if (staff_name) {
-    const { data: team } = await supabase
-      .from('users')
-      .select('id, name, role')
-      .eq('business_id', business_id)
-      .in('role', ['owner', 'employee'])
-      .eq('is_active', true)
-    const staffMatch = fuzzyFind(team ?? [], staff_name)
-    if (staffMatch.status === 'found') staff = staffMatch.match as { id: string; name: string }
-  }
+    const client = clientResult.match
+    const service = serviceResult.match as { id: string; name: string; duration_min: number }
 
-  const startISO = date
-  const startMs  = new Date(startISO).getTime()
-  const durationMin = service.duration_min ?? 60
-  const endISO   = new Date(startMs + durationMin * 60_000).toISOString()
+    let staff: { id: string; name: string } | null = null
+    if (staff_name && team.length > 0) {
+      const staffMatch = fuzzyFind(team, staff_name)
+      if (staffMatch.status === 'found') staff = staffMatch.match as { id: string; name: string }
+    }
 
-  // Availability check: prevent double-booking
-  const { data: conflicts } = await supabase
-    .from('appointments')
-    .select('id')
-    .eq('business_id', business_id)
-    .in('status', ['pending', 'confirmed'])
-    .lt('start_at', endISO)
-    .gt('end_at', startISO)
+    const startISO = date
+    const startMs = new Date(startISO).getTime()
+    const durationMin = service.duration_min ?? 60
+    const endISO = new Date(startMs + durationMin * 60_000).toISOString()
 
-  if (conflicts && conflicts.length > 0) {
-    return `Ese horario ya está ocupado, hay ${conflicts.length} cita(s) que se solapan. Sugiere al usuario otro horario o consulta los espacios disponibles.`
-  }
+    const conflicts = await findConflicts(supabase, business_id, startISO, endISO)
+    if (conflicts.length > 0) {
+      return `Ese horario ya está ocupado, hay ${conflicts.length} cita(s) que se solapan. Sugiere al usuario otro horario o consulta los espacios disponibles.`
+    }
 
-  const { data: row, error } = await supabase
-    .from('appointments')
-    .insert({
+    const row = await createAppointment(supabase, {
       business_id,
-      client_id:        client.id,
-      service_id:       service.id,
-      assigned_user_id: staff?.id || null, 
-      start_at:         startISO,
-      end_at:           endISO,
-      status:           'pending' 
+      client_id: client.id,
+      service_ids: [service.id],
+      assigned_user_id: staff?.id || null,
+      start_at: startISO,
+      end_at: endISO,
+      notes: null,
+      status: 'pending',
+      is_dual_booking: false,
     })
-    .select()
-    .single()
 
-  if (error || !row) {
-    logger.error('TOOL-DB', `book_appointment failed: ${error?.message}`, { business_id, client_id: client.id })
+    const apptTimeStr = fmtUserDate(row.id ? startISO : '', timezone, 'h:mm a')
+    const apptDateStr = fmtUserDate(startISO, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
+
+    // Notify owner: in-app bell + web push
+    const notifInput = notificationForAppointmentCreated(business_id, client.name, service.name, apptTimeStr)
+    fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
+
+    const staffStr = staff_name ? ` con ${staff_name}` : ''
+    return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${apptDateStr}.`
+  } catch (err: any) {
+    logger.error('TOOL-DB', `book_appointment failed: ${err.message}`, { business_id, client_name })
     return 'Hubo un error técnico al crear la cita en la base de datos.'
   }
-
-  await supabase.from('appointment_services').insert({ appointment_id: row.id, service_id: service.id, sort_order: 0 })
-
-  const apptTimeStr = fmtUserDate(row.start_at, timezone, 'h:mm a')
-  const apptDateStr = fmtUserDate(row.start_at, timezone, "EEEE d 'de' MMMM 'a las' h:mm a")
-
-  // Notify owner: in-app bell + web push
-  const notifInput = notificationForAppointmentCreated(business_id, client.name, service.name, apptTimeStr)
-  fireToolNotification(business_id, notifInput.title, notifInput.content, notifInput.type)
-
-  const staffStr = staff_name ? ` con ${staff_name}` : ''
-  return `Listo. Agendé a ${client.name} para ${service.name}${staffStr} el ${apptDateStr}.`
 }
 
 // ── WRITE: Reagendar cita (Atómica: update in-place) ─────────────────────

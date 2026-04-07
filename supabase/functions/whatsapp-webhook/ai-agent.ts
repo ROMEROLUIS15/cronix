@@ -87,19 +87,33 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
   if (!apiKey) throw new Error('LLM_API_KEY no configurada')
 
-  // Groq Whisper requires a filename with extension — derive from mime_type
-  const ext      = mimeType.split('/')[1]?.split(';')[0]?.trim() ?? 'ogg'
+  // Normalize MIME: strip codec suffix (e.g. 'audio/ogg; codecs=opus' → 'audio/ogg').
+  // Groq Whisper rejects the codec suffix in the Content-Type header of the multipart part,
+  // causing silent 400/422 failures on WhatsApp voice notes from Android devices.
+  const cleanMimeType = mimeType.split(';')[0].trim()
+
+  // Map to Groq-supported file extensions (Groq uses the filename extension for format detection).
+  const MIME_TO_EXT: Readonly<Record<string, string>> = {
+    'audio/ogg':  'oga',   // OGG Opus (WhatsApp Android PTT)
+    'audio/mp4':  'm4a',   // WhatsApp iOS voice notes
+    'audio/mpeg': 'mp3',
+    'audio/wav':  'wav',
+    'audio/webm': 'webm',
+    'audio/aac':  'm4a',
+    'audio/amr':  'amr',
+  }
+  const ext      = MIME_TO_EXT[cleanMimeType] ?? (cleanMimeType.split('/')[1] ?? 'oga')
   const filename = `voice.${ext}`
 
   const form = new FormData()
-  form.append('file', new Blob([buffer], { type: mimeType }), filename)
+  form.append('file', new Blob([buffer], { type: cleanMimeType }), filename)
   form.append('model', WHISPER_MODEL)
   form.append('language', 'es')
   form.append('response_format', 'text')
 
   const res = await fetch(WHISPER_API_URL, {
     method:  'POST',
-    headers: { 
+    headers: {
       'Authorization': `Bearer ${apiKey}`,
       ...heliconeHeaders({ type: 'audio-transcription' })
     },

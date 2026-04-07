@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { logger } from '@/lib/logger'
 import { assistantRateLimiter } from '@/lib/api/rate-limit'
+import type { VoiceAssistantContext } from '@/lib/ai/types'
 
 // ── EDGE VALIDATION SCHEMA (ZOD) ──────────────────────────────────────────
 const assistantPayloadSchema = z.object({
@@ -113,16 +114,15 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
   const assistant = new AssistantService(sttEngine, llmEngine, ttsEngine)
 
   // 6. Execution (Business Layer)
-  const result = await assistant.processVoiceRequest(
-    audioFile || text!,
+  const context: VoiceAssistantContext = {
     businessId,
-    user.id,
+    userId: user.id,
     businessName,
-    timezone,
-    clientHistory,
-    userRole,
+    userTimezone: timezone,
+    userRole: userRole as VoiceAssistantContext['userRole'],
     userName
-  )
+  }
+  const result = await assistant.processVoiceRequest(audioFile || text!, context)
 
   // 7. Transparent Response
   return NextResponse.json(result)

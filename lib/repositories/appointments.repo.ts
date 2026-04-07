@@ -197,7 +197,7 @@ export async function createAppointment(
   }
 ): Promise<{ id: string }> {
   const { service_ids, ...rest } = data
-  
+
   const { data: row, error } = await supabase
     .from('appointments')
     .insert({
@@ -222,4 +222,119 @@ export async function createAppointment(
   }
 
   return row
+}
+
+/**
+ * Type for AI appointment rows (used by AI tools for cancel/reschedule).
+ */
+type AiApptRow = {
+  id: string
+  start_at: string
+  services: { name: string; duration_min: number } | null
+  service_id: string | null
+  assigned_user_id: string | null
+}
+
+/**
+ * Fetches active upcoming appointments for a client (for AI cancel/reschedule).
+ */
+export async function findUpcomingByClient(
+  supabase: Client,
+  businessId: string,
+  clientId: string
+): Promise<AiApptRow[]> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, start_at, service_id, assigned_user_id, services:service_id(name, duration_min)')
+    .eq('business_id', businessId)
+    .eq('client_id', clientId)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', new Date().toISOString())
+    .order('start_at', { ascending: true })
+
+  if (error) throw new Error(`findUpcomingByClient: ${error.message}`)
+  return (data ?? []) as unknown as AiApptRow[]
+}
+
+/**
+ * Fetches appointments by date range and optional statuses (for summaries/gaps).
+ */
+export async function findByDateRange(
+  supabase: Client,
+  businessId: string,
+  from: string,
+  to: string,
+  statuses?: string[]
+): Promise<{ id: string; start_at: string; end_at: string; status: string }[]> {
+  let query = supabase
+    .from('appointments')
+    .select('id, start_at, end_at, status')
+    .eq('business_id', businessId)
+    .gte('start_at', from)
+    .lte('start_at', to)
+    .order('start_at', { ascending: true })
+
+  if (statuses?.length) {
+    query = query.in('status', statuses as any)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw new Error(`findByDateRange: ${error.message}`)
+  return (data ?? []).map(row => ({
+    id: row.id,
+    start_at: row.start_at,
+    end_at: row.end_at,
+    status: (row.status ?? 'pending') as string
+  }))
+}
+
+/**
+ * Returns conflicting appointment IDs for a time slot (for booking/rescheduling).
+ */
+export async function findConflicts(
+  supabase: Client,
+  businessId: string,
+  startAt: string,
+  endAt: string,
+  excludeId?: string
+): Promise<{ id: string }[]> {
+  let query = supabase
+    .from('appointments')
+    .select('id')
+    .eq('business_id', businessId)
+    .in('status', ['pending', 'confirmed'])
+    .lt('start_at', endAt)
+    .gt('end_at', startAt)
+
+  if (excludeId) {
+    query = query.neq('id', excludeId)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw new Error(`findConflicts: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Updates an appointment's time slot (for AI reschedule).
+ */
+export async function rescheduleAppointment(
+  supabase: Client,
+  id: string,
+  startAt: string,
+  endAt: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('appointments')
+    .update({
+      start_at: startAt,
+      end_at: endAt,
+      status: 'pending',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+
+  if (error) throw new Error(`rescheduleAppointment: ${error.message}`)
 }

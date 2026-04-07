@@ -280,3 +280,25 @@ export async function deleteEmployee(
 
   if (error) throw new Error(`Error deleting employee: ${error.message}`)
 }
+
+/**
+ * Returns active staff (owner + employee) for AI booking assignment.
+ */
+export async function findActiveStaff(
+  supabase: Client,
+  businessId: string
+): Promise<{ id: string; name: string; role: string }[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, role')
+    .eq('business_id', businessId)
+    .in('role', ['owner', 'employee'])
+    .eq('is_active', true)
+
+  if (error) throw new Error(`findActiveStaff: ${error.message}`)
+  return (data ?? []).map(row => ({
+    id: row.id,
+    name: row.name,
+    role: (row.role ?? 'employee') as string
+  }))
+}

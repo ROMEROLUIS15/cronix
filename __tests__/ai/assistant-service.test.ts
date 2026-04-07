@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AssistantService } from '@/lib/ai/assistant-service'
 import type { ISttProvider, ILlmProvider, ITtsProvider, LlmMessage } from '@/lib/ai/providers/types'
+import type { VoiceAssistantContext } from '@/lib/ai/types'
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -93,6 +94,17 @@ const USER_ID     = 'user-456'
 const BIZ_NAME    = 'Salón Cronix'
 const TIMEZONE    = 'America/Bogota'
 
+function makeContext(): VoiceAssistantContext {
+  return {
+    businessId: BUSINESS_ID,
+    userId: USER_ID,
+    businessName: BIZ_NAME,
+    userTimezone: TIMEZONE,
+    userRole: 'employee',
+    userName: 'TestUser',
+  }
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('AssistantService — ReAct Loop', () => {
@@ -106,7 +118,7 @@ describe('AssistantService — ReAct Loop', () => {
     const llm = makeLlm([{ content: 'Abrimos de 9am a 7pm de lunes a sábado.' }])
     const service = new AssistantService(makeStt(), llm, makeTts())
 
-    const result = await service.processVoiceRequest('Hola, ¿a qué hora abren?', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+    const result = await service.processVoiceRequest('Hola, ¿a qué hora abren?', makeContext())
 
     expect(result.actionPerformed).toBe(false)
     expect(result.text).toBe('Abrimos de 9am a 7pm de lunes a sábado.')
@@ -144,7 +156,7 @@ describe('AssistantService — ReAct Loop', () => {
     ])
 
     const service = new AssistantService(makeStt(), llm, makeTts())
-    const result  = await service.processVoiceRequest('Quiero reservar una cita', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+    const result  = await service.processVoiceRequest('Quiero reservar una cita', makeContext())
 
     expect(result.actionPerformed).toBe(true)
     expect(result.text).toContain('10 de abril')
@@ -178,7 +190,7 @@ describe('AssistantService — ReAct Loop', () => {
     ])
 
     const service = new AssistantService(makeStt(), llm, makeTts())
-    const result  = await service.processVoiceRequest('Busca algo disponible', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+    const result  = await service.processVoiceRequest('Busca algo disponible', makeContext())
 
     expect(result.debug?.loopExhausted).toBe(true)
     expect(result.debug?.steps).toBe(3)
@@ -200,10 +212,10 @@ describe('AssistantService — ReAct Loop', () => {
     const service = new AssistantService(makeStt(), llm, makeTts())
 
     await expect(
-      service.processVoiceRequest('Dame información', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+      service.processVoiceRequest('Dame información', makeContext())
     ).resolves.not.toThrow()
 
-    const result = await service.processVoiceRequest('Dame información', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+    const result = await service.processVoiceRequest('Dame información', makeContext())
 
     expect(result.text).toMatch(/demanda|rate|minutos/i)
     expect(result.actionPerformed).toBe(false)
@@ -231,7 +243,7 @@ describe('AssistantService — ReAct Loop', () => {
     vi.useFakeTimers()
 
     const service = new AssistantService(makeStt(), llm, makeTts())
-    const promise = service.processVoiceRequest('Quiero agendar', BUSINESS_ID, USER_ID, BIZ_NAME, TIMEZONE)
+    const promise = service.processVoiceRequest('Quiero agendar', makeContext())
 
     // Advance past the 10s tool timeout while the promise is awaiting
     await vi.advanceTimersByTimeAsync(10_001)

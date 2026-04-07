@@ -68,3 +68,19 @@ export async function createBusiness(
   if (error) throw new Error(`Error creating business: ${error.message}`)
   return business
 }
+
+/**
+ * Returns just the business name (for AI notification context).
+ */
+export async function getBusinessName(
+  supabase: Client,
+  businessId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('businesses')
+    .select('name')
+    .eq('id', businessId)
+    .single()
+
+  return data?.name ?? null
+}
