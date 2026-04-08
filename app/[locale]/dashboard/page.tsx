@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import * as appointmentsRepo from "@/lib/repositories/appointments.repo";
 import * as servicesRepo from "@/lib/repositories/services.repo";
@@ -61,6 +62,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const { supabase, businessId, userName, loading: contextLoading } = useBusinessContext();
+  const t = useTranslations('dashboard');
   const [tab, setTab] = useState<"agenda" | "resumen">("agenda");
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -312,17 +314,17 @@ export default function DashboardPage() {
               className="text-2xl sm:text-3xl font-black mb-3 text-center"
               style={{ color: "#F2F2F2", letterSpacing: "-0.03em" }}
             >
-              ¡Bienvenido a Cronix!
+              {t('welcome.title')}
             </h2>
             <p
               className="mb-8 text-center text-sm sm:text-base"
               style={{ color: "#909098" }}
             >
-              Sencillez y elegancia para gestionar tu negocio.
+              {t('welcome.subtitle')}
             </p>
             <Link href="/dashboard/setup">
               <Button className="w-full py-4 sm:py-6 text-base sm:text-lg group btn-primary">
-                Configurar mi negocio
+                {t('welcome.button')}
                 <ArrowRight
                   size={20}
                   className="ml-2 group-hover:translate-x-1 transition-transform"
@@ -350,7 +352,7 @@ export default function DashboardPage() {
               className="text-xl sm:text-2xl font-black"
               style={{ color: "#F5F5F5", letterSpacing: "-0.03em" }}
             >
-              Buenos días, {userName} 👋
+              {t('greeting')}, {userName} 👋
             </h1>
             <p
               className="text-xs sm:text-sm capitalize mt-0.5"
@@ -376,7 +378,7 @@ export default function DashboardPage() {
                   : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.15)" }
               }
             >
-              <CalendarDays size={16} /><span>Agenda</span>
+              <CalendarDays size={16} /><span>{t('tabs.agenda')}</span>
             </button>
 
             {/* Cobros */}
@@ -385,7 +387,7 @@ export default function DashboardPage() {
                 className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                 style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.15)" }}
               >
-                <DollarSign size={16} /><span>Cobros</span>
+                <DollarSign size={16} /><span>{t('quickActions.registerPayment')}</span>
               </button>
             </Link>
 
@@ -397,7 +399,7 @@ export default function DashboardPage() {
                 style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
                 leftIcon={<User size={16} />}
               >
-                Nuevo Cliente
+                {t('quickActions.newClient')}
               </Button>
             </Link>
 
@@ -409,36 +411,36 @@ export default function DashboardPage() {
                 style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
                 leftIcon={<Plus size={16} />}
               >
-                Nueva Cita
+                {t('quickActions.newAppointment')}
               </Button>
             </Link>
           </div>
 
           {/* — sm+: Full Width Action Bar (Modern B2B Layout) — */}
           <div className="hidden sm:grid grid-cols-4 lg:grid-cols-5 gap-3 w-full mt-2">
-            {(["agenda", "resumen"] as const).map((t) => (
+            {(["agenda", "resumen"] as const).map((tb) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tb}
+                onClick={() => setTab(tb)}
                 className="w-full h-11 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                 style={
-                  tab === t
+                  tab === tb
                     ? { background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 0 15px rgba(0,98,255,0.4)" }
-                    : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }
+                    : { background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", opacity: 0.85 }
                 }
               >
-                {t === "agenda" ? <><CalendarDays size={18} /><span>Agenda</span></> : <><BarChart3 size={18} /><span>Métricas</span></>}
+                {tb === "agenda" ? <><CalendarDays size={18} /><span>{t('tabs.agenda')}</span></> : <><BarChart3 size={18} /><span>{t('tabs.metrics')}</span></>}
               </button>
             ))}
             
             <Link href="/dashboard/clients/new" className="w-full">
               <Button
-                variant="secondary"
-                className="w-full h-11 text-sm rounded-xl font-semibold transition-all hover:bg-blue-900/20"
-                style={{ background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.2)" }}
+                variant="primary"
+                className="w-full h-11 text-sm rounded-xl font-bold transition-all"
+                style={{ background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 0 15px rgba(0,98,255,0.4)" }}
                 leftIcon={<User size={18} />}
               >
-                Nuevo Cliente
+                {t('quickActions.newClient')}
               </Button>
             </Link>
 
@@ -449,7 +451,7 @@ export default function DashboardPage() {
                 style={{ background: "rgba(48,209,88,0.05)", color: "#30D158", border: "1px solid rgba(48,209,88,0.2)" }}
                 leftIcon={<DollarSign size={18} />}
               >
-                Registrar Cobro
+                {t('quickActions.registerPayment')}
               </Button>
             </Link>
 
@@ -460,7 +462,7 @@ export default function DashboardPage() {
                 style={{ background: "#F5F5F5", color: "#000", border: "none" }}
                 leftIcon={<Plus size={18} />}
               >
-                Nueva Cita
+                {t('quickActions.newAppointment')}
               </Button>
             </Link>
           </div>
@@ -533,10 +535,10 @@ export default function DashboardPage() {
               }}
             >
               {[
-                { color: "#FFD60A", label: "Pendiente" },
-                { color: "#3884FF", label: "Confirmada" },
-                { color: "#30D158", label: "Completada" },
-                { color: "#FF3B30", label: "Cancelada" },
+                { color: "#FFD60A", label: t('status.pending') },
+                { color: "#3884FF", label: t('status.confirmed') },
+                { color: "#30D158", label: t('status.completed') },
+                { color: "#FF3B30", label: t('status.cancelled') },
               ].map((l) => (
                 <div key={l.label} className="flex items-center gap-1.5">
                   <span
@@ -720,7 +722,7 @@ export default function DashboardPage() {
                 {
                   value: monthApts.filter((a) => a.status !== "cancelled")
                     .length,
-                  label: "Citas activas",
+                  label: t('stats.activeAppointments'),
                   color: "#F0F0F5",
                   glow: "rgba(255,255,255,0.05)",
                   border: "#2A2A38",
@@ -728,7 +730,7 @@ export default function DashboardPage() {
                 },
                 {
                   value: monthApts.filter((a) => a.status === "pending").length,
-                  label: "Pendientes",
+                  label: t('stats.pending'),
                   color: "#FFD60A",
                   glow: "rgba(255,214,10,0.08)",
                   border: "rgba(255,214,10,0.2)",
@@ -737,7 +739,7 @@ export default function DashboardPage() {
                 {
                   value: monthApts.filter((a) => a.status === "completed")
                     .length,
-                  label: "Completadas",
+                  label: t('stats.completed'),
                   color: "#30D158",
                   glow: "rgba(48,209,88,0.08)",
                   border: "rgba(48,209,88,0.2)",
@@ -746,15 +748,15 @@ export default function DashboardPage() {
                 {
                   value: monthApts.filter((a) => a.status === "confirmed")
                     .length,
-                  label: "Confirmadas",
+                  label: t('stats.confirmed'),
                   color: "#3884FF",
                   glow: "rgba(56,132,255,0.08)",
                   border: "rgba(56,132,255,0.2)",
                   icon: "🔵",
                 },
-              ].map((s) => (
+              ].map((s, i) => (
                 <div
-                  key={s.label}
+                  key={i}
                   className="flex flex-col items-center justify-center py-4 px-3 rounded-2xl"
                   style={{
                     background: `linear-gradient(135deg, #1A1A22 0%, #16161E 100%)`,
@@ -789,26 +791,26 @@ export default function DashboardPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard
-                title="Citas hoy"
+                title={t('stats.appointmentsToday')}
                 value={stats.todayCount}
-                subtitle={`${stats.pending} pendientes`}
+                subtitle={`${stats.pending} ${t('stats.pending').toLowerCase()}`}
                 icon={<CalendarDays size={22} />}
                 accent
               />
               <StatCard
-                title="Clientes totales"
+                title={t('stats.totalClients')}
                 value={stats.totalClients}
                 icon={<Users size={22} />}
               />
               <StatCard
-                title="Ingresos del mes"
+                title={t('stats.monthRevenue')}
                 value={formatCurrency(stats.monthRevenue)}
                 icon={<DollarSign size={22} />}
               />
               <StatCard
-                title="Por confirmar"
+                title={t('stats.pendingConfirmation')}
                 value={stats.pending}
-                subtitle="citas pendientes"
+                subtitle={`${t('stats.pending')} ${t('tabs.agenda').toLowerCase()}`}
                 icon={<TrendingUp size={22} />}
               />
             </div>
@@ -900,7 +902,7 @@ export default function DashboardPage() {
                   className="text-xs font-bold uppercase tracking-widest"
                   style={{ color: "#0062FF" }}
                 >
-                  Citas del día
+                  {t('panels.dayAppointments')}
                 </p>
                 <p
                   className="text-lg font-black mt-0.5 capitalize"
@@ -953,19 +955,19 @@ export default function DashboardPage() {
                     className="text-sm font-bold mb-1"
                     style={{ color: "#F5F5F5" }}
                   >
-                    Sin citas
+                    {t('panels.noAppointments')}
                   </p>
                   <p
                     className="text-xs text-center mb-4"
                     style={{ color: "#8A8A90" }}
                   >
-                    No hay citas agendadas para este día
+                    {t('panels.noAppointmentsDesc')}
                   </p>
                   <Link
                     href={`/dashboard/appointments/new?date=${format(selectedDate, 'yyyy-MM-dd')}`}
                     className="btn-primary text-xs px-4 py-2 rounded-xl flex items-center gap-2"
                   >
-                    <Plus size={14} /> Agendar cita
+                    <Plus size={14} /> {t('panels.scheduleAppointment')}
                   </Link>
                 </div>
               ) : (
@@ -992,14 +994,14 @@ export default function DashboardPage() {
                               className="text-sm font-bold"
                               style={{ color: "#F5F5F5" }}
                             >
-                              ¿Cancelar esta cita?
+                              {t('panels.cancelQuestion')}
                             </p>
                           </div>
                           <p
                             className="text-xs mb-4"
                             style={{ color: "#8A8A90" }}
                           >
-                            Esta acción marcará la cita como cancelada.
+                            {t('panels.cancelDesc')}
                           </p>
                           <div className="flex gap-2">
                             <button
@@ -1011,7 +1013,7 @@ export default function DashboardPage() {
                                 border: "1px solid #262629",
                               }}
                             >
-                              No, volver
+                              {t('panels.cancelNo')}
                             </button>
                             <button
                               onClick={() => deleteAppointment(apt.id)}
@@ -1027,7 +1029,7 @@ export default function DashboardPage() {
                                 <Loader2 size={12} className="animate-spin" />
                               ) : (
                                 <>
-                                  <Trash2 size={12} /> Cancelar cita
+                                  <Trash2 size={12} /> {t('panels.cancelYes')}
                                 </>
                               )}
                             </button>
@@ -1062,14 +1064,14 @@ export default function DashboardPage() {
                                 }}
                               >
                                 {apt.status === "pending"
-                                  ? "Pendiente"
+                                  ? `● ${t('status.pending')}`
                                   : apt.status === "confirmed"
-                                    ? "Confirmada"
+                                    ? `● ${t('status.confirmed')}`
                                     : apt.status === "completed"
-                                      ? "Completada"
+                                      ? `● ${t('status.completed')}`
                                       : apt.status === "cancelled"
-                                        ? "Cancelada"
-                                        : "No show"}
+                                        ? `● ${t('status.cancelled')}`
+                                        : `● ${t('status.noShow')}`}
                               </span>
                             </div>
                             <div className="flex items-center gap-3">
@@ -1103,7 +1105,7 @@ export default function DashboardPage() {
                                 border: "1px solid rgba(0,98,255,0.15)",
                               }}
                             >
-                              <Pencil size={11} /> Editar
+                              <Pencil size={11} /> {t('panels.edit')}
                             </Link>
                             {apt.status !== "completed" &&
                               apt.status !== "cancelled" && (
@@ -1125,7 +1127,7 @@ export default function DashboardPage() {
                                     border: "1px solid rgba(48,209,88,0.15)",
                                   }}
                                 >
-                                  <Check size={11} /> Confirmar
+                                  <Check size={11} /> {t('panels.confirm')}
                                 </button>
                               )}
                             {apt.status !== "cancelled" && (
@@ -1184,7 +1186,7 @@ export default function DashboardPage() {
                   className="text-xs font-bold uppercase tracking-widest"
                   style={{ color: "#8A8A90" }}
                 >
-                  Detalle de cita
+                  {t('panels.detailTitle')}
                 </p>
                 <p
                   className="text-base font-black mt-0.5"
@@ -1214,14 +1216,14 @@ export default function DashboardPage() {
                   }}
                 >
                   {selectedApt.status === "pending"
-                    ? "● Pendiente"
+                    ? `● ${t('status.pending')}`
                     : selectedApt.status === "confirmed"
-                      ? "● Confirmada"
+                      ? `● ${t('status.confirmed')}`
                       : selectedApt.status === "completed"
-                        ? "● Completada"
+                        ? `● ${t('status.completed')}`
                         : selectedApt.status === "cancelled"
-                          ? "● Cancelada"
-                          : "● No show"}
+                          ? `● ${t('status.cancelled')}`
+                          : `● ${t('status.noShow')}`}
                 </span>
                 <span
                   className="text-base font-black"
@@ -1235,27 +1237,27 @@ export default function DashboardPage() {
               <div className="space-y-0">
                 {[
                   {
-                    label: "Servicio",
+                    label: t('panels.service'),
                     value: selectedApt.service?.name,
                     icon: <User size={13} />,
                   },
                   {
-                    label: "Hora",
+                    label: t('panels.time'),
                     value: `${formatTime(selectedApt.start_at)} – ${formatTime(selectedApt.end_at)}`,
                     icon: <Clock size={13} />,
                   },
                   {
-                    label: "Duración",
+                    label: t('panels.duration'),
                     value: `${selectedApt.service?.duration_min} min`,
                     icon: <Clock size={13} />,
                   },
                   {
-                    label: "Empleado",
-                    value: selectedApt.assigned_user?.name ?? "Sin asignar",
+                    label: t('panels.staff'),
+                    value: selectedApt.assigned_user?.name ?? t('panels.unassigned'),
                     icon: <User size={13} />,
                   },
                   {
-                    label: "Teléfono",
+                    label: t('panels.phone'),
                     value: selectedApt.client?.phone ?? "—",
                     icon: <Phone size={13} />,
                   },
@@ -1290,7 +1292,7 @@ export default function DashboardPage() {
                     className="text-xs font-bold mb-1"
                     style={{ color: "#8A8A90" }}
                   >
-                    Notas
+                    {t('panels.notes')}
                   </p>
                   <p className="text-sm" style={{ color: "#F5F5F5" }}>
                     {selectedApt.notes}
@@ -1306,7 +1308,7 @@ export default function DashboardPage() {
                       className="text-[10px] font-bold uppercase tracking-widest"
                       style={{ color: "#8A8A90" }}
                     >
-                      Cambiar estado
+                      {t('panels.changeStatus')}
                     </p>
                     <div className="space-y-2">
                       {actionError && (
@@ -1325,7 +1327,7 @@ export default function DashboardPage() {
                             border: "1px solid rgba(0,98,255,0.2)",
                           }}
                         >
-                          <Check size={15} /> Confirmar cita
+                          <Check size={15} /> {t('panels.confirmApt')}
                         </button>
                       )}
                       <button
@@ -1338,7 +1340,7 @@ export default function DashboardPage() {
                           border: "1px solid rgba(48,209,88,0.2)",
                         }}
                       >
-                        <Check size={15} /> Marcar completada
+                        <Check size={15} /> {t('panels.markCompleted')}
                       </button>
                       <button
                         onClick={() => updateStatus("cancelled")}
@@ -1350,7 +1352,7 @@ export default function DashboardPage() {
                           border: "1px solid rgba(255,59,48,0.2)",
                         }}
                       >
-                        <Ban size={15} /> Cancelar cita
+                        <Ban size={15} /> {t('panels.cancelApt')}
                       </button>
                     </div>
                   </div>
@@ -1366,14 +1368,14 @@ export default function DashboardPage() {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-colors"
                 style={{ background: "#0062FF", color: "#fff" }}
               >
-                <Pencil size={15} /> Editar cita completa
+                <Pencil size={15} /> {t('panels.editFullApt')}
               </Link>
               <button
                 onClick={closeAptPanel}
                 className="w-full py-2 text-xs font-bold transition-colors rounded-xl"
                 style={{ color: "#8A8A90" }}
               >
-                ← Volver al día
+                {t('panels.backToDay')}
               </button>
             </div>
           </>

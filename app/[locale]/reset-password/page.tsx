@@ -8,8 +8,11 @@ import { resetPasswordSchema } from '@/lib/validations/auth'
 import { PasswordInput } from '@/components/ui/password-input'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { Link } from '@/i18n/navigation'
 
 export default function ResetPasswordPage() {
+  const t = useTranslations('auth.resetPassword')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [isVerifying, setIsVerifying] = useState(true)
@@ -114,10 +117,10 @@ export default function ResetPasswordPage() {
         </div>
 
         <h1 className="text-2xl font-black text-center mb-2 text-white relative z-10" style={{ letterSpacing: "-0.035em" }}>
-          Nueva contraseña
+          {t('title')}
         </h1>
         <p className="text-center mb-8 text-sm relative z-10" style={{ color: "#6A6A7A" }}>
-          Crea una contraseña segura para tu cuenta
+          {t('desc')}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
@@ -147,7 +150,7 @@ export default function ResetPasswordPage() {
                 marginBottom: "8px",
               }}
             >
-              Nueva contraseña
+              {t('password')}
             </label>
             <PasswordInput name="password" placeholder="••••••••" required />
           </div>
@@ -164,7 +167,7 @@ export default function ResetPasswordPage() {
                 marginBottom: "8px",
               }}
             >
-              Confirmar nueva contraseña
+              {t('confirmPassword')}
             </label>
             <PasswordInput name="confirmPassword" placeholder="••••••••" required />
           </div>
@@ -182,7 +185,7 @@ export default function ResetPasswordPage() {
               border: "none",
             }}
           >
-            {isPending ? 'Actualizando...' : 'Actualizar contraseña'}
+            {isPending ? t('submitting') : t('submit')}
           </button>
         </form>
       </div>

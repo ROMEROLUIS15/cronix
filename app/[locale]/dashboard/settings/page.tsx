@@ -23,16 +23,10 @@ import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from "@/c
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
+import { useTranslations } from "next-intl";
 
-const DAYS = [
-  { key: "mon", label: "Lunes" },
-  { key: "tue", label: "Martes" },
-  { key: "wed", label: "Miércoles" },
-  { key: "thu", label: "Jueves" },
-  { key: "fri", label: "Viernes" },
-  { key: "sat", label: "Sábado" },
-  { key: "sun", label: "Domingo" },
-];
+const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+type DayKey = typeof DAYS[number];
 
 interface DayHours {
   open: string;
@@ -43,7 +37,7 @@ const DEFAULT_DAY: DayHours = { open: "09:00", close: "18:00", active: false };
 
 function buildDefaultHours(): Record<string, DayHours> {
   const result: Record<string, DayHours> = {};
-  for (const { key } of DAYS) result[key] = { ...DEFAULT_DAY };
+  for (const key of DAYS) result[key] = { ...DEFAULT_DAY };
   return result;
 }
 
@@ -54,6 +48,7 @@ function getHour(hours: Record<string, DayHours>, key: string): DayHours {
 export default function SettingsPage() {
   // useBusinessContext is cached in React Query — no extra auth queries on navigation
   const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
+  const t = useTranslations("settings");
   const [biz, setBiz] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -103,7 +98,7 @@ export default function SettingsPage() {
       .update({ slug: newSlug })
       .eq('id', bizId);
     if (!error) setBiz(prev => prev ? { ...prev, slug: newSlug } : prev);
-    else showMsg('error', 'Error al generar el enlace');
+    else showMsg('error', t('generateWaError'));
     setGeneratingSlug(false);
   };
 
@@ -131,7 +126,7 @@ export default function SettingsPage() {
         });
         const wh = (business.settings as unknown as BusinessSettingsJson)?.workingHours ?? {};
         const loaded = buildDefaultHours();
-        for (const { key } of DAYS) {
+        for (const key of DAYS) {
           const val = wh[key];
           if (Array.isArray(val) && val.length === 2) {
             loaded[key] = {
@@ -183,8 +178,8 @@ export default function SettingsPage() {
       .eq("id", bizId);
     setSaving(false);
     error
-      ? showMsg("error", "Error al guardar: " + error.message)
-      : showMsg("success", "Perfil del negocio guardado correctamente");
+      ? showMsg("error", t('saveError') + error.message)
+      : showMsg("success", t('saveSuccess'));
   };
 
   const handleSaveHours = async () => {
@@ -202,8 +197,8 @@ export default function SettingsPage() {
       .eq("id", bizId);
     setSavingHours(false);
     error
-      ? showMsg("error", "Error al guardar horario: " + error.message)
-      : showMsg("success", "Horario guardado correctamente");
+      ? showMsg("error", t('saveHoursError') + error.message)
+      : showMsg("success", t('saveHoursSuccess'));
   };
 
   const updateHour = (
@@ -233,8 +228,8 @@ export default function SettingsPage() {
       } : prev);
     }
     error
-      ? showMsg("error", "Error al guardar notificaciones: " + error.message)
-      : showMsg("success", "Preferencias de recordatorio guardadas");
+      ? showMsg("error", t('saveNotifError') + error.message)
+      : showMsg("success", t('saveNotifSuccess'));
   };
 
   const handleSaveLuisFab = async (newVal: boolean) => {
@@ -257,9 +252,9 @@ export default function SettingsPage() {
       
       // Real-time UI sync without refresh
       window.dispatchEvent(new CustomEvent('cronix:toggle-fab', { detail: newVal }));
-      showMsg("success", newVal ? "Asistente activado en pantalla" : "Asistente ocultado");
+      showMsg("success", newVal ? t('saveLuisFabActive') : t('saveLuisFabInactive'));
     } else {
-      showMsg("error", "Error al cambiar visibilidad");
+      showMsg("error", t('saveLuisFabError'));
       setShowLuisFab(!newVal); // revert
     }
   };
@@ -277,7 +272,7 @@ export default function SettingsPage() {
       });
       return next;
     });
-    showMsg("success", "Horarios copiados a los días abiertos");
+    showMsg("success", t('copyHoursSuccess'));
   };
 
 
@@ -292,10 +287,10 @@ export default function SettingsPage() {
     <div className="space-y-6 animate-fade-in max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "#F2F2F2" }}>
-          Ajustes
+          {t('title')}
         </h1>
         <p className="text-sm" style={{ color: "#909098" }}>
-          Configura tu negocio y preferencias
+          {t('subtitle')}
         </p>
       </div>
 
@@ -339,10 +334,10 @@ export default function SettingsPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Perfil del Negocio
+              {t('bizProfile')}
             </h2>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Información pública de tu negocio
+              {t('bizProfileSub')}
             </p>
           </div>
         </div>
@@ -352,13 +347,13 @@ export default function SettingsPage() {
               className="block text-sm font-medium mb-1.5"
               style={{ color: "#F2F2F2" }}
             >
-              Nombre del negocio
+              {t('bizName')}
             </label>
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="input-base"
-              placeholder="Nombre de tu negocio"
+              placeholder={t('bizNamePlace')}
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -367,7 +362,7 @@ export default function SettingsPage() {
                 className="block text-sm font-medium mb-1.5"
                 style={{ color: "#F2F2F2" }}
               >
-                Categoría o rubro
+                {t('category')}
               </label>
               <select
                 value={form.category}
@@ -375,7 +370,7 @@ export default function SettingsPage() {
                 className="input-base"
                 style={{ backgroundColor: "#212125" }}
               >
-                <option value="">Selecciona una categoría</option>
+                <option value="">{t('categoryPlace')}</option>
                 {BUSINESS_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
@@ -388,7 +383,7 @@ export default function SettingsPage() {
                 className="block text-sm font-medium mb-1.5"
                 style={{ color: "#F2F2F2" }}
               >
-                Teléfono
+                {t('phone')}
               </label>
               <PhoneInputFlags
                 country={selectedCountry}
@@ -403,13 +398,13 @@ export default function SettingsPage() {
               className="block text-sm font-medium mb-1.5"
               style={{ color: "#F2F2F2" }}
             >
-              Dirección
+              {t('address')}
             </label>
             <input
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               className="input-base"
-              placeholder="Calle, ciudad..."
+              placeholder={t('addressPlace')}
             />
           </div>
           <div className="flex justify-end">
@@ -418,7 +413,7 @@ export default function SettingsPage() {
               loading={saving}
               leftIcon={<Save size={16} />}
             >
-              Guardar cambios
+              {t('saveChanges')}
             </Button>
           </div>
         </div>
@@ -438,10 +433,10 @@ export default function SettingsPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Link de WhatsApp
+              {t('waLinkTitle')}
             </h2>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Comparte este enlace para que tus clientes agenden por WhatsApp
+              {t('waLinkSub')}
             </p>
           </div>
         </div>
@@ -472,31 +467,31 @@ export default function SettingsPage() {
                 {copiedLink ? (
                   <>
                     <CheckCircle2 size={14} style={{ color: "#30D158" }} />
-                    <span style={{ color: "#30D158" }}>Copiado</span>
+                    <span style={{ color: "#30D158" }}>{t('copied')}</span>
                   </>
                 ) : (
                   <>
                     <Copy size={14} />
-                    Copiar
+                    {t('copy')}
                   </>
                 )}
               </Button>
             </div>
             <p className="text-xs mt-3" style={{ color: "#909098" }}>
-              Cuando un cliente abre este enlace, WhatsApp se abre con tu negocio pre-seleccionado. Ideal para Instagram, tarjetas de presentación o tu página web.
+              {t('waDescGenerated')}
             </p>
           </>
         ) : (
           <div className="text-center py-4 space-y-3">
             <p className="text-sm" style={{ color: "#909098" }}>
-              Tu negocio aún no tiene un enlace de WhatsApp generado.
+              {t('waDescNoGenerated')}
             </p>
             <Button
               onClick={handleGenerateSlug}
               loading={generatingSlug}
               leftIcon={<MessageCircle size={16} />}
             >
-              Generar enlace de WhatsApp
+              {t('generateWaLink')}
             </Button>
           </div>
         )}
@@ -517,10 +512,10 @@ export default function SettingsPage() {
                 className="text-base font-semibold"
                 style={{ color: "#F2F2F2" }}
               >
-                Horario de Atención
+                {t('hoursTitle')}
               </h2>
               <p className="text-xs" style={{ color: "#909098" }}>
-                Define los horarios de cada día
+                {t('hoursSub')}
               </p>
             </div>
           </div>
@@ -530,19 +525,19 @@ export default function SettingsPage() {
               variant="ghost"
               size="sm"
               onClick={() => {
-                const firstActive = DAYS.find(d => hours[d.key]?.active);
-                if (firstActive) copyHoursToAll(firstActive.key);
+                const firstActive = DAYS.find(d => hours[d]?.active);
+                if (firstActive) copyHoursToAll(firstActive);
               }}
               className="text-xs h-8 gap-1.5"
             >
               <Copy size={13} />
-              Copiar a todos
+              {t('copyToAll')}
             </Button>
           )}
         </div>
 
         <div className="space-y-3">
-          {DAYS.map(({ key, label }) => {
+          {DAYS.map((key) => {
             const h: DayHours = getHour(hours, key);
             return (
               <div
@@ -557,7 +552,7 @@ export default function SettingsPage() {
                       <span
                         className={`text-sm font-bold ${h.active ? 'text-white' : 'text-[#8A8A90]'}`}
                       >
-                        {label}
+                        {t(`days.${key}`)}
                       </span>
                     </div>
                     
@@ -579,7 +574,7 @@ export default function SettingsPage() {
                         />
                       </div>
                       <span className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${h.active ? 'text-brand-400' : 'text-[#606068]'}`}>
-                        {h.active ? "Abierto" : "Cerrado"}
+                        {h.active ? t('open') : t('close')}
                       </span>
                     </label>
                   </div>
@@ -588,7 +583,7 @@ export default function SettingsPage() {
                   {h.active && (
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-fade-in flex-1 sm:max-w-[340px] w-full items-end">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">Desde</p>
+                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">{t('from')}</p>
                         <input
                           type="time"
                           value={h.open}
@@ -597,7 +592,7 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">Hasta</p>
+                        <p className="text-[10px] font-bold text-[#6A6A72] uppercase tracking-widest mb-1.5 ml-1">{t('to')}</p>
                         <input
                           type="time"
                           value={h.close}
@@ -619,7 +614,7 @@ export default function SettingsPage() {
               leftIcon={<Save size={16} />}
               className="w-full sm:w-auto"
             >
-              Guardar todos los horarios
+              {t('saveHoursBtn')}
             </Button>
           </div>
         </div>
@@ -639,10 +634,10 @@ export default function SettingsPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Notificaciones del Administrador
+              {t('adminNotifTitle')}
             </h2>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Alertas de reservas automáticas exclusivas para el dueño
+              {t('adminNotifSub')}
             </p>
           </div>
         </div>
@@ -654,10 +649,10 @@ export default function SettingsPage() {
           >
             <div>
               <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
-                WhatsApp del Negocio
+                {t('waBiz')}
               </p>
               <p className="text-xs mt-1" style={{ color: "#909098" }}>
-                Recibe notificaciones instantáneas en tu celular cada vez que la IA agende una nueva cita.
+                {t('waBizSub')}
               </p>
             </div>
             
@@ -670,7 +665,7 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20 self-start sm:self-center">
                     <CheckCircle2 size={16} className="text-[#22C55E]" />
                     <span className="text-sm font-medium text-[#22C55E]">
-                      Verificado: {biz.phone}
+                      {t('verified')}{biz.phone}
                     </span>
                   </div>
                 );
@@ -685,7 +680,7 @@ export default function SettingsPage() {
                 >
                   <Smartphone size={16} className="text-white" />
                   <span className="text-sm font-semibold text-white">
-                    Vincular mi WhatsApp
+                    {t('linkWa')}
                   </span>
                 </a>
               );
@@ -708,10 +703,10 @@ export default function SettingsPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Asistente Inteligente
+              {t('aiAssistantTitle')}
             </h2>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Preferencias de IA y automatización
+              {t('aiAssistantSub')}
             </p>
           </div>
         </div>
@@ -722,10 +717,10 @@ export default function SettingsPage() {
           >
             <div>
               <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
-                Botón flotante de Luis IA
+                {t('fabTitle')}
               </p>
               <p className="text-xs" style={{ color: "#909098" }}>
-                Muestra u oculta el botón walkie-talkie en todas tus pantallas
+                {t('fabSub')}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -763,17 +758,17 @@ export default function SettingsPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Recordatorios
+              {t('remindersTitle')}
             </h2>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Canales y ventanas de tiempo
+              {t('remindersSub')}
             </p>
           </div>
         </div>
         <div className="space-y-4">
           {(
             [
-              { key: "whatsapp", label: "WhatsApp", desc: "Recordatorios automáticos a clientes por WhatsApp" },
+              { key: "whatsapp", label: t('waChannel'), desc: t('waChannelSub') },
             ] as const
           ).map(({ key, label, desc }) => (
             <div
@@ -814,20 +809,20 @@ export default function SettingsPage() {
             >
               <div>
                 <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
-                  Notificaciones Push
+                  {t('pushNotif.title')}
                 </p>
                 <p className="text-xs" style={{ color: "#909098" }}>
                   {notif.state === 'denied'
-                    ? 'Bloqueadas — actívalas en la configuración de tu navegador'
+                    ? t('pushNotif.denied')
                     : notif.state === 'missing_config'
-                    ? 'Error: clave VAPID no configurada en el servidor'
+                    ? t('pushNotif.missingConfig')
                     : notif.state === 'sw_unavailable'
-                    ? 'Requiere build de producción — prueba con next build && next start'
+                    ? t('pushNotif.unavailable')
                     : notif.loading
-                    ? 'Procesando…'
+                    ? t('pushNotif.loading')
                     : notif.subscribed
-                    ? 'Activo en este dispositivo'
-                    : 'Recibe alertas de citas en este dispositivo'}
+                    ? t('pushNotif.active')
+                    : t('pushNotif.receiveAlerts')}
                 </p>
               </div>
               {notif.loading ? (
@@ -842,7 +837,7 @@ export default function SettingsPage() {
                     notif.state === 'sw_unavailable'
                   }
                   className="relative flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label={notif.subscribed ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+                  aria-label={notif.subscribed ? t('pushNotif.btnDisable') : t('pushNotif.btnEnable')}
                 >
                   <div
                     className="w-10 h-5 rounded-full transition-colors"
@@ -864,7 +859,7 @@ export default function SettingsPage() {
               leftIcon={<Save size={16} />}
               className="w-full sm:w-auto"
             >
-              Guardar recordatorios
+              {t('saveReminders')}
             </Button>
           </div>
         </div>
@@ -874,14 +869,14 @@ export default function SettingsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold" style={{ color: "#F2F2F2" }}>
-              Plan actual: {biz?.plan ?? "free"}
+              {t('plan.current', { plan: biz?.plan ?? "free" })}
             </p>
             <p className="text-xs" style={{ color: "#909098" }}>
-              Acceso completo a todas las funcionalidades
+              {t('plan.fullAccess')}
             </p>
           </div>
           <Button variant="secondary" className="w-full sm:w-auto flex-shrink-0">
-            Gestionar plan
+            {t('plan.managePlan')}
           </Button>
         </div>
       </Card>

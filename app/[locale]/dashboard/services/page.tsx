@@ -17,9 +17,16 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
-import * as servicesRepo from "@/lib/repositories/services.repo";
 import type { Service } from "@/types";
 import { logger } from "@/lib/logger";
+import { useTranslations } from "next-intl";
+import { servicesRepo } from "@/lib/repositories";
+import { 
+  SERVICE_COLORS, 
+  SERVICE_CATEGORIES, 
+  DEFAULT_SERVICE_COLOR,
+  DEFAULT_DURATION 
+} from "@/lib/services/constants";
 
 interface ServiceForm {
   name: string;
@@ -31,33 +38,12 @@ interface ServiceForm {
   is_active: boolean;
 }
 
-const COLORS = [
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#3b82f6",
-  "#ef4444",
-  "#14b8a6",
-];
-const CATEGORIES = [
-  "Corte",
-  "Color",
-  "Tratamiento",
-  "Estética",
-  "Salud",
-  "Consulta",
-  "Entrenamiento",
-  "Otro",
-];
-
 const emptyForm = (): ServiceForm => ({
   name: "",
   description: "",
-  duration_min: 30,
+  duration_min: DEFAULT_DURATION,
   priceStr: "", // vacío — el usuario escribe el precio desde cero
-  color: "#6366f1",
+  color: DEFAULT_SERVICE_COLOR,
   category: "",
   is_active: true,
 });
@@ -69,13 +55,14 @@ export default function ServicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ServiceForm>(emptyForm());
-  const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCustom, setIsCustom] = useState(false);
+  const t = useTranslations("services");
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadServices = useCallback(async (bId: string) => {
     try {
@@ -190,14 +177,14 @@ export default function ServicesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "#F2F2F2" }}>
-            Servicios
+            {t('title')}
           </h1>
           <p className="text-sm" style={{ color: "#909098" }}>
-            {services.length} servicios configurados
+            {t('count' as any, { count: services.length })}
           </p>
         </div>
         <Button onClick={openNew} leftIcon={<Plus size={16} />}>
-          Nuevo servicio
+          {t('newService')}
         </Button>
       </div>
 
@@ -235,7 +222,7 @@ export default function ServicesPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              {editingId ? "Editar servicio" : "Nuevo servicio"}
+              {editingId ? t('editService') : t('newService')}
             </h2>
             <button
               onClick={() => setShowForm(false)}
@@ -253,7 +240,7 @@ export default function ServicesPage() {
                   className="block text-sm font-medium mb-1.5"
                   style={{ color: "#F2F2F2" }}
                 >
-                  Nombre *
+                  {t('form.name')} *
                 </label>
                 <input
                   value={form.name}
@@ -261,7 +248,7 @@ export default function ServicesPage() {
                     setForm((f) => ({ ...f, name: e.target.value }))
                   }
                   className="input-base"
-                  placeholder="Ej. Corte de cabello"
+                  placeholder={t('form.namePlaceholder')}
                 />
               </div>
               <div>
@@ -269,7 +256,7 @@ export default function ServicesPage() {
                   className="block text-sm font-medium mb-1.5"
                   style={{ color: "#F2F2F2" }}
                 >
-                  Categoría
+                  {t('form.category')}
                 </label>
                 <select
                   value={form.category}
@@ -279,10 +266,10 @@ export default function ServicesPage() {
                   className="input-base"
                   style={{ backgroundColor: "#212125" }}
                 >
-                  <option value="">Sin categoría</option>
-                  {CATEGORIES.map((c) => (
+                  <option value="">{t('form.noCategory')}</option>
+                  {SERVICE_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {t(`categories.${c}` as any)}
                     </option>
                   ))}
                 </select>
@@ -294,7 +281,7 @@ export default function ServicesPage() {
                 className="block text-sm font-medium mb-1.5"
                 style={{ color: "#F2F2F2" }}
               >
-                Descripción
+                {t('form.description')}
               </label>
               <textarea
                 value={form.description}
@@ -303,7 +290,7 @@ export default function ServicesPage() {
                 }
                 className="input-base resize-none"
                 rows={2}
-                placeholder="Descripción opcional del servicio"
+                placeholder={t('form.descriptionPlaceholder')}
               />
             </div>
 
@@ -313,7 +300,7 @@ export default function ServicesPage() {
                   className="block text-sm font-medium mb-1.5"
                   style={{ color: "#F2F2F2" }}
                 >
-                  Duración (min)
+                  {t('form.duration')}
                 </label>
                 <div className="flex flex-col gap-2">
                   <div className="relative">
@@ -340,12 +327,12 @@ export default function ServicesPage() {
                       className="input-base pl-9"
                       style={{ backgroundColor: "#212125" }}
                     >
-                      <option value={30}>30 minutos</option>
-                      <option value={60}>1 hora</option>
-                      <option value={90}>1:30 minutos</option>
-                      <option value={120}>2 horas</option>
-                      <option value={150}>2:30 minutos</option>
-                      <option value="custom">Personalizado...</option>
+                      <option value={30}>{t('form.durations.30')}</option>
+                      <option value={60}>{t('form.durations.60')}</option>
+                      <option value={90}>{t('form.durations.90')}</option>
+                      <option value={120}>{t('form.durations.120')}</option>
+                      <option value={150}>{t('form.durations.150')}</option>
+                      <option value="custom">{t('form.customDuration')}</option>
                     </select>
                   </div>
                   {isCustom && (
@@ -353,7 +340,7 @@ export default function ServicesPage() {
                        <input
                         type="number"
                         min="1"
-                        placeholder="¿Cuántos minutos?"
+                        placeholder={t('form.customMin')}
                         value={form.duration_min === 0 ? "" : form.duration_min}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -371,7 +358,7 @@ export default function ServicesPage() {
                   className="block text-sm font-medium mb-1.5"
                   style={{ color: "#F2F2F2" }}
                 >
-                  Precio
+                  {t('form.price')}
                 </label>
                 <div className="relative">
                   <DollarSign
@@ -403,10 +390,10 @@ export default function ServicesPage() {
                 className="block text-sm font-medium mb-2"
                 style={{ color: "#F2F2F2" }}
               >
-                Color en agenda
+                {t('form.color')}
               </label>
               <div className="flex gap-2 flex-wrap">
-                {COLORS.map((c) => (
+                {SERVICE_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
@@ -449,20 +436,20 @@ export default function ServicesPage() {
                 />
               </label>
               <span className="text-sm" style={{ color: "#F2F2F2" }}>
-                Servicio activo
+                {t('form.active')}
               </span>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="secondary" onClick={() => setShowForm(false)}>
-                Cancelar
+                {t('form.cancel')}
               </Button>
               <Button
                 onClick={handleSave}
                 loading={saving}
                 leftIcon={<Save size={16} />}
               >
-                {editingId ? "Guardar cambios" : "Crear servicio"}
+                {editingId ? t('form.save') : t('form.create')}
               </Button>
             </div>
           </div>
@@ -478,13 +465,13 @@ export default function ServicesPage() {
             style={{ color: "#909098" }}
           />
           <p className="text-base font-medium" style={{ color: "#F2F2F2" }}>
-            No hay servicios configurados
+            {t('noServices')}
           </p>
           <p className="text-sm mt-1 mb-4" style={{ color: "#909098" }}>
-            Crea tu primer servicio para empezar a agendar citas
+            {t('createFirst')}
           </p>
           <Button onClick={openNew} leftIcon={<Plus size={16} />}>
-            Crear primer servicio
+            {t('createFirstBtn')}
           </Button>
         </Card>
       ) : (
@@ -520,7 +507,7 @@ export default function ServicesPage() {
                         border: "1px solid rgba(0,98,255,0.2)",
                       }}
                     >
-                      {s.category}
+                      {t(`categories.${s.category}` as any)}
                     </span>
                   )}
                   {!s.is_active && (
@@ -532,7 +519,7 @@ export default function ServicesPage() {
                         border: "1px solid #2E2E33",
                       }}
                     >
-                      Inactivo
+                      {t('status.inactive')}
                     </span>
                   )}
                 </div>
@@ -556,7 +543,7 @@ export default function ServicesPage() {
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={() => toggleActive(s)}
-                  title={s.is_active ? "Desactivar" : "Activar"}
+                  title={s.is_active ? t('actions.deactivate') : t('actions.activate')}
                   className="p-2 rounded-lg transition-colors hover:bg-white/5"
                   style={{ color: "#909098" }}
                 >

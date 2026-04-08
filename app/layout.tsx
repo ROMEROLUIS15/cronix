@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { getLocale, getTranslations } from 'next-intl/server'
 import './globals.css'
-import { PwaUpdateToast } from '@/components/ui/pwa-update-toast'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -108,7 +107,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         {children}
-        <PwaUpdateToast />
         <Script
           id="register-sw"
           strategy="afterInteractive"

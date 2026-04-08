@@ -4,6 +4,7 @@ import { getBusinessId } from '@/lib/auth/get-business-id'
 import * as financesRepo from '@/lib/repositories/finances.repo'
 import { ReportsView } from './reports-view'
 import type { ReportData } from './reports-view'
+import { getTranslations } from 'next-intl/server'
 
 interface ReportAppointment {
   id: string
@@ -49,9 +50,11 @@ export default async function ReportsPage() {
   const totalRevenue  = monthTxns.reduce((s, t) => s + (t.net_amount ?? 0), 0)
   const totalExpenses = monthExps.reduce((s, e) => s + e.amount, 0)
 
+  // Translating "Sin servicio" on server
+  const t = await getTranslations('reports')
   const byService: Record<string, { count: number; revenue: number }> = {}
   apts.forEach(apt => {
-    const name = apt.service?.name ?? 'Sin servicio'
+    const name = apt.service?.name ?? t('misc.noService')
     if (!byService[name]) byService[name] = { count: 0, revenue: 0 }
     byService[name].count++
     if (apt.status === 'completed') byService[name].revenue += apt.service?.price ?? 0

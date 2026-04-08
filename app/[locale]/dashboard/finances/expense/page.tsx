@@ -9,11 +9,13 @@ import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import { expenseCategoryLabels } from '@/lib/utils'
 import type { ExpenseCategory } from '@/types'
+import { useTranslations } from 'next-intl'
 
 const CATEGORIES = Object.entries(expenseCategoryLabels) as [ExpenseCategory, string][]
 
 export default function NewExpensePage() {
   const router = useRouter()
+  const t = useTranslations('finances.gasto')
   const { supabase, businessId } = useBusinessContext()
 
   const [form, setForm] = useState({
@@ -31,7 +33,7 @@ export default function NewExpensePage() {
 
     const amount = parseFloat(form.amount)
     if (isNaN(amount) || amount <= 0) {
-      setMsg({ type: 'error', text: 'Ingresa un monto válido mayor a 0.' })
+      setMsg({ type: 'error', text: t('amountValid') })
       return
     }
 
@@ -51,7 +53,7 @@ export default function NewExpensePage() {
       router.push('/dashboard/finances/expenses')
       router.refresh()
     } catch (err) {
-      setMsg({ type: 'error', text: err instanceof Error ? err.message : 'Error al registrar el gasto.' })
+      setMsg({ type: 'error', text: err instanceof Error ? err.message : t('errorSave') })
     } finally {
       setSaving(false)
     }
@@ -60,12 +62,12 @@ export default function NewExpensePage() {
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl">
       <Link href="/dashboard/finances" className="btn-ghost inline-flex text-sm gap-2 text-muted-foreground">
-        <ArrowLeft size={16} /> Volver a Finanzas
+        <ArrowLeft size={16} /> {t('back')}
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Registrar Gasto</h1>
-        <p className="text-muted-foreground text-sm">Registra un egreso o gasto operativo</p>
+        <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+        <p className="text-muted-foreground text-sm">{t('subtitle')}</p>
       </div>
 
       {msg && (
@@ -80,14 +82,14 @@ export default function NewExpensePage() {
             <div className="h-9 w-9 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
               <Receipt size={18} className="text-red-600" />
             </div>
-            <h2 className="text-base font-semibold text-foreground">Detalles del gasto</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('detailsTitle')}</h2>
           </div>
 
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="amount">
-                  Monto *
+                  {t('amount')}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
@@ -101,7 +103,7 @@ export default function NewExpensePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="category">
-                  Categoría *
+                  {t('category')}
                 </label>
                 <select id="category" required value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value as ExpenseCategory })}
@@ -116,7 +118,7 @@ export default function NewExpensePage() {
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="date">
-                Fecha del gasto *
+                {t('date')}
               </label>
               <input id="date" type="date" required value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
@@ -126,12 +128,12 @@ export default function NewExpensePage() {
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="description">
-                Descripción (opcional)
+                {t('description')}
               </label>
               <textarea id="description" rows={2} value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className="input-base resize-none"
-                placeholder="Detalle del gasto..."
+                placeholder={t('descriptionPlaceholder')}
               />
             </div>
           </div>
@@ -139,10 +141,10 @@ export default function NewExpensePage() {
 
         <div className="flex items-center justify-end gap-3">
           <Link href="/dashboard/finances">
-            <Button variant="secondary" type="button">Cancelar</Button>
+            <Button variant="secondary" type="button">{t('cancel')}</Button>
           </Link>
           <Button type="submit" loading={saving} leftIcon={<Receipt size={16} />}>
-            Guardar Gasto
+            {t('save')}
           </Button>
         </div>
       </form>

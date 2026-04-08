@@ -12,6 +12,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Download, Share, X, Smartphone, Monitor } from 'lucide-react'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
+import { useTranslations } from 'next-intl'
 
 interface PwaInstallBannerProps {
   variant?: 'hero' | 'navbar'
@@ -21,6 +22,7 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
   const { canInstall, isIos, isInstalled, install } = usePwaInstall()
   const [showIosGuide, setShowIosGuide] = useState(false)
   const [dismissed,    setDismissed]    = useState(false)
+  const t = useTranslations('pwa')
 
   if (dismissed) return null
   
@@ -56,7 +58,7 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
         onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
       >
         <Download size={16} />
-        Descargar App
+        {t('downloadApp')}
       </button>
     )
   }
@@ -123,11 +125,11 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
               borderRadius: '6px',
               letterSpacing: '0.02em'
             }}>
-              PWA
+              {t('pwaTag')}
             </span>
           </div>
           <p style={{ color: '#909098', fontSize: '12px', margin: 0, lineHeight: 1.4 }}>
-            Notificaciones y acceso rápido.
+            {t('subtitle')}
           </p>
         </div>
 
@@ -139,9 +141,9 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
             } else if (isIos) {
               setShowIosGuide(v => !v);
             } else if (isInstalled) {
-              alert("¡Cronix ya está instalado en tu equipo! Puedes abrirlo desde tu escritorio o menú de aplicaciones.");
+              alert(t('installedAlert'));
             } else {
-              alert("El instalador aún se está cargando o tu navegador no soporta instalaciones automáticas. Intenta usar el icono de la barra de direcciones.");
+              alert(t('browserError'));
             }
           }}
           disabled={isInstalled && !isNavbar}
@@ -168,7 +170,7 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
             if (!isInstalled) e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          {isInstalled ? 'Instalada' : (canInstall ? 'Instalar' : 'Obtener')}
+          {isInstalled ? t('installed') : (canInstall ? t('install') : t('get'))}
         </button>
       </div>
 
@@ -191,7 +193,7 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span style={{ fontWeight: 700, fontSize: '13px', color: '#F2F2F2', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Share size={14} style={{ color: '#3884FF' }} />
-              Instalar en iPhone / iPad
+              {t('iosGuideTitle')}
             </span>
             <button
               onClick={() => setShowIosGuide(false)}
@@ -202,9 +204,9 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
           </div>
           <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {[
-              <>1. Toca el ícono de compartir <strong style={{ color: '#3884FF' }}>⬆</strong> en Safari</>,
-              <>2. Selecciona <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong></>,
-              <>3. Toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir&rdquo;</strong> para confirmar</>,
+              t('iosStep1'),
+              t('iosStep2'),
+              t('iosStep3'),
             ].map((step, i) => (
               <li key={i} style={{ fontSize: '12px', color: '#D1D1D6', lineHeight: 1.5 }}>
                 {step}

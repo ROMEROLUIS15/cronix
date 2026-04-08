@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Store, ArrowRight, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
+import { useTranslations } from "next-intl";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function SetupPage() {
   const [state, formAction] = useFormState(createBusiness, null);
   const [initialData, setInitialData] = useState<{ name: string; category: string } | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const t = useTranslations("setup");
 
   // When the server action returns success, clear the stale React Query cache for
   // business-context before navigating. Without this, the dashboard page renders
@@ -90,10 +92,10 @@ export default function SetupPage() {
             className="text-3xl sm:text-4xl font-black tracking-tight text-center"
             style={{ color: "#F2F2F2", letterSpacing: "-0.03em" }}
           >
-            ¡Bienvenido a Cronix!
+            {t('welcome')}
           </h1>
           <p className="text-center font-medium" style={{ color: "#909098" }}>
-            Sencillez y elegancia para gestionar tu negocio.
+            {t('subtitle')}
           </p>
         </div>
 
@@ -128,7 +130,7 @@ export default function SetupPage() {
                   style={{ color: "#F2F2F2" }}
                 >
                   <Store size={16} style={{ color: "#0062FF" }} />
-                  Nombre de tu negocio
+                  {t('bizNameLabel')}
                 </label>
                 <input
                   id="name"
@@ -136,7 +138,7 @@ export default function SetupPage() {
                   type="text"
                   required
                   defaultValue={initialData?.name}
-                  placeholder="Ej. Barbería El Elegante"
+                  placeholder={t('bizNamePlace')}
                   className="input-base text-base sm:text-lg py-4 sm:py-6"
                 />
               </div>
@@ -148,7 +150,7 @@ export default function SetupPage() {
                   style={{ color: "#F2F2F2" }}
                 >
                   <Sparkles size={16} style={{ color: "#0062FF" }} />
-                  Categoría o rubro
+                  {t('categoryLabel')}
                 </label>
                 <select
                   id="category"
@@ -158,7 +160,7 @@ export default function SetupPage() {
                   className="input-base text-base sm:text-lg py-3"
                   style={{ backgroundColor: "#212125" }}
                 >
-                  <option value="">Selecciona una opción</option>
+                  <option value="">{t('categoryPlace')}</option>
                   {BUSINESS_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
@@ -173,7 +175,7 @@ export default function SetupPage() {
                 type="submit"
                 className="w-full py-4 sm:py-6 text-base sm:text-lg group"
               >
-                Crear mi cuenta de negocio
+                {t('createBtn')}
                 <ArrowRight
                   size={20}
                   className="ml-2 group-hover:translate-x-1 transition-transform"
@@ -187,8 +189,7 @@ export default function SetupPage() {
           className="text-center text-xs mt-8 px-8"
           style={{ color: "#3A3A3F" }}
         >
-          Al crear tu negocio, aceptas nuestros términos de servicio y políticas
-          de privacidad.
+          {t('terms')}
         </p>
       </div>
     </div>

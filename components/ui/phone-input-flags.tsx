@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Users, Loader2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export type Country = {
@@ -117,6 +118,7 @@ export function PhoneInputFlags({
   onPickContact,
   pickContactLoading = false,
 }: PhoneInputFlagsProps) {
+  const t = useTranslations('common')
   const [open,        setOpen]       = useState(false)
   const dropdownRef                  = useRef<HTMLDivElement>(null)
 
@@ -242,7 +244,7 @@ export function PhoneInputFlags({
       {/* ── Hint ─────────────────────────────────────────────────────────── */}
       {showHint && (
         <p className="text-xs mt-1" style={{ color: '#6A6A72' }}>
-          Se guardará como: {country.dial} {localPhone || country.placeholder}
+          {t('savedAs')}: {country.dial} {localPhone || country.placeholder}
         </p>
       )}
     </div>

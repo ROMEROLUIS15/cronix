@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Fingerprint, Trash2, Plus, AlertCircle, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useTranslations } from 'next-intl'
 
 interface StoredPasskey {
   id: string
@@ -11,6 +12,7 @@ interface StoredPasskey {
 }
 
 export function PasskeyRegister() {
+  const t = useTranslations('profile.passkeys')
   const [passkeys,    setPasskeys]    = useState<StoredPasskey[]>([])
   const [deviceName,  setDeviceName]  = useState('')
   const [loading,     setLoading]     = useState(true)
@@ -44,10 +46,10 @@ export function PasskeyRegister() {
         <AlertCircle size={18} style={{ color: '#FF3B30', flexShrink: 0, marginTop: 2 }} />
         <div>
           <p className="text-sm font-semibold" style={{ color: '#F2F2F2' }}>
-            Acceso biométrico no disponible
+            {t('notAvailTitle')}
           </p>
           <p className="text-xs mt-0.5" style={{ color: '#909098' }}>
-            Tu dispositivo no soporta autenticación biométrica.
+            {t('notAvailSub')}
           </p>
         </div>
       </div>
@@ -63,7 +65,7 @@ export function PasskeyRegister() {
       const { startRegistration } = await import('@simplewebauthn/browser')
 
       const optRes = await fetch('/api/passkey/register/options', { method: 'POST' })
-      if (!optRes.ok) throw new Error('Error al obtener opciones de registro')
+      if (!optRes.ok) throw new Error(t('registerErrorOptions'))
       const options = await optRes.json()
 
       const credential = await startRegistration({ optionsJSON: options })
@@ -71,25 +73,25 @@ export function PasskeyRegister() {
       const verRes = await fetch('/api/passkey/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, deviceName: deviceName || 'Mi dispositivo' }),
+        body: JSON.stringify({ credential, deviceName: deviceName || t('defaultDevice') }),
       })
       if (!verRes.ok) {
         const err = await verRes.json()
-        throw new Error(err.error || 'Error al registrar')
+        throw new Error(err.error || t('registerErrorVerify'))
       }
 
-      setSuccess('¡Huella registrada correctamente!')
+      setSuccess(t('registerSuccess'))
       setDeviceName('')
       loadPasskeys()
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
-          setError('Registro cancelado')
+          setError(t('registerCancel'))
         } else {
-          setError(err.message || 'Error al registrar la huella')
+          setError(err.message || t('registerGeneric'))
         }
       } else {
-        setError('Error al registrar la huella')
+        setError(t('registerGeneric'))
       }
     } finally {
       setRegistering(false)
@@ -99,7 +101,7 @@ export function PasskeyRegister() {
   const handleDelete = async (id: string) => {
     const { error: deleteError } = await supabase.from('user_passkeys').delete().eq('id', id)
     if (deleteError) {
-      setError('Error al eliminar la credencial.')
+      setError(t('deleteError'))
       return
     }
     loadPasskeys()
@@ -115,10 +117,10 @@ export function PasskeyRegister() {
         </div>
         <div>
           <p className="text-sm font-bold" style={{ color: '#F2F2F2' }}>
-            Acceso biométrico
+            {t('title')}
           </p>
           <p className="text-xs" style={{ color: '#909098' }}>
-            Inicia sesión con tu huella o Face ID sin contraseña
+            {t('sub')}
           </p>
         </div>
       </div>
@@ -152,7 +154,7 @@ export function PasskeyRegister() {
                 <Fingerprint size={16} style={{ color: '#4D83FF', flexShrink: 0 }} />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate" style={{ color: '#F2F2F2' }}>
-                    {pk.device_name || 'Dispositivo'}
+                    {pk.device_name || t('defaultDevice')}
                   </p>
                   <p className="text-xs" style={{ color: '#909098' }}>
                     {new Date(pk.created_at).toLocaleDateString('es', {
@@ -180,11 +182,11 @@ export function PasskeyRegister() {
           <div className="flex items-center gap-2">
             <Zap size={14} style={{ color: '#4D83FF', flexShrink: 0 }} />
             <p className="text-xs font-bold" style={{ color: '#4D83FF' }}>
-              Activa el acceso rápido con tu huella
+              {t('emptyTitle')}
             </p>
           </div>
           <p className="text-xs" style={{ color: '#909098', lineHeight: 1.6 }}>
-            Registra tu huella o Face ID para ingresar a Cronix en segundos, sin escribir tu contraseña.
+            {t('emptySub')}
           </p>
         </div>
       )}
@@ -195,7 +197,7 @@ export function PasskeyRegister() {
           type="text"
           value={deviceName}
           onChange={e => setDeviceName(e.target.value)}
-          placeholder='Nombre del dispositivo (ej: "iPhone de Luis")'
+          placeholder={t('inputPlaceholder')}
           maxLength={40}
           className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
           style={{ background: '#13131A', border: '1px solid #22222E', color: '#F2F2F2' }}
@@ -214,7 +216,7 @@ export function PasskeyRegister() {
           }}
         >
           <Plus size={15} />
-          {registering ? 'Esperando autenticación...' : passkeys.length > 0 ? 'Agregar otro dispositivo' : 'Registrar huella / Face ID'}
+          {registering ? t('btnWaiting') : passkeys.length > 0 ? t('btnAnother') : t('btnRegister')}
         </button>
       </div>
 

@@ -16,9 +16,11 @@ import { formatDate, formatTime, formatCurrency, appointmentStatusConfig } from 
 import { getServiceNames, getPrimaryColor, getTotalDuration, getTotalPrice } from '@/lib/utils/appointment-services'
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types'
 import { format } from 'date-fns'
+import { useTranslations } from 'next-intl'
 
 export default function AppointmentsPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const t = useTranslations('appointments')
   const [appointments,  setAppointments]  = useState<AppointmentWithRelations[]>([])
   const [loading,       setLoading]       = useState(true)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
@@ -93,11 +95,11 @@ export default function AppointmentsPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-foreground">Agenda</h1>
-          <p className="text-muted-foreground text-sm">Gestiona tus citas y disponibilidad</p>
+          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+          <p className="text-muted-foreground text-sm">{t('subtitle')}</p>
         </div>
         <Link href="/dashboard/appointments/new" className="flex-shrink-0">
-          <Button leftIcon={<Plus size={16} />}>Nueva Cita</Button>
+          <Button leftIcon={<Plus size={16} />}>{t('newAppointment')}</Button>
         </Link>
       </div>
 
@@ -116,7 +118,7 @@ export default function AppointmentsPage() {
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input type="text" placeholder="Buscar cita..."
+            <input type="text" placeholder={t('searchApt')}
               value={query} onChange={e => setQuery(e.target.value)}
               className="input-base pl-9 h-9 text-sm w-full" />
           </div>
@@ -128,7 +130,7 @@ export default function AppointmentsPage() {
                     ? 'bg-card text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}>
-                {v === 'day' ? 'Día' : 'Semana'}
+                {v === 'day' ? t('day') : t('week')}
               </button>
             ))}
           </div>
@@ -139,15 +141,15 @@ export default function AppointmentsPage() {
         {loading ? (
           <div className="flex flex-col justify-center items-center h-[400px] text-muted-foreground">
             <Loader2 size={32} className="animate-spin mb-4" style={{ color: '#0062FF' }} />
-            <p>Cargando agenda...</p>
+            <p>{t('loadingAgenda')}</p>
           </div>
         ) : filteredApts.length === 0 ? (
           <div className="text-center py-20">
             <CalendarDays size={48} className="text-muted-foreground mx-auto mb-4 opacity-30" />
-            <p className="text-base font-medium text-foreground">No hay citas registradas</p>
-            <p className="text-sm text-muted-foreground mt-1">Para el día seleccionado no hay actividad.</p>
+            <p className="text-base font-medium text-foreground">{t('noAptsTitle')}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t('noAptsDesc')}</p>
             <Link href="/dashboard/appointments/new">
-              <Button variant="secondary" className="mt-4">Agendar Cita</Button>
+              <Button variant="secondary" className="mt-4">{t('scheduleApt')}</Button>
             </Link>
           </div>
         ) : (
@@ -172,14 +174,14 @@ export default function AppointmentsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-0.5">
                         <p className="text-sm font-semibold text-foreground group-hover:text-brand-600 transition-colors">
-                          {apt.client?.name ?? 'Cliente desconocido'}
+                          {apt.client?.name ?? t('unknownClient')}
                         </p>
                         {apt.is_dual_booking && <DualBookingBadge />}
                         {/* Expired indicator */}
                         {expired && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
                             style={{ background: 'rgba(255,214,10,0.12)', color: '#FFD60A', border: '1px solid rgba(255,214,10,0.25)' }}>
-                            <AlertCircle size={10} /> Sin gestionar
+                            <AlertCircle size={10} /> {t('unmanaged')}
                           </span>
                         )}
                       </div>
@@ -187,7 +189,7 @@ export default function AppointmentsPage() {
                         <span>{getServiceNames(apt)} ({getTotalDuration(apt)} min)</span>
                         <span className="hidden sm:inline">·</span>
                         <span className="flex items-center gap-1">
-                          <Clock size={11} /> {apt.assigned_user?.name ?? 'Sin asignar'}
+                          <Clock size={11} /> {apt.assigned_user?.name ?? t('unassigned')}
                         </span>
                       </p>
                     </div>
@@ -199,7 +201,7 @@ export default function AppointmentsPage() {
                       <Link href={`/dashboard/appointments/${apt.id}/edit`}
                         className="text-[11px] font-medium hover:underline"
                         style={{ color: '#3884FF' }}>
-                        Editar
+                        {t('edit')}
                       </Link>
                     </div>
                   </div>
@@ -209,7 +211,7 @@ export default function AppointmentsPage() {
                     <div className="flex items-center gap-3 px-4 py-3 flex-wrap"
                       style={{ background: 'rgba(255,214,10,0.06)', borderTop: '1px solid rgba(255,214,10,0.15)' }}>
                       <p className="text-xs font-medium flex-1" style={{ color: '#FFD60A' }}>
-                        Esta cita ya pasó. ¿Fue atendido el cliente?
+                        {t('pastAptCheck')}
                       </p>
                       <div className="flex gap-2 flex-shrink-0 flex-wrap">
                         <button
@@ -221,7 +223,7 @@ export default function AppointmentsPage() {
                             ? <Loader2 size={12} className="animate-spin" />
                             : <CheckCircle2 size={13} />
                           }
-                          Sí, fue atendido
+                          {t('yesAttended')}
                         </button>
                         <button
                           onClick={() => handleResolve(apt.id, 'no_show')}
@@ -232,7 +234,7 @@ export default function AppointmentsPage() {
                             ? <Loader2 size={12} className="animate-spin" />
                             : <XCircle size={13} />
                           }
-                          No se presentó
+                          {t('noShow')}
                         </button>
                       </div>
                     </div>

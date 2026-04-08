@@ -32,6 +32,7 @@ import {
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { useTranslations } from 'next-intl'
 
 // ── Web Speech API types (not yet in lib.dom.d.ts for this TS version) ────────
 interface SpeechRecognitionEventData {
@@ -65,6 +66,8 @@ function fmtReminder(mins: number) {
 function NewAppointmentForm() {
   const router          = useRouter()
   const searchParams    = useSearchParams()
+  const t               = useTranslations('appointments.form')
+  const statusT         = useTranslations('dashboard.status')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const preselectedDate = searchParams.get('date') // "yyyy-MM-dd" from calendar click
 
@@ -409,10 +412,10 @@ function NewAppointmentForm() {
           style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)' }}>
           <AlertCircle size={32} style={{ color: '#FF3B30' }} />
         </div>
-        <h2 className="text-xl font-bold mb-2 text-white">Error de conexión</h2>
+        <h2 className="text-xl font-bold mb-2 text-white">{t('connError.title', { fallback: 'Error de conexión' })}</h2>
         <p className="text-sm mb-6 max-w-xs" style={{ color: '#909098' }}>{fetchError}</p>
         <Button onClick={() => window.location.reload()} variant="secondary">
-          Reintentar carga
+          {t('connError.retry')}
         </Button>
       </div>
     )
@@ -422,7 +425,7 @@ function NewAppointmentForm() {
     return (
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
         <Loader2 size={32} className="animate-spin" />
-        <span className="ml-3 font-medium">Cargando formulario...</span>
+        <span className="ml-3 font-medium">{t('loadingForm')}</span>
       </div>
     )
   }
@@ -435,7 +438,7 @@ function NewAppointmentForm() {
         <Link href="/dashboard/appointments"
           className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-xl"
           style={{ background: '#0062FF', color: '#fff', border: '1px solid #0062FF' }}>
-          <ArrowLeft size={16} /> Agenda
+          <ArrowLeft size={16} /> {t('backToAgenda')}
         </Link>
         <Link href="/dashboard/clients/new"
           className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-xl"
@@ -449,7 +452,7 @@ function NewAppointmentForm() {
         <Link href="/dashboard/appointments"
           className="inline-flex items-center gap-2 text-sm font-semibold hover:opacity-80 transition-opacity"
           style={{ color: '#3884FF' }}>
-          <ArrowLeft size={16} /> Agenda
+          <ArrowLeft size={16} /> {t('backToAgenda')}
         </Link>
         <Link href="/dashboard/clients/new"
           className="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1.5 rounded-xl hover:opacity-80 transition-opacity"
@@ -460,8 +463,8 @@ function NewAppointmentForm() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>Nueva Cita</h1>
-          <p className="text-sm" style={{ color: '#909098' }}>Completa los datos para agendar una cita</p>
+          <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>{t('newAptTitle')}</h1>
+          <p className="text-sm" style={{ color: '#909098' }}>{t('newAptSubtitle')}</p>
         </div>
         
         <Button 
@@ -495,14 +498,14 @@ function NewAppointmentForm() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <h2 className="text-base font-semibold mb-4" style={{ color: '#F2F2F2' }}>
-            Información de la cita
+            {t('infoTitle')}
           </h2>
           <div className="space-y-4">
 
             {/* Cliente */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Cliente *
+                {t('client')} *
               </label>
               <ClientSelect
                 clients={clients}
@@ -519,7 +522,7 @@ function NewAppointmentForm() {
                   {/* Fecha bloqueada en azul — viene del calendario */}
                   <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                      Fecha
+                      {t('date')}
                     </label>
                     <div
                       className="input-base flex items-center gap-2"
@@ -543,7 +546,7 @@ function NewAppointmentForm() {
                   {/* Solo hora editable */}
                   <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                      Hora *
+                      {t('time')} *
                     </label>
                     <input
                       type="time"
@@ -561,7 +564,7 @@ function NewAppointmentForm() {
                 /* Flujo normal — fecha + hora juntos */
                 <div>
                   <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                    Fecha y hora *
+                    {t('dateTime')} *
                   </label>
                   <DateTimePicker
                     value={form.start_at}
@@ -579,7 +582,7 @@ function NewAppointmentForm() {
                 style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)' }}>
                 <Ban size={18} style={{ color: '#FF3B30', flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: '#FF3B30' }}>Horario no disponible</p>
+                  <p className="text-sm font-semibold" style={{ color: '#FF3B30' }}>{t('slotErrors.title')}</p>
                   <p className="text-xs mt-1" style={{ color: 'rgba(255,59,48,0.75)' }}>{slotError}</p>
                 </div>
               </div>
@@ -592,7 +595,7 @@ function NewAppointmentForm() {
                 <AlertTriangle size={18} style={{ color: '#FFD60A', flexShrink: 0, marginTop: 2 }} />
                 <div className="flex-1">
                   <p className="text-sm font-semibold flex items-center gap-2" style={{ color: '#FFD60A' }}>
-                    Doble agenda detectada <DualBookingBadge />
+                    {t('slotErrors.doubleTitle')} <DualBookingBadge />
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'rgba(255,214,10,0.75)' }}>{doubleBookingMsg}</p>
                   <label className="flex items-center gap-2 mt-3 cursor-pointer">
@@ -600,7 +603,7 @@ function NewAppointmentForm() {
                       onChange={e => setConfirmed(e.target.checked)}
                       className="w-4 h-4 rounded" style={{ accentColor: '#FFD60A' }} />
                     <span className="text-xs font-medium" style={{ color: '#FFD60A' }}>
-                      Confirmo que deseo agregar una segunda cita el mismo día
+                      {t('slotErrors.confirmDoubleCheck')}
                     </span>
                   </label>
                 </div>
@@ -610,7 +613,7 @@ function NewAppointmentForm() {
             {/* Servicios (multi-select) */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Servicios *
+                {t('services')} *
               </label>
               <div className="space-y-2">
                 {services.map(s => {
@@ -659,14 +662,14 @@ function NewAppointmentForm() {
                   className="w-full text-left p-3 rounded-xl text-sm font-medium transition-opacity hover:opacity-80"
                   style={{ background: '#212125', border: '1px solid #2E2E33', color: '#3884FF' }}
                 >
-                  + Añadir nuevo servicio...
+                  {t('addService')}
                 </button>
               </div>
               {selectedServices.length > 0 && (
                 <p className="mt-2 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
                   <Info size={12} />
-                  Total: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
-                  {selectedServices.length > 1 && ` · ${selectedServices.length} servicios`}
+                  {t('total')}: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
+                  {selectedServices.length > 1 && ` · ${selectedServices.length} ${t('servicesCount')}`}
                 </p>
               )}
             </div>
@@ -674,12 +677,12 @@ function NewAppointmentForm() {
             {/* Empleado */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Empleado asignado
+                {t('staff')}
               </label>
               <select value={form.assigned_user_id}
                 onChange={e => setForm(f => ({ ...f, assigned_user_id: e.target.value }))}
                 className="input-base bg-card">
-                <option value="">Sin asignar</option>
+                <option value="">{t('unassigned', { fallback: 'Sin asignar' })}</option>
                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
@@ -687,11 +690,11 @@ function NewAppointmentForm() {
             {/* Notas */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Notas (opcional)
+                {t('notes')}
               </label>
               <textarea rows={3} value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Preferencias del cliente, instrucciones especiales..."
+                placeholder={t('notesPlaceholder')}
                 className="input-base resize-none" />
             </div>
 
@@ -706,13 +709,13 @@ function NewAppointmentForm() {
                   }
                   <span className="text-sm" style={{ color: skipReminder ? '#606068' : '#F2F2F2' }}>
                     {skipReminder
-                      ? 'Sin recordatorio para esta cita'
-                      : 'WhatsApp · 8 PM día anterior'
+                      ? t('reminderNone')
+                      : t('reminderWhatsapp')
                     }
                   </span>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <span className="text-xs" style={{ color: '#909098' }}>Omitir</span>
+                  <span className="text-xs" style={{ color: '#909098' }}>{t('skip')}</span>
                   <div className="relative">
                     <input type="checkbox" className="sr-only peer"
                       checked={skipReminder} onChange={e => setSkipReminder(e.target.checked)} />
@@ -728,11 +731,11 @@ function NewAppointmentForm() {
 
         <div className="flex items-center justify-end gap-3 pb-10">
           <Link href="/dashboard/appointments">
-            <Button variant="secondary" type="button">Cancelar</Button>
+            <Button variant="secondary" type="button">{t('cancel')}</Button>
           </Link>
           <Button type="submit" loading={saving} disabled={!canSubmit}
             leftIcon={<CalendarDays size={16} />}>
-            Agendar Cita
+            {t('scheduleBtn')}
           </Button>
         </div>
       </form>
@@ -746,7 +749,7 @@ export default function NewAppointmentPage() {
     <Suspense fallback={
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
         <Loader2 size={32} className="animate-spin" />
-        <span className="ml-3 font-medium">Cargando formulario...</span>
+        <span className="ml-3 font-medium">Cargando...</span>
       </div>
     }>
       <NewAppointmentForm />

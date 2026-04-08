@@ -20,6 +20,7 @@ import * as clientsRepo from "@/lib/repositories/clients.repo";
 import type { AppointmentStatus, ClientAppointmentWithDetails } from "@/types";
 import { isPast } from "date-fns";
 import { DebtActionDialog } from "./DebtActionDialog";
+import { getTranslations } from "next-intl/server";
 
 interface Props {
   params: { id: string };
@@ -33,6 +34,9 @@ export default async function ClientDetailPage({ params }: Props) {
 
   const client = await clientsRepo.getClientById(supabase, params.id, session.business_id);
   if (!client) return notFound();
+
+  const t = await getTranslations("clients.history");
+  const formT = await getTranslations("clients.form");
 
   const clientAppointments: ClientAppointmentWithDetails[] =
     await clientsRepo.getClientAppointments(supabase, client.id, session.business_id);
@@ -64,7 +68,7 @@ export default async function ClientDetailPage({ params }: Props) {
         href="/dashboard/clients"
         className="btn-ghost inline-flex text-sm gap-2 text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft size={16} /> Volver a Clientes
+        <ArrowLeft size={16} /> {formT('backToClients')}
       </Link>
 
       <Card>
@@ -112,7 +116,7 @@ export default async function ClientDetailPage({ params }: Props) {
           </div>
           <Link href={`/dashboard/clients/${client.id}/edit`}>
             <Button variant="secondary" size="sm">
-              Editar
+              {formT('editTitle').replace(' Cliente', '').replace(' Client', '')}
             </Button>
           </Link>
         </div>
@@ -124,14 +128,14 @@ export default async function ClientDetailPage({ params }: Props) {
           <p className="text-2xl font-bold text-foreground">
             {client.total_appointments ?? 0}
           </p>
-          <p className="text-xs text-muted-foreground">Visitas totales</p>
+          <p className="text-xs text-muted-foreground">{t('totalVisits')}</p>
         </Card>
         <Card className="text-center p-4">
           <DollarSign size={20} className="text-brand-600 mx-auto mb-2" />
           <p className="text-2xl font-bold text-foreground">
             {formatCurrency(client.total_spent ?? 0)}
           </p>
-          <p className="text-xs text-muted-foreground">Gasto total</p>
+          <p className="text-xs text-muted-foreground">{t('totalSpent')}</p>
         </Card>
         <Card className="text-center p-4">
           <DollarSign size={20} className="text-brand-600 mx-auto mb-2" />
@@ -142,7 +146,7 @@ export default async function ClientDetailPage({ params }: Props) {
                 : 0,
             )}
           </p>
-          <p className="text-xs text-muted-foreground">Ticket promedio</p>
+          <p className="text-xs text-muted-foreground">{t('avgTicket')}</p>
         </Card>
       </div>
 
@@ -155,11 +159,11 @@ export default async function ClientDetailPage({ params }: Props) {
       <Card>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">
-            Historial de Citas
+            {t('title')}
           </h2>
           {client.last_visit_at && (
             <span className="text-xs text-muted-foreground">
-              Última: {formatRelative(client.last_visit_at)}
+              {t('lastVisit', { time: formatRelative(client.last_visit_at) })}
             </span>
           )}
         </div>
@@ -170,7 +174,7 @@ export default async function ClientDetailPage({ params }: Props) {
               className="text-muted-foreground mx-auto mb-2 opacity-40"
             />
             <p className="text-sm text-muted-foreground">
-              Sin historial de citas
+              {t('noHistory')}
             </p>
           </div>
         ) : (
@@ -215,7 +219,7 @@ export default async function ClientDetailPage({ params }: Props) {
                         variant="warning"
                         className="text-[10px] text-orange-500 border-orange-500/30"
                       >
-                        Abono: {formatCurrency(paid)}
+                        {t('payment')} {formatCurrency(paid)}
                       </Badge>
                     )}
                   </div>
@@ -225,10 +229,10 @@ export default async function ClientDetailPage({ params }: Props) {
                     </p>
                     {owes > 0 ? (
                       <p className="text-xs font-bold text-red-500">
-                        Debe {formatCurrency(owes)}
+                        {t('owes')} {formatCurrency(owes)}
                       </p>
                     ) : paid >= price && price > 0 ? (
-                      <p className="text-xs font-bold text-green-500">Pagado</p>
+                      <p className="text-xs font-bold text-green-500">{t('paid')}</p>
                     ) : null}
                   </div>
                 </div>
@@ -241,7 +245,7 @@ export default async function ClientDetailPage({ params }: Props) {
       {client.notes && (
         <Card>
           <h2 className="text-base font-semibold text-foreground mb-3">
-            Notas internas
+            {formT('internalNotes')}
           </h2>
           <p className="text-sm text-muted-foreground bg-surface rounded-xl p-4">
             {client.notes}

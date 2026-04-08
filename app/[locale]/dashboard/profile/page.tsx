@@ -10,6 +10,7 @@ import { updateProfile } from './actions'
 import { PasswordInput } from '@/components/ui/password-input'
 import { PhoneInputFlags, parsePhone, type Country, COUNTRIES } from '@/components/ui/phone-input-flags'
 import { PasskeyRegister } from '@/components/ui/passkey-register'
+import { useTranslations } from 'next-intl'
 
 interface ProfileUser {
   id: string
@@ -21,6 +22,7 @@ interface ProfileUser {
 
 export default function ProfilePage() {
   const { supabase } = useBusinessContext()
+  const t = useTranslations('profile')
   const [user,           setUser]           = useState<ProfileUser | null>(null)
   const [loading,        setLoading]        = useState(true)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -62,8 +64,8 @@ export default function ProfilePage() {
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user?.id) return
-    if (!file.type.startsWith('image/'))        return showMsg('error', 'Solo se permiten imágenes.')
-    if (file.size > 2 * 1024 * 1024)            return showMsg('error', 'La imagen no puede superar 2MB.')
+    if (!file.type.startsWith('image/'))        return showMsg('error', t('errorImgFormat'))
+    if (file.size > 2 * 1024 * 1024)            return showMsg('error', t('errorImgSize'))
 
     setUploadingPhoto(true)
     const ext  = file.name.split('.').pop()
@@ -74,14 +76,14 @@ export default function ProfilePage() {
 
     if (uploadError) {
       setUploadingPhoto(false)
-      return showMsg('error', 'Error al subir imagen: ' + uploadError.message)
+      return showMsg('error', t('errorUpload') + uploadError.message)
     }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
     await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', user.id)
     setUploadingPhoto(false)
     setAvatarUrl(publicUrl + '?t=' + Date.now())
-    showMsg('success', 'Foto actualizada correctamente')
+    showMsg('success', t('successUpload'))
   }
 
   const handleDeletePhoto = async () => {
@@ -94,9 +96,9 @@ export default function ProfilePage() {
     const { error: updateError } = await supabase
       .from('users').update({ avatar_url: null }).eq('id', user.id)
     setUploadingPhoto(false)
-    if (updateError) return showMsg('error', 'Error al eliminar foto.')
+    if (updateError) return showMsg('error', t('errorDelete'))
     setAvatarUrl(null)
-    showMsg('success', 'Foto eliminada correctamente')
+    showMsg('success', t('successDelete'))
   }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -133,9 +135,9 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>Mi Perfil</h1>
+        <h1 className="text-2xl font-bold" style={{ color: '#F2F2F2' }}>{t('title')}</h1>
         <p className="text-sm" style={{ color: '#909098' }}>
-          Gestiona tu información personal y seguridad
+          {t('subtitle')}
         </p>
       </div>
 
@@ -193,7 +195,7 @@ export default function ProfilePage() {
                 disabled={uploadingPhoto}
                 className="text-xs hover:underline disabled:opacity-50"
                 style={{ color: '#3884FF' }}>
-                {avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+                {avatarUrl ? t('changePhoto') : t('uploadPhoto')}
               </button>
               {avatarUrl && (
                 <>
@@ -201,12 +203,12 @@ export default function ProfilePage() {
                   <button type="button" onClick={handleDeletePhoto} disabled={uploadingPhoto}
                     className="text-xs hover:underline flex items-center gap-1 disabled:opacity-50"
                     style={{ color: '#FF3B30' }}>
-                    <Trash2 size={11} /> Eliminar foto
+                    <Trash2 size={11} /> {t('deletePhoto')}
                   </button>
                 </>
               )}
             </div>
-            <p className="text-[10px]" style={{ color: '#6A6A72' }}>JPG, PNG o WebP · Máx 2MB</p>
+            <p className="text-[10px]" style={{ color: '#6A6A72' }}>{t('photoReqs')}</p>
           </div>
         </div>
       </Card>
@@ -216,26 +218,26 @@ export default function ProfilePage() {
         {/* Personal info */}
         <Card>
           <h2 className="text-base font-semibold mb-4" style={{ color: '#F2F2F2' }}>
-            Información personal
+            {t('personalInfo')}
           </h2>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider ml-1"
                   style={{ color: '#909098' }}>
-                  Nombre completo
+                  {t('fullname')}
                 </label>
                 <div className="relative">
                   <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2"
                     style={{ color: '#909098' }} />
                   <input name="name" defaultValue={user?.name ?? ''} className="input-base pl-10"
-                    placeholder="Tu nombre" required />
+                    placeholder={t('fullnameLabel')} required />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider ml-1"
                   style={{ color: '#909098' }}>
-                  Teléfono
+                  {t('phone')}
                 </label>
                 <div className="relative">
                   <input type="hidden" name="phone"
@@ -252,16 +254,16 @@ export default function ProfilePage() {
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider ml-1"
                 style={{ color: '#909098' }}>
-                Correo electrónico
+                {t('email')}
               </label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2"
                   style={{ color: '#909098' }} />
                 <input name="email" defaultValue={user?.email ?? ''} className="input-base pl-10"
-                  placeholder="tu@email.com" required />
+                  placeholder={t('emailLabel')} required />
               </div>
               <p className="text-[10px] ml-1 italic" style={{ color: '#6A6A72' }}>
-                Si cambias el email, deberás confirmarlo por correo.
+                {t('emailWarning')}
               </p>
             </div>
           </div>
@@ -271,9 +273,9 @@ export default function ProfilePage() {
         <Card>
           <div className="flex items-center justify-between mb-1">
             <div>
-              <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>Seguridad</h2>
+              <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>{t('securityTitle')}</h2>
               <p className="text-sm" style={{ color: '#909098' }}>
-                Cambia tu contraseña cuando lo necesites
+                {t('securitySubtitle')}
               </p>
             </div>
             <button type="button" onClick={() => setChangePassword(v => !v)}
@@ -283,7 +285,7 @@ export default function ProfilePage() {
                 : { background: 'rgba(0,98,255,0.08)', color: '#3884FF', borderColor: 'rgba(0,98,255,0.2)' }
               }>
               <Lock size={13} />
-              {changePassword ? 'Cancelar' : 'Cambiar contraseña'}
+              {changePassword ? t('cancel') : t('changePasswordBtn')}
             </button>
           </div>
 
@@ -292,17 +294,17 @@ export default function ProfilePage() {
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider ml-1"
                   style={{ color: '#909098' }}>
-                  Nueva contraseña
+                  {t('newPassword')}
                 </label>
-                <PasswordInput name="password" placeholder="Mínimo 6 caracteres"
+                <PasswordInput name="password" placeholder={t('newPasswordLabel')}
                   required={changePassword} />
               </div>
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider ml-1"
                   style={{ color: '#909098' }}>
-                  Confirmar nueva contraseña
+                  {t('confirmPassword')}
                 </label>
-                <PasswordInput name="confirmPassword" placeholder="Repite la nueva contraseña"
+                <PasswordInput name="confirmPassword" placeholder={t('confirmPasswordLabel')}
                   required={changePassword} />
               </div>
             </div>
@@ -311,14 +313,14 @@ export default function ProfilePage() {
           {!changePassword && (
             <p className="text-xs mt-3 flex items-center gap-1.5" style={{ color: '#6A6A72' }}>
               <Lock size={12} />
-              Contraseña establecida — haz clic en &quot;Cambiar contraseña&quot; para modificarla
+              {t('passwordSet')}
             </p>
           )}
         </Card>
 
         <div className="flex justify-end pt-2">
           <Button disabled={isPending} type="submit" leftIcon={<Save size={16} />}>
-            Guardar Perfil
+            {t('saveProfile')}
           </Button>
         </div>
       </form>

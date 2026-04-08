@@ -91,26 +91,33 @@ export function Topbar({
       <div ref={containerRef} className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         {actions}
         <button
-          className="relative p-2 rounded-xl transition-all duration-200 hover:bg-white/5 active:scale-95"
+          className="relative p-2 rounded-xl transition-all duration-300 hover:bg-white/10 active:scale-90 group"
           style={{
-            color: isPanelOpen ? "#F2F2F2" : "#909098",
-            background: isPanelOpen ? "rgba(255,255,255,0.05)" : "transparent"
+            color: isPanelOpen ? "#F2F2F2" : "#B0B0B8",
+            background: isPanelOpen ? "rgba(255,255,255,0.08)" : "transparent",
+            boxShadow: isPanelOpen ? "0 0 15px rgba(255,255,255,0.05)" : "none",
           }}
           aria-label={t('notifications')}
           onClick={handleTogglePanel}
         >
-          <Bell size={24} />
+          <Bell 
+            size={22} 
+            className={`transition-transform duration-300 ${isPanelOpen ? 'scale-110' : 'group-hover:scale-110'}`}
+          />
           {unreadCount > 0 && (
-            <div className="absolute top-1 right-1 pointer-events-none">
+            <div className="absolute top-1.5 right-1.5 pointer-events-none">
               <span
                 className="absolute inset-0 h-2.5 w-2.5 rounded-full animate-sonar"
-                style={{ backgroundColor: "#0062FF" }}
+                style={{ 
+                  backgroundColor: "#0062FF",
+                  boxShadow: "0 0 8px rgba(0,98,255,0.6)"
+                }}
               />
               <span
                 className="relative block h-2.5 w-2.5 rounded-full"
                 style={{
                   backgroundColor: "#0062FF",
-                  boxShadow: "0 0 10px rgba(0,98,255,0.9)",
+                  boxShadow: "0 0 12px rgba(0,98,255,1)",
                   border: "2px solid #0F0F12"
                 }}
               />

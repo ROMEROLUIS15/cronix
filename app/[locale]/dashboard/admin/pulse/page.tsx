@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, ShieldAlert, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslations } from "next-intl";
 import { HealthStatCard } from "./_components/health-stat-card";
 import { DeadLetterLog } from "./_components/dead-letter-log";
 
@@ -21,6 +22,7 @@ export default function AdminPulsePage() {
   const [dlqData, setDlqData] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const supabase = createClient();
+  const t = useTranslations("adminPulse");
 
   useEffect(() => {
     async function checkAdmin() {
@@ -128,9 +130,9 @@ export default function AdminPulsePage() {
             <Activity className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">System Pulse</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
             <p className="text-sm text-muted-foreground italic">
-              Founders Real-time Observability • {user?.name}
+              {t('subtitle')} • {user?.name}
             </p>
           </div>
         </div>
@@ -140,7 +142,7 @@ export default function AdminPulsePage() {
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-sm font-medium transition-colors border border-white/10 disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh Pulse'}
+          {isRefreshing ? t('refreshing') : t('refreshPulse')}
         </button>
       </div>
 
@@ -151,7 +153,7 @@ export default function AdminPulsePage() {
           ))
         ) : (
           <Card className="col-span-full py-12 border-dashed bg-black/20">
-             <p className="text-muted-foreground w-full text-center">No vital telemetry streams found.</p>
+             <p className="text-muted-foreground w-full text-center">{t('noVitals')}</p>
           </Card>
         )}
       </div>
@@ -160,10 +162,10 @@ export default function AdminPulsePage() {
         <CardHeader className="border-b border-white/5 bg-white/[0.02] flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-red-400" />
-            <CardTitle className="text-lg">Dead Letter Queue (AI Failures)</CardTitle>
+            <CardTitle className="text-lg">{t('dlqTitle')}</CardTitle>
           </div>
           <span className="px-2 py-1 bg-red-400/10 text-red-400 text-[10px] font-extrabold rounded uppercase tracking-wider">
-            Critical
+            {t('criticalBadge')}
           </span>
         </CardHeader>
         <CardContent className="p-0">

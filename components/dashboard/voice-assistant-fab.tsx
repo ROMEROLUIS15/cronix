@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useSpring } from 'framer-motion'
-import { captureException } from '@sentry/nextjs'
+import { logger } from '@/lib/logger'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import type { BusinessSettingsJson } from '@/types'
 
@@ -33,13 +33,20 @@ export function VoiceAssistantFab() {
 
   // ── Drag & Persistence ──────────────────────────────────────────────────
   const y = useMotionValue(0)
+  const yDesktop = useMotionValue(0)
   // Spring for smooth snapping/movement
   const springY = useSpring(y, { stiffness: 300, damping: 30 })
+  const springYDesktop = useSpring(yDesktop, { stiffness: 300, damping: 30 })
 
   useEffect(() => {
     const savedY = localStorage.getItem('cronix-assistant-y')
     if (savedY) {
       y.set(parseFloat(savedY))
+    }
+
+    const savedYDesktop = localStorage.getItem('cronix-assistant-y-desktop')
+    if (savedYDesktop) {
+      yDesktop.set(parseFloat(savedYDesktop))
     }
     
     // Cloud Visibility Sync
@@ -50,7 +57,7 @@ export function VoiceAssistantFab() {
           const ui = (data?.settings as unknown as BusinessSettingsJson)?.uiSettings
           if (ui?.showLuisFab === false) setShowLuisFab(false)
         } catch (error) {
-          captureException(error, { context: 'fab_visibility_sync' })
+          logger.error('VoiceAssistantFab', 'Visibility sync failed', error)
         } finally {
           setIsLoaded(true)
         }
@@ -71,6 +78,10 @@ export function VoiceAssistantFab() {
 
   const handleDragEnd = () => {
     localStorage.setItem('cronix-assistant-y', y.get().toString())
+  }
+
+  const handleDragEndDesktop = () => {
+    localStorage.setItem('cronix-assistant-y-desktop', yDesktop.get().toString())
   }
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -331,7 +342,7 @@ export function VoiceAssistantFab() {
       }
 
     } catch (err) {
-      captureException(err, { context: 'send_audio_to_assistant' })
+      logger.error('VoiceAssistantFab', 'Error sending audio to assistant', err)
       setState('idle')
       setTranscript('Error de conexión')
       setTimeout(() => setTranscript(''), 3000)
@@ -388,7 +399,7 @@ export function VoiceAssistantFab() {
       }
 
     } catch (error: unknown) {
-      captureException(error, { context: 'send_text_to_assistant' })
+      logger.error('VoiceAssistantFab', 'Error sending text to assistant', error)
       setState('idle')
       setTranscript('Error de conexión')
       setTimeout(() => setTranscript(''), 3000)
@@ -475,7 +486,17 @@ export function VoiceAssistantFab() {
       </motion.div>
 
       {/* ── DESKTOP: Premium Pill design ── */}
-      <div className="hidden sm:flex fixed top-[72px] right-6 z-50 flex-col items-end gap-3">
+      <motion.div 
+        drag="y"
+        dragConstraints={{ 
+          top: -50, 
+          bottom: (typeof window !== 'undefined' ? window.innerHeight - 150 : 800) 
+        }}
+        dragElastic={0.1}
+        onDragEnd={handleDragEndDesktop}
+        style={{ y: springYDesktop }}
+        className="hidden sm:flex fixed top-[72px] right-6 z-50 flex-col items-end gap-3 touch-none"
+      >
 
 
         <button
@@ -539,7 +560,7 @@ export function VoiceAssistantFab() {
             }`}
           />
         </button>
-      </div>
+      </motion.div>
     </>
   )
 }

@@ -12,13 +12,15 @@ import {
   formatCurrency, formatDate,
   paymentMethodLabels, expenseCategoryLabels,
 } from '@/lib/utils'
+import type { TransactionRow, ExpenseRow, PaymentMethod, ExpenseCategory } from '@/types'
+import { useTranslations } from 'next-intl'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as financesRepo from '@/lib/repositories/finances.repo'
-import type { TransactionRow, ExpenseRow, PaymentMethod, ExpenseCategory } from '@/types'
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function FinancesPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const t = useTranslations('finances')
 
   const [loading,            setLoading]            = useState(true)
   const [fetchError,         setFetchError]         = useState<string | null>(null)
@@ -57,7 +59,7 @@ export default function FinancesPage() {
         setSummary({ totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses })
         setFetchError(null)
       } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar las finanzas')
+        setFetchError(err instanceof Error ? err.message : t('errorLoading'))
       } finally {
         setLoading(false)
       }
@@ -77,7 +79,7 @@ export default function FinancesPage() {
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
-        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar las finanzas</p>
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>{t('errorLoading')}</p>
         <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
@@ -98,17 +100,17 @@ export default function FinancesPage() {
       {/* Header */}
       <div className="flex items-start sm:items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
-          <p className="text-muted-foreground text-sm">Resumen financiero del mes actual</p>
+          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+          <p className="text-muted-foreground text-sm">{t('subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Link href="/dashboard/finances/expense" className="block flex-1 sm:flex-none">
             <Button variant="secondary" leftIcon={<Receipt size={16} />} className="w-full sm:w-auto">
-              Registrar Gasto
+              {t('registerExpense')}
             </Button>
           </Link>
           <Link href="/dashboard/finances/new" className="block flex-1 sm:flex-none">
-            <Button leftIcon={<Plus size={16} />} className="w-full sm:w-auto">Registrar Cobro</Button>
+            <Button leftIcon={<Plus size={16} />} className="w-full sm:w-auto">{t('registerIncome')}</Button>
           </Link>
         </div>
       </div>
@@ -116,20 +118,20 @@ export default function FinancesPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard
-          title="Ingresos del mes"
+          title={t('incomeMonth')}
           value={formatCurrency(summary.totalRevenue)}
           icon={<TrendingUp size={22} />}
           accent
         />
         <StatCard
-          title="Gastos del mes"
+          title={t('expenseMonth')}
           value={formatCurrency(summary.totalExpenses)}
           icon={<TrendingDown size={22} />}
         />
         <StatCard
-          title="Ganancia neta"
+          title={t('netProfit')}
           value={formatCurrency(summary.netProfit)}
-          subtitle={summary.totalRevenue > 0 ? `Margen: ${marginPct}%` : undefined}
+          subtitle={summary.totalRevenue > 0 ? `${t('margin')}: ${marginPct}%` : undefined}
           icon={<DollarSign size={22} />}
         />
       </div>
@@ -137,12 +139,12 @@ export default function FinancesPage() {
       {/* Distribution bar */}
       <Card>
         <h2 className="text-sm font-semibold text-foreground mb-4">
-          Distribución del mes
+          {t('distribution')}
         </h2>
         <div className="space-y-3">
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-              <span>Ingresos</span>
+              <span>{t('income')}</span>
               <span>{formatCurrency(summary.totalRevenue)}</span>
             </div>
             <div className="h-3 rounded-full bg-muted overflow-hidden">
@@ -151,7 +153,7 @@ export default function FinancesPage() {
           </div>
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-              <span>Gastos</span>
+              <span>{t('expenses')}</span>
               <span>{formatCurrency(summary.totalExpenses)}</span>
             </div>
             <div className="h-3 rounded-full bg-muted overflow-hidden">
@@ -170,20 +172,20 @@ export default function FinancesPage() {
         {/* Transactions */}
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">Últimos cobros</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('recentIncome')}</h2>
             <Link
               href="/dashboard/finances/transactions"
               className="text-sm flex items-center gap-1 hover:opacity-70 transition-opacity"
               style={{ color: '#0062FF' }}
             >
-              Ver todo <ArrowRight size={14} />
+              {t('viewAll')} <ArrowRight size={14} />
             </Link>
           </div>
 
           {recentTransactions.length === 0 ? (
             <div className="text-center py-8">
               <CreditCard size={36} className="mx-auto mb-2 opacity-30" style={{ color: '#909098' }} />
-              <p className="text-sm text-muted-foreground">No hay cobros este mes</p>
+              <p className="text-sm text-muted-foreground">{t('noIncomeMonth')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -201,7 +203,7 @@ export default function FinancesPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">
-                      {paymentMethodLabels[txn.method as PaymentMethod] ?? 'Pago'}
+                      {paymentMethodLabels[txn.method as PaymentMethod] ?? t('payment')}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {txn.paid_at ? formatDate(txn.paid_at, 'd MMM, HH:mm') : '—'}
@@ -212,7 +214,7 @@ export default function FinancesPage() {
                       +{formatCurrency(txn.net_amount)}
                     </p>
                     {(txn.discount ?? 0) > 0 && (
-                      <p className="text-xs text-muted-foreground">{txn.discount}% desc.</p>
+                      <p className="text-xs text-muted-foreground">{txn.discount}% {t('discount')}</p>
                     )}
                   </div>
                 </div>
@@ -224,20 +226,20 @@ export default function FinancesPage() {
         {/* Expenses */}
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">Últimos gastos</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('recentExpenses')}</h2>
             <Link
               href="/dashboard/finances/expenses"
               className="text-sm flex items-center gap-1 hover:opacity-70 transition-opacity"
               style={{ color: '#0062FF' }}
             >
-              Ver todo <ArrowRight size={14} />
+              {t('viewAll')} <ArrowRight size={14} />
             </Link>
           </div>
 
           {recentExpenses.length === 0 ? (
             <div className="text-center py-8">
               <Receipt size={36} className="mx-auto mb-2 opacity-30" style={{ color: '#909098' }} />
-              <p className="text-sm text-muted-foreground">No hay gastos este mes</p>
+              <p className="text-sm text-muted-foreground">{t('noExpenseMonth')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -255,7 +257,7 @@ export default function FinancesPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">
-                      {expenseCategoryLabels[exp.category as ExpenseCategory] ?? exp.category ?? 'Gasto'}
+                      {expenseCategoryLabels[exp.category as ExpenseCategory] ?? exp.category ?? t('payment')}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {exp.description ?? '—'}

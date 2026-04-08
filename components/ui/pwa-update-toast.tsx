@@ -2,6 +2,7 @@
 
 import { RefreshCw } from 'lucide-react'
 import { usePwaUpdate } from '@/lib/hooks/use-pwa-update'
+import { useTranslations } from 'next-intl'
 
 /**
  * PwaUpdateToast — floating notification when a new app version is ready.
@@ -11,6 +12,7 @@ import { usePwaUpdate } from '@/lib/hooks/use-pwa-update'
  */
 export function PwaUpdateToast() {
   const { updateAvailable, applyUpdate } = usePwaUpdate()
+  const t = useTranslations('pwa')
 
   if (!updateAvailable) return null
 
@@ -47,13 +49,13 @@ export function PwaUpdateToast() {
             className="text-sm font-bold leading-tight"
             style={{ color: '#F2F2F2' }}
           >
-            Nueva versión disponible
+            {t('toastTitle')}
           </p>
           <p
             className="text-xs mt-0.5"
             style={{ color: '#8A8A90' }}
           >
-            Actualiza para obtener las últimas mejoras
+            {t('toastDesc')}
           </p>
         </div>
 
@@ -68,7 +70,7 @@ export function PwaUpdateToast() {
             boxShadow:   '0 0 12px rgba(0, 98, 255, 0.4)',
           }}
         >
-          Actualizar
+          {t('toastBtn')}
         </button>
       </div>
     </div>

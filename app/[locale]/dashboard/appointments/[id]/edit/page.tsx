@@ -30,6 +30,7 @@ import {
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
+import { useTranslations } from 'next-intl'
 
 function fmtReminder(mins: number) {
   if (mins >= 1440) return `${mins / 1440} día${mins >= 2880 ? 's' : ''}`
@@ -53,6 +54,8 @@ interface Props { params: { id: string } }
 
 export default function EditAppointmentPage({ params }: Props) {
   const router   = useRouter()
+  const t        = useTranslations('appointments.form')
+  const statusT  = useTranslations('dashboard.status')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [loadingData, setLoadingData] = useState(true)
@@ -385,7 +388,7 @@ export default function EditAppointmentPage({ params }: Props) {
     return (
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
         <Loader2 size={32} className="animate-spin" />
-        <span className="ml-3 font-medium">Cargando cita...</span>
+        <span className="ml-3 font-medium">{t('loadingApt')}</span>
       </div>
     )
   }
@@ -394,14 +397,14 @@ export default function EditAppointmentPage({ params }: Props) {
     <div className="space-y-6 animate-fade-in max-w-2xl">
       <Link href="/dashboard/appointments"
         className="btn-ghost inline-flex text-sm gap-2" style={{ color: '#909098' }}>
-        <ArrowLeft size={16} /> Volver a Agenda
+        <ArrowLeft size={16} /> {t('backToAgenda')}
       </Link>
 
       <div>
         <h1 className="text-2xl font-black" style={{ color: '#F2F2F2', letterSpacing: '-0.025em' }}>
-          Editar Cita
+          {t('editAptTitle')}
         </h1>
-        <p className="text-sm" style={{ color: '#909098' }}>Modifica los datos de esta cita</p>
+        <p className="text-sm" style={{ color: '#909098' }}>{t('editAptSubtitle')}</p>
       </div>
 
       {msg && (
@@ -422,7 +425,7 @@ export default function EditAppointmentPage({ params }: Props) {
               <CalendarDays size={18} style={{ color: '#0062FF' }} />
             </div>
             <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>
-              Información de la cita
+              {t('infoTitle')}
             </h2>
           </div>
 
@@ -430,7 +433,7 @@ export default function EditAppointmentPage({ params }: Props) {
             {/* Client */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Cliente <span style={{ color: '#FF3B30' }}>*</span>
+                {t('client')} <span style={{ color: '#FF3B30' }}>*</span>
               </label>
               <ClientSelect
                 clients={clients}
@@ -443,7 +446,7 @@ export default function EditAppointmentPage({ params }: Props) {
             {/* Date/time */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Fecha y hora <span style={{ color: '#FF3B30' }}>*</span>
+                {t('dateTime')} <span style={{ color: '#FF3B30' }}>*</span>
               </label>
               <DateTimePicker
                 value={form.start_at}
@@ -458,7 +461,7 @@ export default function EditAppointmentPage({ params }: Props) {
                 style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)' }}>
                 <Ban size={18} style={{ color: '#FF3B30', flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: '#FF3B30' }}>Horario no disponible</p>
+                  <p className="text-sm font-semibold" style={{ color: '#FF3B30' }}>{t('slotErrors.title')}</p>
                   <p className="text-xs mt-1" style={{ color: 'rgba(255,59,48,0.75)' }}>{slotError}</p>
                 </div>
               </div>
@@ -471,7 +474,7 @@ export default function EditAppointmentPage({ params }: Props) {
                 <AlertTriangle size={18} style={{ color: '#FFD60A', flexShrink: 0, marginTop: 2 }} />
                 <div className="flex-1">
                   <p className="text-sm font-semibold flex items-center gap-2" style={{ color: '#FFD60A' }}>
-                    Doble agenda detectada <DualBookingBadge />
+                    {t('slotErrors.doubleTitle')} <DualBookingBadge />
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'rgba(255,214,10,0.7)' }}>{doubleBookingMsg}</p>
                   <label className="flex items-center gap-2 mt-3 cursor-pointer">
@@ -479,7 +482,7 @@ export default function EditAppointmentPage({ params }: Props) {
                       onChange={e => setConfirmed(e.target.checked)}
                       className="w-4 h-4 rounded" style={{ accentColor: '#FFD60A' }} />
                     <span className="text-xs font-medium" style={{ color: '#FFD60A' }}>
-                      Confirmo que deseo mantener esta segunda cita el mismo día
+                      {t('slotErrors.confirmDoubleKeep')}
                     </span>
                   </label>
                 </div>
@@ -489,7 +492,7 @@ export default function EditAppointmentPage({ params }: Props) {
             {/* Servicios (multi-select) */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Servicios <span style={{ color: '#FF3B30' }}>*</span>
+                {t('services')} <span style={{ color: '#FF3B30' }}>*</span>
               </label>
               <div className="space-y-2">
                 {services.map(s => {
@@ -536,8 +539,8 @@ export default function EditAppointmentPage({ params }: Props) {
               {selectedServices.length > 0 && (
                 <p className="mt-2 text-xs flex items-center gap-1" style={{ color: '#606068' }}>
                   <Info size={12} />
-                  Total: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
-                  {selectedServices.length > 1 && ` · ${selectedServices.length} servicios`}
+                  {t('total')}: {totalDuration} min · ${totalPrice.toLocaleString('es-CO')}
+                  {selectedServices.length > 1 && ` · ${selectedServices.length} ${t('servicesCount')}`}
                 </p>
               )}
             </div>
@@ -545,12 +548,12 @@ export default function EditAppointmentPage({ params }: Props) {
             {/* Staff */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Empleado asignado
+                {t('staff')}
               </label>
               <select value={form.assigned_user_id}
                 onChange={e => setForm(f => ({ ...f, assigned_user_id: e.target.value }))}
                 className="input-base">
-                <option value="">Sin asignar</option>
+                <option value="">{t('unassigned', { fallback: 'Sin asignar' })}</option>
                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
@@ -558,27 +561,27 @@ export default function EditAppointmentPage({ params }: Props) {
             {/* Status */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Estado
+                {t('status')}
               </label>
               <select value={form.status}
                 onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                 className="input-base">
-                <option value="pending">Pendiente</option>
-                <option value="confirmed">Confirmada</option>
-                <option value="completed">Completada</option>
-                <option value="cancelled">Cancelada</option>
-                <option value="no_show">No asistió</option>
+                <option value="pending">{statusT('pending')}</option>
+                <option value="confirmed">{statusT('confirmed')}</option>
+                <option value="completed">{statusT('completed')}</option>
+                <option value="cancelled">{statusT('cancelled')}</option>
+                <option value="no_show">{statusT('noShow')}</option>
               </select>
             </div>
 
             {/* Notes */}
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-                Notas (opcional)
+                {t('notes')}
               </label>
               <textarea rows={3} value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Preferencias del cliente, instrucciones especiales..."
+                placeholder={t('notesPlaceholder')}
                 className="input-base resize-none" />
             </div>
 
@@ -593,13 +596,13 @@ export default function EditAppointmentPage({ params }: Props) {
                   }
                   <span className="text-sm" style={{ color: skipReminder ? '#606068' : '#F2F2F2' }}>
                     {skipReminder
-                      ? 'Sin recordatorio para esta cita'
-                      : 'WhatsApp · 8 PM día anterior'
+                      ? t('reminderNone')
+                      : t('reminderWhatsapp')
                     }
                   </span>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <span className="text-xs" style={{ color: '#909098' }}>Omitir</span>
+                  <span className="text-xs" style={{ color: '#909098' }}>{t('skip')}</span>
                   <div className="relative">
                     <input type="checkbox" className="sr-only peer"
                       checked={skipReminder} onChange={e => setSkipReminder(e.target.checked)} />
@@ -615,12 +618,12 @@ export default function EditAppointmentPage({ params }: Props) {
 
         <div className="flex items-center justify-end gap-3 pb-10">
           <Link href="/dashboard/appointments">
-            <Button variant="secondary" type="button">Cancelar</Button>
+            <Button variant="secondary" type="button">{t('cancel')}</Button>
           </Link>
           <Button type="submit" loading={saving}
             disabled={validating || !!slotError || doubleBookingLevel === 'blocked' || (doubleBookingLevel === 'warn' && !confirmed)}
             leftIcon={<Save size={16} />}>
-            Guardar cambios
+            {t('save')}
           </Button>
         </div>
       </form>

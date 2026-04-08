@@ -6,28 +6,29 @@
     "ogDescription": "La plataforma que centraliza tus citas, clientes y finanzas en una sola App.",
     "twitterDescription": "Centraliza tu negocio con el poder de la IA y WhatsApp."
   },
-
   "nav": {
     "sectionLabel": "Principal",
-    "agenda": "Agenda",
+    "agenda": "Calendario",
     "clients": "Clientes",
     "services": "Servicios",
     "team": "Equipo",
     "finances": "Finanzas",
     "reports": "Reportes",
     "settings": "Ajustes",
-    "activeBusiness": "Negocio activo",
+    "activeBusiness": "Empresa Activa",
     "defaultCategory": "Servicios",
     "closeMenu": "Cerrar menú",
     "signOut": "Cerrar sesión",
-    "profile": "Perfil"
+    "profile": "Perfil",
+    "pulse": "Pulso del Sistema",
+    "role_platform_admin": "Admin. Plataforma",
+    "role_owner": "Propietario",
+    "role_staff": "Personal"
   },
-
   "topbar": {
     "openMenu": "Abrir menú",
     "notifications": "Notificaciones"
   },
-
   "pageTitles": {
     "dashboard": "Dashboard",
     "dashboardSub": "Resumen general",
@@ -55,14 +56,12 @@
     "agendaSub": "Agenda",
     "systemPulseSub": "SaaS Health Monitor"
   },
-
   "notifications": {
     "title": "Notificaciones",
     "markAllRead": "Marcar todo como leído",
     "empty": "Bandeja vacía",
     "emptyDesc": "No tienes alertas pendientes en este momento."
   },
-
   "landing": {
     "badge": "PLATAFORMA DE GESTIÓN INTELIGENTE",
     "headline": "Gestiona tu negocio en",
@@ -90,7 +89,6 @@
       "reports": "Reportes en tiempo real"
     }
   },
-
   "auth": {
     "login": {
       "platformBadge": "Plataforma SaaS",
@@ -149,9 +147,18 @@
       "successSpamNote": "¿No ves el correo? Revisa la carpeta de spam o correo no deseado.",
       "successLoginLink": "Ir a iniciar sesión",
       "benefits": {
-        "grow": { "title": "Crece rápido", "desc": "Más reservas con menos esfuerzo manual." },
-        "easy": { "title": "Fácil uso",    "desc": "Sin conocimientos técnicos previos." },
-        "all":  { "title": "Todo en uno",  "desc": "Citas, clientes y finanzas integrados." }
+        "grow": {
+          "title": "Crece rápido",
+          "desc": "Más reservas con menos esfuerzo manual."
+        },
+        "easy": {
+          "title": "Fácil uso",
+          "desc": "Sin conocimientos técnicos previos."
+        },
+        "all": {
+          "title": "Todo en uno",
+          "desc": "Citas, clientes y finanzas integrados."
+        }
       },
       "heroTitle": "Impulsa tu negocio,",
       "heroTitleAccent": "simplifica tu vida.",
@@ -193,7 +200,6 @@
       "loginLink": "Ir al inicio de sesión"
     }
   },
-
   "validation": {
     "emailInvalid": "Email inválido",
     "emailRequired": "El email es requerido",
@@ -209,13 +215,21 @@
     "bizNameShort": "El nombre del negocio es muy corto",
     "selectBizCategory": "Selecciona un tipo de negocio"
   },
-
   "dashboard": {
     "tabs": {
       "agenda": "Agenda",
-      "summary": "Resumen"
+      "summary": "Resumen",
+      "metrics": "Métricas"
     },
-    "weekHeaders": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+    "weekHeaders": [
+      "Lun",
+      "Mar",
+      "Mié",
+      "Jue",
+      "Vie",
+      "Sáb",
+      "Dom"
+    ],
     "stats": {
       "activeAppointments": "Citas activas",
       "pending": "Pendientes",
@@ -223,7 +237,9 @@
       "confirmed": "Confirmadas",
       "todayAppointments": "Citas hoy",
       "totalClients": "Clientes",
-      "monthRevenue": "Ingresos del mes"
+      "monthRevenue": "Ingresos del mes",
+      "appointmentsToday": "Citas hoy",
+      "pendingConfirmation": "Por confirmar"
     },
     "actions": {
       "newAppointment": "Nueva cita",
@@ -256,9 +272,53 @@
     "empty": {
       "title": "Sin citas",
       "desc": "No hay citas programadas para este día."
+    },
+    "greeting": "Buenos días",
+    "greetingFallback": "Hola",
+    "quickActions": {
+      "newClient": "Nuevo cliente",
+      "registerPayment": "Registrar pago",
+      "newAppointment": "Nueva cita"
+    },
+    "welcome": {
+      "title": "¡Bienvenido a Cronix!",
+      "subtitle": "Configura tu negocio para empezar a gestionar citas, clientes y finanzas.",
+      "button": "Configurar mi negocio"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "confirmed": "Confirmada",
+      "completed": "Completada",
+      "cancelled": "Cancelada",
+      "noShow": "No se presentó"
+    },
+    "panels": {
+      "dayAppointments": "Citas del día",
+      "noAppointments": "Sin citas",
+      "noAppointmentsDesc": "No hay citas para este día.",
+      "scheduleAppointment": "Agendar cita",
+      "cancelQuestion": "¿Cancelar esta cita?",
+      "cancelDesc": "Esta acción no se puede deshacer.",
+      "cancelNo": "No",
+      "cancelYes": "Sí, cancelar",
+      "edit": "Editar",
+      "confirm": "Confirmar",
+      "detailTitle": "Detalle de la cita",
+      "service": "Servicio",
+      "time": "Hora",
+      "duration": "Duración",
+      "staff": "Profesional",
+      "unassigned": "Sin asignar",
+      "phone": "Teléfono",
+      "notes": "Notas",
+      "changeStatus": "Cambiar estado",
+      "confirmApt": "Confirmar cita",
+      "markCompleted": "Marcar completada",
+      "cancelApt": "Cancelar cita",
+      "editFullApt": "Editar cita completa",
+      "backToDay": "Volver al día"
     }
   },
-
   "appointments": {
     "title": "Nueva Cita",
     "editTitle": "Editar Cita",
@@ -277,9 +337,24 @@
       "createFailed": "No se pudo crear la cita",
       "updateFailed": "No se pudo actualizar la cita",
       "loadFailed": "No se pudo cargar la información"
-    }
+    },
+    "subtitle": "Gestiona todas tus citas",
+    "newAppointment": "Nueva cita",
+    "searchApt": "Buscar cita...",
+    "day": "Día",
+    "week": "Semana",
+    "loadingAgenda": "Cargando agenda...",
+    "noAptsTitle": "Sin citas",
+    "noAptsDesc": "No hay citas en este período.",
+    "scheduleApt": "Agendar cita",
+    "unknownClient": "Cliente desconocido",
+    "unmanaged": "Sin gestionar",
+    "unassigned": "Sin asignar",
+    "edit": "Editar",
+    "pastAptCheck": "¿Asistió el cliente?",
+    "yesAttended": "Sí, asistió",
+    "noShow": "No se presentó"
   },
-
   "clients": {
     "title": "Clientes",
     "newTitle": "Nuevo Cliente",
@@ -296,9 +371,17 @@
     "errors": {
       "createFailed": "No se pudo crear el cliente",
       "updateFailed": "No se pudo actualizar el cliente"
-    }
+    },
+    "newClient": "Nuevo cliente",
+    "searchPlaceholder": "Buscar cliente...",
+    "clearSearch": "Limpiar búsqueda",
+    "totalClients": "Clientes en total",
+    "vip": "VIP",
+    "avgTicket": "Ticket promedio",
+    "noClients": "Sin clientes aún",
+    "addFirstClient": "Agrega tu primer cliente",
+    "visits": "visitas"
   },
-
   "services": {
     "title": "Servicios",
     "newTitle": "Nuevo Servicio",
@@ -314,9 +397,74 @@
     "errors": {
       "createFailed": "No se pudo crear el servicio",
       "updateFailed": "No se pudo actualizar el servicio"
+    },
+    "errNameReq": "El nombre es requerido",
+    "errDurationReq": "La duración es requerida",
+    "errPriceReq": "El precio es requerido",
+    "errPriceMin": "El precio debe ser un número positivo",
+    "errDescReq": "La descripción es requerida",
+    "toastAdded": "Servicio agregado exitosamente",
+    "toastUpdated": "Servicio actualizado exitosamente",
+    "toastDeleted": "Servicio eliminado exitosamente",
+    "newSub": "Agrega un servicio al catálogo",
+    "editSub": "Modifica los datos del servicio",
+    "colName": "Nombre",
+    "colDuration": "Duración",
+    "colPrice": "Precio",
+    "colStatus": "Estado",
+    "colActions": "Acciones",
+    "statusActive": "Activo",
+    "statusInactive": "Inactivo",
+    "btnActivate": "Activar",
+    "btnDeactivate": "Desactivar",
+    "newService": "Nuevo servicio",
+    "editService": "Editar servicio",
+    "form": {
+      "name": "Nombre del servicio",
+      "namePlaceholder": "Ej. Corte de cabello",
+      "category": "Categoría",
+      "noCategory": "Sin categoría",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Describe el servicio...",
+      "duration": "Duración",
+      "durations": {
+        "30": "30 min",
+        "60": "1 hora",
+        "90": "1 h 30 min",
+        "120": "2 horas",
+        "150": "2 h 30 min"
+      },
+      "customDuration": "Personalizada",
+      "customMin": "minutos",
+      "price": "Precio",
+      "color": "Color",
+      "active": "Activo",
+      "cancel": "Cancelar",
+      "save": "Guardar cambios",
+      "create": "Crear servicio"
+    },
+    "noServices": "No hay servicios configurados",
+    "createFirst": "Crea tu primer servicio para empezar a agendar citas",
+    "createFirstBtn": "Crear primer servicio",
+    "count": "{count} servicios",
+    "categories": {
+      "Corte": "Corte",
+      "Color": "Color",
+      "Tratamiento": "Tratamiento",
+      "Estética": "Estética",
+      "Salud": "Salud",
+      "Consulta": "Consulta",
+      "Entrenamiento": "Entrenamiento",
+      "Otro": "Otro"
+    },
+    "status": {
+      "inactive": "Inactivo"
+    },
+    "actions": {
+      "deactivate": "Desactivar",
+      "activate": "Activar"
     }
   },
-
   "finances": {
     "title": "Finanzas",
     "income": "Ingresos",
@@ -335,18 +483,44 @@
     "empty": "No hay transacciones para este período.",
     "errors": {
       "loadFailed": "No se pudieron cargar las finanzas"
-    }
+    },
+    "errorLoading": "Error al cargar las finanzas",
+    "subtitle": "Control financiero del negocio",
+    "registerExpense": "Registrar gasto",
+    "registerIncome": "Registrar cobro",
+    "incomeMonth": "Ingresos del mes",
+    "expenseMonth": "Gastos del mes",
+    "netProfit": "Ganancia neta",
+    "margin": "Margen",
+    "distribution": "Distribución",
+    "recentIncome": "Cobros recientes",
+    "viewAll": "Ver todos",
+    "noIncomeMonth": "Sin cobros este mes",
+    "payment": "Pago",
+    "discount": "Descuento",
+    "recentExpenses": "Gastos recientes",
+    "noExpenseMonth": "Sin gastos este mes"
   },
-
   "reports": {
     "title": "Reportes",
     "period": "Período",
     "empty": "No hay datos para este período.",
     "errors": {
       "loadFailed": "No se pudieron cargar los reportes"
+    },
+    "subtitle": "Métricas generales del negocio",
+    "statRevenue": "Ingresos Totales",
+    "statApts": "Citas Totales",
+    "statClients": "Nuevos Clientes",
+    "statAvgTicket": "Ticket Promedio",
+    "trendUp": "Subiendo",
+    "trendDown": "Bajando",
+    "chartRevenueTitle": "Evolución de Ingresos",
+    "chartAptsTitle": "Evolución de Citas",
+    "misc": {
+      "noService": "Sin servicio asignado"
     }
   },
-
   "settings": {
     "title": "Configuración",
     "businessName": "Nombre del negocio",
@@ -368,9 +542,83 @@
     },
     "errors": {
       "saveFailed": "No se pudo guardar la configuración"
+    },
+    "errBizNameRef": "Nombre del negocio es requerido",
+    "errCatReq": "La categoría es requerida",
+    "errTzReq": "La zona horaria es requerida",
+    "warnProfileIncomplete": "Tu perfil de negocio está incompleto.",
+    "saveBtn": "Guardar Cambios",
+    "toastSaved": "Configuración guardada",
+    "tabBiz": "Negocio",
+    "tabHours": "Horarios",
+    "generateWaError": "Error al generar el enlace de WhatsApp",
+    "saveError": "Error al guardar la configuración",
+    "saveSuccess": "Configuración guardada",
+    "saveHoursError": "Error al guardar los horarios",
+    "saveHoursSuccess": "Horarios guardados",
+    "saveNotifError": "Error al guardar notificaciones",
+    "saveNotifSuccess": "Notificaciones guardadas",
+    "saveLuisFabActive": "Asistente IA activado",
+    "saveLuisFabInactive": "Asistente IA desactivado",
+    "saveLuisFabError": "Error al cambiar el asistente IA",
+    "copyHoursSuccess": "Horario copiado a todos los días",
+    "subtitle": "Configura los detalles de tu negocio",
+    "bizProfile": "Perfil del negocio",
+    "bizProfileSub": "Nombre, categoría y datos de contacto",
+    "bizName": "Nombre del negocio",
+    "bizNamePlace": "Ej. Mi negocio",
+    "category": "Categoría",
+    "categoryPlace": "Seleccionar categoría",
+    "phone": "Teléfono",
+    "address": "Dirección",
+    "addressPlace": "Calle, ciudad, país",
+    "saveChanges": "Guardar cambios",
+    "waLinkTitle": "Enlace de WhatsApp",
+    "waLinkSub": "Comparte este enlace con tus clientes",
+    "copied": "¡Copiado!",
+    "copy": "Copiar",
+    "waDescGenerated": "Enlace generado correctamente",
+    "waDescNoGenerated": "Aún no tienes enlace generado",
+    "generateWaLink": "Generar enlace",
+    "hoursTitle": "Horario de atención",
+    "hoursSub": "Configura los días y horas de apertura y cierre",
+    "copyToAll": "Copiar a todos",
+    "open": "Abre",
+    "close": "Cierra",
+    "from": "Desde",
+    "to": "Hasta",
+    "saveHoursBtn": "Guardar horarios",
+    "adminNotifTitle": "Notificaciones admin",
+    "adminNotifSub": "Recibe alertas sobre tu negocio",
+    "waBiz": "WhatsApp Business",
+    "waBizSub": "Conecta tu número para recordatorios",
+    "verified": "Verificado",
+    "linkWa": "Vincular WhatsApp",
+    "aiAssistantTitle": "Asistente IA",
+    "aiAssistantSub": "Luis IA te ayuda a gestionar el negocio",
+    "fabTitle": "Botón flotante de IA",
+    "fabSub": "Muestra u oculta el asistente en el dashboard",
+    "remindersTitle": "Recordatorios automáticos",
+    "remindersSub": "Envía recordatorios a los clientes antes de su cita",
+    "waChannel": "Canal de WhatsApp",
+    "waChannelSub": "Notificaciones a través de mensajes de WhatsApp",
+    "pushNotif": {
+      "title": "Notificaciones push",
+      "denied": "Notificaciones bloqueadas por el navegador",
+      "missingConfig": "Falta configuración de notificaciones",
+      "unavailable": "Tu navegador no soporta notificaciones",
+      "loading": "Cargando...",
+      "active": "Activo",
+      "receiveAlerts": "Recibir alertas del negocio",
+      "btnDisable": "Desactivar notificaciones",
+      "btnEnable": "Activar notificaciones"
+    },
+    "saveReminders": "Guardar recordatorios",
+    "plan": {
+      "fullAccess": "Acceso completo incluido",
+      "managePlan": "Gestionar plan"
     }
   },
-
   "profile": {
     "title": "Mi Perfil",
     "name": "Nombre",
@@ -383,9 +631,35 @@
     "successMsg": "Perfil actualizado correctamente.",
     "errors": {
       "saveFailed": "No se pudo actualizar el perfil"
-    }
+    },
+    "subtitle": "Administra tu información personal",
+    "errorImgFormat": "Formato de imagen no válido",
+    "errorImgSize": "La imagen es demasiado grande",
+    "errorUpload": "Error al subir la imagen",
+    "successUpload": "Foto de perfil actualizada",
+    "errorDelete": "Error al eliminar la foto",
+    "successDelete": "Foto de perfil eliminada",
+    "changePhoto": "Cambiar foto",
+    "uploadPhoto": "Subir foto",
+    "deletePhoto": "Eliminar foto",
+    "photoReqs": "JPG, PNG o WebP. Máx. 5 MB.",
+    "personalInfo": "Información personal",
+    "fullname": "Nombre completo",
+    "fullnameLabel": "Nombre y apellido",
+    "phone": "Teléfono",
+    "emailLabel": "Correo electrónico",
+    "emailWarning": "El email no puede cambiarse desde aquí.",
+    "securityTitle": "Seguridad",
+    "securitySubtitle": "Cambia tu contraseña",
+    "cancel": "Cancelar",
+    "changePasswordBtn": "Cambiar contraseña",
+    "newPassword": "Nueva contraseña",
+    "newPasswordLabel": "Ingresa tu nueva contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPasswordLabel": "Repite la nueva contraseña",
+    "passwordSet": "Contraseña actualizada",
+    "saveProfile": "Guardar perfil"
   },
-
   "team": {
     "title": "Equipo",
     "newMember": "Agregar miembro",
@@ -395,9 +669,57 @@
     "empty": "No hay miembros de equipo aún.",
     "errors": {
       "loadFailed": "No se pudo cargar el equipo"
-    }
+    },
+    "errNameReq": "El nombre es requerido",
+    "toastUpdated": "Manejo de equipo actualizado",
+    "toastAdded": "Miembro agregado exitosamente",
+    "toastDeleted": "Miembro eliminado",
+    "restrictedTitle": "Acceso Restringido",
+    "restrictedSub": "Solo los propietarios pueden manejar equipos.",
+    "subtitleOnlyYou": "Actualiza los miembros del equipo.",
+    "addBtn": "Invitar al equipo",
+    "addBtnShort": "Agregar",
+    "editTitle": "Editar Miembro",
+    "newTitle": "Nuevo Miembro",
+    "nameLabel": "Nombre",
+    "namePlace": "Ej. Juan Pérez",
+    "emailLabel": "Email",
+    "emailPlace": "correo@ejemplo.com",
+    "phoneLabel": "Móvil",
+    "colorLabel": "Color",
+    "cancelBtn": "Cancelar",
+    "saveChangesBtn": "Guardar",
+    "ownerLabel": "Propietario",
+    "ownerBadge": "Propietario",
+    "employeesLabel": "Miembros Activos",
+    "noEmployeesTitle": "No hay personal adicional",
+    "noEmployeesSub": "Actualmente eres el único miembro.",
+    "addFirstBtn": "Añadir Primer Empleado",
+    "inactiveBadge": "Inactivo",
+    "noContact": "Sin contacto",
+    "btnDeactivate": "Desactivar empleado",
+    "btnActivate": "Activar empleado"
   },
-
+  "pwa": {
+    "downloadApp": "Descargar App",
+    "pwaTag": "Instalable",
+    "subtitle": "Instala Cronix en tu pantalla de inicio para un acceso rápido y notificaciones.",
+    "installedAlert": "La aplicación ya está instalada.",
+    "browserError": "Tu navegador no soporta la instalación directa. Prueba usando Chrome en Android o Safari en iOS.",
+    "installed": "Instalada",
+    "install": "Instalar",
+    "get": "Obtener",
+    "iosGuideTitle": "Instalar en iPhone / iPad",
+    "iosStep1": "1. Haz clic en el botón 'Compartir' (icono con flecha arriba).",
+    "iosStep2": "2. Selecciona 'Agregar a pantalla de inicio'.",
+    "iosStep3": "3. Haz clic en 'Agregar'.",
+    "installFree": "Instalar Gratis",
+    "getAppIos": "Obtener para iOS",
+    "close": "Cerrar",
+    "toastTitle": "Nueva versión",
+    "toastDesc": "Hay una actualización lista.",
+    "toastBtn": "Actualizar"
+  },
   "setup": {
     "title": "Configuración Inicial",
     "welcome": "Bienvenido a Cronix",
@@ -406,9 +728,14 @@
     "finish": "Finalizar",
     "errors": {
       "saveFailed": "No se pudo guardar la configuración"
-    }
+    },
+    "bizNameLabel": "Nombre de la empresa",
+    "bizNamePlace": "ej. Mi Empresa",
+    "categoryLabel": "Categoría del Negocio",
+    "categoryPlace": "Seleccionar",
+    "createBtn": "Terminar y Entrar",
+    "terms": "Al continuar aceptas los términos y condiciones."
   },
-
   "businessCategories": {
     "barbershop": "Barbería",
     "beautySalon": "Estética / Belleza",
@@ -425,7 +752,6 @@
     "appliances": "Electrodomésticos",
     "other": "Otros"
   },
-
   "languageSwitcher": {
     "label": "Idioma",
     "es": "Español",
@@ -435,7 +761,6 @@
     "de": "Deutsch",
     "it": "Italiano"
   },
-
   "common": {
     "loading": "Cargando...",
     "error": "Error",
@@ -453,5 +778,18 @@
     "of": "de",
     "yes": "Sí",
     "no": "No"
+  },
+  "adminPulse": {
+    "title": "Pulso del Sistema",
+    "subtitle": "Registro de auditoría interna de bases de datos",
+    "tenants": "Equipos Registrados",
+    "activeUsers": "Usuarios Activos",
+    "errorRate": "Tasa de Errores",
+    "connections": "Conexiones DB",
+    "refreshing": "Actualizando...",
+    "refreshPulse": "Actualizar Pulse",
+    "noVitals": "Sin datos de salud del sistema",
+    "dlqTitle": "Cola de errores (DLQ)",
+    "criticalBadge": "Crítico"
   }
 }

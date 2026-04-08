@@ -10,9 +10,11 @@ import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import type { PaymentMethod, Client } from '@/types'
+import { useTranslations } from 'next-intl'
 
 export default function NewFinancePage() {
   const router = useRouter()
+  const t = useTranslations('finances.cobro')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [form, setForm] = useState({
@@ -42,7 +44,7 @@ export default function NewFinancePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!businessId || !form.client_id) {
-      setMsg({ type: 'error', text: 'Debes seleccionar un cliente.' })
+      setMsg({ type: 'error', text: t('errorClient') })
       return
     }
     setSaving(true)
@@ -61,7 +63,7 @@ export default function NewFinancePage() {
 
     setSaving(false)
     if (error) {
-      setMsg({ type: 'error', text: 'Error al registrar el cobro.' })
+      setMsg({ type: 'error', text: t('errorSave') })
     } else {
       router.push('/dashboard/finances')
       router.refresh()
@@ -72,7 +74,7 @@ export default function NewFinancePage() {
     return (
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
         <Loader2 size={32} className="animate-spin" />
-        <span className="ml-3 font-medium">Cargando módulo de cobros...</span>
+        <span className="ml-3 font-medium">{t('loading')}</span>
       </div>
     )
   }
@@ -80,12 +82,12 @@ export default function NewFinancePage() {
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl">
       <Link href="/dashboard" className="btn-ghost inline-flex text-sm gap-2 text-muted-foreground mr-4">
-        <ArrowLeft size={16} /> Volver al Resumen
+        <ArrowLeft size={16} /> {t('back')}
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold text-emerald-400">Registrar Cobro</h1>
-        <p className="text-muted-foreground text-sm">Registra un adelanto, abono o pago total para un cliente</p>
+        <h1 className="text-2xl font-bold text-emerald-400">{t('title')}</h1>
+        <p className="text-muted-foreground text-sm">{t('subtitle')}</p>
       </div>
 
       {msg && (
@@ -100,13 +102,13 @@ export default function NewFinancePage() {
             <div className="h-9 w-9 rounded-xl bg-emerald-900/30 flex items-center justify-center border border-emerald-500/20">
               <User size={18} className="text-emerald-500" />
             </div>
-            <h2 className="text-base font-semibold text-foreground">Asignación de Pago</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('paymentAssign')}</h2>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="client">
-                Buscar Cliente *
+                {t('searchClient')}
               </label>
               <ClientSelect
                 clients={clients}
@@ -115,7 +117,7 @@ export default function NewFinancePage() {
                 required
               />
               <p className="text-xs text-muted-foreground mt-2 mt-1">
-                Puedes registrar un abono adelantado aunque el cliente no tenga cita, o saldar una cita pasada.
+                {t('clientHelp')}
               </p>
             </div>
           </div>
@@ -126,14 +128,14 @@ export default function NewFinancePage() {
             <div className="h-9 w-9 rounded-xl bg-emerald-900/30 flex items-center justify-center border border-emerald-500/20">
               <DollarSign size={18} className="text-emerald-500" />
             </div>
-            <h2 className="text-base font-semibold text-foreground">Detalles del cobro</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('detailsTitle')}</h2>
           </div>
 
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="amount">
-                  Monto a Registrar *
+                  {t('amount')}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
@@ -147,17 +149,17 @@ export default function NewFinancePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="method">
-                  Método de pago *
+                  {t('method')}
                 </label>
                 <select id="method" required value={form.method}
                   onChange={(e) => setForm({ ...form, method: e.target.value as PaymentMethod })}
                   className="input-base bg-card"
                 >
-                  <option value="cash">Efectivo / Cash</option>
-                  <option value="transfer">Zelle / Transferencia</option>
-                  <option value="card">Punto de Venta / Tarjeta</option>
-                  <option value="qr">Pago Móvil / QR</option>
-                  <option value="other">Otro</option>
+                  <option value="cash">{t('methods.cash')}</option>
+                  <option value="transfer">{t('methods.transfer')}</option>
+                  <option value="card">{t('methods.card')}</option>
+                  <option value="qr">{t('methods.qr')}</option>
+                  <option value="other">{t('methods.other')}</option>
                 </select>
               </div>
             </div>
@@ -165,7 +167,7 @@ export default function NewFinancePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="date">
-                  Fecha del cobro *
+                  {t('date')}
                 </label>
                 <input id="date" type="date" required value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
@@ -175,12 +177,12 @@ export default function NewFinancePage() {
               
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="notes">
-                  Concepto / Nota
+                  {t('notes')}
                 </label>
                 <input id="notes" type="text" value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   className="input-base"
-                  placeholder="Ej: Abono reserva balayage..."
+                  placeholder={t('notesPlaceholder')}
                 />
               </div>
             </div>
@@ -189,10 +191,10 @@ export default function NewFinancePage() {
 
         <div className="flex items-center justify-end gap-3 pt-4 pb-10">
           <Link href="/dashboard">
-            <Button variant="secondary" type="button">Cancelar</Button>
+            <Button variant="secondary" type="button">{t('cancel')}</Button>
           </Link>
           <Button type="submit" loading={saving} leftIcon={<DollarSign size={16} />} style={{ backgroundColor: '#30D158', color: '#000' }}>
-            Registrar Cobro
+            {t('save')}
           </Button>
         </div>
       </form>

@@ -1,14 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import Link from 'next/link'
+import { Link } from '@/i18n/navigation'
 import Image from 'next/image'
 import { AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { forgotPassword } from './actions'
 import { forgotPasswordSchema } from '@/lib/validations/auth'
 import { cn } from '@/lib/utils'
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations('auth.forgotPassword')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -95,10 +97,10 @@ export default function ForgotPasswordPage() {
 
 
         <h1 className="text-2xl font-black text-center mb-2 text-white relative z-10" style={{ letterSpacing: "-0.035em" }}>
-          Recuperar contraseña
+          {t('title')}
         </h1>
         <p className="text-center mb-8 text-sm relative z-10" style={{ color: "#6A6A7A" }}>
-          Ingresa tu correo y te enviaremos un enlace para restablecer tu cuenta
+          {t('desc')}
         </p>
 
         {success ? (
@@ -123,7 +125,7 @@ export default function ForgotPasswordPage() {
               }}
             >
               <ArrowLeft size={16} />
-              Volver al inicio de sesión
+              {t('back')}
             </Link>
           </div>
         ) : (
@@ -154,12 +156,12 @@ export default function ForgotPasswordPage() {
                   marginBottom: "8px",
                 }}
               >
-                Correo electrónico
+                {t('email')}
               </label>
               <input 
                 name="email" 
                 type="email" 
-                placeholder="tu@email.com" 
+                placeholder={t('emailPlaceholder')} 
                 className="w-full transition-colors"
                 style={{
                   background: "#13131A",
@@ -187,7 +189,7 @@ export default function ForgotPasswordPage() {
                 border: "none",
               }}
             >
-              {isPending ? 'Enviando...' : 'Enviar enlace de recuperación'}
+              {isPending ? t('submitting') : t('submit')}
             </button>
 
             <Link 
@@ -196,7 +198,7 @@ export default function ForgotPasswordPage() {
               style={{ color: "#3884FF" }}
             >
               <ArrowLeft size={16} />
-              Volver al inicio de sesión
+              {t('back')}
             </Link>
           </form>
         )}

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatRelative } from '@/lib/utils'
 import Link from 'next/link'
 import type { Client } from '@/types'
+import { useTranslations } from 'next-intl'
 
 function ClientRow({ client }: { client: Client }) {
   const isVIP = (client.tags ?? []).includes('VIP')
@@ -42,7 +43,7 @@ function ClientRow({ client }: { client: Client }) {
       </div>
       <div className="text-right flex-shrink-0 hidden sm:block">
         <p className="text-sm font-semibold text-foreground">{formatCurrency(client.total_spent ?? 0)}</p>
-        <p className="text-xs text-muted-foreground">{client.total_appointments ?? 0} visitas</p>
+        <p className="text-xs text-muted-foreground">{client.total_appointments ?? 0} {client._t_visits}</p>
         {client.last_visit_at && (
           <p className="text-xs text-muted-foreground">{formatRelative(client.last_visit_at)}</p>
         )}
@@ -57,6 +58,7 @@ interface ClientsViewProps {
 
 export function ClientsView({ initialClients }: ClientsViewProps) {
   const [query, setQuery] = useState('')
+  const t = useTranslations('clients')
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase()
@@ -78,13 +80,13 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
           <p className="text-muted-foreground text-sm">
-            {initialClients.length} clientes registrados
+            {t('count', { count: initialClients.length })}
           </p>
         </div>
         <Link href="/dashboard/clients/new">
-          <Button leftIcon={<Plus size={16} />}>Nuevo Cliente</Button>
+          <Button leftIcon={<Plus size={16} />}>{t('newClient')}</Button>
         </Link>
       </div>
 
@@ -97,7 +99,7 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
           />
           <input
             type="text"
-            placeholder="Buscar por nombre, teléfono, email o etiqueta..."
+            placeholder={t('searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="w-full bg-[#16161A]/80 backdrop-blur-xl border border-brand-500/50 hover:border-brand-500/70 focus:border-brand-500 rounded-2xl py-3.5 pl-12 pr-12 text-sm text-[#F2F2F2] placeholder-[#5A5A62] outline-none transition-all duration-300 focus:ring-4 focus:ring-brand-500/20 shadow-2xl"
@@ -107,7 +109,7 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
               <button
                 onClick={() => setQuery('')}
                 className="p-1 rounded-md hover:bg-white/10 text-[#8A8A90] hover:text-white transition-colors"
-                title="Limpiar búsqueda"
+                title={t('clearSearch')}
               >
                 <X size={14} />
               </button>
@@ -123,9 +125,9 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
       {/* Stats */}
       <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
         {[
-          { label: 'Total clientes', value: initialClients.length, icon: '👥' },
-          { label: 'VIP', value: vipCount, icon: '⭐' },
-          { label: 'Ticket promedio', value: formatCurrency(avgSpent), icon: '💰' },
+          { label: t('totalClients'), value: initialClients.length, icon: '👥' },
+          { label: t('vip'), value: vipCount, icon: '⭐' },
+          { label: t('avgTicket'), value: formatCurrency(avgSpent), icon: '💰' },
         ].map(s => (
           <div key={s.label} className="card-base text-center p-3 sm:p-4">
             <p className="text-2xl mb-1">{s.icon}</p>
@@ -140,23 +142,23 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
         <div className="card-base text-center py-16">
           <Search size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
           <p className="text-muted-foreground">
-            {query ? `No se encontraron clientes para "${query}"` : 'Aún no tienes clientes registrados'}
+            {query ? t('notFoundQuery', { query }) : t('noClients')}
           </p>
           {query && (
             <Button variant="ghost" size="sm" className="mt-2" onClick={() => setQuery('')}>
-              Limpiar búsqueda
+              {t('clearSearch')}
             </Button>
           )}
           {!query && (
             <Link href="/dashboard/clients/new">
-              <Button size="sm" className="mt-3">Agregar primer cliente</Button>
+              <Button size="sm" className="mt-3">{t('addFirstClient')}</Button>
             </Link>
           )}
         </div>
       ) : (
         <div className="card-base p-0 overflow-hidden">
           <div className="divide-y divide-border">
-            {filtered.map(client => <ClientRow key={client.id} client={client} />)}
+            {filtered.map(client => <ClientRow key={client.id} client={{...client, _t_visits: t('visits')} as any} />)}
           </div>
         </div>
       )}

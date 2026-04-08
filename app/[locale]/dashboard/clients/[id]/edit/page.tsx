@@ -13,6 +13,7 @@ import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import * as clientsRepo from '@/lib/repositories/clients.repo'
 import { PhoneInputFlags, parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
 import { useContactPicker } from '@/lib/hooks/use-contact-picker'
+import { useTranslations } from 'next-intl'
 
 const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo']
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ interface Props { params: { id: string } }
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ClientEditPage({ params }: Props) {
   const router   = useRouter()
+  const t        = useTranslations('clients.form')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [loading,        setLoading]        = useState(true)
@@ -159,15 +161,15 @@ export default function ClientEditPage({ params }: Props) {
         className="btn-ghost inline-flex text-sm gap-2"
         style={{ color: '#909098' }}
       >
-        <ArrowLeft size={16} /> Volver al perfil
+        <ArrowLeft size={16} /> {t('backToProfile')}
       </Link>
 
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black" style={{ color: '#F2F2F2', letterSpacing: '-0.025em' }}>
-          Editar Cliente
+          {t('editTitle')}
         </h1>
-        <p className="text-sm" style={{ color: '#909098' }}>Actualiza la información del cliente</p>
+        <p className="text-sm" style={{ color: '#909098' }}>{t('editSubtitle')}</p>
       </div>
 
       {/* Feedback */}
@@ -199,9 +201,9 @@ export default function ClientEditPage({ params }: Props) {
         >
           <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold">Teléfono sin código de país</p>
+            <p className="font-semibold">{t('legacyPhoneTitle')}</p>
             <p className="mt-0.5 text-xs" style={{ color: 'rgba(255,214,10,0.75)' }}>
-              El número guardado no incluye el prefijo internacional. Selecciona el país correcto, verifica el número y guarda para corregirlo — de lo contrario los recordatorios de WhatsApp no llegarán.
+              {t('legacyPhoneDesc')}
             </p>
           </div>
         </div>
@@ -215,7 +217,7 @@ export default function ClientEditPage({ params }: Props) {
             <UserPen size={18} style={{ color: '#0062FF' }} />
           </div>
           <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>
-            Información personal
+            {t('personalInfo')}
           </h2>
         </div>
 
@@ -223,20 +225,20 @@ export default function ClientEditPage({ params }: Props) {
           {/* Nombre */}
           <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-              Nombre completo <span style={{ color: '#FF3B30' }}>*</span>
+              {t('fullname')} <span style={{ color: '#FF3B30' }}>*</span>
             </label>
             <input
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
               className="input-base"
-              placeholder="Nombre del cliente"
+              placeholder="Ej. Juan Pérez"
             />
           </div>
 
           {/* Teléfono con selector de país */}
           <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-              Teléfono
+              {t('phone')}
             </label>
             <PhoneInputFlags
               country={selectedCountry}
@@ -251,7 +253,7 @@ export default function ClientEditPage({ params }: Props) {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: '#F2F2F2' }}>
-              Email
+              {t('email')}
             </label>
             <div className="relative">
               <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#606068' }} />
@@ -274,7 +276,7 @@ export default function ClientEditPage({ params }: Props) {
             style={{ background: 'rgba(0,98,255,0.1)' }}>
             <Tag size={18} style={{ color: '#0062FF' }} />
           </div>
-          <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>Etiquetas</h2>
+          <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>{t('tags')}</h2>
         </div>
         <div className="flex gap-2 flex-wrap">
           {TAG_OPTIONS.map(tag => (
@@ -294,7 +296,7 @@ export default function ClientEditPage({ params }: Props) {
         </div>
         {form.tags.length > 0 && (
           <p className="text-xs mt-2" style={{ color: '#6A6A72' }}>
-            Seleccionadas: {form.tags.join(', ')}
+            {t('selectedTags')} {form.tags.join(', ')}
           </p>
         )}
       </Card>
@@ -306,13 +308,13 @@ export default function ClientEditPage({ params }: Props) {
             style={{ background: 'rgba(0,98,255,0.1)' }}>
             <FileText size={18} style={{ color: '#0062FF' }} />
           </div>
-          <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>Notas internas</h2>
+          <h2 className="text-base font-semibold" style={{ color: '#F2F2F2' }}>{t('internalNotes')}</h2>
         </div>
         <textarea
           value={form.notes}
           onChange={e => setForm({ ...form, notes: e.target.value })}
           className="input-base resize-none"
-          placeholder="Preferencias, alergias, observaciones..."
+          placeholder={t('notesPlaceholder')}
           rows={4}
         />
       </Card>
@@ -327,12 +329,12 @@ export default function ClientEditPage({ params }: Props) {
             className="flex items-center gap-2 text-sm transition-colors"
             style={{ color: '#FF3B30' }}
           >
-            <Trash2 size={14} /> Eliminar cliente
+            <Trash2 size={14} /> {t('deleteClient')}
           </button>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium" style={{ color: '#FF3B30' }}>
-              ¿Confirmar eliminación?
+              {t('confirmDelete')}
             </span>
             <button
               type="button"
@@ -341,7 +343,7 @@ export default function ClientEditPage({ params }: Props) {
               className="px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50"
               style={{ background: '#FF3B30' }}
             >
-              {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              {deleting ? t('deleting') : t('yesDelete')}
             </button>
             <button
               type="button"
@@ -349,14 +351,14 @@ export default function ClientEditPage({ params }: Props) {
               className="px-3 py-1.5 text-xs font-medium rounded-lg"
               style={{ border: '1px solid #2E2E33', color: '#909098' }}
             >
-              Cancelar
+              {t('cancelDelete')}
             </button>
           </div>
         )}
 
         {/* Guardar */}
         <Button onClick={handleSave} loading={saving} leftIcon={<Save size={16} />}>
-          Guardar cambios
+          {t('saveChanges')}
         </Button>
       </div>
     </div>

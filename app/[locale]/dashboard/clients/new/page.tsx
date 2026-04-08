@@ -17,11 +17,13 @@ import {
   Country,
 } from "@/components/ui/phone-input-flags";
 import { useContactPicker } from "@/lib/hooks/use-contact-picker";
+import { useTranslations } from "next-intl";
 
 const TAG_OPTIONS = ["VIP", "Frecuente", "Nuevo"];
 
 export default function NewClientPage() {
   const router = useRouter();
+  const t = useTranslations('clients.form');
   const { supabase, businessId } = useBusinessContext();
   const [form, setForm] = useState({
     name: "",
@@ -110,7 +112,7 @@ export default function NewClientPage() {
             leftIcon={<ArrowLeft size={16} />}
             className="w-full h-10 rounded-xl px-4"
           >
-            Clientes
+            {t('backToClients')}
           </Button>
         </Link>
         <Link href="/dashboard" className="flex-1 sm:flex-initial">
@@ -120,7 +122,7 @@ export default function NewClientPage() {
             leftIcon={<ArrowLeft size={16} />}
             className="w-full h-10 rounded-xl px-4"
           >
-            Agenda
+            {t('backToAgenda')}
           </Button>
         </Link>
       </div>
@@ -130,10 +132,10 @@ export default function NewClientPage() {
           className="text-2xl font-black"
           style={{ color: "#F2F2F2", letterSpacing: "-0.025em" }}
         >
-          Nuevo Cliente
+          {t('newTitle')}
         </h1>
         <p className="text-sm" style={{ color: "#909098" }}>
-          Registra un nuevo cliente en tu base de datos
+          {t('newSubtitle')}
         </p>
       </div>
 
@@ -163,7 +165,7 @@ export default function NewClientPage() {
               className="text-base font-semibold"
               style={{ color: "#F2F2F2" }}
             >
-              Información personal
+              {t('personalInfo')}
             </h2>
           </div>
 
@@ -175,7 +177,7 @@ export default function NewClientPage() {
                 htmlFor="client-name"
                 style={{ color: "#F2F2F2" }}
               >
-                Nombre completo *
+                {t('fullname')} *
               </label>
               <input
                 id="client-name"
@@ -193,7 +195,7 @@ export default function NewClientPage() {
                 className="block text-sm font-medium mb-1.5"
                 style={{ color: "#F2F2F2" }}
               >
-                Teléfono
+                {t('phone')}
               </label>
               <PhoneInputFlags
                 country={selectedCountry}
@@ -212,7 +214,7 @@ export default function NewClientPage() {
                 htmlFor="client-email"
                 style={{ color: "#F2F2F2" }}
               >
-                Email
+                {t('email')}
               </label>
               <input
                 id="client-email"
@@ -230,7 +232,7 @@ export default function NewClientPage() {
                 className="block text-sm font-medium mb-2"
                 style={{ color: "#F2F2F2" }}
               >
-                Etiquetas
+                {t('tags')}
               </label>
               <div className="flex gap-2 flex-wrap">
                 {TAG_OPTIONS.map((tag) => (
@@ -259,7 +261,7 @@ export default function NewClientPage() {
               </div>
               {selectedTags.length > 0 && (
                 <p className="text-xs mt-1.5" style={{ color: "#6A6A72" }}>
-                  Seleccionadas: {selectedTags.join(", ")}
+                  {t('selectedTags')} {selectedTags.join(", ")}
                 </p>
               )}
             </div>
@@ -271,7 +273,7 @@ export default function NewClientPage() {
                 htmlFor="client-notes"
                 style={{ color: "#F2F2F2" }}
               >
-                Notas internas
+                {t('internalNotes')}
               </label>
               <textarea
                 id="client-notes"
@@ -279,7 +281,7 @@ export default function NewClientPage() {
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="input-base resize-none"
-                placeholder="Preferencias, alergias, historial relevante..."
+                placeholder={t('notesPlaceholder')}
               />
             </div>
           </div>
@@ -291,7 +293,7 @@ export default function NewClientPage() {
             loading={saving}
             leftIcon={<UserPlus size={16} />}
           >
-            Guardar Cliente
+            {t('saveClient')}
           </Button>
         </div>
       </form>

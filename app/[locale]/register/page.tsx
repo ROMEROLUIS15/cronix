@@ -2,8 +2,9 @@
 
 import { useState, useTransition, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { AlertCircle, CheckCircle2, Rocket, Zap, Star, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { register } from "./actions";
@@ -14,22 +15,24 @@ import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 
 type OAuthError = "google_not_registered" | null;
 
-const BENEFITS = [
-  { icon: Rocket, title: "Crece rápido",  desc: "Más reservas con menos esfuerzo manual."   },
-  { icon: Zap,    title: "Fácil uso",     desc: "Sin conocimientos técnicos previos."        },
-  { icon: Star,   title: "Todo en uno",   desc: "Citas, clientes y finanzas integrados."     },
+const getBenefits = (t: any) => [
+  { icon: Rocket, title: t("benefits.grow.title"),  desc: t("benefits.grow.desc") },
+  { icon: Zap,    title: t("benefits.easy.title"),     desc: t("benefits.easy.desc") },
+  { icon: Star,   title: t("benefits.all.title"),   desc: t("benefits.all.desc") },
 ];
 
-const OAUTH_ERROR_MESSAGES: Record<NonNullable<OAuthError>, { title: string; body: string }> = {
+const getOauthErrorMessages = (t: any): Record<NonNullable<OAuthError>, { title: string; body: string }> => ({
   google_not_registered: {
-    title: "Tu cuenta de Google no está registrada",
-    body:  "Para ingresar con Google primero debes crear tu cuenta en Cronix. Completa el formulario y luego podrás usar Google para iniciar sesión.",
+    title: t("oauthErrors.google_not_registered.title"),
+    body:  t("oauthErrors.google_not_registered.body"),
   },
-}
+})
 
 function RegisterForm() {
+  const t = useTranslations("auth.register");
   const searchParams = useSearchParams();
   const rawError    = searchParams.get("error") as OAuthError;
+  const OAUTH_ERROR_MESSAGES = getOauthErrorMessages(t);
   const oauthError  = rawError && rawError in OAUTH_ERROR_MESSAGES ? rawError : null;
   const oauthMsg    = oauthError ? OAUTH_ERROR_MESSAGES[oauthError] : null;
 
@@ -102,10 +105,6 @@ function RegisterForm() {
             <div className="relative" style={{ height:"28px", width:"112px" }}>
               <Image src="/cronix-letras.jpg" alt="Cronix" fill className="object-contain" sizes="112px" />
             </div>
-            <p style={{ color:"#3884FF", fontSize:"11px", fontWeight:700,
-              letterSpacing:"0.12em", textTransform:"uppercase", marginTop:"6px" }}>
-              Gestión Inteligente
-            </p>
           </Link>
 
           {/* OAuth error banner */}
@@ -123,11 +122,11 @@ function RegisterForm() {
               <div className="flex items-center gap-2"
                 style={{ marginTop:"0.875rem", paddingTop:"0.75rem",
                   borderTop:"1px solid rgba(255,214,10,0.15)", paddingLeft:"1.4rem" }}>
-                <span style={{ fontSize:"12px", color:"rgba(255,214,10,0.55)" }}>¿Ya tienes cuenta?</span>
+                <span style={{ fontSize:"12px", color:"rgba(255,214,10,0.55)" }}>{t("hasAccount")}</span>
                 <Link href="/login"
                   className="inline-flex items-center gap-1 transition-opacity hover:opacity-70"
                   style={{ fontSize:"12px", fontWeight:700, color:"#FFD60A" }}>
-                  <LogIn size={12} /> Iniciar sesión
+                  <LogIn size={12} /> {t("loginLink")}
                 </Link>
               </div>
             </div>
@@ -147,10 +146,10 @@ function RegisterForm() {
                 </div>
                 <h2 className="font-black text-white"
                   style={{ fontSize:"1.75rem", letterSpacing:"-0.025em", marginBottom:"0.375rem", textAlign:"center" }}>
-                  ¡Cuenta creada!
+                  {t("successTitle")}
                 </h2>
                 <p style={{ color:"#6A6A7A", fontSize:"14px", textAlign:"center" }}>
-                  Solo falta un paso más para entrar
+                  {t("successSubtitle")}
                 </p>
               </div>
 
@@ -160,12 +159,12 @@ function RegisterForm() {
                 marginBottom:"1.5rem" }}>
                 <p style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em",
                   textTransform:"uppercase", color:"#3884FF", marginBottom:"0.875rem" }}>
-                  ¿Qué hacer ahora?
+                  {t("successStepsTitle")}
                 </p>
                 {[
-                  { step:"1", text:"Revisa tu bandeja de entrada" },
-                  { step:"2", text:"Abre el correo de confirmación de Cronix" },
-                  { step:"3", text:"Haz clic en el enlace para activar tu cuenta" },
+                  { step:"1", text:t("successStep1") },
+                  { step:"2", text:t("successStep2") },
+                  { step:"3", text:t("successStep3") },
                 ].map(({ step, text }) => (
                   <div key={step} className="flex items-center gap-3" style={{ marginBottom:"0.625rem" }}>
                     <div className="flex items-center justify-center flex-shrink-0"
@@ -177,8 +176,7 @@ function RegisterForm() {
                   </div>
                 ))}
                 <p style={{ fontSize:"12px", color:"#4A4A5A", marginTop:"0.875rem",
-                  paddingTop:"0.75rem", borderTop:"1px solid rgba(56,132,255,0.1)" }}>
-                  ¿No ves el correo? Revisa la carpeta de <span style={{ color:"#3884FF", fontWeight:600 }}>spam o correo no deseado</span>.
+                  paddingTop:"0.75rem", borderTop:"1px solid rgba(56,132,255,0.1)" }} dangerouslySetInnerHTML={{ __html: t("successSpamNote") }}>
                 </p>
               </div>
 
@@ -187,7 +185,7 @@ function RegisterForm() {
                   background:"linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
                   color:"#fff", fontSize:"14px", fontWeight:700,
                   boxShadow:"0 0 24px rgba(56,132,255,0.35)", textDecoration:"none" }}>
-                Ir a iniciar sesión
+                {t("successLoginLink")}
               </Link>
             </div>
 
@@ -195,10 +193,10 @@ function RegisterForm() {
             <>
               <h1 className="font-black text-white"
                 style={{ fontSize:"clamp(1.7rem,4vw,2.25rem)", letterSpacing:"-0.035em", marginBottom:"0.375rem" }}>
-                Crea tu cuenta
+                {t("title")}
               </h1>
               <p style={{ color:"#6A6A7A", fontSize:"14px", marginBottom:"1.75rem" }}>
-                Empieza a gestionar tu negocio hoy mismo
+                {t("subtitle")}
               </p>
 
               <form onSubmit={handleSubmit}
@@ -218,7 +216,7 @@ function RegisterForm() {
                 {/* Name row */}
                 <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                   <div>
-                    <input name="firstName" placeholder="Nombre" required
+                    <input name="firstName" placeholder={t("firstName")} required
                       className={cn("input-base w-full", validationErrors.firstName && "border-red-500")}
                       style={inputStyle} />
                     {validationErrors.firstName && (
@@ -226,7 +224,7 @@ function RegisterForm() {
                     )}
                   </div>
                   <div>
-                    <input name="lastName" placeholder="Apellido" required
+                    <input name="lastName" placeholder={t("lastName")} required
                       className={cn("input-base w-full", validationErrors.lastName && "border-red-500")}
                       style={inputStyle} />
                     {validationErrors.lastName && (
@@ -237,7 +235,7 @@ function RegisterForm() {
 
                 {/* Business */}
                 <div>
-                  <input name="bizName" placeholder="Nombre del Negocio" required
+                  <input name="bizName" placeholder={t("bizName")} required
                     className={cn("input-base w-full", validationErrors.bizName && "border-red-500")}
                     style={inputStyle} />
                   {validationErrors.bizName && (
@@ -251,7 +249,7 @@ function RegisterForm() {
                     className={cn("input-base w-full", validationErrors.bizCategory && "border-red-500")}
                     style={{ ...inputStyle, backgroundColor: "#13131A" }}
                     defaultValue="">
-                    <option value="" disabled>Tipo de negocio</option>
+                    <option value="" disabled>{t("bizCategory")}</option>
                     {BUSINESS_CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
@@ -263,7 +261,7 @@ function RegisterForm() {
 
                 {/* Email */}
                 <div>
-                  <input name="email" type="email" placeholder="Email" required
+                  <input name="email" type="email" placeholder={t("email")} required
                     className={cn("input-base w-full", validationErrors.email && "border-red-500")}
                     style={inputStyle} />
                   {validationErrors.email && (
@@ -273,7 +271,7 @@ function RegisterForm() {
 
                 {/* Password */}
                 <div>
-                  <PasswordInput name="password" placeholder="Contraseña" required
+                  <PasswordInput name="password" placeholder={t("password")} required
                     className={validationErrors.password ? "border-red-500" : undefined} />
                   {validationErrors.password && (
                     <p style={{ color:"#FF6B6B", fontSize:"10px", marginTop:"3px" }}>{validationErrors.password}</p>
@@ -282,7 +280,7 @@ function RegisterForm() {
 
                 {/* Confirm password */}
                 <div>
-                  <PasswordInput name="confirmPassword" placeholder="Confirmar Contraseña" required
+                  <PasswordInput name="confirmPassword" placeholder={t("confirmPassword")} required
                     className={validationErrors.confirmPassword ? "border-red-500" : undefined} />
                   {validationErrors.confirmPassword && (
                     <p style={{ color:"#FF6B6B", fontSize:"10px", marginTop:"3px" }}>{validationErrors.confirmPassword}</p>
@@ -296,7 +294,7 @@ function RegisterForm() {
                     background:"linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
                     color:"#fff", fontSize:"14px", fontWeight:700, border:"none", cursor:"pointer", marginTop:"0.25rem",
                     boxShadow:"0 0 24px rgba(56,132,255,0.35),0 4px 12px rgba(56,132,255,0.2)" }}>
-                  {isPending ? "Procesando..." : "Crear cuenta gratis"}
+                  {isPending ? t("submitting") : t("submit")}
                 </button>
 
                 {/* Divider */}
@@ -306,7 +304,7 @@ function RegisterForm() {
                   </div>
                   <div style={{ position:"relative", display:"flex", justifyContent:"center" }}>
                     <span style={{ padding:"0 1rem", background:"#0A0A0F", color:"#3A3A4A", fontSize:"12px" }}>
-                      o regístrate con
+                      {t("divider")}
                     </span>
                   </div>
                 </div>
@@ -323,17 +321,17 @@ function RegisterForm() {
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                   </svg>
-                  Google
+                  {t("google")}
                 </button>
               </form>
             </>
           )}
 
           <p style={{ textAlign:"center", color:"#3A3A4A", fontSize:"14px", marginTop:"1.75rem" }}>
-            ¿Ya tienes cuenta?{" "}
+            {t("hasAccount")}{" "}
             <Link href="/login" className="font-bold hover:opacity-70 transition-opacity"
               style={{ color:"#3884FF" }}>
-              Inicia sesión
+              {t("loginLink")}
             </Link>
           </p>
         </div>
@@ -371,28 +369,28 @@ function RegisterForm() {
             style={{ marginBottom:"1.5rem", background:"rgba(56,132,255,0.15)", border:"1px solid rgba(56,132,255,0.3)" }}>
             <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background:"#63B3FF" }} />
             <span style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:"#63B3FF" }}>
-              Únete gratis hoy
+              {t("heroCta")}
             </span>
           </div>
 
           <h1 className="font-black text-white"
             style={{ fontSize:"clamp(2rem,3.2vw,2.65rem)", letterSpacing:"-0.035em", lineHeight:1.1, marginBottom:"1rem" }}>
-            Impulsa tu negocio,<br />
+            {t("heroTitle")}<br />
             <span style={{ background:"linear-gradient(90deg,#63B3FF,#A5D8FF)",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
-              simplifica tu vida.
+              {t("heroTitleAccent")}
             </span>
           </h1>
           <p style={{ color:"rgba(255,255,255,0.52)", fontSize:"15px", lineHeight:"1.65", maxWidth:"310px", marginBottom:"2.5rem" }}>
-            Únete a miles de profesionales que ya automatizan sus citas y escalan sus ingresos sin esfuerzo.
+            {t("heroDesc")}
           </p>
 
           <div className="flex gap-6 xl:gap-8"
             style={{ marginBottom:"2rem", paddingBottom:"2rem", borderBottom:"1px solid rgba(56,132,255,0.15)" }}>
             {[
-              { value:"+2,400", label:"Negocios activos" },
-              { value:"98%",    label:"Satisfacción"     },
-              { value:"< 2min", label:"Para comenzar"    },
+              { value:"+2,400", label:t("stats.businesses") },
+              { value:"98%",    label:t("stats.satisfaction") },
+              { value:"< 2min", label:t("stats.setupTime") },
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontSize:"1.5rem", fontWeight:900, letterSpacing:"-0.03em",
@@ -408,7 +406,7 @@ function RegisterForm() {
           </div>
 
           <div style={{ display:"flex", flexDirection:"column", gap:"0.625rem" }}>
-            {BENEFITS.map(({ icon: Icon, title, desc }) => (
+            {getBenefits(t).map(({ icon: Icon, title, desc }) => (
               <div key={title} className="flex items-center gap-4"
                 style={{ padding:"0.9rem 1.1rem", borderRadius:"14px",
                   background:"rgba(56,132,255,0.08)", border:"1px solid rgba(56,132,255,0.22)",
@@ -435,10 +433,11 @@ function RegisterForm() {
 }
 
 export default function RegisterPage() {
+  const t = useTranslations("common");
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#060608" }}>
-        <div className="animate-pulse" style={{ color: "#3884FF" }}>Cargando...</div>
+        <div className="animate-pulse" style={{ color: "#3884FF" }}>{t("loading")}</div>
       </div>
     }>
       <RegisterForm />

@@ -10,11 +10,13 @@
 import { useState } from 'react'
 import { Download, Smartphone, Share, X } from 'lucide-react'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
+import { useTranslations } from 'next-intl'
 
 export function PwaInstallFloating() {
   const { canInstall, isIos, isInstalled, install } = usePwaInstall()
   const [dismissed, setDismissed]       = useState(false)
   const [showIosGuide, setShowIosGuide] = useState(false)
+  const t = useTranslations('pwa')
 
   if (isInstalled || dismissed) return null
   if (!canInstall && !isIos)   return null
@@ -49,7 +51,7 @@ export function PwaInstallFloating() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontWeight: 700, fontSize: '14px', color: '#F2F2F2', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Share size={14} style={{ color: '#4D83FF' }} />
-                Instalar en iPhone / iPad
+                {t('iosGuideTitle')}
               </span>
               <button
                 onClick={() => setShowIosGuide(false)}
@@ -61,9 +63,9 @@ export function PwaInstallFloating() {
 
             <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {[
-                <><strong style={{ color: '#4D83FF' }}>1.</strong> Toca el ícono de compartir <strong style={{ color: '#4D83FF' }}>⬆</strong> en Safari</>,
-                <><strong style={{ color: '#4D83FF' }}>2.</strong> Selecciona <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong></>,
-                <><strong style={{ color: '#4D83FF' }}>3.</strong> Toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir&rdquo;</strong> para confirmar</>,
+                t('iosStep1'),
+                t('iosStep2'),
+                t('iosStep3'),
               ].map((step, i) => (
                 <li key={i} style={{ fontSize: '13px', color: '#D1D1D6', lineHeight: 1.5 }}>{step}</li>
               ))}
@@ -93,12 +95,12 @@ export function PwaInstallFloating() {
             }}
           >
             {canInstall ? <Download size={18} /> : <Smartphone size={18} />}
-            {canInstall ? 'Instalar app gratis' : 'Obtener App (iOS)'}
+            {canInstall ? t('installFree') : t('getAppIos')}
           </button>
 
           <button
             onClick={() => setDismissed(true)}
-            aria-label="Cerrar"
+            aria-label={t('close')}
             style={{
               width:        '48px',
               borderRadius: '14px',

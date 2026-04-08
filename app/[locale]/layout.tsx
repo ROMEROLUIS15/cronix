@@ -2,6 +2,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getMessages } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
+import { PwaUpdateToast } from '@/components/ui/pwa-update-toast'
 
 // ── Generate static params for all locales ───────────────────────────────────
 // Tells Next.js about valid [locale] segments at build time.
@@ -32,6 +33,7 @@ export default async function LocaleLayout({
   return (
     <NextIntlClientProvider messages={messages}>
       {children}
+      <PwaUpdateToast />
     </NextIntlClientProvider>
   )
 }

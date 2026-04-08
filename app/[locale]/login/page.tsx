@@ -1,7 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { useState, useTransition, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Link } from "@/i18n/navigation";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import {
   AlertCircle,
   CalendarDays,
@@ -12,33 +15,31 @@ import {
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { PwaInstallFloating } from "@/components/ui/pwa-install-floating";
 import { PasskeyLoginButton } from "@/components/ui/passkey-login-button";
-import { useState, useTransition, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import { loginSchema } from "@/lib/validations/auth";
 import { PasswordInput } from "@/components/ui/password-input";
 import { cn } from "@/lib/utils";
 import { login, signInWithGoogle } from "./actions";
 
-const FEATURES = [
+const getFeatures = (t: any) => [
   {
     icon: CalendarDays,
-    title: "Agenda inteligente",
-    desc: "Citas y disponibilidad en tiempo real.",
+    title: t("features.smartAgenda"),
+    desc: t("features.smartAgendaDesc"),
   },
   {
     icon: Bell,
-    title: "Recordatorios automáticos",
-    desc: "WhatsApp y email sin esfuerzo.",
+    title: t("features.autoReminders"),
+    desc: t("features.autoRemindersDesc"),
   },
   {
     icon: BarChart3,
-    title: "Reportes financieros",
-    desc: "Métricas de tu negocio al instante.",
+    title: t("features.financialReports"),
+    desc: t("features.financialReportsDesc"),
   },
   {
     icon: Shield,
-    title: "100% seguro",
-    desc: "Datos protegidos con cifrado moderno.",
+    title: t("features.secure"),
+    desc: t("features.secureDesc"),
   },
 ];
 
@@ -55,6 +56,8 @@ function InactivityDetector({ onInactivity, onSessionExpired }: { onInactivity: 
 }
 
 export default function LoginPage() {
+  const t = useTranslations('auth.login');
+  const tLanding = useTranslations('landing.mockup');
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -90,12 +93,8 @@ export default function LoginPage() {
     >
       <Suspense fallback={null}>
         <InactivityDetector
-          onInactivity={() =>
-            setError('Tu sesión se cerró por 30 minutos de inactividad. Por favor inicia sesión de nuevo.')
-          }
-          onSessionExpired={() =>
-            setError('Tu sesión de 12 horas expiró. Por favor inicia sesión de nuevo.')
-          }
+          onInactivity={() => setError(t('sessionInactive'))}
+          onSessionExpired={() => setError(t('sessionExpired'))}
         />
       </Suspense>
 
@@ -198,7 +197,7 @@ export default function LoginPage() {
               className="text-xs font-bold tracking-widest uppercase"
               style={{ color: "#63B3FF" }}
             >
-              Plataforma SaaS
+              {t('platformBadge')}
             </span>
           </div>
 
@@ -206,7 +205,7 @@ export default function LoginPage() {
             className="text-4xl xl:text-[2.65rem] font-black leading-[1.1] text-white"
             style={{ letterSpacing: "-0.035em", marginBottom: "1.1rem" }}
           >
-            Tu negocio en
+            {t('heroTitle')}
             <br />
             <span
               style={{
@@ -215,7 +214,7 @@ export default function LoginPage() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              control total.
+              {t('heroTitleAccent')}
             </span>
           </h1>
           <p
@@ -227,8 +226,7 @@ export default function LoginPage() {
               marginBottom: "2.2rem",
             }}
           >
-            Gestiona citas, clientes y finanzas desde un panel moderno accesible
-            desde cualquier dispositivo.
+            {t('heroDesc')}
           </p>
 
           {/* Dashboard mockup */}
@@ -283,7 +281,12 @@ export default function LoginPage() {
                   borderRight: "1px solid #1A1A1E",
                 }}
               >
-                {["Agenda", "Clientes", "Finanzas", "Reportes"].map(
+                {[
+                  tLanding("agenda"), 
+                  tLanding("clientsNav"), 
+                  tLanding("financesNav"), 
+                  tLanding("reportsNav")
+                ].map(
                   (item, i) => (
                     <div
                       key={item}
@@ -304,9 +307,9 @@ export default function LoginPage() {
               <div className="flex-1 p-3 space-y-2">
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { l: "Citas hoy", v: "8", c: "#63B3FF" },
-                    { l: "Clientes", v: "124", c: "#30D158" },
-                    { l: "Ingresos", v: "$4.2k", c: "#FFD60A" },
+                    { l: tLanding("todayAppointments"), v: "8", c: "#63B3FF" },
+                    { l: tLanding("clients"), v: "124", c: "#30D158" },
+                    { l: tLanding("revenue"), v: "$4.2k", c: "#FFD60A" },
                   ].map((s) => (
                     <div
                       key={s.l}
@@ -349,7 +352,7 @@ export default function LoginPage() {
                       color: "#F2F2F2",
                     }}
                   >
-                    Próximas citas
+                    {t('upcomingAppointments')}
                   </div>
                   {[
                     { name: "María G.", time: "09:00", c: "#63B3FF" },
@@ -383,7 +386,7 @@ export default function LoginPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-2.5 mt-auto">
-            {FEATURES.map(({ icon: Icon, title, desc }) => (
+            {getFeatures(t).map(({ icon: Icon, title, desc }) => (
               <div
                 key={title}
                 className="flex items-start gap-2.5 p-3 rounded-xl"
@@ -502,7 +505,7 @@ export default function LoginPage() {
                 marginTop: "6px",
               }}
             >
-              Gestión Inteligente
+              Cronix
             </p>
           </Link>
 
@@ -514,12 +517,12 @@ export default function LoginPage() {
               marginBottom: "0.375rem",
             }}
           >
-            Bienvenido de nuevo
+            {t('welcomeBack')}
           </h1>
           <p
             style={{ color: "#6A6A7A", fontSize: "14px", marginBottom: "2rem" }}
           >
-            Inicia sesión para gestionar tu negocio
+            {t('welcomeBackDesc')}
           </p>
 
           <form
@@ -574,7 +577,7 @@ export default function LoginPage() {
                       textDecoration: "underline",
                     }}
                   >
-                    ¿No tienes cuenta? Regístrate
+                    {t('noAccount')} {t('registerLink')}
                   </Link>
                   <span
                     style={{ color: "rgba(255,107,107,0.3)", fontSize: "12px" }}
@@ -591,7 +594,7 @@ export default function LoginPage() {
                       textDecoration: "underline",
                     }}
                   >
-                    Recuperar contraseña
+                    {t('recoverPassword')}
                   </Link>
                 </div>
               </div>
@@ -611,15 +614,16 @@ export default function LoginPage() {
                   marginBottom: "8px",
                 }}
               >
-                Email
+                {t('email')}
               </label>
               <input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="hola@tuempresa.com"
+                placeholder={t('emailPlaceholder')}
+                required
                 className={cn(
-                  "input-base w-full",
+                  "w-full transition-colors",
                   validationErrors.email && "border-red-500",
                 )}
                 style={{
@@ -662,18 +666,19 @@ export default function LoginPage() {
                     color: "#4A4A5A",
                   }}
                 >
-                  Contraseña
+                  {t('password')}
                 </label>
                 <Link
                   href="/forgot-password"
                   style={{
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: "#3884FF",
+                    color: "#63B3FF",
+                    transition: "opacity 0.2s",
                   }}
-                  className="hover:opacity-70 transition-opacity"
+                  className="hover:opacity-70"
                 >
-                  ¿Olvidaste tu contraseña?
+                  {t('forgotPassword')}
                 </Link>
               </div>
               <PasswordInput
@@ -738,15 +743,15 @@ export default function LoginPage() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                     />
                   </svg>
-                  Iniciando sesión...
+                  {t('submitting')}
                 </>
               ) : (
-                "Iniciar sesión"
+                t('submit')
               )}
             </button>
 
             {/* Divider */}
-            <div className="relative" style={{ margin: "0.25rem 0" }}>
+            <div className="relative" style={{ margin: "1rem 0 0.5rem" }}>
               <div
                 style={{
                   position: "absolute",
@@ -774,7 +779,7 @@ export default function LoginPage() {
                     fontSize: "12px",
                   }}
                 >
-                  o continúa con
+                  {t('divider')}
                 </span>
               </div>
             </div>
@@ -799,7 +804,12 @@ export default function LoginPage() {
                 cursor: "pointer",
               }}
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                style={{ marginRight: "4px" }}
+              >
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   fill="#4285F4"
@@ -817,21 +827,25 @@ export default function LoginPage() {
                   fill="#EA4335"
                 />
               </svg>
-              Ingresar con Google
+              {t('google')}
             </button>
           </form>
 
           <p
-            className="text-center"
-            style={{ color: "#3A3A4A", fontSize: "14px", marginTop: "1.75rem" }}
+            style={{
+              textAlign: "center",
+              color: "#3A3A4A",
+              fontSize: "14px",
+              marginTop: "2.5rem",
+            }}
           >
-            ¿No tienes cuenta?{" "}
+            {t('noAccount')}{" "}
             <Link
               href="/register"
               className="font-bold hover:opacity-70 transition-opacity"
               style={{ color: "#3884FF" }}
             >
-              Regístrate gratis
+              {t('registerLink')}
             </Link>
           </p>
 

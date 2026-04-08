@@ -6,7 +6,6 @@
     "ogDescription": "The platform that centralizes your appointments, clients, and finances in one app.",
     "twitterDescription": "Centralize your business with the power of AI and WhatsApp."
   },
-
   "nav": {
     "sectionLabel": "Main",
     "agenda": "Calendar",
@@ -16,18 +15,20 @@
     "finances": "Finances",
     "reports": "Reports",
     "settings": "Settings",
-    "activeBusiness": "Active business",
+    "activeBusiness": "Active Business",
     "defaultCategory": "Services",
     "closeMenu": "Close menu",
     "signOut": "Sign out",
-    "profile": "Profile"
+    "profile": "Profile",
+    "pulse": "System Pulse",
+    "role_platform_admin": "Platform Admin",
+    "role_owner": "Owner",
+    "role_staff": "Staff"
   },
-
   "topbar": {
     "openMenu": "Open menu",
     "notifications": "Notifications"
   },
-
   "pageTitles": {
     "dashboard": "Dashboard",
     "dashboardSub": "General overview",
@@ -55,14 +56,12 @@
     "agendaSub": "Calendar",
     "systemPulseSub": "SaaS Health Monitor"
   },
-
   "notifications": {
     "title": "Notifications",
     "markAllRead": "Mark all as read",
     "empty": "Empty inbox",
     "emptyDesc": "You have no pending alerts at this time."
   },
-
   "landing": {
     "badge": "INTELLIGENT MANAGEMENT PLATFORM",
     "headline": "Manage your business in",
@@ -90,7 +89,6 @@
       "reports": "Real-time reports"
     }
   },
-
   "auth": {
     "login": {
       "platformBadge": "SaaS Platform",
@@ -149,9 +147,18 @@
       "successSpamNote": "Don't see the email? Check your spam or junk folder.",
       "successLoginLink": "Go to sign in",
       "benefits": {
-        "grow": { "title": "Grow fast", "desc": "More bookings with less manual effort." },
-        "easy": { "title": "Easy to use", "desc": "No technical knowledge required." },
-        "all":  { "title": "All in one", "desc": "Appointments, clients, and finances integrated." }
+        "grow": {
+          "title": "Grow fast",
+          "desc": "More bookings with less manual effort."
+        },
+        "easy": {
+          "title": "Easy to use",
+          "desc": "No technical knowledge required."
+        },
+        "all": {
+          "title": "All in one",
+          "desc": "Appointments, clients, and finances integrated."
+        }
       },
       "heroTitle": "Boost your business,",
       "heroTitleAccent": "simplify your life.",
@@ -193,7 +200,6 @@
       "loginLink": "Go to sign in"
     }
   },
-
   "validation": {
     "emailInvalid": "Invalid email",
     "emailRequired": "Email is required",
@@ -209,13 +215,21 @@
     "bizNameShort": "Business name is too short",
     "selectBizCategory": "Please select a business type"
   },
-
   "dashboard": {
     "tabs": {
       "agenda": "Calendar",
-      "summary": "Summary"
+      "summary": "Summary",
+      "metrics": "Metrics"
     },
-    "weekHeaders": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "weekHeaders": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
     "stats": {
       "activeAppointments": "Active appointments",
       "pending": "Pending",
@@ -223,7 +237,9 @@
       "confirmed": "Confirmed",
       "todayAppointments": "Today's appointments",
       "totalClients": "Clients",
-      "monthRevenue": "Monthly revenue"
+      "monthRevenue": "Monthly revenue",
+      "appointmentsToday": "Appointments Today",
+      "pendingConfirmation": "Awaiting confirmation"
     },
     "actions": {
       "newAppointment": "New appointment",
@@ -256,9 +272,53 @@
     "empty": {
       "title": "No appointments",
       "desc": "There are no appointments scheduled for this day."
+    },
+    "greeting": "Good morning",
+    "greetingFallback": "Hello",
+    "quickActions": {
+      "newClient": "New Client",
+      "registerPayment": "Record Payment",
+      "newAppointment": "New Appt"
+    },
+    "welcome": {
+      "title": "Welcome to Cronix!",
+      "subtitle": "Set up your business to start managing appointments, clients, and finances.",
+      "button": "Set up my business"
+    },
+    "status": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "noShow": "No show"
+    },
+    "panels": {
+      "dayAppointments": "Day's appointments",
+      "noAppointments": "No appointments",
+      "noAppointmentsDesc": "No appointments for this day.",
+      "scheduleAppointment": "Schedule appointment",
+      "cancelQuestion": "Cancel this appointment?",
+      "cancelDesc": "This action cannot be undone.",
+      "cancelNo": "No",
+      "cancelYes": "Yes, cancel",
+      "edit": "Edit",
+      "confirm": "Confirm",
+      "detailTitle": "Appointment detail",
+      "service": "Service",
+      "time": "Time",
+      "duration": "Duration",
+      "staff": "Staff",
+      "unassigned": "Unassigned",
+      "phone": "Phone",
+      "notes": "Notes",
+      "changeStatus": "Change status",
+      "confirmApt": "Confirm appointment",
+      "markCompleted": "Mark as completed",
+      "cancelApt": "Cancel appointment",
+      "editFullApt": "Edit full appointment",
+      "backToDay": "Back to day"
     }
   },
-
   "appointments": {
     "title": "New Appointment",
     "editTitle": "Edit Appointment",
@@ -277,9 +337,24 @@
       "createFailed": "Could not create appointment",
       "updateFailed": "Could not update appointment",
       "loadFailed": "Could not load information"
-    }
+    },
+    "subtitle": "Manage all your appointments",
+    "newAppointment": "New appointment",
+    "searchApt": "Search appointment...",
+    "day": "Day",
+    "week": "Week",
+    "loadingAgenda": "Loading calendar...",
+    "noAptsTitle": "No appointments",
+    "noAptsDesc": "No appointments in this period.",
+    "scheduleApt": "Schedule appointment",
+    "unknownClient": "Unknown client",
+    "unmanaged": "Unmanaged",
+    "unassigned": "Unassigned",
+    "edit": "Edit",
+    "pastAptCheck": "Did the client attend?",
+    "yesAttended": "Yes, attended",
+    "noShow": "No show"
   },
-
   "clients": {
     "title": "Clients",
     "newTitle": "New Client",
@@ -296,9 +371,17 @@
     "errors": {
       "createFailed": "Could not create client",
       "updateFailed": "Could not update client"
-    }
+    },
+    "newClient": "New client",
+    "searchPlaceholder": "Search client...",
+    "clearSearch": "Clear search",
+    "totalClients": "Total clients",
+    "vip": "VIP",
+    "avgTicket": "Avg. ticket",
+    "noClients": "No clients yet",
+    "addFirstClient": "Add your first client",
+    "visits": "visits"
   },
-
   "services": {
     "title": "Services",
     "newTitle": "New Service",
@@ -314,9 +397,74 @@
     "errors": {
       "createFailed": "Could not create service",
       "updateFailed": "Could not update service"
+    },
+    "errNameReq": "Name is required",
+    "errDurationReq": "Duration is required",
+    "errPriceReq": "Price is required",
+    "errPriceMin": "Price must be positive",
+    "errDescReq": "Description is required",
+    "toastAdded": "Service added successfully",
+    "toastUpdated": "Service updated successfully",
+    "toastDeleted": "Service deleted successfully",
+    "newSub": "Add a service to the catalog",
+    "editSub": "Modify service details",
+    "colName": "Name",
+    "colDuration": "Duration",
+    "colPrice": "Price",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "statusActive": "Active",
+    "statusInactive": "Inactive",
+    "btnActivate": "Activate",
+    "btnDeactivate": "Deactivate",
+    "newService": "New service",
+    "editService": "Edit service",
+    "form": {
+      "name": "Service name",
+      "namePlaceholder": "e.g. Haircut",
+      "category": "Category",
+      "noCategory": "No category",
+      "description": "Description",
+      "descriptionPlaceholder": "Describe the service...",
+      "duration": "Duration",
+      "durations": {
+        "30": "30 min",
+        "60": "1 hour",
+        "90": "1 h 30 min",
+        "120": "2 hours",
+        "150": "2 h 30 min"
+      },
+      "customDuration": "Custom",
+      "customMin": "minutes",
+      "price": "Price",
+      "color": "Color",
+      "active": "Active",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "create": "Create service"
+    },
+    "noServices": "No services configured",
+    "createFirst": "Create your first service to start scheduling appointments",
+    "createFirstBtn": "Create first service",
+    "count": "{count} services",
+    "categories": {
+      "Corte": "Haircut",
+      "Color": "Color",
+      "Tratamiento": "Treatment",
+      "Estética": "Esthetics",
+      "Salud": "Health",
+      "Consulta": "Consultation",
+      "Entrenamiento": "Training",
+      "Otro": "Other"
+    },
+    "status": {
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "deactivate": "Deactivate",
+      "activate": "Activate"
     }
   },
-
   "finances": {
     "title": "Finances",
     "income": "Income",
@@ -335,18 +483,44 @@
     "empty": "No transactions for this period.",
     "errors": {
       "loadFailed": "Could not load finances"
-    }
+    },
+    "errorLoading": "Error loading finances",
+    "subtitle": "Business financial control",
+    "registerExpense": "Register expense",
+    "registerIncome": "Register income",
+    "incomeMonth": "Income this month",
+    "expenseMonth": "Expenses this month",
+    "netProfit": "Net profit",
+    "margin": "Margin",
+    "distribution": "Distribution",
+    "recentIncome": "Recent income",
+    "viewAll": "View all",
+    "noIncomeMonth": "No income this month",
+    "payment": "Payment",
+    "discount": "Discount",
+    "recentExpenses": "Recent expenses",
+    "noExpenseMonth": "No expenses this month"
   },
-
   "reports": {
     "title": "Reports",
     "period": "Period",
     "empty": "No data for this period.",
     "errors": {
       "loadFailed": "Could not load reports"
+    },
+    "subtitle": "General business metrics",
+    "statRevenue": "Total Revenue",
+    "statApts": "Total Appointments",
+    "statClients": "New Clients",
+    "statAvgTicket": "Avg. Ticket",
+    "trendUp": "Trending Up",
+    "trendDown": "Trending Down",
+    "chartRevenueTitle": "Revenue History",
+    "chartAptsTitle": "Appointments History",
+    "misc": {
+      "noService": "No service assigned"
     }
   },
-
   "settings": {
     "title": "Settings",
     "businessName": "Business name",
@@ -368,9 +542,83 @@
     },
     "errors": {
       "saveFailed": "Could not save settings"
+    },
+    "errBizNameRef": "Business name required",
+    "errCatReq": "Category required",
+    "errTzReq": "Timezone required",
+    "warnProfileIncomplete": "Your business profile is incomplete.",
+    "saveBtn": "Save Changes",
+    "toastSaved": "Settings saved",
+    "tabBiz": "Business",
+    "tabHours": "Hours",
+    "generateWaError": "Error generating WhatsApp link",
+    "saveError": "Error saving settings",
+    "saveSuccess": "Settings saved",
+    "saveHoursError": "Error saving hours",
+    "saveHoursSuccess": "Hours saved",
+    "saveNotifError": "Error saving notifications",
+    "saveNotifSuccess": "Notifications saved",
+    "saveLuisFabActive": "AI assistant activated",
+    "saveLuisFabInactive": "AI assistant deactivated",
+    "saveLuisFabError": "Error toggling AI assistant",
+    "copyHoursSuccess": "Hours copied to all days",
+    "subtitle": "Configure your business details",
+    "bizProfile": "Business profile",
+    "bizProfileSub": "Name, category and contact details",
+    "bizName": "Business name",
+    "bizNamePlace": "e.g. My Business",
+    "category": "Category",
+    "categoryPlace": "Select category",
+    "phone": "Phone",
+    "address": "Address",
+    "addressPlace": "Street, city, country",
+    "saveChanges": "Save changes",
+    "waLinkTitle": "WhatsApp link",
+    "waLinkSub": "Share this link with your clients",
+    "copied": "Copied!",
+    "copy": "Copy",
+    "waDescGenerated": "Link generated successfully",
+    "waDescNoGenerated": "No link generated yet",
+    "generateWaLink": "Generate link",
+    "hoursTitle": "Business hours",
+    "hoursSub": "Configure opening and closing hours",
+    "copyToAll": "Copy to all",
+    "open": "Opens",
+    "close": "Closes",
+    "from": "From",
+    "to": "To",
+    "saveHoursBtn": "Save hours",
+    "adminNotifTitle": "Admin notifications",
+    "adminNotifSub": "Receive alerts about your business",
+    "waBiz": "WhatsApp Business",
+    "waBizSub": "Connect your number for reminders",
+    "verified": "Verified",
+    "linkWa": "Link WhatsApp",
+    "aiAssistantTitle": "AI Assistant",
+    "aiAssistantSub": "Luis AI helps you manage your business",
+    "fabTitle": "AI floating button",
+    "fabSub": "Show or hide the assistant in the dashboard",
+    "remindersTitle": "Automatic reminders",
+    "remindersSub": "Send reminders to clients before their appointment",
+    "waChannel": "WhatsApp channel",
+    "waChannelSub": "Notifications via WhatsApp messages",
+    "pushNotif": {
+      "title": "Push notifications",
+      "denied": "Notifications blocked by browser",
+      "missingConfig": "Notification config missing",
+      "unavailable": "Your browser doesn't support notifications",
+      "loading": "Loading...",
+      "active": "Active",
+      "receiveAlerts": "Receive business alerts",
+      "btnDisable": "Disable notifications",
+      "btnEnable": "Enable notifications"
+    },
+    "saveReminders": "Save reminders",
+    "plan": {
+      "fullAccess": "Full access included",
+      "managePlan": "Manage plan"
     }
   },
-
   "profile": {
     "title": "My Profile",
     "name": "First name",
@@ -383,9 +631,35 @@
     "successMsg": "Profile updated successfully.",
     "errors": {
       "saveFailed": "Could not update profile"
-    }
+    },
+    "subtitle": "Manage your personal information",
+    "errorImgFormat": "Invalid image format",
+    "errorImgSize": "Image too large",
+    "errorUpload": "Error uploading image",
+    "successUpload": "Profile photo updated",
+    "errorDelete": "Error deleting photo",
+    "successDelete": "Profile photo deleted",
+    "changePhoto": "Change photo",
+    "uploadPhoto": "Upload photo",
+    "deletePhoto": "Delete photo",
+    "photoReqs": "JPG, PNG or WebP. Max 5 MB.",
+    "personalInfo": "Personal information",
+    "fullname": "Full name",
+    "fullnameLabel": "First and last name",
+    "phone": "Phone",
+    "emailLabel": "Email address",
+    "emailWarning": "Email cannot be changed here.",
+    "securityTitle": "Security",
+    "securitySubtitle": "Change your password",
+    "cancel": "Cancel",
+    "changePasswordBtn": "Change password",
+    "newPassword": "New password",
+    "newPasswordLabel": "Enter your new password",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordLabel": "Repeat your new password",
+    "passwordSet": "Password updated",
+    "saveProfile": "Save profile"
   },
-
   "team": {
     "title": "Team",
     "newMember": "Add member",
@@ -395,9 +669,57 @@
     "empty": "No team members yet.",
     "errors": {
       "loadFailed": "Could not load team"
-    }
+    },
+    "errNameReq": "Name is required",
+    "toastUpdated": "Team updated",
+    "toastAdded": "Member added",
+    "toastDeleted": "Member removed",
+    "restrictedTitle": "Restricted Access",
+    "restrictedSub": "Only owners can manage the team.",
+    "subtitleOnlyYou": "Manage team members.",
+    "addBtn": "Invite Team Member",
+    "addBtnShort": "Add",
+    "editTitle": "Edit Member",
+    "newTitle": "New Member",
+    "nameLabel": "Name",
+    "namePlace": "e.g. John Doe",
+    "emailLabel": "Email",
+    "emailPlace": "email@example.com",
+    "phoneLabel": "Phone",
+    "colorLabel": "Theme Color",
+    "cancelBtn": "Cancel",
+    "saveChangesBtn": "Save",
+    "ownerLabel": "Owner",
+    "ownerBadge": "Owner",
+    "employeesLabel": "Active Members",
+    "noEmployeesTitle": "No additional staff",
+    "noEmployeesSub": "You are currently the only member.",
+    "addFirstBtn": "Add First Employee",
+    "inactiveBadge": "Inactive",
+    "noContact": "No contact info",
+    "btnDeactivate": "Deactivate",
+    "btnActivate": "Activate"
   },
-
+  "pwa": {
+    "downloadApp": "Download App",
+    "pwaTag": "Installable",
+    "subtitle": "Install Cronix on your home screen for quick access and notifications.",
+    "installedAlert": "The app is already installed.",
+    "browserError": "Your browser does not support direct installation. Try using Chrome on Android or Safari on iOS.",
+    "installed": "Installed",
+    "install": "Install",
+    "get": "Get",
+    "iosGuideTitle": "Install on iPhone / iPad",
+    "iosStep1": "1. Click the 'Share' button (arrow up icon).",
+    "iosStep2": "2. Select 'Add to Home Screen'.",
+    "iosStep3": "3. Click 'Add'.",
+    "installFree": "Install Free",
+    "getAppIos": "Get for iOS",
+    "close": "Close",
+    "toastTitle": "New version",
+    "toastDesc": "An update is ready.",
+    "toastBtn": "Update"
+  },
   "setup": {
     "title": "Initial Setup",
     "welcome": "Welcome to Cronix",
@@ -406,9 +728,14 @@
     "finish": "Finish",
     "errors": {
       "saveFailed": "Could not save settings"
-    }
+    },
+    "bizNameLabel": "Business Name",
+    "bizNamePlace": "e.g. My Business",
+    "categoryLabel": "Business Category",
+    "categoryPlace": "Select",
+    "createBtn": "Finish Setup",
+    "terms": "By continuing you accept the terms and conditions."
   },
-
   "businessCategories": {
     "barbershop": "Barbershop",
     "beautySalon": "Beauty salon",
@@ -425,7 +752,6 @@
     "appliances": "Appliances",
     "other": "Other"
   },
-
   "languageSwitcher": {
     "label": "Language",
     "es": "Español",
@@ -435,7 +761,6 @@
     "de": "Deutsch",
     "it": "Italiano"
   },
-
   "common": {
     "loading": "Loading...",
     "error": "Error",
@@ -453,5 +778,18 @@
     "of": "of",
     "yes": "Yes",
     "no": "No"
+  },
+  "adminPulse": {
+    "title": "System Pulse",
+    "subtitle": "Internal DB Audit Log",
+    "tenants": "Registered Tenants",
+    "activeUsers": "Active Users",
+    "errorRate": "Error Rate",
+    "connections": "DB Connections",
+    "refreshing": "Refreshing...",
+    "refreshPulse": "Refresh Pulse",
+    "noVitals": "No system health data",
+    "dlqTitle": "Dead Letter Queue (DLQ)",
+    "criticalBadge": "Critical"
   }
 }
