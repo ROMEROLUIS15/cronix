@@ -1,0 +1,46 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run security audit
+        run: |
+          echo "🔍 Running npm audit..."
+          npm audit --audit-level=high
+          exit_code=$?
+          
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::⛔ HIGH/CRITICAL vulnerabilities detected!"
+            echo "📚 Review dependency policy: docs/security/dependency-policy.md"
+            echo ""
+            echo "If this is a known issue with documented mitigations:"
+            echo "1. Check docs/architecture/ for relevant ADRs"
+            echo "2. Verify issue is tracked in GitHub issues"
+            echo "3. If new, create issue with 'security' label"
+            exit 1
+          fi
+          
+          echo "✅ No HIGH/CRITICAL vulnerabilities found"
+      
+      - name: Run tests
+        run: npm test
+        if: success()

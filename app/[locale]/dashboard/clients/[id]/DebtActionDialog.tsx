@@ -51,7 +51,7 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
       })
       reset()
     } catch {
-      setError('Error al registrar el pago. Intenta de nuevo.')
+      setError(t('paymentError'))
     } finally {
       setLoading(false)
     }

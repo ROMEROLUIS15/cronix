@@ -105,7 +105,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__pwaDeferred=e;});`
         }} />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Script
           id="register-sw"

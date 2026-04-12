@@ -1023,6 +1023,20 @@ export type Database = {
           timezone: string
         }[]
       }
+      fn_get_dashboard_stats: {
+        Args: {
+          p_business_id: string
+          p_today_start: string
+          p_today_end: string
+          p_month_start: string
+        }
+        Returns: {
+          today_count: number
+          total_clients: number
+          month_revenue: number
+          pending_count: number
+        }[]
+      }
       fn_mark_all_notifications_as_read: {
         Args: { target_business_id: string }
         Returns: undefined

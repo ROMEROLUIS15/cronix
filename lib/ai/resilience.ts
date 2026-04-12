@@ -90,14 +90,21 @@ export async function safeLLM(
   }
 
   const execute = async (model: string) => {
+    // max_tokens split by use case:
+    // - With tools (planner/ReAct): 300 tokens — tool_call JSON can be 100-200 tokens alone;
+    //   100 was causing truncation and silent fallback to plain text.
+    // - Without tools (quality tier text): 100 tokens — voice response is 2-3 sentences max;
+    //   keeping it low prevents long TTS synthesis latency downstream.
+    const maxTokens = tools.length ? 300 : 100
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 256,
-        temperature: 0.7,
+        max_tokens: maxTokens,
+        temperature: 0.4,
         tools: tools.length ? tools : undefined,
         tool_choice: tools.length ? 'auto' : undefined
       }),

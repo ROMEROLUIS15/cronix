@@ -3,6 +3,7 @@ import { getMessages } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
 import { PwaUpdateToast } from '@/components/ui/pwa-update-toast'
+import { captureRequestError } from '@sentry/nextjs'
 
 // ── Generate static params for all locales ───────────────────────────────────
 // Tells Next.js about valid [locale] segments at build time.
@@ -18,7 +19,7 @@ export default async function LocaleLayout({
   params,
 }: {
   children: React.ReactNode
-  params: { locale: string }
+  params: Promise<{ locale: string }>
 }) {
   const { locale } = await params
 
@@ -37,3 +38,8 @@ export default async function LocaleLayout({
     </NextIntlClientProvider>
   )
 }
+
+// ── Sentry RSC Error Boundary ─────────────────────────────────────────────────
+// Captures errors from nested Server Components (RSCs) that are not caught
+// by the global error.tsx handler.
+export const onRequestError = captureRequestError

@@ -165,8 +165,12 @@ export function Sidebar({
           </p>
           {NAV_ITEMS
             .filter((item) => {
-              if (item.adminOnly && user?.role !== "platform_admin") return false;
-              if (item.ownerOnly && user?.role !== "owner" && user?.role !== "platform_admin") return false;
+              // platform_admin sees everything (all business items + Pulse)
+              if (user?.role === "platform_admin") return true;
+              // Pulse is exclusive to platform_admin — hide from everyone else
+              if (item.adminOnly) return false;
+              // ownerOnly items hidden from employees
+              if (item.ownerOnly && user?.role !== "owner") return false;
               return true;
             })
             .map((item) => {
@@ -199,7 +203,7 @@ export function Sidebar({
             })}
         </nav>
 
-        {/* Install PWA button — only visible on Android Chrome before install */}
+        {/* Install PWA button — always visible */}
         <div className="px-3 pb-2 flex-shrink-0">
           <InstallPwaButton />
         </div>
@@ -266,6 +270,7 @@ export function Sidebar({
               </div>
             </Link>
 
+            {/* Sign out */}
             <form action={signout}>
               <button
                 type="submit"

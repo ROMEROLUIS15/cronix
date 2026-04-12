@@ -48,3 +48,39 @@ export function toErrorMessage(e: unknown): string {
   if (typeof e === 'string') return e
   return 'Error inesperado. Por favor intenta de nuevo.'
 }
+
+/**
+ * capture<T> — Adapts a throw-based async function to Promise<Result<T>>.
+ *
+ * Use at architectural boundaries where the callee may throw (legacy repos,
+ * external fetch, JSON.parse, etc.) and the caller needs an explicit Result.
+ *
+ * Rule: never silence the error — always surface it as result.error so the
+ * caller can decide what to do with it.
+ *
+ * Usage:
+ *   const result = await capture(() => appointmentsRepo.getMonthAppointments(...))
+ *   if (result.error) { setFetchError(result.error); return }
+ *   setMonthApts(result.data)
+ */
+export async function capture<T>(fn: () => Promise<T>): Promise<Result<T>> {
+  try {
+    return ok(await fn())
+  } catch (e) {
+    return fail(toErrorMessage(e))
+  }
+}
+
+/**
+ * mapResult<T, U> — Transforms the success value of a Result without unwrapping.
+ *
+ * Use when you have a Result<T> and need a Result<U> by applying a projection.
+ * Passes through error results unchanged.
+ *
+ * Usage:
+ *   const names = mapResult(clientsResult, clients => clients.map(c => c.name))
+ */
+export function mapResult<T, U>(result: Result<T>, fn: (data: T) => U): Result<U> {
+  if (result.error !== null) return fail(result.error)
+  return ok(fn(result.data))
+}

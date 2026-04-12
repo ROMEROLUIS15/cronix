@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { GroqProvider } from '@/lib/ai/providers/groq-provider'
 import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
-import { AssistantService } from '@/lib/ai/assistant-service'
 import { logger } from '@/lib/logger'
 
 /**
@@ -12,14 +11,10 @@ import { logger } from '@/lib/logger'
  * Generates a proactive welcome message for the dashboard mount.
  */
 export const GET = withErrorHandler(async (req, _context, supabase, user) => {
-  // Use the user from the wrapper
-  let businessId = user.user_metadata?.business_id
-
-  // Fallback: fetch from database if not in metadata
-  if (!businessId) {
-    const { data: dbUser } = await supabase.from('users').select('business_id').eq('id', user.id).single()
-    businessId = dbUser?.business_id
-  }
+  // Admin client bypasses RLS on users table — prevents infinite recursion in users_isolation policy
+  const admin = createAdminClient()
+  const { data: dbUser } = await admin.from('users').select('business_id, name').eq('id', user.id).single()
+  const businessId = dbUser?.business_id
 
   if (!businessId) {
     logger.warn('AI-PROACTIVE', 'Business ID not found for user', { userId: user.id })
@@ -34,20 +29,20 @@ export const GET = withErrorHandler(async (req, _context, supabase, user) => {
   const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
   if (!DEEPGRAM_API_KEY) return NextResponse.json({ error: 'TTS provider not configured' }, { status: 500 })
   const tts = new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
-  
-  const assistant = new AssistantService(stt, llm, tts)
 
   // 1. Get Today Context (Raw)
   const { get_today_summary } = await import('@/lib/ai/assistant-tools')
-  const summary = await get_today_summary(businessId)
+  const { buildToolContext } = await import('@/lib/ai/tools/_context')
+  const ctx = await buildToolContext()
+  const summary = await get_today_summary({ business_id: businessId }, ctx)
 
   // 2. Generate a natural greeting via LLM
-  const prompt = `Resumen actual: ${summary}. 
-  Genera un saludo SUPER CORTO y entusiasta (MÁXIMO 10 PALABRAS) para el dueño del negocio (${user.user_metadata?.name || 'Administrador'}).
+  const prompt = `Resumen actual: ${summary}.
+  Genera un saludo SUPER CORTO y entusiasta (MÁXIMO 10 PALABRAS) para el dueño del negocio (${dbUser?.name || 'Administrador'}).
   Sé directo y profesional.`
 
   const greetingRes = await llm.chat([{ role: 'user', content: prompt }])
-  const text = greetingRes.message.content || '¡Hola! Qué bueno verte. Ya estoy listo para ayudarte.'
+  const text = greetingRes.message?.content || '¡Hola! Qué bueno verte. Ya estoy listo para ayudarte.'
 
   // 3. Generate Audio
   const ttsRes = await tts.synthesize(text)

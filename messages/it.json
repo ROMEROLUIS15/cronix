@@ -119,7 +119,9 @@
       "noAccount": "Non hai un account?",
       "registerLink": "Registrati gratis",
       "recoverPassword": "Recupera password",
-      "upcomingAppointments": "Prossimi appuntamenti"
+      "upcomingAppointments": "Prossimi appuntamenti",
+      "welcomeBack": "Bentornato",
+      "welcomeBackDesc": "Inserisci le tue credenziali per continuare."
     },
     "register": {
       "title": "Crea il tuo account",
@@ -353,7 +355,46 @@
     "edit": "Modifica",
     "pastAptCheck": "Il cliente è venuto?",
     "yesAttended": "Sì, è venuto",
-    "noShow": "Assente"
+    "noShow": "Assente",
+    "form": {
+      "loadingApt": "Caricamento appuntamento...",
+      "loadingForm": "Caricamento dati del modulo...",
+      "backToAgenda": "Torna all'agenda",
+      "editAptTitle": "Modifica Appuntamento",
+      "editAptSubtitle": "Modifica i dettagli dell'appuntamento",
+      "newAptTitle": "Nuovo Appuntamento",
+      "newAptSubtitle": "Pianifica un appuntamento per il tuo cliente",
+      "infoTitle": "Informazioni appuntamento",
+      "client": "Cliente",
+      "dateTime": "Data e ora",
+      "date": "Data",
+      "time": "Ora",
+      "services": "Servizi",
+      "addService": "Aggiungi servizio",
+      "total": "Totale",
+      "servicesCount": "servizi",
+      "staff": "Professionista",
+      "unassigned": "Non assegnato",
+      "status": "Stato",
+      "notes": "Note",
+      "notesPlaceholder": "Note interne sull'appuntamento...",
+      "reminderNone": "Nessun promemoria",
+      "reminderWhatsapp": "Promemoria WhatsApp",
+      "skip": "Salta",
+      "cancel": "Annulla",
+      "save": "Salva modifiche",
+      "scheduleBtn": "Pianifica appuntamento",
+      "slotErrors": {
+        "title": "Conflitto di orario",
+        "doubleTitle": "Doppia prenotazione rilevata",
+        "confirmDoubleKeep": "Conferma e mantieni entrambi gli appuntamenti",
+        "confirmDoubleCheck": "Comprendo il conflitto e voglio pianificare comunque"
+      },
+      "connError": {
+        "title": "Errore di connessione",
+        "retry": "Riprova"
+      }
+    }
   },
   "clients": {
     "title": "Clienti",
@@ -380,7 +421,84 @@
     "avgTicket": "Scontrino medio",
     "noClients": "Nessun cliente ancora",
     "addFirstClient": "Aggiungi il primo cliente",
-    "visits": "visite"
+    "visits": "visite",
+    "count": "{count, plural, =0 {Nessun cliente} one {# cliente} other {# clienti}}",
+    "notFoundQuery": "Nessun risultato per \"{query}\"",
+    "debt": {
+      "pendingDebt": "Debito pendente",
+      "managePayment": "Gestisci pagamento",
+      "manaDebtTitle": "Gestisci debito",
+      "selectAction": "Seleziona un'azione",
+      "markPaid": "Segna come pagato",
+      "paidFull": "Pagamento integrale di {amount}",
+      "registerPayment": "Registra pagamento",
+      "partialPayment": "Pagamento parziale",
+      "close": "Chiudi",
+      "amount": "Importo",
+      "confirmTotal": "Il totale di",
+      "method": "Metodo di pagamento",
+      "methods": {
+        "cash": "Contanti",
+        "card": "Carta",
+        "transfer": "Bonifico",
+        "qr": "Codice QR",
+        "other": "Altro"
+      },
+      "reference": "Riferimento",
+      "referenceOptional": "Opzionale",
+      "back": "Indietro",
+      "confirmBtn": "Conferma pagamento integrale",
+      "savePayment": "Salva pagamento",
+      "paymentError": "Errore nella registrazione del pagamento. Riprova."
+    },
+    "form": {
+      "sessionError": "Impossibile ottenere la sessione. Ricarica la pagina.",
+      "duplicatePhone": "Questo numero è già registrato per il cliente \"{name}\". Ogni telefono deve essere unico per attività.",
+      "namePlaceholder": "Es. Mario Rossi",
+      "tag": {
+        "vip": "VIP",
+        "frecuente": "Frequente",
+        "nuevo": "Nuovo"
+      },
+      "backToClients": "Torna ai clienti",
+      "backToAgenda": "Torna all'agenda",
+      "backToProfile": "Torna al profilo",
+      "newTitle": "Nuovo Cliente",
+      "newSubtitle": "Aggiungi un nuovo cliente al tuo database",
+      "editTitle": "Modifica Cliente",
+      "editSubtitle": "Modifica i dati del cliente",
+      "personalInfo": "Informazioni personali",
+      "fullname": "Nome completo",
+      "phone": "Telefono",
+      "email": "Email",
+      "tags": "Etichette",
+      "selectedTags": "Selezionate:",
+      "internalNotes": "Note interne",
+      "notesPlaceholder": "Es. Preferisce orario mattutino...",
+      "saveClient": "Salva cliente",
+      "legacyPhoneTitle": "Numero di telefono legacy",
+      "legacyPhoneDesc": "Questo cliente ha un telefono nel vecchio formato. Sarà aggiornato al formato E.164 alla prossima salvataggio.",
+      "deleteClient": "Elimina cliente",
+      "confirmDelete": "Eliminare questo cliente?",
+      "deleting": "Eliminazione...",
+      "yesDelete": "Sì, elimina",
+      "cancelDelete": "Annulla",
+      "saveChanges": "Salva modifiche"
+    },
+    "history": {
+      "title": "Cronologia appuntamenti",
+      "totalVisits": "Visite totali",
+      "totalSpent": "Totale speso",
+      "avgTicket": "Scontrino medio",
+      "lastVisit": "Ultima visita: {time}",
+      "noHistory": "Questo cliente non ha ancora appuntamenti registrati.",
+      "payment": "Pagato:",
+      "owes": "Deve:",
+      "paid": "Pagato"
+    },
+    "select": {
+      "searchPlaceholder": "Cerca per nome o telefono..."
+    }
   },
   "services": {
     "title": "Servizi",
@@ -499,7 +617,54 @@
     "payment": "Pagamento",
     "discount": "Sconto",
     "recentExpenses": "Spese recenti",
-    "noExpenseMonth": "Nessuna spesa"
+    "noExpenseMonth": "Nessuna spesa",
+    "gasto": {
+      "amountValid": "Inserisci un importo valido maggiore di 0",
+      "back": "Torna alle finanze",
+      "title": "Registra Spesa",
+      "subtitle": "Registra una spesa operativa dell'azienda",
+      "detailsTitle": "Dettagli della spesa",
+      "amount": "Importo",
+      "category": "Categoria",
+      "date": "Data",
+      "description": "Descrizione",
+      "descriptionPlaceholder": "Descrivi il motivo della spesa...",
+      "cancel": "Annulla",
+      "save": "Salva spesa",
+      "errorSave": "Errore nel salvataggio della spesa"
+    },
+    "cobro": {
+      "errorClient": "Seleziona un cliente",
+      "errorSave": "Errore nel salvataggio del pagamento",
+      "loading": "Caricamento clienti...",
+      "back": "Torna alla dashboard",
+      "title": "Registra Pagamento",
+      "subtitle": "Registra un pagamento ricevuto",
+      "paymentAssign": "Assegna pagamento al cliente",
+      "searchClient": "Cerca cliente",
+      "clientHelp": "Seleziona il cliente che ha effettuato il pagamento",
+      "detailsTitle": "Dettagli del pagamento",
+      "amount": "Importo",
+      "method": "Metodo di pagamento",
+      "methods": {
+        "cash": "Contanti",
+        "transfer": "Bonifico",
+        "card": "Carta",
+        "qr": "Codice QR",
+        "other": "Altro"
+      },
+      "date": "Data",
+      "notes": "Note",
+      "notesPlaceholder": "Opzionale",
+      "cancel": "Annulla",
+      "save": "Salva pagamento"
+    },
+    "expensesPage": {
+      "searchPlaceholder": "Cerca spesa..."
+    },
+    "transactionsPage": {
+      "searchPlaceholder": "Cerca transazione..."
+    }
   },
   "reports": {
     "title": "Report",
@@ -517,8 +682,69 @@
     "trendDown": "In calo",
     "chartRevenueTitle": "Evoluzione Entrate",
     "chartAptsTitle": "Storico Appuntamenti",
+    "export": "Esporta rapporto",
+    "txtTitle": "Rapporto Cronix",
+    "txtTotalApp": "Totale appuntamenti",
+    "txtCompletedApp": "Completati",
+    "txtCancelledApp": "Annullati",
+    "txtTotalClients": "Totale clienti",
+    "txtIncome": "Entrate",
+    "txtExpenses": "Uscite",
+    "txtNetProfit": "Utile netto",
+    "txtPopularServices": "Servizi più popolari",
+    "txtAppSuffix": "appuntamenti",
+    "stats": {
+      "incomeMonth": "Entrate del mese",
+      "totalApp": "Totale appuntamenti",
+      "clientsReg": "Clienti registrati",
+      "total": "Totale",
+      "completed": "Completati",
+      "cancelled": "Annullati",
+      "income": "Entrate",
+      "expenses": "Uscite",
+      "netProfit": "Utile netto"
+    },
+    "cards": {
+      "appointments": {
+        "title": "Appuntamenti",
+        "sub": "Performance appuntamenti",
+        "period": "Questo mese"
+      },
+      "finances": {
+        "title": "Finanze",
+        "sub": "Riepilogo finanziario",
+        "period": "Questo mese"
+      },
+      "clients": {
+        "title": "Clienti",
+        "sub": "Crescita clienti",
+        "period": "Questo mese"
+      },
+      "services": {
+        "title": "Servizi",
+        "sub": "Servizi più richiesti",
+        "period": "Questo mese"
+      }
+    },
+    "sections": {
+      "appointments": "Dettaglio appuntamenti",
+      "finances": "Dettaglio finanziario",
+      "services": "Dettaglio servizi",
+      "clients": "Dettaglio clienti"
+    },
     "misc": {
-      "noService": "Nessun servizio assegnato"
+      "noService": "Nessun servizio assegnato",
+      "latestAppointments": "Ultimi appuntamenti",
+      "noAppointments": "Nessun appuntamento in questo periodo",
+      "appointmentsCount": "{count, plural, =0 {Nessun appuntamento} one {# appuntamento} other {# appuntamenti}}",
+      "clientsCountLabel": "Totale clienti registrati"
+    },
+    "status": {
+      "completed": "Completato",
+      "cancelled": "Annullato",
+      "confirmed": "Confermato",
+      "pending": "In attesa",
+      "no_show": "Assente"
     }
   },
   "settings": {
@@ -616,7 +842,8 @@
     "saveReminders": "Salva promemoria",
     "plan": {
       "fullAccess": "Accesso completo incluso",
-      "managePlan": "Gestisci piano"
+      "managePlan": "Gestisci piano",
+      "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}"
     }
   },
   "profile": {
@@ -658,7 +885,26 @@
     "confirmPassword": "Conferma password",
     "confirmPasswordLabel": "Ripeti la nuova password",
     "passwordSet": "Password aggiornata",
-    "saveProfile": "Salva profilo"
+    "saveProfile": "Salva profilo",
+    "passkeys": {
+      "title": "Chiavi di accesso",
+      "sub": "Accedi senza password con il tuo dispositivo",
+      "notAvailTitle": "Chiavi di accesso non disponibili",
+      "notAvailSub": "Il tuo browser non supporta le chiavi di accesso. Usa Chrome, Edge o Safari.",
+      "registerErrorOptions": "Impossibile ottenere le opzioni di registrazione",
+      "registerErrorVerify": "Errore nella verifica della chiave di accesso",
+      "registerSuccess": "Chiave di accesso registrata con successo",
+      "registerCancel": "Registrazione annullata",
+      "registerGeneric": "Errore nella registrazione della chiave. Riprova.",
+      "defaultDevice": "Il mio dispositivo",
+      "deleteError": "Errore nell'eliminazione della chiave",
+      "emptyTitle": "Primo passo: aggiungi la tua prima chiave di accesso",
+      "emptySub": "Le chiavi di accesso ti consentono di accedere in modo sicuro senza password. Usa la biometria del tuo dispositivo.",
+      "inputPlaceholder": "Nome del dispositivo (opzionale)",
+      "btnWaiting": "Registrazione...",
+      "btnAnother": "Aggiungi un altro dispositivo",
+      "btnRegister": "Registra chiave di accesso"
+    }
   },
   "team": {
     "title": "Team",
@@ -677,6 +923,7 @@
     "restrictedTitle": "Accesso Negato",
     "restrictedSub": "Solo il proprietario può operare.",
     "subtitleOnlyYou": "Gestiscili.",
+    "subtitleMembers": "{count, plural, =0 {Nessun membro} one {# membro attivo} other {# membri attivi}}",
     "addBtn": "Invita",
     "addBtnShort": "Avanti",
     "editTitle": "Modifica",
@@ -709,6 +956,8 @@
     "installed": "Installata",
     "install": "Installa",
     "get": "Ottieni",
+    "installBtn": "Installa app",
+    "addToHome": "Aggiungi alla schermata home",
     "iosGuideTitle": "Installa su iPhone / iPad",
     "iosStep1": "1. Clicca sul pulsante 'Condividi' (icona con la freccia verso l'alto).",
     "iosStep2": "2. Seleziona 'Aggiungi alla schermata home'.",
@@ -777,7 +1026,10 @@
     "minutes": "min",
     "of": "di",
     "yes": "Sì",
-    "no": "No"
+    "no": "No",
+    "savedAs": "Salvato come",
+    "selectCountry": "Seleziona paese",
+    "country": "Paese"
   },
   "adminPulse": {
     "title": "Pulse",
@@ -790,6 +1042,25 @@
     "refreshPulse": "Aggiorna",
     "noVitals": "Nessun dato sistema",
     "dlqTitle": "Coda Errori (DLQ)",
-    "criticalBadge": "Critico"
+    "criticalBadge": "Critico",
+    "noDlqTitle": "Nessun errore recente",
+    "noDlqSub": "Tutti i processi funzionano correttamente.",
+    "thTimestamp": "Timestamp",
+    "thReason": "Motivo",
+    "thPayload": "Payload",
+    "thAction": "Azione",
+    "unknownFail": "Errore sconosciuto",
+    "viewPayload": "Vedi payload",
+    "retryBtn": "Riprova"
+  },
+  "sessionTimeout": {
+    "stillThereTitle": "Ancora li?",
+    "stillThereDesc": "La tua sessione verra chiusa per inattivita. Vuoi mantenerla attiva?",
+    "expiringTitle": "Sessione in scadenza",
+    "expiringDesc": "La tua sessione raggiungera il limite di 12 ore. Salva il tuo lavoro e accedi di nuovo.",
+    "keepSession": "Mantieni sessione"
+  },
+  "voiceAssistant": {
+    "fabTitle": "Assistente Esecutivo IA — Tieni premuto o clicca per parlare"
   }
 }

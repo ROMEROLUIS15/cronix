@@ -176,7 +176,8 @@ function RegisterForm() {
                   </div>
                 ))}
                 <p style={{ fontSize:"12px", color:"#4A4A5A", marginTop:"0.875rem",
-                  paddingTop:"0.75rem", borderTop:"1px solid rgba(56,132,255,0.1)" }} dangerouslySetInnerHTML={{ __html: t("successSpamNote") }}>
+                  paddingTop:"0.75rem", borderTop:"1px solid rgba(56,132,255,0.1)" }}>
+                  {t("successSpamNote")}
                 </p>
               </div>
 

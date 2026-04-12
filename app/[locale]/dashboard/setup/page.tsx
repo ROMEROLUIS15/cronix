@@ -36,6 +36,7 @@ export default function SetupPage() {
     async function getUserData() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
       if (user?.user_metadata) {
         setInitialData({
           name: user.user_metadata.biz_name || "",
@@ -45,7 +46,7 @@ export default function SetupPage() {
       setLoadingUser(false);
     }
     getUserData();
-  }, []);
+  }, [router]);
 
   if (loadingUser) {
     return (

@@ -23,37 +23,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
+import type { BusinessRow, AppointmentWithClient }      from './types.ts'
 
-// ── Notification helpers ────────────────────────────────────────────────────
-function buildReminderNotification(
-  businessId: string,
-  appointments: AppointmentWithClient[]
-): { title: string; content: string; type: string; metadata: Record<string, unknown> } {
-  const MAX_LISTED = 5
-  const listed = appointments.slice(0, MAX_LISTED).map(apt => {
-    const clientName  = apt.clients?.name  ?? 'Cliente'
-    const serviceName = apt.services?.name ?? 'Servicio'
-    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
-      hour: '2-digit', minute: '2-digit'
-    })
-    return `${time} · ${clientName} — ${serviceName}`
-  })
-
-  const overflow = appointments.length > MAX_LISTED ? `\n+${appointments.length - MAX_LISTED} más` : ''
-  const content = listed.join('\n') + overflow
-
-  return {
-    title: `📋 ${appointments.length} recordatorio${appointments.length > 1 ? 's' : ''} enviado${appointments.length > 1 ? 's' : ''}`,
-    content,
-    type: 'info',
-    metadata: {
-      event: 'reminder.sent',
-      totalAppointments: appointments.length,
-    },
-  }
-}
-
-// Initialize once per cold start
 initSentry('cron-reminders')
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
@@ -69,20 +40,29 @@ function json(data: unknown, status = 200) {
   })
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface BusinessRow {
-  id:       string
-  name:     string
-  timezone: string | null
-  settings: Record<string, unknown> | null
-}
+// ── Notification helper ───────────────────────────────────────────────────────
+function buildReminderNotification(
+  _businessId:  string,
+  appointments: AppointmentWithClient[]
+): { title: string; content: string; type: string; metadata: Record<string, unknown> } {
+  const MAX_LISTED = 5
+  const listed = appointments.slice(0, MAX_LISTED).map(apt => {
+    const clientName  = apt.clients?.name  ?? 'Cliente'
+    const serviceName = apt.services?.name ?? 'Servicio'
+    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
+      hour: '2-digit', minute: '2-digit',
+    })
+    return `${time} · ${clientName} — ${serviceName}`
+  })
 
-interface AppointmentWithClient {
-  id:         string
-  start_at:   string
-  service_id: string
-  services:   { name: string } | null
-  clients:    { name: string; phone: string | null } | null
+  const overflow = appointments.length > MAX_LISTED ? `\n+${appointments.length - MAX_LISTED} más` : ''
+
+  return {
+    title:    `📋 ${appointments.length} recordatorio${appointments.length > 1 ? 's' : ''} enviado${appointments.length > 1 ? 's' : ''}`,
+    content:  listed.join('\n') + overflow,
+    type:     'info',
+    metadata: { event: 'reminder.sent', totalAppointments: appointments.length },
+  }
 }
 
 // ── Helper: Check if it's 8 PM in a given timezone ───────────────────────────
@@ -137,10 +117,13 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   })
 
-  // ── Get all businesses ──────────────────────────────────────────────────
-  const { data: businesses, error: bizErr } = await supabase
-    .from('businesses')
-    .select('id, name, timezone, settings')
+  // ── Get businesses at 8 PM local time ─────────────────────────────────────
+  // OPTIMIZATION: Push timezone filter into DB instead of fetching ALL businesses.
+  // Only returns businesses where EXTRACT(HOUR FROM NOW() AT TIME ZONE tz) = 20
+  const { data: businesses, error: bizErr } = await supabase.rpc(
+    'fn_get_businesses_at_hour',
+    { p_hour: 20 }
+  )
 
   if (bizErr || !businesses) {
     captureException(bizErr ?? new Error('No businesses returned'), {
@@ -164,12 +147,7 @@ Deno.serve(async (req: Request) => {
     results.businesses_checked++
     const timezone = biz.timezone ?? 'UTC'
 
-    // ── Skip businesses that are NOT at 8 PM local ───────────────────────
-    if (!is8PMInTimezone(timezone)) {
-      continue
-    }
-
-    results.businesses_at_8pm++
+    // No longer need is8PMInTimezone check — DB already filtered
 
     // Scope all Sentry events in this iteration to the current business
     setSentryTag('business_id',   biz.id)

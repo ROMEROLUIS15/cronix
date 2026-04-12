@@ -6,23 +6,14 @@ import {
   Loader2, CheckCircle2, AlertCircle, Save, Ban, Bell, BellOff,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
 import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { getRepos } from '@/lib/repositories'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
-import * as clientsRepo from '@/lib/repositories/clients.repo'
-import * as servicesRepo from '@/lib/repositories/services.repo'
-import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
-import * as usersRepo from '@/lib/repositories/users.repo'
-import * as businessesRepo from '@/lib/repositories/businesses.repo'
-import * as notificationsRepo from '@/lib/repositories/notifications.repo'
-import {
-  upsertReminder,
-  cancelRemindersByAppointment,
-} from '@/lib/repositories/reminders.repo'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
@@ -50,12 +41,11 @@ function toDatetimeLocal(iso: string): string {
   )
 }
 
-interface Props { params: { id: string } }
-
-export default function EditAppointmentPage({ params }: Props) {
-  const router   = useRouter()
-  const t        = useTranslations('appointments.form')
-  const statusT  = useTranslations('dashboard.status')
+export default function EditAppointmentPage() {
+  const router              = useRouter()
+  const { id: appointmentId } = useParams<{ id: string }>()
+  const t                   = useTranslations('appointments.form')
+  const statusT             = useTranslations('dashboard')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [loadingData, setLoadingData] = useState(true)
@@ -90,24 +80,26 @@ export default function EditAppointmentPage({ params }: Props) {
       return
     }
     async function init() {
-      const [clientsData, servicesData, membersData, aptData, bizSettings, existingReminder] = await Promise.all([
-        clientsRepo.getClients(supabase, businessId!),
-        servicesRepo.getActiveServices(supabase, businessId!),
-        usersRepo.getBusinessMembers(supabase, businessId!),
-        appointmentsRepo.getAppointmentForEdit(supabase, params.id, businessId!),
-        businessesRepo.getBusinessSettings(supabase, businessId!),
+      const repos = getRepos(supabase)
+      const [clientsResult, servicesResult, membersResult, aptResult, bizSettingsResult, existingReminder] = await Promise.all([
+        repos.clients.getAll(businessId!),
+        repos.services.getActive(businessId!),
+        repos.users.getTeamMembers(businessId!),
+        repos.appointments.getForEdit(appointmentId, businessId!),
+        repos.businesses.getSettings(businessId!),
         supabase
           .from('appointment_reminders')
           .select('id')
-          .eq('appointment_id', params.id)
+          .eq('appointment_id', appointmentId)
           .in('status', ['pending', 'sent'])
           .maybeSingle(),
       ])
 
-      setClients(clientsData as Client[])
-      setServices(servicesData as Service[])
-      setUsers(membersData as User[])
+      setClients((clientsResult.data ?? []) as Client[])
+      setServices((servicesResult.data ?? []) as Service[])
+      setUsers((membersResult.data ?? []) as User[])
 
+      const aptData = aptResult.data
       if (!aptData) {
         router.push('/dashboard/appointments')
         return
@@ -130,7 +122,7 @@ export default function EditAppointmentPage({ params }: Props) {
         status:           apt.status           ?? 'pending',
         notes:            apt.notes            ?? '',
       })
-      const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
+      const notif = (bizSettingsResult.data?.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
       const hours  = notif?.reminderHours?.[0] ?? 24
       setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
       // Si no hay reminder activo en la BD, el toggle "Omitir" debe estar ON
@@ -139,7 +131,7 @@ export default function EditAppointmentPage({ params }: Props) {
       setLoadingData(false)
     }
     init()
-  }, [supabase, businessId, contextLoading, params.id, router])
+  }, [supabase, businessId, contextLoading, appointmentId, router])
 
   const selectedServices = services.filter(s => form.service_ids.includes(s.id))
   const totalDuration    = selectedServices.reduce((sum, s) => sum + s.duration_min, 0)
@@ -256,7 +248,7 @@ export default function EditAppointmentPage({ params }: Props) {
     }
 
     const t = setTimeout(async () => {
-      const result = await runValidation(params.id)
+      const result = await runValidation(appointmentId)
       setSlotError(result.slotBlocked ? (result.slotMsg ?? null) : null)
       setDoubleBookingLevel(result.bookingLevel)
       setDoubleBookingMsg(result.bookingMsg)
@@ -275,7 +267,7 @@ export default function EditAppointmentPage({ params }: Props) {
     setSaving(true)
 
     // Re-validate right before saving — guards against race conditions
-    const fresh = await runValidation(params.id)
+    const fresh = await runValidation(appointmentId)
     if (fresh.slotBlocked) {
       setSlotError(fresh.slotMsg ?? null)
       setDoubleBookingLevel('blocked')
@@ -311,7 +303,7 @@ export default function EditAppointmentPage({ params }: Props) {
         is_dual_booking:  doubleBookingLevel === 'warn',
         updated_at:       new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', appointmentId)
       .eq('business_id', businessId)
 
     // Sync junction table: delete old rows + insert new ones
@@ -319,13 +311,13 @@ export default function EditAppointmentPage({ params }: Props) {
       await supabase
         .from('appointment_services')
         .delete()
-        .eq('appointment_id', params.id)
+        .eq('appointment_id', appointmentId)
 
       if (form.service_ids.length > 0) {
         await supabase
           .from('appointment_services')
           .insert(form.service_ids.map((sid, i) => ({
-            appointment_id: params.id,
+            appointment_id: appointmentId,
             service_id:     sid,
             sort_order:     i,
           })))
@@ -333,18 +325,19 @@ export default function EditAppointmentPage({ params }: Props) {
     }
 
     if (!error) {
-      await cancelRemindersByAppointment(supabase, params.id).catch(() => null)
+      const repos = getRepos(supabase)
+      await repos.reminders.cancelByAppointment(appointmentId).catch(() => null)
       if (bizNotif.whatsapp && businessId) {
         const remindAt = new Date(Date.UTC(
           startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
         )).toISOString()
 
         if (!skipReminder) {
-          await upsertReminder(supabase, params.id, businessId, remindAt, 0).catch(() => null)
+          await repos.reminders.upsert(appointmentId, businessId, remindAt, 0).catch(() => null)
         } else {
           // Owner opted out — insert cancelled record so cron skips this appointment
           await supabase.from('appointment_reminders').insert({
-            appointment_id: params.id,
+            appointment_id: appointmentId,
             business_id:    businessId,
             remind_at:      remindAt,
             minutes_before: 0,
@@ -367,11 +360,11 @@ export default function EditAppointmentPage({ params }: Props) {
           type: 'info' as const,
           metadata: {
             event: 'appointment.updated',
-            appointmentId: params.id,
+            appointmentId: appointmentId,
           },
         }
         // Fire-and-forget: notification failures don't block the flow
-        notificationsRepo.createNotification(supabase, notifPayload)
+        repos.notifications.create(notifPayload).catch(() => null)
       }
     }
 
@@ -566,11 +559,11 @@ export default function EditAppointmentPage({ params }: Props) {
               <select value={form.status}
                 onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                 className="input-base">
-                <option value="pending">{statusT('pending')}</option>
-                <option value="confirmed">{statusT('confirmed')}</option>
-                <option value="completed">{statusT('completed')}</option>
-                <option value="cancelled">{statusT('cancelled')}</option>
-                <option value="no_show">{statusT('noShow')}</option>
+                <option value="pending">{statusT('status.pending')}</option>
+                <option value="confirmed">{statusT('status.confirmed')}</option>
+                <option value="completed">{statusT('status.completed')}</option>
+                <option value="cancelled">{statusT('status.cancelled')}</option>
+                <option value="no_show">{statusT('status.noShow')}</option>
               </select>
             </div>
 

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { AppointmentStatusBadge, DualBookingBadge } from '@/components/ui/badge'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
+import { getRepos } from '@/lib/repositories'
 import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case'
 import { formatDate, formatTime, formatCurrency, appointmentStatusConfig } from '@/lib/utils'
 import { getServiceNames, getPrimaryColor, getTotalDuration, getTotalPrice } from '@/lib/utils/appointment-services'
@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl'
 
 export default function AppointmentsPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const { appointments: appointmentsRepo } = getRepos(supabase)
   const t = useTranslations('appointments')
   const [appointments,  setAppointments]  = useState<AppointmentWithRelations[]>([])
   const [loading,       setLoading]       = useState(true)
@@ -31,27 +32,17 @@ export default function AppointmentsPage() {
   const fetchAppointments = useCallback(async () => {
     if (!businessId) return
     setLoading(true)
-    const dateStr    = format(date, 'yyyy-MM-dd')
-    const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString()
-    const endOfDay   = new Date(`${dateStr}T23:59:59.999`).toISOString()
+    const dateStr = format(date, 'yyyy-MM-dd')
+    
+    const result = await appointmentsRepo.getDayAppointments(businessId, dateStr)
 
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id, start_at, end_at, status, is_dual_booking, notes,
-        client:clients(id, name, phone, avatar_url),
-        service:services(id, name, color, duration_min, price),
-        appointment_services(sort_order, service:services(id, name, color, duration_min, price)),
-        assigned_user:users(id, name, avatar_url, color)
-      `)
-      .eq('business_id', businessId)
-      .gte('start_at', startOfDay)
-      .lt('start_at', endOfDay)
-      .order('start_at', { ascending: true })
-
-    if (!error && data) setAppointments(data as AppointmentWithRelations[])
+    if (result.error) {
+      setAppointments([])
+    } else {
+      setAppointments(result.data ?? [])
+    }
     setLoading(false)
-  }, [businessId, date, supabase])
+  }, [businessId, date, appointmentsRepo])
 
   useEffect(() => {
     if (!contextLoading) {
@@ -72,11 +63,14 @@ export default function AppointmentsPage() {
     aptId: string,
     resolution: 'completed' | 'no_show'
   ) => {
+    if (!businessId) return
     setResolvingId(aptId)
-    await appointmentsRepo.updateAppointmentStatus(supabase, aptId, resolution)
-    setAppointments(prev =>
-      prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
-    )
+    const result = await appointmentsRepo.updateStatus(aptId, resolution, businessId)
+    if (!result.error) {
+      setAppointments(prev =>
+        prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
+      )
+    }
     setResolvingId(null)
   }
 

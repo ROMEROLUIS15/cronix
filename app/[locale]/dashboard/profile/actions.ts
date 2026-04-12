@@ -3,7 +3,6 @@
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import * as usersRepo from '@/lib/repositories/users.repo'
 
 // ── Zod schemas ───────────────────────────────────────────────────────────
 const UpdateProfileSchema = z.object({
@@ -61,8 +60,11 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
     }
   }
 
-  // 4. Update user table via repo
-  await usersRepo.updateUser(supabase, user.id, { name, phone: phone || null })
+  // 4. Update user table
+  await supabase
+    .from('users')
+    .update({ name, phone: phone || null })
+    .eq('id', user.id)
 
   // 5. Change password (auth infra — stays in action)
   if (rawPassword) {
@@ -94,8 +96,11 @@ export async function updateAvatar(url: string): Promise<ProfileResult> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'No autenticado' }
 
-  // Update avatar via repo
-  await usersRepo.updateUser(supabase, user.id, { avatar_url: url })
+  // Update avatar
+  await supabase
+    .from('users')
+    .update({ avatar_url: url })
+    .eq('id', user.id)
 
   revalidatePath('/dashboard/profile')
   return { success: 'Imagen actualizada' }

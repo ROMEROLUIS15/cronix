@@ -16,30 +16,33 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth/get-session";
 import { formatCurrency, formatDate, formatRelative } from "@/lib/utils";
-import * as clientsRepo from "@/lib/repositories/clients.repo";
+import { getRepos } from "@/lib/repositories";
 import type { AppointmentStatus, ClientAppointmentWithDetails } from "@/types";
 import { isPast } from "date-fns";
 import { DebtActionDialog } from "./DebtActionDialog";
 import { getTranslations } from "next-intl/server";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function ClientDetailPage({ params }: Props) {
+  const { id } = await params
   const session = await getSession();
   if (!session?.business_id) return notFound();
 
   const supabase = await createClient();
+  const { clients: clientsRepoInstance } = getRepos(supabase);
 
-  const client = await clientsRepo.getClientById(supabase, params.id, session.business_id);
+  const clientRes = await clientsRepoInstance.getById(id, session.business_id);
+  const client = clientRes.error ? null : clientRes.data;
   if (!client) return notFound();
-
+ 
   const t = await getTranslations("clients.history");
   const formT = await getTranslations("clients.form");
-
-  const clientAppointments: ClientAppointmentWithDetails[] =
-    await clientsRepo.getClientAppointments(supabase, client.id, session.business_id);
+ 
+  const aptsRes = await clientsRepoInstance.getAppointments(client.id, session.business_id);
+  const clientAppointments: ClientAppointmentWithDetails[] = aptsRes.data ?? [];
 
   // Calcular deudas (SÓLO CITAS PASADAS Y NO PAGADAS)
   let totalDebt = 0;

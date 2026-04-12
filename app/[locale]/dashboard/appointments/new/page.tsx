@@ -14,13 +14,7 @@ import { Button } from '@/components/ui/button'
 import { DualBookingBadge } from '@/components/ui/badge'
 import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as clientsRepo from '@/lib/repositories/clients.repo'
-import * as servicesRepo from '@/lib/repositories/services.repo'
-import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
-import * as usersRepo from '@/lib/repositories/users.repo'
-import * as businessesRepo from '@/lib/repositories/businesses.repo'
-import { upsertReminder } from '@/lib/repositories/reminders.repo'
-import * as notificationsRepo from '@/lib/repositories/notifications.repo'
+import { getRepos } from '@/lib/repositories'
 import { notifyOwner } from '@/lib/services/push-notify.service'
 import { parseVoiceCommand } from '@/lib/actions/voice-assistant'
 import { notificationForAppointmentCreated } from '@/lib/use-cases/notifications.use-case'
@@ -31,6 +25,7 @@ import {
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
+import { logger } from '@/lib/logger'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { useTranslations } from 'next-intl'
 
@@ -67,8 +62,17 @@ function NewAppointmentForm() {
   const router          = useRouter()
   const searchParams    = useSearchParams()
   const t               = useTranslations('appointments.form')
-  const statusT         = useTranslations('dashboard.status')
+  const statusT         = useTranslations('dashboard')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const { 
+    clients: clientsRepo, 
+    services: servicesRepo, 
+    appointments: appointmentsRepo, 
+    users: usersRepo,
+    businesses: businessesRepo,
+    notifications: notificationsRepo,
+    reminders: remindersRepo
+  } = getRepos(supabase)
   const preselectedDate = searchParams.get('date') // "yyyy-MM-dd" from calendar click
 
   const [form,               setForm]               = useState({
@@ -104,20 +108,20 @@ function NewAppointmentForm() {
     async function init() {
       try {
         setFetchError(null)
-        const [clientsData, servicesData, membersData, bizSettings] = await Promise.all([
-          clientsRepo.getClients(supabase, businessId!).catch(() => []),
-          servicesRepo.getActiveServices(supabase, businessId!).catch(() => []),
-          usersRepo.getBusinessMembers(supabase, businessId!).catch(() => []),
-          businessesRepo.getBusinessSettings(supabase, businessId!).catch(() => null),
+        const [clientsRes, servicesRes, membersRes, bizRes] = await Promise.all([
+          clientsRepo.getAll(businessId!),
+          servicesRepo.getActive(businessId!),
+          usersRepo.getTeamMembers(businessId!),
+          businessesRepo.getSettings(businessId!),
         ])
-
-        setClients((clientsData as Client[]) || [])
-        setServices((servicesData as Service[]) || [])
-        setUsers((membersData as User[]) || [])
+ 
+        if (!clientsRes.error) setClients(clientsRes.data ?? [])
+        if (!servicesRes.error) setServices(servicesRes.data as any ?? [])
+        if (!membersRes.error) setUsers(membersRes.data as any ?? [])
 
         // Load business notification settings
-        if (bizSettings) {
-          const notif = (bizSettings.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
+        if (!bizRes.error && bizRes.data?.settings) {
+          const notif = (bizRes.data.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
           const hours = notif?.reminderHours?.[0] ?? 24
           setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
         }
@@ -147,8 +151,8 @@ function NewAppointmentForm() {
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
 
-    const rawApts = await appointmentsRepo.getDaySlots(supabase, businessId, start, end).catch(() => [])
-    const dayApts = Array.isArray(rawApts) ? rawApts : []
+    const daySlotsResult = await appointmentsRepo.getDaySlots(businessId, start, end)
+    const dayApts = daySlotsResult.error ? [] : (daySlotsResult.data ?? [])
 
     // 1) Employee conflict — each employee can only handle one client at a time.
     if (form.assigned_user_id) {
@@ -221,9 +225,9 @@ function NewAppointmentForm() {
       time:    new Date(a.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
       service: '',
     }))
-    const result = evaluateDoubleBooking({ existingCount: clientApts.length, existingSlots })
+    const doubleResult = evaluateDoubleBooking({ existingCount: clientApts.length, existingSlots })
 
-    return { slotBlocked: false, bookingLevel: result.level, bookingMsg: result.message }
+    return { slotBlocked: false, bookingLevel: doubleResult.level, bookingMsg: doubleResult.message }
   }
 
   // ── Validation: slot overlap + double booking ──────────────────────────
@@ -291,19 +295,19 @@ function NewAppointmentForm() {
     const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
     let newApt: { id: string } | null = null
-    try {
-      newApt = await appointmentsRepo.createAppointment(supabase, {
-        business_id:      businessId,
-        client_id:        form.client_id,
-        service_ids:      form.service_ids,
-        assigned_user_id: form.assigned_user_id || null,
-        start_at:         startObj.toISOString(),
-        end_at:           endObj.toISOString(),
-        notes:            form.notes || null,
-        status:           'pending',
-        is_dual_booking:  doubleBookingLevel === 'warn',
-      })
-    } catch { /* handled below */ }
+    const result = await appointmentsRepo.create({
+      business_id:      businessId,
+      client_id:        form.client_id,
+      service_ids:      form.service_ids,
+      assigned_user_id: form.assigned_user_id || null,
+      start_at:         startObj.toISOString(),
+      end_at:           endObj.toISOString(),
+      notes:            form.notes || null,
+      status:           'pending',
+      is_dual_booking:  doubleBookingLevel === 'warn',
+    })
+
+    if (!result.error) newApt = result.data
 
     if (newApt) {
       // Reminder WhatsApp
@@ -314,17 +318,10 @@ function NewAppointmentForm() {
 
         if (!skipReminder) {
           // Create pending reminder — cron will send WhatsApp at 8 PM
-          await upsertReminder(supabase, newApt.id, businessId, remindAt, 0).catch(() => null)
+          await remindersRepo.upsert(newApt.id, businessId, remindAt, 0)
         } else {
           // Owner opted out — insert cancelled record so cron skips this appointment
-          await supabase.from('appointment_reminders').insert({
-            appointment_id: newApt.id,
-            business_id:    businessId,
-            remind_at:      remindAt,
-            minutes_before: 0,
-            status:         'cancelled',
-            channel:        'whatsapp',
-          }).then(() => null, () => null)
+          await remindersRepo.forceCancel(newApt.id, businessId, remindAt, 0)
         }
       }
 
@@ -333,9 +330,7 @@ function NewAppointmentForm() {
       const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
       const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
       const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
-      notificationsRepo.createNotification(supabase, notifPayload).catch(err => {
-        logger.error('Failed to create in-app notification for new appointment', err)
-      })
+      notificationsRepo.create(notifPayload)
 
       // Web Push al dueño: notificación inmediata de nueva cita
       notifyOwner({

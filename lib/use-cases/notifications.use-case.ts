@@ -10,7 +10,7 @@
  * Pure business logic — receives data, returns notification payloads.
  */
 
-import type { CreateNotificationInput } from '@/lib/repositories/notifications.repo'
+import type { CreateNotificationPayload as CreateNotificationInput } from '@/lib/domain/repositories/INotificationRepository'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

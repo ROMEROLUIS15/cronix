@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { Search, ChevronDown, User } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Modal } from './modal'
 import type { Client } from '@/types'
 
@@ -13,6 +14,7 @@ interface ClientSelectProps {
 }
 
 export function ClientSelect({ clients, value, onChange, required }: ClientSelectProps) {
+  const t = useTranslations('clients.select')
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -80,7 +82,7 @@ export function ClientSelect({ clients, value, onChange, required }: ClientSelec
             />
             <input
               type="search"
-              placeholder="Buscar por nombre o teléfono..."
+              placeholder={t('searchPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all placeholder:text-muted-foreground"

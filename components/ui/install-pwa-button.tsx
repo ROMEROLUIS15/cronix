@@ -17,9 +17,11 @@
 
 import { useState } from 'react'
 import { Download, Share, X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
 
 export function InstallPwaButton() {
+  const t = useTranslations('pwa')
   const { canInstall, isIos, isInstalled, install } = usePwaInstall()
   const [showIosGuide, setShowIosGuide] = useState(false)
 
@@ -39,7 +41,7 @@ export function InstallPwaButton() {
         }}
       >
         <Download size={13} className="flex-shrink-0" />
-        <span className="flex-1 text-left">Instalar app</span>
+        <span className="flex-1 text-left">{t('installBtn')}</span>
       </button>
     )
   }
@@ -58,7 +60,7 @@ export function InstallPwaButton() {
           }}
         >
           <Share size={13} className="flex-shrink-0" />
-          <span className="flex-1 text-left">Añadir a inicio</span>
+          <span className="flex-1 text-left">{t('addToHome')}</span>
         </button>
 
         {showIosGuide && (

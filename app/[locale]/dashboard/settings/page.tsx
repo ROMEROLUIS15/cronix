@@ -24,6 +24,7 @@ import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import { useTranslations } from "next-intl";
+import { getRepos } from "@/lib/repositories";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 type DayKey = typeof DAYS[number];
@@ -93,11 +94,10 @@ export default function SettingsPage() {
       .slice(0, 20);
     const suffix = Math.random().toString(36).slice(2, 8);
     const newSlug = base ? `${base}-${suffix}` : suffix;
-    const { error } = await supabase
-      .from('businesses')
-      .update({ slug: newSlug })
-      .eq('id', bizId);
-    if (!error) setBiz(prev => prev ? { ...prev, slug: newSlug } : prev);
+    const { businesses: businessesRepoInstance } = getRepos(supabase);
+    const result = await businessesRepoInstance.update(bizId, { slug: newSlug });
+    
+    if (!result.error) setBiz(prev => prev ? { ...prev, slug: newSlug } as any : prev);
     else showMsg('error', t('generateWaError'));
     setGeneratingSlug(false);
   };
@@ -109,14 +109,13 @@ export default function SettingsPage() {
       return;
     }
     async function load() {
-      const { data: business } = await supabase
-        .from("businesses")
-        .select("id, name, category, phone, address, logo_url, slug, owner_id, settings, timezone, locale, plan, created_at, updated_at")
-        .eq("id", bizId!)
-        .single();
-      if (business) {
-        setBiz(business);
-        const { country, local } = parsePhone(business.phone);
+      const { businesses: businessesRepoInstance } = getRepos(supabase);
+      const result = await businessesRepoInstance.getById(bizId!);
+      
+      if (!result.error && result.data) {
+        const business = result.data;
+        setBiz(business as any);
+        const { country, local } = parsePhone(business.phone ?? '');
         setSelectedCountry(country);
         setForm({
           name: business.name,
@@ -143,7 +142,7 @@ export default function SettingsPage() {
             whatsapp: notifData.whatsapp ?? false,
           });
         }
-        
+
         const uiData = (business.settings as unknown as BusinessSettingsJson)?.uiSettings;
         if (uiData && typeof uiData.showLuisFab === "boolean") {
           setShowLuisFab(uiData.showLuisFab);
@@ -166,19 +165,18 @@ export default function SettingsPage() {
     
     // Combinar dial + número local (normalizado)
     const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
+    const { businesses: businessesRepoInstance } = getRepos(supabase);
 
-    const { error } = await supabase
-      .from("businesses")
-      .update({
-        name: form.name.trim(),
-        category: form.category,
-        phone: fullPhone,
-        address: form.address.trim() || null,
-      })
-      .eq("id", bizId);
+    const result = await businessesRepoInstance.update(bizId, {
+      name: form.name.trim(),
+      category: form.category,
+      phone: fullPhone,
+      address: form.address.trim() || null,
+    });
+
     setSaving(false);
-    error
-      ? showMsg("error", t('saveError') + error.message)
+    result.error
+      ? showMsg("error", t('saveError') + result.error)
       : showMsg("success", t('saveSuccess'));
   };
 
@@ -186,18 +184,18 @@ export default function SettingsPage() {
     if (!bizId || !biz) return;
     setSavingHours(true);
     const workingHours: Record<string, [string, string] | null> = {};
-    for (const { key } of DAYS) {
+    for (const key of DAYS) {
       const h = getHour(hours, key);
       workingHours[key] = h.active ? [h.open, h.close] : null;
     }
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { error } = await supabase
-      .from("businesses")
-      .update({ settings: { ...currentSettings, workingHours } })
-      .eq("id", bizId);
+    const { businesses: businessesRepoInstance } = getRepos(supabase);
+    
+    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, workingHours });
+    
     setSavingHours(false);
-    error
-      ? showMsg("error", t('saveHoursError') + error.message)
+    result.error
+      ? showMsg("error", t('saveHoursError') + result.error)
       : showMsg("success", t('saveHoursSuccess'));
   };
 
@@ -216,39 +214,37 @@ export default function SettingsPage() {
     if (!bizId || !biz) return;
     setSavingNotif(true);
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { error } = await supabase
-      .from("businesses")
-      .update({ settings: { ...currentSettings, notifications: notifSettings } })
-      .eq("id", bizId);
+    const { businesses: businessesRepoInstance } = getRepos(supabase);
+    
+    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, notifications: notifSettings });
+    
     setSavingNotif(false);
-    if (!error) {
+    if (!result.error) {
       setBiz(prev => prev ? {
         ...prev,
         settings: { ...(prev.settings as BusinessSettingsJson), notifications: notifSettings } as unknown as Business['settings'],
-      } : prev);
+      } as any : prev);
     }
-    error
-      ? showMsg("error", t('saveNotifError') + error.message)
+    result.error
+      ? showMsg("error", t('saveNotifError') + result.error)
       : showMsg("success", t('saveNotifSuccess'));
   };
 
   const handleSaveLuisFab = async (newVal: boolean) => {
     if (!bizId || !biz) return;
     setShowLuisFab(newVal);
-    setSavingFab(true);
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { error } = await supabase
-      .from("businesses")
-      .update({ settings: { ...currentSettings, uiSettings: { showLuisFab: newVal } } })
-      .eq("id", bizId);
+    const { businesses: businessesRepoInstance } = getRepos(supabase);
+    
+    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, uiSettings: { showLuisFab: newVal } });
     
     setSavingFab(false);
     
-    if (!error) {
+    if (!result.error) {
       setBiz(prev => prev ? {
         ...prev,
         settings: { ...(prev.settings as BusinessSettingsJson), uiSettings: { showLuisFab: newVal } } as unknown as Business['settings'],
-      } : prev);
+      } as any : prev);
       
       // Real-time UI sync without refresh
       window.dispatchEvent(new CustomEvent('cronix:toggle-fab', { detail: newVal }));
@@ -265,7 +261,7 @@ export default function SettingsPage() {
     
     setHours(prev => {
       const next = { ...prev };
-      DAYS.forEach(({ key }) => {
+      DAYS.forEach((key) => {
         if (key !== sourceKey && next[key]?.active) {
           next[key] = { ...next[key]!, open: source.open, close: source.close };
         }

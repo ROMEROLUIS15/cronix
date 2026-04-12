@@ -119,7 +119,9 @@
       "noAccount": "Don't have an account?",
       "registerLink": "Sign up free",
       "recoverPassword": "Recover password",
-      "upcomingAppointments": "Upcoming appointments"
+      "upcomingAppointments": "Upcoming appointments",
+      "welcomeBack": "Welcome back",
+      "welcomeBackDesc": "Enter your credentials to continue."
     },
     "register": {
       "title": "Create your account",
@@ -353,7 +355,46 @@
     "edit": "Edit",
     "pastAptCheck": "Did the client attend?",
     "yesAttended": "Yes, attended",
-    "noShow": "No show"
+    "noShow": "No show",
+    "form": {
+      "loadingApt": "Loading appointment...",
+      "loadingForm": "Loading form data...",
+      "backToAgenda": "Back to agenda",
+      "editAptTitle": "Edit Appointment",
+      "editAptSubtitle": "Modify appointment details",
+      "newAptTitle": "New Appointment",
+      "newAptSubtitle": "Schedule an appointment for your client",
+      "infoTitle": "Appointment information",
+      "client": "Client",
+      "dateTime": "Date and time",
+      "date": "Date",
+      "time": "Time",
+      "services": "Services",
+      "addService": "Add service",
+      "total": "Total",
+      "servicesCount": "services",
+      "staff": "Staff",
+      "unassigned": "Unassigned",
+      "status": "Status",
+      "notes": "Notes",
+      "notesPlaceholder": "Internal notes about the appointment...",
+      "reminderNone": "No reminder",
+      "reminderWhatsapp": "WhatsApp reminder",
+      "skip": "Skip",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "scheduleBtn": "Schedule appointment",
+      "slotErrors": {
+        "title": "Schedule conflict",
+        "doubleTitle": "Double booking detected",
+        "confirmDoubleKeep": "Confirm and keep both appointments",
+        "confirmDoubleCheck": "I understand the conflict and want to schedule anyway"
+      },
+      "connError": {
+        "title": "Connection error",
+        "retry": "Retry"
+      }
+    }
   },
   "clients": {
     "title": "Clients",
@@ -380,7 +421,84 @@
     "avgTicket": "Avg. ticket",
     "noClients": "No clients yet",
     "addFirstClient": "Add your first client",
-    "visits": "visits"
+    "visits": "visits",
+    "count": "{count, plural, =0 {No clients} one {# client} other {# clients}}",
+    "notFoundQuery": "No results found for \"{query}\"",
+    "select": {
+      "searchPlaceholder": "Search by name or phone..."
+    },
+    "debt": {
+      "pendingDebt": "Pending debt",
+      "managePayment": "Manage payment",
+      "manaDebtTitle": "Manage debt",
+      "selectAction": "Select an action",
+      "markPaid": "Mark as paid",
+      "paidFull": "Full payment of {amount}",
+      "registerPayment": "Register payment",
+      "partialPayment": "Partial payment",
+      "close": "Close",
+      "amount": "Amount",
+      "confirmTotal": "The total of",
+      "method": "Payment method",
+      "methods": {
+        "cash": "Cash",
+        "card": "Card",
+        "transfer": "Transfer",
+        "qr": "QR Code",
+        "other": "Other"
+      },
+      "reference": "Reference",
+      "referenceOptional": "Optional",
+      "back": "Back",
+      "confirmBtn": "Confirm full payment",
+      "savePayment": "Save payment",
+      "paymentError": "Error registering payment. Try again."
+    },
+    "form": {
+      "sessionError": "Could not get session. Reload the page.",
+      "duplicatePhone": "This number is already registered for client \"{name}\". Each phone must be unique per business.",
+      "namePlaceholder": "e.g. John Doe",
+      "tag": {
+        "vip": "VIP",
+        "frecuente": "Frequent",
+        "nuevo": "New"
+      },
+      "backToClients": "Back to clients",
+      "backToAgenda": "Back to agenda",
+      "backToProfile": "Back to profile",
+      "newTitle": "New Client",
+      "newSubtitle": "Add a new client to your database",
+      "editTitle": "Edit Client",
+      "editSubtitle": "Modify client details",
+      "personalInfo": "Personal information",
+      "fullname": "Full name",
+      "phone": "Phone",
+      "email": "Email",
+      "tags": "Tags",
+      "selectedTags": "Selected:",
+      "internalNotes": "Internal notes",
+      "notesPlaceholder": "e.g. Prefers morning hours...",
+      "saveClient": "Save client",
+      "legacyPhoneTitle": "Legacy phone number",
+      "legacyPhoneDesc": "This client has a phone in old format. It will be updated to E.164 format next time it's saved.",
+      "deleteClient": "Delete client",
+      "confirmDelete": "Delete this client?",
+      "deleting": "Deleting...",
+      "yesDelete": "Yes, delete",
+      "cancelDelete": "Cancel",
+      "saveChanges": "Save changes"
+    },
+    "history": {
+      "title": "Appointment history",
+      "totalVisits": "Total visits",
+      "totalSpent": "Total spent",
+      "avgTicket": "Average ticket",
+      "lastVisit": "Last visit: {time}",
+      "noHistory": "This client has no registered appointments yet.",
+      "payment": "Paid:",
+      "owes": "Owes:",
+      "paid": "Paid"
+    }
   },
   "services": {
     "title": "Services",
@@ -499,7 +617,54 @@
     "payment": "Payment",
     "discount": "Discount",
     "recentExpenses": "Recent expenses",
-    "noExpenseMonth": "No expenses this month"
+    "noExpenseMonth": "No expenses this month",
+    "gasto": {
+      "amountValid": "Enter a valid amount greater than 0",
+      "back": "Back to finances",
+      "title": "Register Expense",
+      "subtitle": "Register a business operating expense",
+      "detailsTitle": "Expense details",
+      "amount": "Amount",
+      "category": "Category",
+      "date": "Date",
+      "description": "Description",
+      "descriptionPlaceholder": "Describe the reason for the expense...",
+      "cancel": "Cancel",
+      "save": "Save expense",
+      "errorSave": "Error saving expense"
+    },
+    "cobro": {
+      "errorClient": "Select a client",
+      "errorSave": "Error saving payment",
+      "loading": "Loading clients...",
+      "back": "Back to dashboard",
+      "title": "Register Payment",
+      "subtitle": "Register a received payment",
+      "paymentAssign": "Assign payment to client",
+      "searchClient": "Search client",
+      "clientHelp": "Select the client who made the payment",
+      "detailsTitle": "Payment details",
+      "amount": "Amount",
+      "method": "Payment method",
+      "methods": {
+        "cash": "Cash",
+        "transfer": "Transfer",
+        "card": "Card",
+        "qr": "QR Code",
+        "other": "Other"
+      },
+      "date": "Date",
+      "notes": "Notes",
+      "notesPlaceholder": "Optional",
+      "cancel": "Cancel",
+      "save": "Save payment"
+    },
+    "expensesPage": {
+      "searchPlaceholder": "Search expense..."
+    },
+    "transactionsPage": {
+      "searchPlaceholder": "Search transaction..."
+    }
   },
   "reports": {
     "title": "Reports",
@@ -517,8 +682,69 @@
     "trendDown": "Trending Down",
     "chartRevenueTitle": "Revenue History",
     "chartAptsTitle": "Appointments History",
+    "export": "Export report",
+    "txtTitle": "Cronix Report",
+    "txtTotalApp": "Total appointments",
+    "txtCompletedApp": "Completed",
+    "txtCancelledApp": "Cancelled",
+    "txtTotalClients": "Total clients",
+    "txtIncome": "Income",
+    "txtExpenses": "Expenses",
+    "txtNetProfit": "Net profit",
+    "txtPopularServices": "Most popular services",
+    "txtAppSuffix": "appointments",
+    "stats": {
+      "incomeMonth": "Monthly income",
+      "totalApp": "Total appointments",
+      "clientsReg": "Registered clients",
+      "total": "Total",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "income": "Income",
+      "expenses": "Expenses",
+      "netProfit": "Net profit"
+    },
+    "cards": {
+      "appointments": {
+        "title": "Appointments",
+        "sub": "Appointment performance",
+        "period": "This month"
+      },
+      "finances": {
+        "title": "Finances",
+        "sub": "Financial summary",
+        "period": "This month"
+      },
+      "clients": {
+        "title": "Clients",
+        "sub": "Client growth",
+        "period": "This month"
+      },
+      "services": {
+        "title": "Services",
+        "sub": "Most requested services",
+        "period": "This month"
+      }
+    },
+    "sections": {
+      "appointments": "Appointment details",
+      "finances": "Financial details",
+      "services": "Service details",
+      "clients": "Client details"
+    },
     "misc": {
-      "noService": "No service assigned"
+      "noService": "No service assigned",
+      "latestAppointments": "Latest appointments",
+      "noAppointments": "No appointments in this period",
+      "appointmentsCount": "{count, plural, =0 {No appointments} one {# appointment} other {# appointments}}",
+      "clientsCountLabel": "Total registered clients"
+    },
+    "status": {
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "no_show": "No show"
     }
   },
   "settings": {
@@ -616,7 +842,8 @@
     "saveReminders": "Save reminders",
     "plan": {
       "fullAccess": "Full access included",
-      "managePlan": "Manage plan"
+      "managePlan": "Manage plan",
+      "current": "Plan {plan, select, free {Free} pro {Pro} enterprise {Enterprise} other {Free}}"
     }
   },
   "profile": {
@@ -658,7 +885,26 @@
     "confirmPassword": "Confirm password",
     "confirmPasswordLabel": "Repeat your new password",
     "passwordSet": "Password updated",
-    "saveProfile": "Save profile"
+    "saveProfile": "Save profile",
+    "passkeys": {
+      "title": "Passkeys",
+      "sub": "Sign in without a password using your device",
+      "notAvailTitle": "Passkeys not available",
+      "notAvailSub": "Your browser doesn't support passkeys. Use Chrome, Edge, or Safari.",
+      "registerErrorOptions": "Could not get registration options",
+      "registerErrorVerify": "Error verifying passkey",
+      "registerSuccess": "Passkey registered successfully",
+      "registerCancel": "Registration cancelled",
+      "registerGeneric": "Error registering passkey. Try again.",
+      "defaultDevice": "My device",
+      "deleteError": "Error deleting passkey",
+      "emptyTitle": "First step: add your first passkey",
+      "emptySub": "Passkeys allow you to sign in securely without a password. Use your device's biometrics.",
+      "inputPlaceholder": "Device name (optional)",
+      "btnWaiting": "Registering...",
+      "btnAnother": "Add another device",
+      "btnRegister": "Register passkey"
+    }
   },
   "team": {
     "title": "Team",
@@ -698,7 +944,8 @@
     "inactiveBadge": "Inactive",
     "noContact": "No contact info",
     "btnDeactivate": "Deactivate",
-    "btnActivate": "Activate"
+    "btnActivate": "Activate",
+    "subtitleMembers": "{count, plural, =0 {No members} one {# active member} other {# active members}}"
   },
   "pwa": {
     "downloadApp": "Download App",
@@ -718,7 +965,9 @@
     "close": "Close",
     "toastTitle": "New version",
     "toastDesc": "An update is ready.",
-    "toastBtn": "Update"
+    "toastBtn": "Update",
+    "installBtn": "Install app",
+    "addToHome": "Add to home"
   },
   "setup": {
     "title": "Initial Setup",
@@ -777,7 +1026,10 @@
     "minutes": "min",
     "of": "of",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "savedAs": "Will be saved as",
+    "selectCountry": "Select country",
+    "country": "Country"
   },
   "adminPulse": {
     "title": "System Pulse",
@@ -790,6 +1042,25 @@
     "refreshPulse": "Refresh Pulse",
     "noVitals": "No system health data",
     "dlqTitle": "Dead Letter Queue (DLQ)",
-    "criticalBadge": "Critical"
+    "criticalBadge": "Critical",
+    "noDlqTitle": "No recent errors",
+    "noDlqSub": "All processes are running correctly.",
+    "thTimestamp": "Timestamp",
+    "thReason": "Reason",
+    "thPayload": "Payload",
+    "thAction": "Action",
+    "unknownFail": "Unknown failure",
+    "viewPayload": "View payload",
+    "retryBtn": "Retry"
+  },
+  "sessionTimeout": {
+    "stillThereTitle": "Still there?",
+    "stillThereDesc": "Your session will close due to inactivity. Do you want to keep it active?",
+    "expiringTitle": "Session expiring",
+    "expiringDesc": "Your session will reach the 12-hour limit. Save your work and sign in again.",
+    "keepSession": "Keep session"
+  },
+  "voiceAssistant": {
+    "fabTitle": "AI Executive Assistant — Hold or click to speak"
   }
 }

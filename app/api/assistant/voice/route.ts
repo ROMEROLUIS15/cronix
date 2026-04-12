@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { logger } from '@/lib/logger'
+import { redisRateLimit, isRedisAvailable } from '@/lib/rate-limit/redis-rate-limiter'
+import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
 import { assistantRateLimiter } from '@/lib/api/rate-limit'
 import type { VoiceAssistantContext } from '@/lib/ai/types'
 
@@ -15,7 +17,7 @@ const assistantPayloadSchema = z.object({
       content: z.string().max(4000).nullable().optional(),
       tool_call_id: z.string().optional(),
       name: z.string().optional(),
-      tool_calls: z.any().optional() // CRITICAL: LLM requires this array to not crash
+      tool_calls: z.any().optional()
     }).passthrough()
   ).max(20, "El historial excede los límites por seguridad").default([])
 })
@@ -24,27 +26,48 @@ const assistantPayloadSchema = z.object({
 import { GroqProvider } from '@/lib/ai/providers/groq-provider'
 import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
 import { AssistantService } from '@/lib/ai/assistant-service'
+import { createAdminClient } from '@/lib/supabase/server'
 
 // ── CONFIG ───────────────────────────────────────────────────────────────
 const GROQ_API_KEY     = process.env.LLM_API_KEY || process.env.GROQ_API_KEY
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
 
+// ── PROVIDER SINGLETONS — reused across requests, no per-request init overhead
+const sttEngine  = GROQ_API_KEY     ? new GroqProvider(GROQ_API_KEY)     : null
+const llmEngine  = GROQ_API_KEY     ? new GroqProvider(GROQ_API_KEY)     : null
+const ttsEngine  = DEEPGRAM_API_KEY ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es') : null
+const assistant  = (sttEngine && llmEngine && ttsEngine)
+  ? new AssistantService(sttEngine, llmEngine, ttsEngine)
+  : null
+
 // ── HANDLER ───────────────────────────────────────────────────────────────
 export const POST = withErrorHandler(async (req, _context, supabase, user) => {
-  
-  // 1. Protection: Rate Limiting
-  // SECURITY: Only use authenticated user.id — never trust x-forwarded-for (spoofable)
+
+  // 1. Protection: Rate Limiting (Redis distributed → in-memory fallback)
   const identifier = user.id
-  const { limited, retryAfter } = assistantRateLimiter.isRateLimited(identifier)
-  if (limited) {
-    return NextResponse.json(
-      { error: `Demasiadas solicitudes. Reintenta en ${retryAfter}s.` },
-      { status: 429 }
-    )
+  if (isRedisAvailable()) {
+    const result = await redisRateLimit(identifier, 'assistant', 10, 60)
+    if (!result.allowed) {
+      return NextResponse.json(
+        { error: `Demasiadas solicitudes. Reintenta en ${result.retryAfter}s.` },
+        { status: 429 },
+      )
+    }
+  } else {
+    const { limited, retryAfter } = assistantRateLimiter.isRateLimited(identifier)
+    if (limited) {
+      return NextResponse.json(
+        { error: `Demasiadas solicitudes. Reintenta en ${retryAfter}s.` },
+        { status: 429 },
+      )
+    }
   }
 
   // 2. Context: Business Isolation & Identity + Role
-  const { data: dbUser } = await supabase
+  // Use admin client to bypass RLS on users table (same pattern as dashboard layout).
+  // The regular client can return null due to RLS policy recursion on some accounts.
+  const admin = createAdminClient()
+  const { data: dbUser } = await admin
     .from('users')
     .select('business_id, name, role, business:businesses(name)')
     .eq('id', user.id)
@@ -56,6 +79,16 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
   const userRole     = (dbUser?.role as string) || 'employee'
 
   if (!businessId) return NextResponse.json({ error: 'No business attached' }, { status: 403 })
+
+  // 2b. Token Quota — prevents runaway LLM costs
+  const quota = await checkTokenQuota(businessId)
+  if (!quota.allowed) {
+    logger.warn('AI-ASSISTANT', `Token quota exceeded: ${quota.used}/${quota.limit}`, { businessId })
+    return NextResponse.json(
+      { error: 'Límite diario de IA alcanzado. Se reanudará mañana.' },
+      { status: 429 },
+    )
+  }
 
   // 3. Payload Extraction & Input Switch
   let audioFile: Blob | null = null
@@ -73,8 +106,7 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     const formData = await req.formData()
     audioFile = formData.get('audio') as Blob | null
     timezone = formData.get('timezone') as string || 'UTC'
-    
-    // Parse JSON History from FormData
+
     const historyString = formData.get('history') as string
     if (historyString) {
       try {
@@ -104,14 +136,9 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     return NextResponse.json({ error: 'No input provided (require audio or text)' }, { status: 400 })
   }
 
-  // 5. Platinum Orchestration (Dependency Injection)
-  const sttEngine = new GroqProvider(GROQ_API_KEY!)
-  const llmEngine = new GroqProvider(GROQ_API_KEY!)
-  
+  // 5. Platinum Orchestration — singleton initialized at module level
   if (!DEEPGRAM_API_KEY) return NextResponse.json({ error: 'TTS provider not configured' }, { status: 500 })
-  const ttsEngine = new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
-
-  const assistant = new AssistantService(sttEngine, llmEngine, ttsEngine)
+  if (!assistant) return NextResponse.json({ error: 'AI service not initialized' }, { status: 500 })
 
   // 6. Execution (Business Layer)
   const context: VoiceAssistantContext = {
@@ -120,10 +147,20 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     businessName,
     userTimezone: timezone,
     userRole: userRole as VoiceAssistantContext['userRole'],
-    userName
+    userName,
+    requestId: req.headers.get('x-request-id') ?? undefined,
   }
   const result = await assistant.processVoiceRequest(audioFile || text!, context)
 
-  // 7. Transparent Response
+  // 7. Record token usage (fire-and-forget — non-blocking)
+  if (result.debug?.steps) {
+    // Estimate: ~4 tokens per word, ~1 token per 4 chars
+    const inputTokens = text ? Math.ceil(text.length / 4) : 0
+    const outputTokens = result.text ? Math.ceil(result.text.length / 4) : 0
+    const totalTokens = inputTokens + outputTokens + result.debug.steps * 50 // steps include tool calls
+
+    void recordTokenUsage(businessId, totalTokens)
+  }
+
   return NextResponse.json(result)
 })

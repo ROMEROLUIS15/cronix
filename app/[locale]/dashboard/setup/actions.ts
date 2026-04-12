@@ -4,8 +4,7 @@ import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import * as usersRepo from '@/lib/repositories/users.repo'
-import * as businessesRepo from '@/lib/repositories/businesses.repo'
+import { getRepos } from '@/lib/repositories'
 
 // ── Zod schema for business creation ──────────────────────────────────────
 const CreateBusinessSchema = z.object({
@@ -29,6 +28,18 @@ export async function createBusiness(
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) redirect('/login')
 
+  // platform_admin never creates a business — read role via admin client
+  // (bypasses the recursive RLS policy on the users table)
+  const adminClient = createAdminClient()
+  const { data: callerUser } = await adminClient
+    .from('users')
+    .select('role, business_id')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (callerUser?.role === 'platform_admin') {
+    redirect('/dashboard')
+  }
+
   // 2. Validate input
   const parsed = CreateBusinessSchema.safeParse({
     name:     formData.get('name'),
@@ -43,20 +54,26 @@ export async function createBusiness(
   const { name, category } = parsed.data
   const timezone = (formData.get('timezone') as string) || 'America/Caracas'
 
-  // 3. Check if user already has a business
-  const existingBizId = await usersRepo.getUserBusinessId(supabase, user.id)
-  if (existingBizId) {
+  // 3. Check if user already has a business (reuse the callerUser query above)
+  if (callerUser?.business_id) {
     redirect('/dashboard')
   }
 
   // 4. Create business via repo
-  const business = await businessesRepo.createBusiness(supabase, {
+  const repos = getRepos(supabase)
+  const businessResult = await repos.businesses.create({
     name,
     category,
     owner_id: user.id,
     timezone,
     plan: 'pro',
   })
+
+  if (businessResult.error) {
+    return { error: 'Error al crear el negocio: ' + businessResult.error }
+  }
+  const business = businessResult.data
+  if (!business) return { error: 'Error al crear el negocio.' }
 
   // 5. Link user to business and activate (admin bypasses RLS for this privileged op)
   const admin = createAdminClient()

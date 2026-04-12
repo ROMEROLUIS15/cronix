@@ -1,7 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
-export async function getSession() {
+export interface SessionUser {
+  id: string
+  email?: string | null
+  dbUser: {
+    id: string
+    email: string | null
+    name: string | null
+    role: string | null
+    status: string | null
+    business_id: string | null
+    avatar_url: string | null
+    phone: string | null
+    color: string | null
+    provider: string | null
+    is_active: boolean | null
+    created_at: string | null
+    updated_at: string | null
+  } | null
+  business_id: string | null
+  [key: string]: unknown
+}
+
+export async function getSession(): Promise<SessionUser | null> {
   try {
     const supabase = await createClient()
 
@@ -21,12 +43,14 @@ export async function getSession() {
 
     if (dbError) {
       logger.error('getSession', 'Error fetching dbUser', dbError.message)
-      // Si hay error de base de datos (como recursión de RLS), devolvemos el usuario de auth sin dbUser
-      return { ...user, dbUser: null, business_id: null, error: 'Error al obtener datos del usuario.' }
+      // SECURITY: On DB error (e.g., RLS recursion), return null instead of
+      // partial state. Downstream code may assume business_id exists and crash.
+      return null
     }
 
     if (!dbUser) {
-      return { ...user, dbUser: null, business_id: null }
+      // User exists in auth but not in our DB table — incomplete registration
+      return null
     }
 
     return {

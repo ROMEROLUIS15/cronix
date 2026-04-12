@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npx *)",
+      "Bash(select-string *)",
+      "Bash(select-object *)",
+      "WebSearch",
+      "Bash(npm install *)",
+      "Bash(timeout *)",
+      "Bash(npm ls *)",
+      "Bash(findstr *)",
+      "Bash(del *)",
+      "Bash(npm run *)",
+      "Bash(npm pack *)",
+      "Bash(rmdir *)",
+      "Bash(tar *)",
+      "Bash(move *)",
+      "Bash(type *)",
+      "Bash(more)",
+      "Bash(exit *)",
+      "Bash(do *)",
+      "Bash(mkdir *)",
+      "Read(c:\\Users\\luisc.BESKTOP-LGM74MM\\Documents\\PROYECTOS PROGRAMACION\\cronix/**)",
+      "Bash(npm audit *)",
+      "Bash(npm *)",
+      "Bash(supabase *)",
+      "Bash(ren *)",
+      "Bash(dir *)",
+      "Bash(@findstr *)",
+      "Bash(r *)",
+      "Bash(powershell *)",
+      "Bash(rd *)",
+      "Bash(@if *)"
+    ]
+  },
+  "$version": 3
+}

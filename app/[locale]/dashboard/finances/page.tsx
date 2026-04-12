@@ -15,7 +15,7 @@ import {
 import type { TransactionRow, ExpenseRow, PaymentMethod, ExpenseCategory } from '@/types'
 import { useTranslations } from 'next-intl'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as financesRepo from '@/lib/repositories/finances.repo'
+import { getRepos } from '@/lib/repositories'
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function FinancesPage() {
@@ -36,10 +36,18 @@ export default function FinancesPage() {
 
     async function loadData() {
       try {
-        const [txns, exps] = await Promise.all([
-          financesRepo.getTransactions(supabase, businessId!),
-          financesRepo.getExpenses(supabase, businessId!),
+        const { finances: financesRepoInstance } = getRepos(supabase)
+        
+        const [txnsRes, expsRes] = await Promise.all([
+          financesRepoInstance.getTransactions(businessId!),
+          financesRepoInstance.getExpenses(businessId!),
         ])
+
+        if (txnsRes.error) throw new Error(txnsRes.error)
+        if (expsRes.error) throw new Error(expsRes.error)
+
+        const txns = txnsRes.data ?? []
+        const exps = expsRes.data ?? []
 
         // Filter to current month
         const startOfMonth = new Date(

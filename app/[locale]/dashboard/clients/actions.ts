@@ -4,8 +4,7 @@ import { z } from 'zod'
 import { isPast } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import * as financesRepo from '@/lib/repositories/finances.repo'
-import * as clientsRepo from '@/lib/repositories/clients.repo'
+import { getRepos } from '@/lib/repositories'
 
 // ── Zod schema for payment registration ───────────────────────────────────
 const RegisterPaymentSchema = z.object({
@@ -38,6 +37,7 @@ export async function registerClientPayment(
 
   const validData = parsed.data
   const supabase = await createClient()
+  const repos = getRepos(supabase)
 
   // 2. Auth guard
   const { data: { user } } = await supabase.auth.getUser()
@@ -45,7 +45,7 @@ export async function registerClientPayment(
 
   // 3. If a specific appointment is provided, link directly
   if (validData.appointment_id) {
-    await financesRepo.createTransaction(supabase, {
+    const txResult = await repos.finances.createTransaction({
       business_id:     validData.business_id,
       amount:          validData.amount,
       net_amount:      validData.amount,
@@ -53,13 +53,14 @@ export async function registerClientPayment(
       notes:           validData.notes ?? null,
       appointment_id:  validData.appointment_id,
     })
+    if (txResult.error) throw new Error(txResult.error)
   } else {
     // 4. No specific appointment — distribute across unpaid past appointments (oldest first)
-    const appointments = await clientsRepo.getClientAppointments(
-      supabase,
+    const apptResult = await repos.clients.getAppointments(
       validData.client_id,
       validData.business_id,
     )
+    const appointments = apptResult.data ?? []
 
     const unpaid = appointments
       .filter((apt) => {
@@ -80,7 +81,7 @@ export async function registerClientPayment(
       const owes = price - paid
       const toApply = Math.min(remaining, owes)
 
-      await financesRepo.createTransaction(supabase, {
+      const txResult = await repos.finances.createTransaction({
         business_id:    validData.business_id,
         amount:         toApply,
         net_amount:     toApply,
@@ -88,6 +89,7 @@ export async function registerClientPayment(
         notes:          validData.notes ?? null,
         appointment_id: apt.id,
       })
+      if (txResult.error) throw new Error(txResult.error)
 
       remaining -= toApply
     }

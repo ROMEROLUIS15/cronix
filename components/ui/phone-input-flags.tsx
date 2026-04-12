@@ -142,7 +142,7 @@ export function PhoneInputFlags({
           <button
             type="button"
             onClick={() => setOpen(o => !o)}
-            aria-label="Seleccionar país"
+            aria-label={t('selectCountry')}
             aria-expanded={open}
             className="flex items-center gap-1.5 h-full px-3 rounded-xl text-sm font-semibold transition-all"
             style={{
@@ -171,7 +171,7 @@ export function PhoneInputFlags({
           {open && (
             <div
               role="listbox"
-              aria-label="País"
+              aria-label={t('country')}
               className="absolute top-full left-0 mt-1 z-50 rounded-xl overflow-hidden overflow-y-auto"
               style={{
                 background:  '#1A1A1F',

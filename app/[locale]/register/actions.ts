@@ -3,7 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { registerSchema } from '@/lib/validations/auth'
 import { headers } from 'next/headers'
-import { generateBusinessSlug } from '@/lib/repositories/businesses.repo'
+import { generateBusinessSlug } from '@/lib/repositories/SupabaseBusinessRepository'
 
 export async function register(formData: FormData) {
   const data = Object.fromEntries(formData.entries())

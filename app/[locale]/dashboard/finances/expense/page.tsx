@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { getRepos } from '@/lib/repositories'
 import { expenseCategoryLabels } from '@/lib/utils'
 import type { ExpenseCategory } from '@/types'
 import { useTranslations } from 'next-intl'
@@ -41,14 +42,16 @@ export default function NewExpensePage() {
     setMsg(null)
 
     try {
-      const { createExpense } = await import('@/lib/repositories/finances.repo')
-      await createExpense(supabase, {
+      const { finances: financesRepo } = getRepos(supabase)
+      const result = await financesRepo.createExpense({
         business_id:  businessId,
         category:     form.category,
         amount,
         description:  form.description.trim() || null,
         expense_date: form.date,
       })
+
+      if (result.error) throw new Error(result.error)
 
       router.push('/dashboard/finances/expenses')
       router.refresh()

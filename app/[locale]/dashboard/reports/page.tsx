@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getBusinessId } from '@/lib/auth/get-business-id'
-import * as financesRepo from '@/lib/repositories/finances.repo'
+import { getRepos } from '@/lib/repositories'
 import { ReportsView } from './reports-view'
 import type { ReportData } from './reports-view'
 import { getTranslations } from 'next-intl/server'
@@ -24,7 +24,9 @@ export default async function ReportsPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString()
 
-  const [aptsRes, clientsRes, txns, expenses] = await Promise.all([
+  const repos = getRepos(supabase)
+
+  const [aptsRes, clientsRes, txnsRes, expensesRes] = await Promise.all([
     supabase
       .from('appointments')
       .select('id, start_at, status, service:services(name, price), client:clients(name)')
@@ -37,13 +39,15 @@ export default async function ReportsPage() {
       .select('id', { count: 'exact' })
       .eq('business_id', businessId)
       .is('deleted_at', null),
-    financesRepo.getTransactions(supabase, businessId),
-    financesRepo.getExpenses(supabase, businessId),
+    repos.finances.getTransactions(businessId),
+    repos.finances.getExpenses(businessId),
   ])
 
   const apts = (aptsRes.data ?? []) as ReportAppointment[]
   const monthStartDate = monthStart.split('T')[0] ?? ''
   const monthEndDate   = monthEnd.split('T')[0] ?? ''
+  const txns = txnsRes.data ?? []
+  const expenses = expensesRes.data ?? []
   const monthTxns = txns.filter(t => (t.paid_at ?? '') >= monthStart && (t.paid_at ?? '') <= monthEnd)
   const monthExps = expenses.filter(e => (e.expense_date ?? '') >= monthStartDate && (e.expense_date ?? '') <= monthEndDate)
 

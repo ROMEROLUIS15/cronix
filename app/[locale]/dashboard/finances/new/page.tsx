@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ClientSelect } from '@/components/ui/client-select'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as clientsRepo from '@/lib/repositories/clients.repo'
+import { getRepos } from '@/lib/repositories'
 import type { PaymentMethod, Client } from '@/types'
 import { useTranslations } from 'next-intl'
 
@@ -30,16 +30,18 @@ export default function NewFinancePage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  const { clients: clientsRepo, finances: financesRepo } = getRepos(supabase)
+
   useEffect(() => {
     if (!businessId) {
       if (!contextLoading) setLoadingData(false)
       return
     }
-    clientsRepo.getClients(supabase, businessId).then(data => {
-      setClients(data as Client[])
+    clientsRepo.getAll(businessId).then(res => {
+      setClients(res.error ? [] : res.data as Client[])
       setLoadingData(false)
     })
-  }, [supabase, businessId, contextLoading])
+  }, [businessId, contextLoading, clientsRepo])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,19 +52,19 @@ export default function NewFinancePage() {
     setSaving(true)
 
     const amount = parseFloat(form.amount)
-
-    const { error } = await supabase.from('transactions').insert({
+ 
+    const result = await financesRepo.createTransaction({
       business_id: businessId,
       client_id:   form.client_id,
       amount,
-      net_amount:  amount, // sin descuento ni propina por defecto
+      net_amount:  amount,
       method:      form.method,
       notes:       form.notes.trim() || null,
-      paid_at: form.date ? new Date(form.date).toISOString() : null,
+      paid_at:     form.date ? new Date(form.date).toISOString() : new Date().toISOString(),
     })
 
     setSaving(false)
-    if (error) {
+    if (result.error) {
       setMsg({ type: 'error', text: t('errorSave') })
     } else {
       router.push('/dashboard/finances')

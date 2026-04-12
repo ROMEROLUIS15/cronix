@@ -119,7 +119,9 @@
       "noAccount": "Não tem conta?",
       "registerLink": "Cadastre-se grátis",
       "recoverPassword": "Recuperar senha",
-      "upcomingAppointments": "Próximos agendamentos"
+      "upcomingAppointments": "Próximos agendamentos",
+      "welcomeBack": "Bem-vindo de volta",
+      "welcomeBackDesc": "Insira suas credenciais para continuar."
     },
     "register": {
       "title": "Crie sua conta",
@@ -353,7 +355,46 @@
     "edit": "Editar",
     "pastAptCheck": "O cliente compareceu?",
     "yesAttended": "Sim, compareceu",
-    "noShow": "Faltou"
+    "noShow": "Faltou",
+    "form": {
+      "loadingApt": "Carregando agendamento...",
+      "loadingForm": "Carregando dados do formulário...",
+      "backToAgenda": "Voltar à agenda",
+      "editAptTitle": "Editar Agendamento",
+      "editAptSubtitle": "Modifique os detalhes do agendamento",
+      "newAptTitle": "Novo Agendamento",
+      "newAptSubtitle": "Agende um horário para seu cliente",
+      "infoTitle": "Informações do agendamento",
+      "client": "Cliente",
+      "dateTime": "Data e hora",
+      "date": "Data",
+      "time": "Hora",
+      "services": "Serviços",
+      "addService": "Adicionar serviço",
+      "total": "Total",
+      "servicesCount": "serviços",
+      "staff": "Profissional",
+      "unassigned": "Sem responsável",
+      "status": "Status",
+      "notes": "Observações",
+      "notesPlaceholder": "Observações internas sobre o agendamento...",
+      "reminderNone": "Sem lembrete",
+      "reminderWhatsapp": "Lembrete por WhatsApp",
+      "skip": "Pular",
+      "cancel": "Cancelar",
+      "save": "Salvar alterações",
+      "scheduleBtn": "Agendar",
+      "slotErrors": {
+        "title": "Conflito de horários",
+        "doubleTitle": "Duplo agendamento detectado",
+        "confirmDoubleKeep": "Confirmar e manter ambos agendamentos",
+        "confirmDoubleCheck": "Entendo o conflito e quero agendar mesmo assim"
+      },
+      "connError": {
+        "title": "Erro de conexão",
+        "retry": "Tentar novamente"
+      }
+    }
   },
   "clients": {
     "title": "Clientes",
@@ -380,7 +421,84 @@
     "avgTicket": "Ticket médio",
     "noClients": "Sem clientes ainda",
     "addFirstClient": "Crie seu primeiro cliente",
-    "visits": "visitas"
+    "visits": "visitas",
+    "count": "{count, plural, =0 {Sem clientes} one {# cliente} other {# clientes}}",
+    "notFoundQuery": "Nenhum resultado para \"{query}\"",
+    "debt": {
+      "pendingDebt": "Dívida pendente",
+      "managePayment": "Gerenciar pagamento",
+      "manaDebtTitle": "Gerenciar dívida",
+      "selectAction": "Selecione uma ação",
+      "markPaid": "Marcar como pago",
+      "paidFull": "Pagamento integral de {amount}",
+      "registerPayment": "Registrar pagamento",
+      "partialPayment": "Pagamento parcial",
+      "close": "Fechar",
+      "amount": "Valor",
+      "confirmTotal": "O total de",
+      "method": "Método de pagamento",
+      "methods": {
+        "cash": "Dinheiro",
+        "card": "Cartão",
+        "transfer": "Transferência",
+        "qr": "Código QR",
+        "other": "Outro"
+      },
+      "reference": "Referência",
+      "referenceOptional": "Opcional",
+      "back": "Voltar",
+      "confirmBtn": "Confirmar pagamento integral",
+      "savePayment": "Salvar pagamento",
+      "paymentError": "Erro ao registrar o pagamento. Tente novamente."
+    },
+    "form": {
+      "sessionError": "Não foi possível obter a sessão. Recarregue a página.",
+      "duplicatePhone": "Este número já está registrado para o cliente \"{name}\". Cada telefone deve ser único por negócio.",
+      "namePlaceholder": "Ex. João Silva",
+      "tag": {
+        "vip": "VIP",
+        "frecuente": "Frequente",
+        "nuevo": "Novo"
+      },
+      "backToClients": "Voltar aos clientes",
+      "backToAgenda": "Voltar à agenda",
+      "backToProfile": "Voltar ao perfil",
+      "newTitle": "Novo Cliente",
+      "newSubtitle": "Adicione um novo cliente à sua base de dados",
+      "editTitle": "Editar Cliente",
+      "editSubtitle": "Modifique os dados do cliente",
+      "personalInfo": "Informação pessoal",
+      "fullname": "Nome completo",
+      "phone": "Telefone",
+      "email": "Email",
+      "tags": "Etiquetas",
+      "selectedTags": "Selecionadas:",
+      "internalNotes": "Notas internas",
+      "notesPlaceholder": "Ex. Prefere horário pela manhã...",
+      "saveClient": "Salvar cliente",
+      "legacyPhoneTitle": "Número de telefone legado",
+      "legacyPhoneDesc": "Este cliente tem um telefone em formato antigo. Será atualizado para o formato E.164 na próxima vez que for salvo.",
+      "deleteClient": "Excluir cliente",
+      "confirmDelete": "Excluir este cliente?",
+      "deleting": "Excluindo...",
+      "yesDelete": "Sim, excluir",
+      "cancelDelete": "Cancelar",
+      "saveChanges": "Salvar alterações"
+    },
+    "history": {
+      "title": "Histórico de agendamentos",
+      "totalVisits": "Visitas totais",
+      "totalSpent": "Total gasto",
+      "avgTicket": "Ticket médio",
+      "lastVisit": "Última visita: {time}",
+      "noHistory": "Este cliente ainda não tem agendamentos registrados.",
+      "payment": "Pago:",
+      "owes": "Deve:",
+      "paid": "Pago"
+    },
+    "select": {
+      "searchPlaceholder": "Buscar por nome ou telefone..."
+    }
   },
   "services": {
     "title": "Serviços",
@@ -499,7 +617,54 @@
     "payment": "Pagamento",
     "discount": "Desconto",
     "recentExpenses": "Despesas recentes",
-    "noExpenseMonth": "Sem despesas este mês"
+    "noExpenseMonth": "Sem despesas este mês",
+    "gasto": {
+      "amountValid": "Insira um valor válido maior que 0",
+      "back": "Voltar às finanças",
+      "title": "Registrar Despesa",
+      "subtitle": "Registre uma despesa operacional do negócio",
+      "detailsTitle": "Detalhes da despesa",
+      "amount": "Valor",
+      "category": "Categoria",
+      "date": "Data",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Descreva o motivo da despesa...",
+      "cancel": "Cancelar",
+      "save": "Salvar despesa",
+      "errorSave": "Erro ao salvar despesa"
+    },
+    "cobro": {
+      "errorClient": "Selecione um cliente",
+      "errorSave": "Erro ao salvar cobrança",
+      "loading": "Carregando clientes...",
+      "back": "Voltar ao dashboard",
+      "title": "Registrar Cobrança",
+      "subtitle": "Registre um pagamento recebido",
+      "paymentAssign": "Atribuir pagamento ao cliente",
+      "searchClient": "Buscar cliente",
+      "clientHelp": "Selecione o cliente que realizou o pagamento",
+      "detailsTitle": "Detalhes do cobrança",
+      "amount": "Valor",
+      "method": "Método de pagamento",
+      "methods": {
+        "cash": "Dinheiro",
+        "transfer": "Transferência",
+        "card": "Cartão",
+        "qr": "Código QR",
+        "other": "Outro"
+      },
+      "date": "Data",
+      "notes": "Notas",
+      "notesPlaceholder": "Opcional",
+      "cancel": "Cancelar",
+      "save": "Salvar cobrança"
+    },
+    "expensesPage": {
+      "searchPlaceholder": "Buscar despesa..."
+    },
+    "transactionsPage": {
+      "searchPlaceholder": "Buscar transação..."
+    }
   },
   "reports": {
     "title": "Relatórios",
@@ -518,7 +683,68 @@
     "chartRevenueTitle": "Evolução da Receita",
     "chartAptsTitle": "Histórico de Agendamentos",
     "misc": {
-      "noService": "Sem serviço atribuído"
+      "noService": "Sem serviço atribuído",
+      "latestAppointments": "Últimos agendamentos",
+      "noAppointments": "Sem agendamentos neste período",
+      "appointmentsCount": "{count, plural, =0 {Sem agendamentos} one {# agendamento} other {# agendamentos}}",
+      "clientsCountLabel": "Total de clientes registrados"
+    },
+    "export": "Exportar relatório",
+    "txtTitle": "Relatório Cronix",
+    "txtTotalApp": "Total de agendamentos",
+    "txtCompletedApp": "Concluídos",
+    "txtCancelledApp": "Cancelados",
+    "txtTotalClients": "Total de clientes",
+    "txtIncome": "Receitas",
+    "txtExpenses": "Despesas",
+    "txtNetProfit": "Lucro líquido",
+    "txtPopularServices": "Serviços mais populares",
+    "txtAppSuffix": "agendamentos",
+    "stats": {
+      "incomeMonth": "Receita do mês",
+      "totalApp": "Total de agendamentos",
+      "clientsReg": "Clientes registrados",
+      "total": "Total",
+      "completed": "Concluídos",
+      "cancelled": "Cancelados",
+      "income": "Receitas",
+      "expenses": "Despesas",
+      "netProfit": "Lucro líquido"
+    },
+    "cards": {
+      "appointments": {
+        "title": "Agendamentos",
+        "sub": "Desempenho de agendamentos",
+        "period": "Este mês"
+      },
+      "finances": {
+        "title": "Finanças",
+        "sub": "Resumo financeiro",
+        "period": "Este mês"
+      },
+      "clients": {
+        "title": "Clientes",
+        "sub": "Crescimento de clientes",
+        "period": "Este mês"
+      },
+      "services": {
+        "title": "Serviços",
+        "sub": "Serviços mais procurados",
+        "period": "Este mês"
+      }
+    },
+    "sections": {
+      "appointments": "Detalhe de agendamentos",
+      "finances": "Detalhe financeiro",
+      "services": "Detalhe de serviços",
+      "clients": "Detalhe de clientes"
+    },
+    "status": {
+      "completed": "Concluído",
+      "cancelled": "Cancelado",
+      "confirmed": "Confirmado",
+      "pending": "Pendente",
+      "no_show": "Não compareceu"
     }
   },
   "settings": {
@@ -616,7 +842,8 @@
     "saveReminders": "Salvar lembretes",
     "plan": {
       "fullAccess": "Acesso completo incluído",
-      "managePlan": "Gerenciar plano"
+      "managePlan": "Gerenciar plano",
+      "current": "Plano {plan, select, free {Gratuito} pro {Pro} enterprise {Empresarial} other {Gratuito}}"
     }
   },
   "profile": {
@@ -677,6 +904,7 @@
     "restrictedTitle": "Acesso Negado",
     "restrictedSub": "Apenas proprietários podem gerir.",
     "subtitleOnlyYou": "Gira seus membros.",
+    "subtitleMembers": "{count, plural, =0 {Sem membros} one {# membro ativo} other {# membros ativos}}",
     "addBtn": "Convidar Equipe",
     "addBtnShort": "Add",
     "editTitle": "Editar Membro",
@@ -718,7 +946,9 @@
     "close": "Fechar",
     "toastTitle": "Nova versão",
     "toastDesc": "Uma atualização está pronta.",
-    "toastBtn": "Actualizar"
+    "toastBtn": "Actualizar",
+    "installBtn": "Instalar app",
+    "addToHome": "Adicionar à tela inicial"
   },
   "setup": {
     "title": "Configuração Inicial",
@@ -777,7 +1007,10 @@
     "minutes": "min",
     "of": "de",
     "yes": "Sim",
-    "no": "Não"
+    "no": "Não",
+    "savedAs": "Será salvo como",
+    "selectCountry": "Selecionar país",
+    "country": "País"
   },
   "adminPulse": {
     "title": "System Pulse",
@@ -790,6 +1023,85 @@
     "refreshPulse": "Atualizar",
     "noVitals": "Sem dados do sistema",
     "dlqTitle": "Fila de Erros (DLQ)",
-    "criticalBadge": "Crítico"
+    "criticalBadge": "Crítico",
+    "noDlqTitle": "Sem erros recentes",
+    "noDlqSub": "Todos os processos estão funcionando corretamente.",
+    "thTimestamp": "Timestamp",
+    "thReason": "Motivo",
+    "thPayload": "Payload",
+    "thAction": "Ação",
+    "unknownFail": "Falha desconhecida",
+    "viewPayload": "Ver payload",
+    "retryBtn": "Tentar novamente"
+  },
+  "profile": {
+    "title": "Meu Perfil",
+    "name": "Nome",
+    "lastName": "Sobrenome",
+    "email": "Email",
+    "role": "Função",
+    "avatar": "Foto de perfil",
+    "save": "Salvar alterações",
+    "saving": "Salvando...",
+    "successMsg": "Perfil atualizado com sucesso.",
+    "errors": {
+      "saveFailed": "Não foi possível atualizar o perfil"
+    },
+    "subtitle": "Gerencie suas informações pessoais",
+    "errorImgFormat": "Formato de imagem inválido",
+    "errorImgSize": "Imagem muito grande",
+    "errorUpload": "Erro ao fazer upload",
+    "successUpload": "Foto atualizada",
+    "errorDelete": "Erro ao deletar foto",
+    "successDelete": "Foto removida",
+    "changePhoto": "Alterar foto",
+    "uploadPhoto": "Enviar foto",
+    "deletePhoto": "Remover foto",
+    "photoReqs": "JPG, PNG ou WebP. Máx. 5 MB.",
+    "personalInfo": "Dados pessoais",
+    "fullname": "Nome completo",
+    "fullnameLabel": "Nome e sobrenome",
+    "phone": "Telefone",
+    "emailLabel": "E-mail",
+    "emailWarning": "O e-mail não pode ser alterado aqui.",
+    "securityTitle": "Segurança",
+    "securitySubtitle": "Alterar sua senha",
+    "cancel": "Cancelar",
+    "changePasswordBtn": "Alterar senha",
+    "newPassword": "Nova senha",
+    "newPasswordLabel": "Digite sua nova senha",
+    "confirmPassword": "Confirmar senha",
+    "confirmPasswordLabel": "Repita a nova senha",
+    "passwordSet": "Senha alterada",
+    "saveProfile": "Salvar perfil",
+    "passkeys": {
+      "title": "Chaves de acesso",
+      "sub": "Entre sem senha usando seu dispositivo",
+      "notAvailTitle": "Chaves de acesso indisponíveis",
+      "notAvailSub": "Seu navegador não suporta chaves de acesso. Use Chrome, Edge ou Safari.",
+      "registerErrorOptions": "Não foi possível obter as opções de registro",
+      "registerErrorVerify": "Erro ao verificar a chave de acesso",
+      "registerSuccess": "Chave de acesso registrada com sucesso",
+      "registerCancel": "Registro cancelado",
+      "registerGeneric": "Erro ao registrar a chave de acesso. Tente novamente.",
+      "defaultDevice": "Meu dispositivo",
+      "deleteError": "Erro ao excluir a chave de acesso",
+      "emptyTitle": "Primeiro passo: adicione sua primeira chave de acesso",
+      "emptySub": "As chaves de acesso permitem entrar de forma segura sem senha. Use a biometria do seu dispositivo.",
+      "inputPlaceholder": "Nome do dispositivo (opcional)",
+      "btnWaiting": "Registrando...",
+      "btnAnother": "Adicionar outro dispositivo",
+      "btnRegister": "Registrar chave de acesso"
+    }
+  },
+  "sessionTimeout": {
+    "stillThereTitle": "Ainda aí?",
+    "stillThereDesc": "Sua sessão será encerrada por inatividade. Deseja mantê-la ativa?",
+    "expiringTitle": "Sessão expirando",
+    "expiringDesc": "Sua sessão atingirá o limite de 12 horas. Salve seu trabalho e entre novamente.",
+    "keepSession": "Manter sessão"
+  },
+  "voiceAssistant": {
+    "fabTitle": "Assistente Executivo IA — Segure ou clique para falar"
   }
 }

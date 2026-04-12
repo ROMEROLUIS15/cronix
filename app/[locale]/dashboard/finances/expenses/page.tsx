@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatCurrency, formatDate, expenseCategoryLabels } from '@/lib/utils'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as financesRepo from '@/lib/repositories/finances.repo'
+import { getRepos } from '@/lib/repositories'
+import { useTranslations } from 'next-intl'
 import type { ExpenseRow } from '@/types'
 
 export default function ExpensesPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const t = useTranslations('finances.expensesPage')
   const [query, setQuery] = useState('')
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,8 +27,12 @@ export default function ExpensesPage() {
 
     async function loadExpenses() {
       try {
-        const data = await financesRepo.getExpenses(supabase, businessId!)
-        setExpenses(data)
+        const { finances: financesRepoInstance } = getRepos(supabase)
+        const result = await financesRepoInstance.getExpenses(businessId!)
+        
+        if (result.error) throw new Error(result.error)
+
+        setExpenses(result.data ?? [])
         setFetchError(null)
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los gastos')
@@ -86,7 +92,7 @@ export default function ExpensesPage() {
         <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Buscar gasto..."
+          placeholder={t('searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="input-base pl-10"

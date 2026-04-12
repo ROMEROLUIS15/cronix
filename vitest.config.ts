@@ -3,10 +3,18 @@ import path from 'path'
 
 export default defineConfig({
   test: {
-    environment: 'node',
+    // ── Unit & Repository Tests (jsdom — component-compatible) ───────────────
+    environment: 'jsdom',
     globals: true,
+    exclude: [
+      '**/node_modules/**',
+      '**/tests/e2e/**',           // Playwright tests — run with `npx playwright test`
+      '**/*.spec.ts',              // Playwright spec files use .spec.ts convention
+      '**/tests/integration/**',   // Integration tests — run separately (see below)
+    ],
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': path.resolve(__dirname, './'),
     },
   },
 })
+

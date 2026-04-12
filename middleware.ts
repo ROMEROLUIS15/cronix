@@ -11,6 +11,12 @@ function isNonLocalizedRoute(pathname: string): boolean {
   return pathname.startsWith('/api/') || pathname.startsWith('/auth/')
 }
 
+// Routes that handle their own auth via withErrorHandler — skip middleware updateSession
+// to avoid redundant Supabase auth calls (~100-200ms savings per request)
+function isSelfAuthedApi(pathname: string): boolean {
+  return pathname.startsWith('/api/assistant/')
+}
+
 // ── 2. Función Helper de Fusión (SOLID: SRP) ──────────────────────────────────
 /**
  * Fusiona las cabeceras y cookies de la respuesta de Supabase hacia la de Next-Intl
@@ -45,6 +51,13 @@ export async function middleware(request: NextRequest) {
 
   // A. Rutas bypass (API/Auth puras)
   if (isNonLocalizedRoute(pathname)) {
+    // Self-authed APIs (e.g. /api/assistant/*) handle their own auth via withErrorHandler
+    // Skip updateSession to avoid redundant Supabase auth call (~100-200ms saved)
+    if (isSelfAuthedApi(pathname)) {
+      const response = NextResponse.next()
+      response.headers.set('x-request-id', requestId)
+      return response
+    }
     const response = await updateSession(request)
     response.headers.set('x-request-id', requestId)
     return response

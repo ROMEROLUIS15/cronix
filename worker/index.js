@@ -27,6 +27,19 @@ self.addEventListener('message', function (event) {
   }
 })
 
+// ── Push subscription change ─────────────────────────────────────────────────
+// When a push subscription expires or is revoked by the browser (common on
+// Android), this handler fires. We notify the main app to re-subscribe so
+// push notifications don't silently stop working.
+self.addEventListener('pushsubscriptionchange', function (event) {
+  // Notify all open windows to re-subscribe to push notifications
+  self.clients.matchAll({ type: 'window' }).then(function (clients) {
+    clients.forEach(function (client) {
+      client.postMessage({ type: 'PUSH_SUBSCRIPTION_EXPIRED' })
+    })
+  })
+})
+
 // ── Push event ───────────────────────────────────────────────────────────────
 self.addEventListener('push', function (event) {
   var data = {}

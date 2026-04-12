@@ -20,7 +20,7 @@ import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import type { Service } from "@/types";
 import { logger } from "@/lib/logger";
 import { useTranslations } from "next-intl";
-import { servicesRepo } from "@/lib/repositories";
+import { getRepos } from "@/lib/repositories";
 import { 
   SERVICE_COLORS, 
   SERVICE_CATEGORIES, 
@@ -66,8 +66,14 @@ export default function ServicesPage() {
 
   const loadServices = useCallback(async (bId: string) => {
     try {
-      const data = await servicesRepo.getServices(supabase, bId);
-      setServices(data);
+      const { services: servicesRepoInstance } = getRepos(supabase);
+      const result = await servicesRepoInstance.getAll(bId);
+      
+      if (!result.error) {
+        setServices(result.data ?? []);
+      } else {
+        logger.error('services', 'Error loading services', result.error);
+      }
     } catch (err) {
       logger.error('services', 'Error loading services', err);
     } finally {
@@ -123,11 +129,17 @@ export default function ServicesPage() {
       is_active: form.is_active,
     };
     try {
+      const { services: servicesRepoInstance } = getRepos(supabase);
+      let result;
+      
       if (editingId) {
-        await servicesRepo.updateService(supabase, editingId, businessId, payload);
+        result = await servicesRepoInstance.update(editingId, businessId, payload);
       } else {
-        await servicesRepo.createService(supabase, businessId, payload);
+        result = await servicesRepoInstance.create(businessId, payload);
       }
+
+      if (result.error) throw new Error(result.error);
+
       showMsg(
         "success",
         editingId ? "Servicio actualizado" : "Servicio creado correctamente",
@@ -145,7 +157,11 @@ export default function ServicesPage() {
     if (!businessId) return;
     setDeletingId(id);
     try {
-      await servicesRepo.deleteService(supabase, id, businessId);
+      const { services: servicesRepoInstance } = getRepos(supabase);
+      const result = await servicesRepoInstance.delete(id, businessId);
+      
+      if (result.error) throw new Error(result.error);
+
       showMsg("success", "Servicio eliminado");
       await loadServices(businessId);
     } catch (err) {
@@ -158,7 +174,11 @@ export default function ServicesPage() {
   const toggleActive = async (s: Service) => {
     if (!businessId) return;
     try {
-      await servicesRepo.toggleServiceActive(supabase, s.id, s.is_active ?? true);
+      const { services: servicesRepoInstance } = getRepos(supabase);
+      const result = await servicesRepoInstance.toggleActive(s.id, s.is_active ?? true);
+      
+      if (result.error) throw new Error(result.error);
+      
       await loadServices(businessId);
     } catch (err) {
       showMsg("error", "Error al cambiar estado: " + (err instanceof Error ? err.message : 'Error desconocido'));

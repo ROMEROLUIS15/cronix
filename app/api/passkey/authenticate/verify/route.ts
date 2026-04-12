@@ -1,10 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { redisRateLimit, isRedisAvailable } from '@/lib/rate-limit/redis-rate-limiter'
+import { generalRateLimiter } from '@/lib/api/rate-limit'
 
 export const runtime = 'nodejs'
 
+// Dedicated passkey rate limit: 10 attempts/min per IP
+const PASSKEY_LIMIT = 10
+const PASSKEY_WINDOW_SECS = 60
+
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ?? '127.0.0.1'
+
+  if (isRedisAvailable()) {
+    const result = await redisRateLimit(ip, 'passkey_auth', PASSKEY_LIMIT, PASSKEY_WINDOW_SECS)
+    if (!result.allowed) {
+      return NextResponse.json(
+        { error: `Too many authentication attempts. Try again in ${result.retryAfter}s.` },
+        { status: 429 },
+      )
+    }
+  } else {
+    const { limited, retryAfter } = generalRateLimiter.isRateLimited(ip)
+    if (limited) {
+      return NextResponse.json(
+        { error: `Too many authentication attempts. Try again in ${retryAfter}s.` },
+        { status: 429 },
+      )
+    }
+  }
+
   const admin = createAdminClient()
   const { credential } = await request.json()
 

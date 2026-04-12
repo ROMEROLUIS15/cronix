@@ -119,7 +119,9 @@
       "noAccount": "Noch kein Konto?",
       "registerLink": "Kostenlos registrieren",
       "recoverPassword": "Passwort wiederherstellen",
-      "upcomingAppointments": "Kommende Termine"
+      "upcomingAppointments": "Kommende Termine",
+      "welcomeBack": "Willkommen zurück",
+      "welcomeBackDesc": "Gib deine Anmeldedaten ein, um fortzufahren."
     },
     "register": {
       "title": "Konto erstellen",
@@ -353,7 +355,46 @@
     "edit": "Bearbeiten",
     "pastAptCheck": "Ist der Kunde erschienen?",
     "yesAttended": "Ja, erschienen",
-    "noShow": "Nicht erschienen"
+    "noShow": "Nicht erschienen",
+    "form": {
+      "loadingApt": "Termin wird geladen...",
+      "loadingForm": "Formulardaten werden geladen...",
+      "backToAgenda": "Zurück zur Agenda",
+      "editAptTitle": "Termin bearbeiten",
+      "editAptSubtitle": "Termindetails ändern",
+      "newAptTitle": "Neuer Termin",
+      "newAptSubtitle": "Einen Termin für deinen Kunden vereinbaren",
+      "infoTitle": "Termininformationen",
+      "client": "Kunde",
+      "dateTime": "Datum und Uhrzeit",
+      "date": "Datum",
+      "time": "Uhrzeit",
+      "services": "Leistungen",
+      "addService": "Leistung hinzufügen",
+      "total": "Gesamt",
+      "servicesCount": "Leistungen",
+      "staff": "Mitarbeiter",
+      "unassigned": "Nicht zugewiesen",
+      "status": "Status",
+      "notes": "Notizen",
+      "notesPlaceholder": "Interne Notizen zum Termin...",
+      "reminderNone": "Keine Erinnerung",
+      "reminderWhatsapp": "Erinnerung per WhatsApp",
+      "skip": "Überspringen",
+      "cancel": "Abbrechen",
+      "save": "Änderungen speichern",
+      "scheduleBtn": "Termin vereinbaren",
+      "slotErrors": {
+        "title": "Zeitkonflikt",
+        "doubleTitle": "Doppelbuchung erkannt",
+        "confirmDoubleKeep": "Bestätigen und beide Termine behalten",
+        "confirmDoubleCheck": "Ich verstehe den Konflikt und möchte trotzdem buchen"
+      },
+      "connError": {
+        "title": "Verbindungsfehler",
+        "retry": "Erneut versuchen"
+      }
+    }
   },
   "clients": {
     "title": "Kunden",
@@ -380,7 +421,84 @@
     "avgTicket": "Durchschn. Ticket",
     "noClients": "Noch keine Kunden",
     "addFirstClient": "Ersten Kunden hinzufügen",
-    "visits": "Besuche"
+    "visits": "Besuche",
+    "count": "{count, plural, =0 {Keine Kunden} one {# Kunde} other {# Kunden}}",
+    "notFoundQuery": "Keine Ergebnisse für \"{query}\"",
+    "debt": {
+      "pendingDebt": "Ausstehende Schuld",
+      "managePayment": "Zahlung verwalten",
+      "manaDebtTitle": "Schuld verwalten",
+      "selectAction": "Aktion auswählen",
+      "markPaid": "Als bezahlt markieren",
+      "paidFull": "Vollzahlung von {amount}",
+      "registerPayment": "Zahlung erfassen",
+      "partialPayment": "Teilzahlung",
+      "close": "Schließen",
+      "amount": "Betrag",
+      "confirmTotal": "Der Gesamtbetrag von",
+      "method": "Zahlungsmethode",
+      "methods": {
+        "cash": "Bar",
+        "card": "Karte",
+        "transfer": "Überweisung",
+        "qr": "QR-Code",
+        "other": "Andere"
+      },
+      "reference": "Referenz",
+      "referenceOptional": "Optional",
+      "back": "Zurück",
+      "confirmBtn": "Vollzahlung bestätigen",
+      "savePayment": "Zahlung speichern",
+      "paymentError": "Fehler bei der Zahlungserfassung. Versuche es erneut."
+    },
+    "form": {
+      "sessionError": "Sitzung konnte nicht abgerufen werden. Lade die Seite neu.",
+      "duplicatePhone": "Diese Nummer ist bereits für Kunden \"{name}\" registriert. Jede Telefonnummer muss pro Geschäft eindeutig sein.",
+      "namePlaceholder": "z.B. Max Mustermann",
+      "tag": {
+        "vip": "VIP",
+        "frecuente": "Stammkunde",
+        "nuevo": "Neu"
+      },
+      "backToClients": "Zurück zu Kunden",
+      "backToAgenda": "Zurück zur Agenda",
+      "backToProfile": "Zurück zum Profil",
+      "newTitle": "Neuer Kunde",
+      "newSubtitle": "Füge einen neuen Kunden zur Datenbank hinzu",
+      "editTitle": "Kunde bearbeiten",
+      "editSubtitle": "Kundendaten ändern",
+      "personalInfo": "Persönliche Informationen",
+      "fullname": "Vollständiger Name",
+      "phone": "Telefon",
+      "email": "E-Mail",
+      "tags": "Etiketten",
+      "selectedTags": "Ausgewählt:",
+      "internalNotes": "Interne Notizen",
+      "notesPlaceholder": "z.B. Bevorzugt Vormittag...",
+      "saveClient": "Kunde speichern",
+      "legacyPhoneTitle": "Veraltete Telefonnummer",
+      "legacyPhoneDesc": "Dieser Kunde hat eine Telefonnummer im alten Format. Sie wird beim nächsten Speichern auf E.164 aktualisiert.",
+      "deleteClient": "Kunde löschen",
+      "confirmDelete": "Diesen Kunden löschen?",
+      "deleting": "Löschen...",
+      "yesDelete": "Ja, löschen",
+      "cancelDelete": "Abbrechen",
+      "saveChanges": "Änderungen speichern"
+    },
+    "history": {
+      "title": "Terminverlauf",
+      "totalVisits": "Gesamtbesuche",
+      "totalSpent": "Gesamt ausgegeben",
+      "avgTicket": "Durchschnittsticket",
+      "lastVisit": "Letzter Besuch: {time}",
+      "noHistory": "Dieser Kunde hat noch keine registrierten Termine.",
+      "payment": "Bezahlt:",
+      "owes": "Schuldig:",
+      "paid": "Bezahlt"
+    },
+    "select": {
+      "searchPlaceholder": "Nach Name oder Telefon suchen..."
+    }
   },
   "services": {
     "title": "Leistungen",
@@ -499,7 +617,54 @@
     "payment": "Zahlung",
     "discount": "Rabatt",
     "recentExpenses": "Aktuelle Ausgaben",
-    "noExpenseMonth": "Keine Ausgaben"
+    "noExpenseMonth": "Keine Ausgaben",
+    "gasto": {
+      "amountValid": "Gib einen gültigen Betrag größer als 0 ein",
+      "back": "Zurück zu Finanzen",
+      "title": "Ausgabe erfassen",
+      "subtitle": "Erfasse eine betriebliche Ausgabe des Unternehmens",
+      "detailsTitle": "Ausgabendetails",
+      "amount": "Betrag",
+      "category": "Kategorie",
+      "date": "Datum",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Beschreibe den Grund der Ausgabe...",
+      "cancel": "Abbrechen",
+      "save": "Ausgabe speichern",
+      "errorSave": "Fehler beim Speichern der Ausgabe"
+    },
+    "cobro": {
+      "errorClient": "Wähle einen Kunden aus",
+      "errorSave": "Fehler beim Speichern der Zahlung",
+      "loading": "Kunden werden geladen...",
+      "back": "Zurück zum Dashboard",
+      "title": "Zahlung erfassen",
+      "subtitle": "Erfasse eine erhaltene Zahlung",
+      "paymentAssign": "Zahlung einem Kunden zuweisen",
+      "searchClient": "Kunde suchen",
+      "clientHelp": "Wähle den Kunden, der die Zahlung geleistet hat",
+      "detailsTitle": "Zahlungsdetails",
+      "amount": "Betrag",
+      "method": "Zahlungsmethode",
+      "methods": {
+        "cash": "Bar",
+        "transfer": "Überweisung",
+        "card": "Karte",
+        "qr": "QR-Code",
+        "other": "Andere"
+      },
+      "date": "Datum",
+      "notes": "Notizen",
+      "notesPlaceholder": "Optional",
+      "cancel": "Abbrechen",
+      "save": "Zahlung speichern"
+    },
+    "expensesPage": {
+      "searchPlaceholder": "Ausgabe suchen..."
+    },
+    "transactionsPage": {
+      "searchPlaceholder": "Transaktion suchen..."
+    }
   },
   "reports": {
     "title": "Berichte",
@@ -517,8 +682,69 @@
     "trendDown": "Fallend",
     "chartRevenueTitle": "Umsatzentwicklung",
     "chartAptsTitle": "Terminverlauf",
+    "export": "Bericht exportieren",
+    "txtTitle": "Cronix Bericht",
+    "txtTotalApp": "Gesamte Termine",
+    "txtCompletedApp": "Abgeschlossen",
+    "txtCancelledApp": "Storniert",
+    "txtTotalClients": "Gesamte Kunden",
+    "txtIncome": "Einnahmen",
+    "txtExpenses": "Ausgaben",
+    "txtNetProfit": "Nettogewinn",
+    "txtPopularServices": "Beliebteste Leistungen",
+    "txtAppSuffix": "Termine",
+    "stats": {
+      "incomeMonth": "Monatliche Einnahmen",
+      "totalApp": "Gesamte Termine",
+      "clientsReg": "Registrierte Kunden",
+      "total": "Gesamt",
+      "completed": "Abgeschlossen",
+      "cancelled": "Storniert",
+      "income": "Einnahmen",
+      "expenses": "Ausgaben",
+      "netProfit": "Nettogewinn"
+    },
+    "cards": {
+      "appointments": {
+        "title": "Termine",
+        "sub": "Terminleistung",
+        "period": "Dieser Monat"
+      },
+      "finances": {
+        "title": "Finanzen",
+        "sub": "Finanzübersicht",
+        "period": "Dieser Monat"
+      },
+      "clients": {
+        "title": "Kunden",
+        "sub": "Kundenwachstum",
+        "period": "Dieser Monat"
+      },
+      "services": {
+        "title": "Leistungen",
+        "sub": "Gefragteste Leistungen",
+        "period": "Dieser Monat"
+      }
+    },
+    "sections": {
+      "appointments": "Termindetails",
+      "finances": "Finanzdetails",
+      "services": "Leistungsdetails",
+      "clients": "Kundendetails"
+    },
     "misc": {
-      "noService": "Kein Dienst zugewiesen"
+      "noService": "Kein Dienst zugewiesen",
+      "latestAppointments": "Letzte Termine",
+      "noAppointments": "Keine Termine in diesem Zeitraum",
+      "appointmentsCount": "{count, plural, =0 {Keine Termine} one {# Termin} other {# Termine}}",
+      "clientsCountLabel": "Gesamte registrierte Kunden"
+    },
+    "status": {
+      "completed": "Abgeschlossen",
+      "cancelled": "Storniert",
+      "confirmed": "Bestätigt",
+      "pending": "Ausstehend",
+      "no_show": "Nicht erschienen"
     }
   },
   "settings": {
@@ -615,6 +841,7 @@
     },
     "saveReminders": "Erinnerungen speichern",
     "plan": {
+      "current": "Plan {plan, select, free {Kostenlos} pro {Pro} enterprise {Unternehmen} other {Kostenlos}}",
       "fullAccess": "Vollzugriff inklusive",
       "managePlan": "Plan verwalten"
     }
@@ -658,7 +885,26 @@
     "confirmPassword": "Passwort bestätigen",
     "confirmPasswordLabel": "Neues Passwort wiederholen",
     "passwordSet": "Passwort aktualisiert",
-    "saveProfile": "Profil speichern"
+    "saveProfile": "Profil speichern",
+    "passkeys": {
+      "title": "Passkeys",
+      "sub": "Melde dich ohne Passwort mit deinem Gerät an",
+      "notAvailTitle": "Passkeys nicht verfügbar",
+      "notAvailSub": "Dein Browser unterstützt keine Passkeys. Verwende Chrome, Edge oder Safari.",
+      "registerErrorOptions": "Registrierungsoptionen konnten nicht abgerufen werden",
+      "registerErrorVerify": "Fehler bei der Passkey-Überprüfung",
+      "registerSuccess": "Passkey erfolgreich registriert",
+      "registerCancel": "Registrierung abgebrochen",
+      "registerGeneric": "Fehler bei der Passkey-Registrierung. Versuche es erneut.",
+      "defaultDevice": "Mein Gerät",
+      "deleteError": "Fehler beim Löschen des Passkeys",
+      "emptyTitle": "Erster Schritt: Füge deinen ersten Passkey hinzu",
+      "emptySub": "Mit Passkeys kannst du dich sicher ohne Passwort anmelden. Verwende die Biometrie deines Geräts.",
+      "inputPlaceholder": "Gerätename (optional)",
+      "btnWaiting": "Registrierung...",
+      "btnAnother": "Weiteres Gerät hinzufügen",
+      "btnRegister": "Passkey registrieren"
+    }
   },
   "team": {
     "title": "Team",
@@ -698,11 +944,14 @@
     "inactiveBadge": "Inaktiv",
     "noContact": "Kein Kontakt",
     "btnDeactivate": "Deaktivieren",
-    "btnActivate": "Aktivieren"
+    "btnActivate": "Aktivieren",
+    "subtitleMembers": "{count, plural, =0 {Keine Mitglieder} one {# aktives Mitglied} other {# aktive Mitglieder}}"
   },
   "pwa": {
     "downloadApp": "App herunterladen",
     "pwaTag": "Installierbar",
+    "installBtn": "App installieren",
+    "addToHome": "Zum Startbildschirm",
     "subtitle": "Installiere Cronix auf deinem Startbildschirm für schnellen Zugriff und Benachrichtigungen.",
     "installedAlert": "Die App ist bereits installiert.",
     "browserError": "Dein Browser unterstützt keine direkte Installation. Versuche es mit Chrome auf Android oder Safari auf iOS.",
@@ -777,7 +1026,10 @@
     "minutes": "Min",
     "of": "von",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "savedAs": "Wird gespeichert als",
+    "selectCountry": "Land auswählen",
+    "country": "Land"
   },
   "adminPulse": {
     "title": "System-Puls",
@@ -790,6 +1042,25 @@
     "refreshPulse": "Aktualisieren",
     "noVitals": "Keine Systemdaten",
     "dlqTitle": "Fehlerwarteschlange (DLQ)",
-    "criticalBadge": "Kritisch"
+    "criticalBadge": "Kritisch",
+    "noDlqTitle": "Keine aktuellen Fehler",
+    "noDlqSub": "Alle Prozesse laufen einwandfrei.",
+    "thTimestamp": "Zeitstempel",
+    "thReason": "Grund",
+    "thPayload": "Payload",
+    "thAction": "Aktion",
+    "unknownFail": "Unbekannter Fehler",
+    "viewPayload": "Payload anzeigen",
+    "retryBtn": "Erneut versuchen"
+  },
+  "sessionTimeout": {
+    "stillThereTitle": "Noch da?",
+    "stillThereDesc": "Deine Sitzung wird wegen Inaktivität geschlossen. Möchtest du sie aktiv halten?",
+    "expiringTitle": "Sitzung läuft ab",
+    "expiringDesc": "Deine Sitzung erreicht das 12-Stunden-Limit. Speichere deine Arbeit und melde dich erneut an.",
+    "keepSession": "Sitzung behalten"
+  },
+  "voiceAssistant": {
+    "fabTitle": "KI Executive Assistent — Gedrückt halten oder klicken zum Sprechen"
   }
 }

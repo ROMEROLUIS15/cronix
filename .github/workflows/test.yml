@@ -1,0 +1,130 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  NEXT_PUBLIC_AXIOM_DATASET: ${{ secrets.NEXT_PUBLIC_AXIOM_DATASET }}
+  AXIOM_TOKEN:               ${{ secrets.AXIOM_TOKEN }}
+  E2E_TEST_EMAIL:            ${{ secrets.E2E_TEST_EMAIL }}
+  E2E_TEST_PASSWORD:         ${{ secrets.E2E_TEST_PASSWORD }}
+
+jobs:
+  # ── Job 1: Unit & Repository Tests ────────────────────────────────────────
+  unit:
+    name: Unit & Repository Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Unit & Repository Tests (Vitest)
+        run: npm test
+
+      - name: Run Lint
+        run: npm run lint
+
+  # ── Job 1.5: Production Build Verification ────────────────────────────────
+  build:
+    name: Production Build
+    runs-on: ubuntu-latest
+    needs: [unit]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Production Bundle
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Verify Build Output
+        run: |
+          echo "Build completed successfully"
+          ls -la .next/standalone/ 2>/dev/null || echo "Standalone output not found, checking .next/..."
+          ls -la .next/
+
+  # ── Job 2: Integration Tests (only on push — not on every PR draft) ────────
+  integration:
+    name: Integration Tests (AI → DB)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Integration Tests (Vitest Node)
+        run: npx vitest run --config vitest.integration.config.ts
+
+  # ── Job 3: E2E Tests (only on push to main) ────────────────────────────────
+  e2e:
+    name: E2E Visual Tests (Playwright)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [unit, build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Create auth directory
+        run: mkdir -p playwright/.auth
+
+      - name: Run E2E Tests
+        run: npx playwright test --project=setup --project=chromium --project=smoke --reporter=html
+        env:
+          CI: 'true'
+          PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+

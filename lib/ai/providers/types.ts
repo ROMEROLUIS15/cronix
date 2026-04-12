@@ -75,8 +75,21 @@ export interface ISttProvider {
 
 export type LlmTier = 'fast' | 'quality'
 
+export interface LlmStreamResult {
+  /** Complete LLM response text */
+  fullText: string
+  /** First complete sentence (≤220 chars) — ready for TTS before LLM finishes */
+  ttsText:  string
+}
+
 export interface ILlmProvider {
   chat(messages: LlmMessage[], tools?: ToolSchema[], tier?: LlmTier): Promise<LlmResult>
+  /**
+   * Optional: stream the LLM response token-by-token, extract first sentence for early TTS.
+   * Falls back gracefully to chat() if not implemented.
+   * Only use with tier='quality' (no tool calls).
+   */
+  streamChat?(messages: LlmMessage[], tier?: LlmTier): Promise<LlmStreamResult>
 }
 
 export interface ITtsProvider {

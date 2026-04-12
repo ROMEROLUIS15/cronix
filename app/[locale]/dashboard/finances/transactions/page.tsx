@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatCurrency, formatDate, paymentMethodLabels } from '@/lib/utils'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as financesRepo from '@/lib/repositories/finances.repo'
+import { getRepos } from '@/lib/repositories'
+import { useTranslations } from 'next-intl'
 import type { TransactionRow } from '@/types'
 
 export default function TransactionsPage() {
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const t = useTranslations('finances.transactionsPage')
   const [query, setQuery] = useState('')
   const [transactions, setTransactions] = useState<TransactionRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,8 +26,12 @@ export default function TransactionsPage() {
     }
     async function loadTransactions() {
       try {
-        const data = await financesRepo.getTransactions(supabase, businessId!)
-        setTransactions(data)
+        const { finances: financesRepoInstance } = getRepos(supabase)
+        const result = await financesRepoInstance.getTransactions(businessId!)
+        
+        if (result.error) throw new Error(result.error)
+
+        setTransactions(result.data ?? [])
         setFetchError(null)
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los cobros')
@@ -78,7 +84,7 @@ export default function TransactionsPage() {
       <div className="relative max-w-md">
         <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <input
-          type="text" placeholder="Buscar transacción..."
+          type="text" placeholder={t('searchPlaceholder')}
           value={query} onChange={(e) => setQuery(e.target.value)}
           className="input-base pl-10"
         />

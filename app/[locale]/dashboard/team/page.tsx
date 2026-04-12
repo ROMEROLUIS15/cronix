@@ -21,8 +21,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import { useTranslations } from 'next-intl'
-import * as usersRepo from '@/lib/repositories/users.repo'
-import type { TeamMember } from '@/lib/repositories/users.repo'
+import { getRepos } from '@/lib/repositories'
+import type { TeamMember } from '@/lib/domain/repositories/IUserRepository'
 import {
   PhoneInputFlags,
   parsePhone,
@@ -74,11 +74,12 @@ export default function TeamPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const isOwner = userRole === 'owner'
+  const isOwner = userRole === 'owner' || userRole === 'platform_admin'
 
   const loadMembers = useCallback(async (bId: string) => {
-    const data = await usersRepo.getTeamMembers(supabase, bId)
-    setMembers(data)
+    const { users: usersRepoInstance } = getRepos(supabase)
+    const result = await usersRepoInstance.getTeamMembers(bId)
+    setMembers(result.error ? [] : result.data as any)
     setLoading(false)
   }, [supabase])
 
@@ -123,7 +124,7 @@ export default function TeamPage() {
     }
 
     if (editingId) {
-      await updateEmployeeAction({ employeeId: editingId, businessId, ...payload })
+      await updateEmployeeAction({ employeeId: editingId, ...payload })
         .then(() => {
           showMsg('success', t('toastUpdated'))
           setShowForm(false)
@@ -131,7 +132,7 @@ export default function TeamPage() {
         })
         .catch((err: Error) => showMsg('error', err.message))
     } else {
-      await createEmployeeAction({ businessId, ...payload })
+      await createEmployeeAction(payload)
         .then(() => {
           showMsg('success', t('toastAdded'))
           setShowForm(false)
@@ -147,7 +148,6 @@ export default function TeamPage() {
     if (!businessId) return
     await toggleEmployeeActiveAction({
       employeeId: m.id,
-      businessId,
       currentlyActive: m.is_active ?? true,
     })
       .then(() => loadMembers(businessId))
@@ -157,7 +157,7 @@ export default function TeamPage() {
   const handleDelete = async (id: string) => {
     if (!businessId) return
     setDeletingId(id)
-    await deleteEmployeeAction({ employeeId: id, businessId })
+    await deleteEmployeeAction({ employeeId: id })
       .then(() => {
         showMsg('success', t('toastDeleted'))
         loadMembers(businessId)

@@ -1,18 +1,44 @@
 /**
- * Repository barrel export.
+ * Repository Factory — barrel export.
  *
- * Usage:
- *  import * as usersRepo from '@/lib/repositories/users.repo'
- *  import * as appointmentsRepo from '@/lib/repositories/appointments.repo'
- *
- * Or import specific functions:
- *  import { getBusinessContext } from '@/lib/repositories/users.repo'
+ * Usage (Server Actions, API Routes, Hooks):
+ *  const { appointments, clients } = getRepos(supabase)
+ *  const result = await appointments.getAll(businessId)
+ *  if (result.error) return showMsg('error', result.error)
  */
 
-export * as usersRepo from './users.repo'
-export * as appointmentsRepo from './appointments.repo'
-export * as businessesRepo from './businesses.repo'
-export * as clientsRepo from './clients.repo'
-export * as servicesRepo from './services.repo'
-export * as financesRepo from './finances.repo'
-export * as notificationsRepo from './notifications.repo'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { Database } from '@/types/database.types'
+
+import { SupabaseAppointmentRepository } from './SupabaseAppointmentRepository'
+import { SupabaseUserRepository } from './SupabaseUserRepository'
+import { SupabaseClientRepository } from './SupabaseClientRepository'
+import { SupabaseFinanceRepository } from './SupabaseFinanceRepository'
+import { SupabaseServiceRepository } from './SupabaseServiceRepository'
+import { SupabaseBusinessRepository } from './SupabaseBusinessRepository'
+import { SupabaseNotificationRepository } from './SupabaseNotificationRepository'
+import { SupabaseReminderRepository } from './SupabaseReminderRepository'
+
+type TypedSupabaseClient = SupabaseClient<Database>
+
+/**
+ * Repository Factory — Returns typed repository instances.
+ * Finance repo is injected into appointment repo for getDashboardStats.
+ *
+ * SECURITY: Accepts only a typed SupabaseClient<Database> to prevent
+ * misconfigured clients from bypassing RLS or querying wrong tables.
+ */
+export const getRepos = (supabase: TypedSupabaseClient) => {
+  const finances = new SupabaseFinanceRepository(supabase)
+
+  return {
+    appointments:  new SupabaseAppointmentRepository(supabase, finances),
+    users:         new SupabaseUserRepository(supabase),
+    clients:       new SupabaseClientRepository(supabase),
+    finances,
+    services:      new SupabaseServiceRepository(supabase),
+    businesses:    new SupabaseBusinessRepository(supabase),
+    notifications: new SupabaseNotificationRepository(supabase),
+    reminders:     new SupabaseReminderRepository(supabase),
+  }
+}

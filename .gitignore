@@ -56,6 +56,10 @@ typecheck.log
 # Testing
 coverage/
 .nyc_output
+# Playwright — auth state contains session tokens, never commit
+playwright/.auth/
+playwright-report/
+test-results/
 
 # Herramientas de IA y temporales
 .agent/

@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl'
 
 function ClientRow({ client }: { client: Client }) {
   const isVIP = (client.tags ?? []).includes('VIP')
+  const t = useTranslations('clients')
   return (
     <Link
       href={`/dashboard/clients/${client.id}`}
@@ -43,7 +44,7 @@ function ClientRow({ client }: { client: Client }) {
       </div>
       <div className="text-right flex-shrink-0 hidden sm:block">
         <p className="text-sm font-semibold text-foreground">{formatCurrency(client.total_spent ?? 0)}</p>
-        <p className="text-xs text-muted-foreground">{client.total_appointments ?? 0} {client._t_visits}</p>
+        <p className="text-xs text-muted-foreground">{client.total_appointments ?? 0} {t('visits')}</p>
         {client.last_visit_at && (
           <p className="text-xs text-muted-foreground">{formatRelative(client.last_visit_at)}</p>
         )}
@@ -158,7 +159,7 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
       ) : (
         <div className="card-base p-0 overflow-hidden">
           <div className="divide-y divide-border">
-            {filtered.map(client => <ClientRow key={client.id} client={{...client, _t_visits: t('visits')} as any} />)}
+            {filtered.map(client => <ClientRow key={client.id} client={client} />)}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { signout } from '@/lib/actions/auth'
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ interface WarningDialogProps {
 }
 
 function WarningDialog({ title, description, msLeft, onKeep, onSignout }: WarningDialogProps) {
+  const t = useTranslations('sessionTimeout')
   const [remaining, setRemaining] = useState(msLeft)
 
   useEffect(() => {
@@ -118,7 +120,7 @@ function WarningDialog({ title, description, msLeft, onKeep, onSignout }: Warnin
               className="py-2.5 rounded-xl text-sm font-bold transition-all duration-200 hover:brightness-110"
               style={{ backgroundColor: '#0062FF', color: '#fff' }}
             >
-              Mantener sesión
+              {t('keepSession')}
             </button>
           )}
           <button
@@ -156,6 +158,7 @@ function WarningDialog({ title, description, msLeft, onKeep, onSignout }: Warnin
  * even when the user stays on a single page without navigating.
  */
 export function SessionTimeout() {
+  const t = useTranslations('sessionTimeout')
   type WarningType = 'inactivity' | 'absolute' | null
 
   // ── Use a ref to expose current warning state to stable event handlers ─────
@@ -275,8 +278,8 @@ export function SessionTimeout() {
   if (warning === 'inactivity') {
     return (
       <WarningDialog
-        title="¿Sigues ahí?"
-        description="Tu sesión se cerrará por inactividad. ¿Deseas mantenerla activa?"
+        title={t('stillThereTitle')}
+        description={t('stillThereDesc')}
         msLeft={warningMsLeft}
         onKeep={() => {
           setWarning(null)
@@ -290,8 +293,8 @@ export function SessionTimeout() {
 
   return (
     <WarningDialog
-      title="Sesión por expirar"
-      description="Tu sesión alcanzará el límite de 12 horas. Guarda tu trabajo y vuelve a iniciar sesión."
+      title={t('expiringTitle')}
+      description={t('expiringDesc')}
       msLeft={warningMsLeft}
       onSignout={doSignout}
     />

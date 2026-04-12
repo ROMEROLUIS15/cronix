@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
-import * as notificationsRepo from "@/lib/repositories/notifications.repo";
+import { getRepos } from "@/lib/repositories";
 import { notificationForNewClient } from "@/lib/use-cases/notifications.use-case";
 import {
   PhoneInputFlags,
@@ -19,7 +19,8 @@ import {
 import { useContactPicker } from "@/lib/hooks/use-contact-picker";
 import { useTranslations } from "next-intl";
 
-const TAG_OPTIONS = ["VIP", "Frecuente", "Nuevo"];
+const TAG_OPTIONS = ["VIP", "Frecuente", "Nuevo"] as const;
+type TagOption = typeof TAG_OPTIONS[number];
 
 export default function NewClientPage() {
   const router = useRouter();
@@ -53,7 +54,7 @@ export default function NewClientPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) {
-      setError("No se pudo obtener la sesión. Recarga la página.");
+      setError(t('sessionError'));
       return;
     }
     setSaving(true);
@@ -74,7 +75,7 @@ export default function NewClientPage() {
 
       if (existing) {
         setSaving(false);
-        setError(`Este número ya está registrado para el cliente "${existing.name}". Cada teléfono debe ser único por negocio.`);
+        setError(t('duplicatePhone', { name: existing.name }));
         return;
       }
     }
@@ -92,9 +93,10 @@ export default function NewClientPage() {
       setError("Error al crear el cliente: " + insertError.message);
     } else {
       // In-app notification for new client
-      const notifPayload = notificationForNewClient(businessId, form.name.trim(), fullPhone);
+      const notifPayload = notificationForNewClient(businessId, form.name.trim(), fullPhone ?? undefined);
       // Fire-and-forget: notification failures don't block the flow
-      notificationsRepo.createNotification(supabase, notifPayload);
+      const repos = getRepos(supabase);
+      repos.notifications.create(notifPayload).catch(() => null);
 
       router.push("/dashboard/clients");
       router.refresh();
@@ -185,7 +187,7 @@ export default function NewClientPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input-base"
-                placeholder="Ej. Juan Pérez"
+                placeholder={t('namePlaceholder')}
               />
             </div>
 
@@ -255,7 +257,7 @@ export default function NewClientPage() {
                           }
                     }
                   >
-                    {tag}
+                    {t(`tag.${tag.toLowerCase()}`)}
                   </button>
                 ))}
               </div>

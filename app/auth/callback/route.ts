@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import type { EmailOtpType, User } from '@supabase/supabase-js'
-import { generateBusinessSlug } from '@/lib/repositories/businesses.repo'
+import { generateBusinessSlug } from '@/lib/repositories/SupabaseBusinessRepository'
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url)
@@ -161,18 +161,19 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
 
 /**
  * Determines where to redirect after auth:
- *  - Has business → dashboard (or custom `next`)
- *  - No business  → setup wizard
+ *  - platform_admin → pulse (no business, special role)
+ *  - Has business   → dashboard (or custom `next`)
+ *  - No business    → setup wizard
  */
 async function getRedirectDestination(user: User, next: string): Promise<string> {
   const admin = createAdminClient()
 
   const { data: dbUser } = await admin
     .from('users')
-    .select('business_id')
+    .select('role, business_id')
     .eq('id', user.id)
     .maybeSingle()
 
-  if (dbUser?.business_id) return next
+  if (dbUser?.business_id || dbUser?.role === 'platform_admin') return next
   return '/dashboard/setup'
 }

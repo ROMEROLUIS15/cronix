@@ -1,12 +1,13 @@
-import * as tools from './assistant-tools'
-import type { ToolSchema, ToolParamProperty } from './providers/types'
-
 /**
- * tool-registry.ts — Dynamic registry for AI Tools.
- * Maps JSON schemas to server-side handlers.
+ * tool-registry.ts — Dynamic registry core for AI Tools.
  *
- * V5: Strong typing — eliminated `any` from ToolDefinition and execute().
+ * SRP: manages the tool map, registration, and execution.
+ * Tool definitions live in tool-definitions.ts (data layer).
  */
+
+import type { ToolSchema, ToolParamProperty } from './providers/types'
+import { readToolDefinitions } from './tool-definitions.read'
+import { writeToolDefinitions } from './tool-definitions.write'
 
 export interface ToolDefinition extends ToolSchema {
   handler: (businessId: string, args: Record<string, unknown>, timezone?: string) => Promise<string>
@@ -19,266 +20,9 @@ class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map()
 
   constructor() {
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_today_summary',
-        description: 'Resumen del día: ingresos y estado de citas.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId) => tools.get_today_summary(bizId),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_upcoming_gaps',
-        description: 'Horarios ocupados hoy para identificar espacios libres.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId, _args, tz) => tools.get_upcoming_gaps(bizId, tz),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:       'get_client_debt',
-        description: 'Citas completadas sin pago de un cliente.',
-        parameters: {
-          type:       'object',
-          properties: { client_name: { type: 'string' } },
-          required:   ['client_name'],
-        },
-      },
-      handler: (bizId, args) => tools.get_client_debt(bizId, String(args.client_name ?? '')),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_client_appointments',
-        description: 'Lista citas próximas activas de un cliente. Usar antes de cancelar/reagendar cuando hay múltiples citas.',
-        parameters: {
-          type:       'object',
-          properties: { client_name: { type: 'string' } },
-          required:   ['client_name'],
-        },
-      },
-      handler: (bizId, args, tz) => tools.get_client_appointments(bizId, String(args.client_name ?? ''), tz),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'cancel_appointment',
-        description: 'Cancela una cita activa. Con una sola cita actúa directo. Con varias, devuelve lista para que el usuario elija; luego llamar con appointment_date.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_name:      { type: 'string' },
-            appointment_date: { type: 'string', description: 'ISO 8601. Requerido si el cliente tiene varias citas.' },
-          },
-          required: ['client_name'],
-        },
-      },
-      handler: (bizId, args, tz) => tools.cancel_appointment(
-        bizId,
-        String(args.client_name ?? ''),
-        args.appointment_date !== undefined ? String(args.appointment_date) : undefined,
-        tz,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'book_appointment',
-        description: 'Agenda una cita. Requiere cliente, servicio y fecha+hora (ISO 8601). Hora OBLIGATORIA.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_name:  { type: 'string' },
-            service_name: { type: 'string' },
-            date:         { type: 'string', description: 'ISO 8601 con hora (YYYY-MM-DDTHH:mm:ss).' },
-            staff_name:   { type: 'string', description: 'Empleado asignado (opcional).' },
-          },
-          required: ['client_name', 'service_name', 'date'],
-        },
-      },
-      handler: (bizId, args, tz) => tools.book_appointment(
-        bizId,
-        String(args.client_name   ?? ''),
-        String(args.service_name  ?? ''),
-        String(args.date          ?? ''),
-        args.staff_name !== undefined ? String(args.staff_name) : undefined,
-        tz,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'reschedule_appointment',
-        description: 'Reagenda una cita a nueva fecha/hora. Con varias citas, devuelve lista; luego llamar con old_date. Valida disponibilidad.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_name: { type: 'string' },
-            new_date:    { type: 'string', description: 'ISO 8601 con hora. OBLIGATORIA.' },
-            old_date:    { type: 'string', description: 'ISO 8601 de la cita a reagendar (si hay varias).' },
-          },
-          required: ['client_name', 'new_date'],
-        },
-      },
-      handler: (bizId, args, tz) => tools.reschedule_appointment(
-        bizId,
-        String(args.client_name ?? ''),
-        String(args.new_date    ?? ''),
-        args.old_date !== undefined ? String(args.old_date) : undefined,
-        tz,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'register_payment',
-        description: 'Registra un cobro de un cliente.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_name: { type: 'string' },
-            amount:      { type: 'number' },
-            method:      { type: 'string', enum: ['efectivo', 'tarjeta', 'transferencia', 'qr'] },
-          },
-          required: ['client_name', 'amount', 'method'],
-        },
-      },
-      handler: (bizId, args) => tools.register_payment(
-        bizId,
-        String(args.client_name ?? ''),
-        Number(args.amount ?? 0),
-        String(args.method ?? ''),
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_inactive_clients',
-        description: 'Clientes sin visita en más de 60 días.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId) => tools.get_inactive_clients(bizId),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_revenue_stats',
-        description: 'Ingresos de esta semana vs semana anterior.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId) => tools.get_revenue_stats(bizId),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_monthly_forecast',
-        description: 'Proyección de ingresos al cierre del mes.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId) => tools.get_monthly_forecast(bizId),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'send_reactivation_message',
-        description: 'Envía WhatsApp de reactivación a cliente inactivo.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_id:   { type: 'string' },
-            client_name: { type: 'string' },
-          },
-          required: ['client_id', 'client_name'],
-        },
-      },
-      handler: (bizId, args) => tools.send_reactivation_message(
-        bizId,
-        String(args.client_id   ?? ''),
-        String(args.client_name ?? ''),
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'create_client',
-        description: 'Registra un cliente nuevo. Verifica duplicados antes de crear. Requiere nombre y teléfono.',
-        parameters: {
-          type:       'object',
-          properties: {
-            client_name: { type: 'string' },
-            phone:       { type: 'string', description: 'Teléfono para WhatsApp (obligatorio).' },
-            email:       { type: 'string', description: 'Email (opcional).' },
-          },
-          required: ['client_name', 'phone'],
-        },
-      },
-      handler: (bizId, args) => tools.create_client(
-        bizId,
-        String(args.client_name ?? ''),
-        String(args.phone       ?? ''),
-        args.email !== undefined ? String(args.email) : undefined,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_clients',
-        description: 'Lista clientes o busca uno por nombre.',
-        parameters: {
-          type:       'object',
-          properties: { query: { type: 'string', description: 'Filtro por nombre (opcional).' } },
-          required:   [],
-        },
-      },
-      handler: (bizId, args) => tools.get_clients(
-        bizId,
-        args.query !== undefined ? String(args.query) : undefined,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_staff',
-        description: 'Lista empleados o busca uno por nombre.',
-        parameters: {
-          type:       'object',
-          properties: { query: { type: 'string', description: 'Filtro por nombre (opcional).' } },
-          required:   [],
-        },
-      },
-      handler: (bizId, args) => tools.get_staff(
-        bizId,
-        args.query !== undefined ? String(args.query) : undefined,
-      ),
-    })
-
-    this.register({
-      type: 'function',
-      function: {
-        name:        'get_services',
-        description: 'Obtiene el catálogo completo de servicios del negocio (tratamientos, cortes, masajes, etc.) con nombre, precio y duración. Llamar cuando el usuario pregunte qué servicios ofrece el negocio, qué opciones hay disponibles, cuánto cuesta un servicio o cuáles son los tratamientos.',
-        parameters:  { type: 'object', properties: {}, required: [] },
-      },
-      handler: (bizId) => tools.get_services(bizId),
-    })
+    for (const def of [...readToolDefinitions, ...writeToolDefinitions]) {
+      this.register(def)
+    }
   }
 
   register(tool: ToolDefinition): void {
@@ -287,16 +31,16 @@ class ToolRegistry {
 
   getDefinitions(): ToolSchema[] {
     return Array.from(this.tools.values()).map(t => ({
-      type:     t.type,
+      type: t.type,
       function: t.function,
     }))
   }
 
   async execute(
-    name:       string,
-    args:       Record<string, unknown>,
+    name: string,
+    args: Record<string, unknown>,
     businessId: string,
-    timezone?:  string,
+    timezone?: string,
   ): Promise<string> {
     const tool = this.tools.get(name)
     if (!tool) throw new Error(`Tool ${name} not found`)

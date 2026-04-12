@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft, UserPen, ChevronDown, Mail,
   Tag, FileText, Save, AlertCircle, CheckCircle2, Trash2,
@@ -10,19 +10,17 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import * as clientsRepo from '@/lib/repositories/clients.repo'
+import { getRepos } from '@/lib/repositories'
 import { PhoneInputFlags, parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
 import { useContactPicker } from '@/lib/hooks/use-contact-picker'
 import { useTranslations } from 'next-intl'
 
-const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo']
-// ── Props ─────────────────────────────────────────────────────────────────────
-interface Props { params: { id: string } }
-
+const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo'] as const
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function ClientEditPage({ params }: Props) {
-  const router   = useRouter()
-  const t        = useTranslations('clients.form')
+export default function ClientEditPage() {
+  const router          = useRouter()
+  const { id: clientId } = useParams<{ id: string }>()
+  const t               = useTranslations('clients.form')
   const { supabase, businessId, loading: contextLoading } = useBusinessContext()
 
   const [loading,        setLoading]        = useState(true)
@@ -55,7 +53,9 @@ export default function ClientEditPage({ params }: Props) {
       return
     }
     async function load() {
-      const client = await clientsRepo.getClientById(supabase, params.id, businessId!)
+      const repos = getRepos(supabase)
+      const clientResult = await repos.clients.getById(clientId, businessId!)
+      const client = clientResult.data
       if (!client) return router.push('/dashboard/clients')
 
       setLegacyPhone(!isE164Phone(client.phone))
@@ -71,7 +71,7 @@ export default function ClientEditPage({ params }: Props) {
       setLoading(false)
     }
     load()
-  }, [supabase, businessId, contextLoading, params.id, router])
+  }, [supabase, businessId, contextLoading, clientId, router])
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text })
@@ -101,7 +101,7 @@ export default function ClientEditPage({ params }: Props) {
         .eq('business_id', businessId)
         .eq('phone', fullPhone)
         .is('deleted_at', null)
-        .neq('id', params.id)
+        .neq('id', clientId)
         .maybeSingle()
 
       if (existing) {
@@ -120,14 +120,14 @@ export default function ClientEditPage({ params }: Props) {
         tags:       form.tags.length > 0 ? form.tags : null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', clientId)
       .eq('business_id', businessId)
 
     setSaving(false)
     if (error) return showMsg('error', 'Error al guardar: ' + error.message)
     setLegacyPhone(false)
     showMsg('success', 'Cliente actualizado correctamente')
-    setTimeout(() => router.push(`/dashboard/clients/${params.id}`), 1200)
+    setTimeout(() => router.push(`/dashboard/clients/${clientId}`), 1200)
   }
 
   const handleDelete = async () => {
@@ -136,7 +136,7 @@ export default function ClientEditPage({ params }: Props) {
     const { error } = await supabase
       .from('clients')
       .update({ deleted_at: new Date().toISOString() })
-      .eq('id', params.id)
+      .eq('id', clientId)
       .eq('business_id', businessId)
 
     setDeleting(false)
@@ -157,7 +157,7 @@ export default function ClientEditPage({ params }: Props) {
     <div className="space-y-6 animate-fade-in max-w-2xl">
       {/* Back */}
       <Link
-        href={`/dashboard/clients/${params.id}`}
+        href={`/dashboard/clients/${clientId}`}
         className="btn-ghost inline-flex text-sm gap-2"
         style={{ color: '#909098' }}
       >
@@ -231,7 +231,7 @@ export default function ClientEditPage({ params }: Props) {
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
               className="input-base"
-              placeholder="Ej. Juan Pérez"
+              placeholder={t('namePlaceholder')}
             />
           </div>
 
@@ -290,7 +290,7 @@ export default function ClientEditPage({ params }: Props) {
                 : { background: 'transparent', color: '#909098', border: '1px solid #2E2E33' }
               }
             >
-              {tag}
+              {t(`tag.${tag.toLowerCase()}`)}
             </button>
           ))}
         </div>
