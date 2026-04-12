@@ -46,10 +46,10 @@ export function compose(...middlewares: MiddlewareFn[]): (request: NextRequest) 
       // next() is a no-op stub — chain advances when middleware returns null
       const result = await current(req, res, async () => res)
 
-      // Middleware returned a response → short-circuit (redirect, error, etc.)
-      if (result) return result
+      // Middleware returned a response different from the base → short-circuit (redirect, error, etc.)
+      if (result && result !== res) return result
 
-      // Middleware returned null → advance to next middleware
+      // Middleware returned null or the same base response → advance to next middleware
       return execute(req, res, index + 1)
     }
 

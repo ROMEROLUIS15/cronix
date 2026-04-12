@@ -328,11 +328,20 @@ function extractNumericDate(normalized: string): string | null {
 // A query like "agendar una cita hoy" would otherwise fuzzy-match "agenda de hoy"
 // → get_today_summary — completely wrong. Write intents always go to the LLM.
 const WRITE_INTENT_SIGNALS = [
-  'agendar', 'agenda una', 'quiero agendar', 'necesito agendar',
+  'agenda una', 'quiero agendar', 'necesito agendar', 'voy a agendar',
   'cancelar', 'cancela', 'quiero cancelar',
-  'reagendar', 'mover la cita', 'cambiar la cita',
+  'reagendar', 'mover la cita', 'cambiar la cita', 'reagenda',
   'cobrar', 'registrar pago', 'registrar cobro',
-  'crear cliente', 'nuevo cliente', 'agregar cliente',
+  'crear cliente', 'nuevo cliente', 'agregar cliente', 'crea un cliente',
+]
+
+// ── Ambiguous query guard ─────────────────────────────────────────────────────
+// These phrases are too ambiguous or conversational for the fast path.
+// They would otherwise fuzzy-match READ intents incorrectly.
+const AMBIGUOUS_SIGNALS = [
+  'como estas',
+  'mejor cliente',
+  'saber sobre las citas',
 ]
 
 // ── Future-date guard ─────────────────────────────────────────────────────────
@@ -340,10 +349,13 @@ const WRITE_INTENT_SIGNALS = [
 // Without this, "qué citas tengo para mañana" fuzzy-matches "citas de hoy"
 // on the single word "citas" (only word ≥4 chars in that keyword) → wrong tool.
 // These queries fall through to the LLM or to the get_appointments_by_date fast-path.
+//
+// NOTE: Uses word-boundary check to avoid false blocking (e.g. "proximos espacios"
+// should NOT be blocked — "proximos" is not the same as "proximo" as a standalone date ref).
 const FUTURE_DATE_SIGNALS = [
   'manana', 'pasado manana', 'semana que viene', 'proxima semana',
   'el lunes', 'el martes', 'el miercoles', 'el jueves', 'el viernes',
-  'el sabado', 'el domingo', 'proximo', 'proxima', 'siguiente',
+  'el sabado', 'el domingo',
 ]
 
 // Regex for explicit numeric date references: "el día 16", "para el 16", "del 16", "el 16 de"
@@ -369,6 +381,11 @@ export function routeIntent(userText: string, userId?: string): RouterResult {
       userId,
       query: normalized.slice(0, 60),
     })
+    return { matched: false }
+  }
+
+  // Guard: ambiguous/conversational queries should fall through to the LLM.
+  if (AMBIGUOUS_SIGNALS.some(signal => normalized.includes(norm(signal)))) {
     return { matched: false }
   }
 

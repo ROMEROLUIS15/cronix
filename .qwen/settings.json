@@ -31,7 +31,10 @@
       "Bash(r *)",
       "Bash(powershell *)",
       "Bash(rd *)",
-      "Bash(@if *)"
+      "Bash(@if *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)"
     ]
   },
   "$version": 3

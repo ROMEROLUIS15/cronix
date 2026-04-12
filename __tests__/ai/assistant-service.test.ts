@@ -52,9 +52,10 @@ vi.mock('@/lib/ai/prompts/luis.prompt', () => ({
 
 vi.mock('@/lib/logger', () => ({
   logger: {
-    info:  vi.fn(),
-    warn:  vi.fn(),
-    error: vi.fn(),
+    info:   vi.fn(),
+    warn:   vi.fn(),
+    error:  vi.fn(),
+    metric: vi.fn(),
   },
 }))
 
@@ -160,9 +161,10 @@ describe('AssistantService — ReAct Loop', () => {
 
     expect(result.actionPerformed).toBe(true)
     expect(result.text).toContain('10 de abril')
-    // 3 LLM calls: 2×8B (tool call + post-tool step) + 1×70B final pass
-    // actionPerformed=true always triggers the 70B quality pass regardless of 8B reply
-    expect(llm.chat).toHaveBeenCalledTimes(3)
+    // 2 LLM calls: 1×8B (tool call) + 1×8B (post-tool, returns empty → tool result used directly).
+    // NOTE: The quality-tier 70B pass was removed for tool-calling paths (see architecture comment in assistant-service.ts).
+    // Tool results are returned directly as-is — already readable Spanish text.
+    expect(llm.chat).toHaveBeenCalledTimes(2)
     expect(result.debug?.toolsAttempted).toContain('check_availability')
     expect(result.debug?.loopExhausted).toBe(false)
   })
@@ -190,7 +192,7 @@ describe('AssistantService — ReAct Loop', () => {
     ])
 
     const service = new AssistantService(makeStt(), llm, makeTts())
-    const result  = await service.processVoiceRequest('Busca algo disponible', makeContext())
+    const result  = await service.processVoiceRequest('Procesar solicitud tecnica pendiente', makeContext())
 
     expect(result.debug?.loopExhausted).toBe(true)
     // Architecture note: The planner returns steps=1 per iteration (exits on first tool_call).
@@ -204,8 +206,9 @@ describe('AssistantService — ReAct Loop', () => {
       expect.stringContaining('exhausted'),
       expect.objectContaining({ userId: USER_ID })
     )
-    // 4 total calls: 3×8B (outer loop) + 1×70B (quality pass, loopExhausted triggers it)
-    expect(llm.chat).toHaveBeenCalledTimes(4)
+    // 3 LLM calls total: all via the planner (each outer iteration calls runReActLoop once).
+    // No quality-tier call — tool results are used directly per current architecture.
+    expect(llm.chat).toHaveBeenCalledTimes(3)
     expect(result.text).toBeTruthy()
   })
 
