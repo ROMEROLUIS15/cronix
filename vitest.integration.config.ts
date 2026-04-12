@@ -9,11 +9,11 @@
 
 import { defineConfig } from 'vitest/config'
 import path from 'path'
-import * as dotenv from 'dotenv'
 
-// Load .env.local at config-evaluation time (process.cwd = project root when
-// running `npm run test:integration` from the project directory).
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+// Load .env.local if dotenv is available; otherwise env vars must be set externally
+let dotenv: any
+try { dotenv = require('dotenv') } catch { /* dotenv not installed — skip */ }
+if (dotenv) dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 export default defineConfig({
   test: {

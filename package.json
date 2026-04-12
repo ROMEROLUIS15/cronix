@@ -6,7 +6,7 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -56,7 +56,7 @@
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
-    "eslint-config-next": "^16.2.2",
+    "eslint-config-next": "^15.5.15",
     "husky": "^9.1.7",
     "jimp": "^1.6.1",
     "jsdom": "^29.0.1",
@@ -70,7 +70,7 @@
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
-      "next lint --fix",
+      "eslint --fix",
       "tsc --noEmit"
     ]
   },

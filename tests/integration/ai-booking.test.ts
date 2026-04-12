@@ -12,12 +12,12 @@
 
 import { describe, it, expect, afterEach, beforeAll } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
 import * as path from 'path'
 
-// Fallback env loading — the config loads it too, this ensures the test
-// file works even when run in isolation.
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+// Fallback env loading — try/catch for when dotenv is not installed
+let dotenv: any
+try { dotenv = require('dotenv') } catch { /* not installed — skip */ }
+if (dotenv) dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 // ── Env Guards ──────────────────────────────────────────────────────────────
 
@@ -25,20 +25,19 @@ const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 const TEST_SLUG         = 'e2e-test'
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  throw new Error(
-    'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. ' +
-    'Run `node scripts/setup-e2e-data.ts` first and ensure .env.local is configured.'
-  )
-}
+// Skip entire suite when Supabase credentials are not available (e.g. CI without .env.local)
+const hasSupabaseAccess = !!(SUPABASE_URL && SERVICE_ROLE_KEY)
+const describeIntegration = hasSupabaseAccess ? describe : describe.skip
 
 // ── Shared State ────────────────────────────────────────────────────────────
 
 // Explicitly pass Node's native fetch — @supabase/supabase-js's internal fetch
 // polyfill fails to resolve under vitest/CJS on Windows + Node 20.
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  global: { fetch: (...args: Parameters<typeof fetch>) => fetch(...args) },
-})
+const supabase = hasSupabaseAccess
+  ? createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
+      global: { fetch: (...args: Parameters<typeof fetch>) => fetch(...args) },
+    })
+  : null as any
 const createdAppointmentIds: string[] = []
 
 let BIZ_ID:     string
@@ -104,7 +103,7 @@ afterEach(async () => {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('AI Tool → Database Integration', () => {
+describeIntegration('AI Tool → Database Integration', () => {
   /**
    * T1: Direct repository insertion validates end-to-end data flow.
    * We bypass the tool (which requires Next.js server context for createClient)
