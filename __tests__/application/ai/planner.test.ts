@@ -2,7 +2,7 @@
  * AI Planner — Unit Tests
  *
  * Tests for lib/application/ai/planner.ts
- * Covers: LLM response parsing, MAX_STEPS exhaustion, error handling.
+ * Covers: LLM response parsing, error handling, message mutation.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -12,6 +12,7 @@ vi.mock('@/lib/logger', () => ({
 }))
 
 import { runReActLoop } from '@/lib/application/ai/planner'
+import type { ToolSchema } from '@/lib/ai/providers/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function makeLlm(responses: Array<{ content?: string | null; tool_calls?: any[]; error?: string }>) {
@@ -26,9 +27,13 @@ function makeLlm(responses: Array<{ content?: string | null; tool_calls?: any[];
   }
 }
 
-const TOOLS = [{
+const TOOLS: ToolSchema[] = [{
   type: 'function' as const,
-  function: { name: 'check_availability', description: 'Check slots', parameters: {} },
+  function: {
+    name: 'check_availability',
+    description: 'Check slots',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
 }]
 
 const MSGS = [{ role: 'user' as const, content: 'test' }]
@@ -44,7 +49,7 @@ describe('AI Planner', () => {
     const result = await runReActLoop(llm as any, MSGS as any, TOOLS, 'user-1')
 
     expect(result.type).toBe('text')
-    expect(result.text).toBe('I can help with that!')
+    expect((result as any).text).toBe('I can help with that!')
     expect(result.steps).toBe(1)
   })
 
@@ -57,8 +62,8 @@ describe('AI Planner', () => {
     const result = await runReActLoop(llm as any, MSGS as any, TOOLS, 'user-1')
 
     expect(result.type).toBe('commands')
-    expect(result.commands).toHaveLength(1)
-    expect(result.commands[0].toolName).toBe('check_availability')
+    expect((result as any).commands).toHaveLength(1)
+    expect((result as any).commands[0].toolName).toBe('check_availability')
   })
 
   it('parses tool call arguments from JSON string', async () => {
@@ -89,8 +94,8 @@ describe('AI Planner', () => {
     const result = await runReActLoop(llm as any, MSGS as any, TOOLS, 'user-1')
 
     expect(result.type).toBe('error')
-    expect(result.text).toMatch(/demanda/i)
-    expect(result.loopExhausted).toBe(false)
+    expect((result as any).text).toMatch(/demanda/i)
+    expect((result as any).loopExhausted).toBe(false)
   })
 
   it('returns generic error message for non-rate-limit errors', async () => {
@@ -98,14 +103,12 @@ describe('AI Planner', () => {
 
     const result = await runReActLoop(llm as any, MSGS as any, TOOLS, 'user-1')
 
-    expect(result.text).toMatch(/problema técnico/i)
+    expect((result as any).text).toMatch(/problema técnico/i)
   })
 
-  it('exhausts after MAX_STEPS (3) when LLM always returns tool_calls', async () => {
-    // NOTE: The planner returns commands on every tool_call, so it only makes
-    // 1 LLM call per invocation. MAX_STEPS exhaustion is unreachable in the
-    // planner alone — it's the assistant-service outer loop that handles it.
-    // This test verifies the planner returns commands correctly when tools requested.
+  it('returns commands on each tool_call (planner exits early)', async () => {
+    // The planner returns commands as soon as the LLM requests a tool call.
+    // It only reaches MAX_STEPS exhaustion if called repeatedly by the outer loop.
     const llm = makeLlm([{
       content: null,
       tool_calls: [{ id: 'c1', type: 'function', function: { name: 'check_availability', arguments: '{}' } }],
@@ -127,6 +130,7 @@ describe('AI Planner', () => {
     await runReActLoop(llm as any, msgs as any, TOOLS, 'user-1')
 
     expect(msgs).toHaveLength(2)
-    expect(msgs[1].role).toBe('assistant')
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(msgs[1]!.role).toBe('assistant')
   })
 })

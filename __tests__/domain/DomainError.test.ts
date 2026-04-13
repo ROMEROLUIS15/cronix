@@ -1,32 +1,32 @@
 /**
- * Domain Error — Unit Tests
+ * DomainError — Unit Tests
  *
  * Tests for lib/domain/errors/DomainError.ts
  */
 import { describe, it, expect } from 'vitest'
 
-import { DomainError } from '@/lib/domain/errors/DomainError'
+import { DomainError, type DomainErrorCode } from '@/lib/domain/errors/DomainError'
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('DomainError', () => {
   it('creates error with code and message', () => {
-    const err = new DomainError('NOT_FOUND', 'Resource not found')
+    const code: DomainErrorCode = 'APPOINTMENT_NOT_FOUND'
+    const err = new DomainError(code, 'Resource not found')
 
-    expect(err.code).toBe('NOT_FOUND')
+    expect(err.code).toBe(code)
     expect(err.message).toBe('Resource not found')
     expect(err.name).toBe('DomainError')
   })
 
-  it('supports all known error codes', () => {
-    const codes: Array<DomainError['code']> = [
-      'NOT_FOUND',
-      'DUPLICATE',
-      'INVALID_STATE',
-      'UNAUTHORIZED',
-      'FORBIDDEN',
-      'VALIDATION',
-      'CONFLICT',
+  it('supports multiple error codes', () => {
+    const codes: DomainErrorCode[] = [
+      'APPOINTMENT_NOT_FOUND',
+      'APPOINTMENT_CONFLICT',
+      'CLIENT_NOT_FOUND',
+      'SERVICE_NOT_FOUND',
+      'TRANSACTION_CREATE_FAILED',
+      'UNKNOWN_ERROR',
     ]
 
     for (const code of codes) {
@@ -36,13 +36,21 @@ describe('DomainError', () => {
   })
 
   it('is instance of Error', () => {
-    const err = new DomainError('NOT_FOUND', 'test')
+    const err = new DomainError('UNKNOWN_ERROR', 'test')
     expect(err).toBeInstanceOf(Error)
   })
 
   it('includes stack trace', () => {
-    const err = new DomainError('NOT_FOUND', 'test')
+    const err = new DomainError('UNKNOWN_ERROR', 'test')
     expect(err.stack).toBeDefined()
     expect(typeof err.stack).toBe('string')
+  })
+
+  it('stores optional cause', () => {
+    const original = new Error('original')
+    const err = DomainError.from('APPOINTMENT_CREATE_FAILED', original)
+
+    expect(err.cause).toBe(original)
+    expect(err.message).toBe('original')
   })
 })

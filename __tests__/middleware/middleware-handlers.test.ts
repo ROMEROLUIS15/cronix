@@ -34,6 +34,8 @@ vi.mock('@/lib/rate-limit/redis-rate-limiter', () => ({
 vi.mock('@/lib/api/rate-limit', () => ({
   assistantRateLimiter: { isRateLimited: vi.fn().mockReturnValue({ limited: false, retryAfter: 0 }) },
   generalRateLimiter: { isRateLimited: vi.fn().mockReturnValue({ limited: false, retryAfter: 0 }) },
+  writeToolRateLimiter: { isRateLimited: vi.fn().mockReturnValue({ limited: false, retryAfter: 0 }) },
+  WRITE_TOOLS: new Set(['book_appointment']),
 }))
 
 // ── Mock routing ─────────────────────────────────────────────────────────────
@@ -72,6 +74,8 @@ function makeResponse() {
   return res
 }
 
+const noop = () => Promise.resolve(NextResponse.next())
+
 // ── Import middleware after mocks ───────────────────────────────────────────
 import { withRequestId } from '@/lib/middleware/with-request-id'
 import { withCsrf } from '@/lib/middleware/with-csrf'
@@ -85,7 +89,7 @@ describe('withRequestId', () => {
   it('sets x-request-id header on the response', async () => {
     const req = makeRequest()
     const res = makeResponse()
-    const result = await withRequestId(req, res)
+    const result = await withRequestId(req, res, noop)
 
     expect(res.headers.get('x-request-id')).toMatch(/^[0-9a-f-]+$/)
     expect(result).toBeNull()
@@ -96,7 +100,7 @@ describe('withCsrf', () => {
   it('does not set CSRF cookie for unauthenticated requests', async () => {
     const req = makeRequest()
     const res = makeResponse()
-    const result = await withCsrf(req, res)
+    const result = await withCsrf(req, res, noop)
 
     expect(res.headers.getSetCookie()).not.toContain(
       expect.stringContaining('cronix_csrf_token')
@@ -109,7 +113,7 @@ describe('withCsrf', () => {
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
 
-    const result = await withCsrf(req, res)
+    const result = await withCsrf(req, res, noop)
 
     const cookies = res.headers.getSetCookie()
     expect(cookies.length).toBeGreaterThan(0)
@@ -122,7 +126,7 @@ describe('withCsrf', () => {
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
 
-    await withCsrf(req, res)
+    await withCsrf(req, res, noop)
 
     const cookies = res.headers.getSetCookie()
     expect(cookies[0]).toContain('existing-token')
@@ -134,21 +138,21 @@ describe('withRateLimit', () => {
 
   it('skips non-auth and non-API paths', async () => {
     const req = makeRequest({ pathname: '/dashboard' })
-    const result = await withRateLimit(req, makeResponse())
+    const result = await withRateLimit(req, makeResponse(), noop)
 
     expect(result).toBeNull()
   })
 
   it('skips ping endpoint', async () => {
     const req = makeRequest({ pathname: '/api/activity/ping' })
-    const result = await withRateLimit(req, makeResponse())
+    const result = await withRateLimit(req, makeResponse(), noop)
 
     expect(result).toBeNull()
   })
 
   it('processes login path (auth rate limit)', async () => {
     const req = makeRequest({ pathname: '/login' })
-    const result = await withRateLimit(req, makeResponse())
+    const result = await withRateLimit(req, makeResponse(), noop)
 
     // Not rate limited (fresh IP)
     expect(result).toBeNull()
@@ -156,7 +160,7 @@ describe('withRateLimit', () => {
 
   it('processes API path (api rate limit)', async () => {
     const req = makeRequest({ pathname: '/api/health' })
-    const result = await withRateLimit(req, makeResponse())
+    const result = await withRateLimit(req, makeResponse(), noop)
 
     expect(result).toBeNull()
   })
@@ -174,7 +178,7 @@ describe('withSessionTimeout', () => {
   it('skips for unauthenticated users', async () => {
     const req = makeRequest({ pathname: '/dashboard' })
     const res = makeResponse()
-    const result = await withSessionTimeout(req, res)
+    const result = await withSessionTimeout(req, res, noop)
 
     expect(result).toBeNull()
   })
@@ -183,7 +187,7 @@ describe('withSessionTimeout', () => {
     const req = makeRequest({ pathname: '/api/something' })
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
-    const result = await withSessionTimeout(req, res)
+    const result = await withSessionTimeout(req, res, noop)
 
     expect(result).toBeNull()
   })
@@ -199,7 +203,7 @@ describe('withSessionTimeout', () => {
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
 
-    const result = await withSessionTimeout(req, res)
+    const result = await withSessionTimeout(req, res, noop)
 
     expect(result).toBeNull()
     const cookies = res.headers.getSetCookie()
@@ -212,7 +216,7 @@ describe('withUserStatus', () => {
 
   it('skips for unauthenticated users', async () => {
     const req = makeRequest({ pathname: '/dashboard' })
-    const result = await withUserStatus(req, makeResponse())
+    const result = await withUserStatus(req, makeResponse(), noop)
 
     expect(result).toBeNull()
   })
@@ -221,7 +225,7 @@ describe('withUserStatus', () => {
     const req = makeRequest({ pathname: '/settings' })
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
-    const result = await withUserStatus(req, res)
+    const result = await withUserStatus(req, res, noop)
 
     expect(result).toBeNull()
   })
@@ -234,7 +238,7 @@ describe('withUserStatus', () => {
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
 
-    const result = await withUserStatus(req, res)
+    const result = await withUserStatus(req, res, noop)
 
     expect(result).not.toBeNull()
     expect(result?.status).toBe(307)
@@ -249,7 +253,7 @@ describe('withUserStatus', () => {
     const res = makeResponse()
     res.headers.set('x-user-id', 'user-123')
 
-    const result = await withUserStatus(req, res)
+    const result = await withUserStatus(req, res, noop)
 
     expect(result).toBeNull()
   })
