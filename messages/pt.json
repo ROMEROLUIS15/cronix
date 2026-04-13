@@ -1094,6 +1094,27 @@
       "btnRegister": "Registrar chave de acesso"
     }
   },
+  "adminUsers": {
+    "title": "Gestão de usuários",
+    "subtitle": "Painel de controle de usuários da plataforma",
+    "refresh": "Atualizar",
+    "refreshing": "Atualizando...",
+    "filter_all": "Todos",
+    "filter_active": "Ativos",
+    "filter_pending": "Pendentes",
+    "filter_rejected": "Bloqueados",
+    "tableTitle": "Usuários da plataforma",
+    "noUsers": "Nenhum usuário encontrado",
+    "thUser": "Usuário",
+    "thBusiness": "Empresa",
+    "thRole": "Função",
+    "thStatus": "Status",
+    "thJoined": "Registro",
+    "thActions": "Ações",
+    "activateBtn": "Ativar",
+    "blockBtn": "Bloquear",
+    "youLabel": "Você"
+  },
   "sessionTimeout": {
     "stillThereTitle": "Ainda aí?",
     "stillThereDesc": "Sua sessão será encerrada por inatividade. Deseja mantê-la ativa?",

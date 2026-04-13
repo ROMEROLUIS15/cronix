@@ -1053,6 +1053,27 @@
     "viewPayload": "Payload anzeigen",
     "retryBtn": "Erneut versuchen"
   },
+  "adminUsers": {
+    "title": "Benutzerverwaltung",
+    "subtitle": "Benutzer-Kontrollpanel der Plattform",
+    "refresh": "Aktualisieren",
+    "refreshing": "Wird aktualisiert...",
+    "filter_all": "Alle",
+    "filter_active": "Aktiv",
+    "filter_pending": "Ausstehend",
+    "filter_rejected": "Gesperrt",
+    "tableTitle": "Plattformbenutzer",
+    "noUsers": "Keine Benutzer gefunden",
+    "thUser": "Benutzer",
+    "thBusiness": "Unternehmen",
+    "thRole": "Rolle",
+    "thStatus": "Status",
+    "thJoined": "Beigetreten",
+    "thActions": "Aktionen",
+    "activateBtn": "Aktivieren",
+    "blockBtn": "Sperren",
+    "youLabel": "Du"
+  },
   "sessionTimeout": {
     "stillThereTitle": "Noch da?",
     "stillThereDesc": "Deine Sitzung wird wegen Inaktivität geschlossen. Möchtest du sie aktiv halten?",

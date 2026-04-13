@@ -1053,6 +1053,27 @@
     "viewPayload": "View payload",
     "retryBtn": "Retry"
   },
+  "adminUsers": {
+    "title": "User Management",
+    "subtitle": "Platform users control panel",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "filter_all": "All",
+    "filter_active": "Active",
+    "filter_pending": "Pending",
+    "filter_rejected": "Blocked",
+    "tableTitle": "Platform users",
+    "noUsers": "No users found",
+    "thUser": "User",
+    "thBusiness": "Business",
+    "thRole": "Role",
+    "thStatus": "Status",
+    "thJoined": "Joined",
+    "thActions": "Actions",
+    "activateBtn": "Activate",
+    "blockBtn": "Block",
+    "youLabel": "You"
+  },
   "sessionTimeout": {
     "stillThereTitle": "Still there?",
     "stillThereDesc": "Your session will close due to inactivity. Do you want to keep it active?",

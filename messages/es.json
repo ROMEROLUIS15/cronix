@@ -1055,6 +1055,27 @@
       "searchPlaceholder": "Buscar transacción..."
     }
   },
+  "adminUsers": {
+    "title": "Gestión de usuarios",
+    "subtitle": "Panel de control de usuarios de la plataforma",
+    "refresh": "Actualizar",
+    "refreshing": "Actualizando...",
+    "filter_all": "Todos",
+    "filter_active": "Activos",
+    "filter_pending": "Pendientes",
+    "filter_rejected": "Bloqueados",
+    "tableTitle": "Usuarios de la plataforma",
+    "noUsers": "No se encontraron usuarios",
+    "thUser": "Usuario",
+    "thBusiness": "Negocio",
+    "thRole": "Rol",
+    "thStatus": "Estado",
+    "thJoined": "Registro",
+    "thActions": "Acciones",
+    "activateBtn": "Activar",
+    "blockBtn": "Bloquear",
+    "youLabel": "Tú"
+  },
   "sessionTimeout": {
     "stillThereTitle": "¿Sigues ahí?",
     "stillThereDesc": "Tu sesión se cerrará por inactividad. ¿Deseas mantenerla activa?",

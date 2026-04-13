@@ -1053,6 +1053,27 @@
     "viewPayload": "Vedi payload",
     "retryBtn": "Riprova"
   },
+  "adminUsers": {
+    "title": "Gestione utenti",
+    "subtitle": "Pannello di controllo utenti della piattaforma",
+    "refresh": "Aggiorna",
+    "refreshing": "Aggiornamento...",
+    "filter_all": "Tutti",
+    "filter_active": "Attivi",
+    "filter_pending": "In attesa",
+    "filter_rejected": "Bloccati",
+    "tableTitle": "Utenti della piattaforma",
+    "noUsers": "Nessun utente trovato",
+    "thUser": "Utente",
+    "thBusiness": "Azienda",
+    "thRole": "Ruolo",
+    "thStatus": "Stato",
+    "thJoined": "Registrazione",
+    "thActions": "Azioni",
+    "activateBtn": "Attiva",
+    "blockBtn": "Blocca",
+    "youLabel": "Tu"
+  },
   "sessionTimeout": {
     "stillThereTitle": "Ancora li?",
     "stillThereDesc": "La tua sessione verra chiusa per inattivita. Vuoi mantenerla attiva?",
