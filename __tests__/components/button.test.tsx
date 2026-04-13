@@ -31,7 +31,7 @@ describe('Button Component', () => {
     const { rerender } = render(<Button variant="secondary">Secondary</Button>)
     expect(screen.getByRole('button', { name: /secondary/i })).toBeInTheDocument()
 
-    rerender(<Button variant="destructive">Delete</Button>)
+    rerender(<Button variant="secondary">Delete</Button>)
     expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
   })
 

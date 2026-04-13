@@ -44,15 +44,13 @@ describe('Card Components', () => {
 
   describe('StatCard', () => {
     it('renders stat with value', () => {
-      render(<StatCard value="$1,234" label="Revenue" />)
+      render(<StatCard title="Revenue" value="$1,234" />)
       expect(screen.getByText(/\$1,234/i)).toBeInTheDocument()
-      // Label renders in a separate element — verify the card exists with value
     })
 
     it('renders with trend indicator', () => {
-      render(<StatCard value="15%" label="Growth" trend="up" />)
-      expect(screen.getByText(/15%/i)).toBeInTheDocument()
-      // Trend indicator renders as arrow + percentage
+      render(<StatCard title="Growth" value={15} trend={{ value: 12, label: 'vs last month' }} />)
+      expect(screen.getByText(/15/i)).toBeInTheDocument()
     })
   })
 })
