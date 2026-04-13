@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal'
 describe('Modal Component', () => {
   it('renders children when open', () => {
     render(
-      <Modal isOpen onClose={vi.fn()} title="Test Modal">
+      <Modal open onClose={vi.fn()} title="Test Modal">
         <p>Modal content</p>
       </Modal>
     )
@@ -20,7 +20,7 @@ describe('Modal Component', () => {
 
   it('does not render when closed', () => {
     render(
-      <Modal isOpen={false} onClose={vi.fn()} title="Test Modal">
+      <Modal open={false} onClose={vi.fn()} title="Test Modal">
         <p>Modal content</p>
       </Modal>
     )
@@ -30,17 +30,17 @@ describe('Modal Component', () => {
   it('calls onClose when close button is clicked', () => {
     const onClose = vi.fn()
     render(
-      <Modal isOpen onClose={onClose} title="Test Modal">
+      <Modal open onClose={onClose} title="Test Modal">
         <p>Content</p>
       </Modal>
     )
-    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    fireEvent.click(screen.getByRole('button', { name: /cerrar/i }))
     expect(onClose).toHaveBeenCalled()
   })
 
   it('renders title', () => {
     render(
-      <Modal isOpen onClose={vi.fn()} title="My Custom Title">
+      <Modal open onClose={vi.fn()} title="My Custom Title">
         <p>Content</p>
       </Modal>
     )
@@ -49,7 +49,7 @@ describe('Modal Component', () => {
 
   it('renders footer slot when provided', () => {
     render(
-      <Modal isOpen onClose={vi.fn()} title="Test" footer={<button>Save</button>}>
+      <Modal open onClose={vi.fn()} title="Test" footer={<button>Save</button>}>
         <p>Content</p>
       </Modal>
     )
@@ -58,14 +58,14 @@ describe('Modal Component', () => {
 
   it('supports size variants', () => {
     const { rerender } = render(
-      <Modal isOpen onClose={vi.fn()} title="Small" size="sm">
+      <Modal open onClose={vi.fn()} title="Small" size="sm">
         <p>Small modal</p>
       </Modal>
     )
     expect(screen.getByText(/small modal/i)).toBeInTheDocument()
 
     rerender(
-      <Modal isOpen onClose={vi.fn()} title="Large" size="lg">
+      <Modal open onClose={vi.fn()} title="Large" size="lg">
         <p>Large modal</p>
       </Modal>
     )
