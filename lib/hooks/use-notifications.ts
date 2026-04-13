@@ -1,38 +1,11 @@
 'use client'
 
-/**
- * useNotifications — Web Push subscription lifecycle manager.
- *
- * Handles:
- *  - Feature detection (Push API + Notification API + ServiceWorker)
- *  - Requesting notification permission
- *  - Subscribing / unsubscribing via the browser PushManager
- *  - Persisting the PushSubscription in `notification_subscriptions` (Supabase)
- *  - Detecting existing subscription on mount
- *
- * Multi-tenant safe:
- *  - Subscription is always scoped to the current user_id + business_id
- *  - Unsubscribing removes the row from the DB too
- *
- * Required env var (Vercel):
- *   NEXT_PUBLIC_VAPID_PUBLIC_KEY — base64url VAPID public key
- *                                   (generate with: npx web-push generate-vapid-keys)
- *
- * Usage:
- *   const { state, subscribed, loading, subscribe, unsubscribe } =
- *     useNotifications(businessId)
- */
-
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const VAPID_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 
-/**
- * Converts a base64url VAPID public key to a Uint8Array for PushManager.subscribe.
- * The browser requires an ArrayBuffer / Uint8Array, not a raw string.
- */
 function vapidKeyToUint8Array(base64UrlKey: string): Uint8Array {
   const padding = '='.repeat((4 - (base64UrlKey.length % 4)) % 4)
   const base64  = (base64UrlKey + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -49,192 +22,125 @@ function isPushSupported(): boolean {
   )
 }
 
-/**
- * Resolves when a ServiceWorker becomes active, or rejects after `ms` milliseconds.
- * Prevents infinite hangs if the SW fails to register (build issues, browser quirks).
- */
-function getReadyRegistration(ms = 8_000): Promise<ServiceWorkerRegistration> {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('SW_NOT_READY')), ms)
-  )
-  return Promise.race([navigator.serviceWorker.ready, timeout])
-}
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-/**
- * - unsupported   : browser lacks Push/Notification/ServiceWorker API
- * - default       : permission not yet requested
- * - granted       : permission granted
- * - denied        : user blocked notifications (must unlock in browser settings)
- * - missing_config: NEXT_PUBLIC_VAPID_PUBLIC_KEY env var not set
- * - sw_unavailable: ServiceWorker not registered (disabled in dev, or build issue)
- */
-export type NotificationPermission =
+export type NotificationState =
   | 'unsupported'
-  | 'default'
-  | 'granted'
+  | 'permission-denied'
+  | 'idle'
+  | 'subscribing'
+  | 'subscribed'
+  | 'unsubscribing'
   | 'denied'
   | 'missing_config'
   | 'sw_unavailable'
 
-export interface UseNotificationsReturn {
-  /** Current permission state — 'unsupported' if the browser lacks Push API. */
-  state:       NotificationPermission
-  /** Whether a valid subscription exists in the DB for this user+business. */
-  subscribed:  boolean
-  /** True while subscribe/unsubscribe is in progress. */
-  loading:     boolean
-  /** Request permission, subscribe via PushManager, persist to DB. */
-  subscribe:   () => Promise<void>
-  /** Unsubscribe from browser PushManager and remove from DB. */
+interface UseNotificationsReturn {
+  state: NotificationState
+  subscribed: boolean
+  loading: boolean
+  subscribe: () => Promise<void>
   unsubscribe: () => Promise<void>
+  error: string | null
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
-
 export function useNotifications(businessId: string | null): UseNotificationsReturn {
+  const [state, setState] = useState<NotificationState>('idle')
+  const [error, setError] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
-  const [state,      setState]      = useState<NotificationPermission>('default')
-  const [subscribed, setSubscribed] = useState(false)
-  const [loading,    setLoading]    = useState(false)
-
-  // ── Feature detection + initial permission state ──────────────────────
+  // Detect existing subscription on mount
   useEffect(() => {
-    if (!isPushSupported()) {
+    if (!isPushSupported() || !businessId) {
       setState('unsupported')
       return
     }
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-    if (!vapidPublicKey) {
-      setState('missing_config')
+
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        setState(sub ? 'subscribed' : 'idle')
+      } catch {
+        setState('idle')
+      }
+    })()
+  }, [businessId])
+
+  const subscribe = useCallback(async () => {
+    if (!isPushSupported() || !businessId || !VAPID_KEY) {
+      setState('unsupported')
       return
     }
-    setState(window.Notification.permission as NotificationPermission)
-  }, [])
 
-  // ── Check if an active subscription already exists in the DB ─────────
-  useEffect(() => {
-    if (state !== 'granted' || !businessId) return
-
-    async function checkExisting() {
-      try {
-        const reg      = await getReadyRegistration()
-        const existing = await reg.pushManager.getSubscription()
-        if (!existing) { setSubscribed(false); return }
-
-        const { data } = await supabase
-          .from('notification_subscriptions')
-          .select('id')
-          .eq('endpoint', existing.endpoint)
-          .maybeSingle()
-
-        setSubscribed(!!data)
-      } catch {
-        setSubscribed(false)
-      }
-    }
-
-    checkExisting()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, businessId])
-
-  // ── Subscribe ─────────────────────────────────────────────────────────
-  const subscribe = useCallback(async () => {
-    if (!businessId) return
-    setLoading(true)
+    setState('subscribing')
+    setError(null)
 
     try {
-      // 1. Request browser permission
-      const perm = await window.Notification.requestPermission()
-      setState(perm as NotificationPermission)
-      if (perm !== 'granted') return
-
-      // 2. Wait for SW registration (8 s timeout — fails gracefully in dev/no-SW envs)
-      let reg: ServiceWorkerRegistration
-      try {
-        reg = await getReadyRegistration()
-      } catch {
-        setState('sw_unavailable')
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') {
+        setState('permission-denied')
         return
       }
 
-      // 3. Subscribe via PushManager
-      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-      if (!vapidPublicKey) {
-        setState('missing_config')
-        logger.error('useNotifications', 'NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set')
-        return
-      }
+      const reg = await navigator.serviceWorker.ready
+      const existing = await reg.pushManager.getSubscription()
+      if (existing) await existing.unsubscribe()
 
-      const pushSub = await reg.pushManager.subscribe({
-        userVisibleOnly:      true,
-        applicationServerKey: vapidKeyToUint8Array(vapidPublicKey).buffer as ArrayBuffer,
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKeyToUint8Array(VAPID_KEY) as unknown as ArrayBuffer,
       })
 
-      // 4. Serialize the subscription
-      const subJson = pushSub.toJSON() as {
-        endpoint: string
-        keys:     { p256dh: string; auth: string }
-      }
-
-      // 5. Identify the current user
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
+      if (!user) { setState('idle'); return }
 
-      // 6. Persist to notification_subscriptions with upsert
-      //    (handles browser refresh → same endpoint, different keys)
-      const { error } = await supabase.from('notification_subscriptions').upsert(
-        {
-          user_id:     user.id,
-          business_id: businessId,
-          endpoint:    subJson.endpoint,
-          p256dh:      subJson.keys.p256dh,
-          auth:        subJson.keys.auth,
-          user_agent:  navigator.userAgent.slice(0, 200),
-          updated_at:  new Date().toISOString(),
-        },
-        { onConflict: 'user_id,endpoint' },
-      )
+      await supabase.from('notification_subscriptions').upsert({
+        user_id: user.id,
+        business_id: businessId,
+        endpoint: sub.endpoint,
+        p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')!))),
+        auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')!))),
+      }, { onConflict: 'user_id,endpoint' })
 
-      if (error) {
-        logger.error('useNotifications', 'DB upsert error', error)
-        return
-      }
-
-      setSubscribed(true)
+      setState('subscribed')
     } catch (err) {
-      logger.error('useNotifications', 'subscribe failed', err)
-    } finally {
-      setLoading(false)
+      logger.error('useNotifications', 'Subscribe failed', err)
+      setError(err instanceof Error ? err.message : 'Subscription failed')
+      setState('idle')
     }
   }, [businessId, supabase])
 
-  // ── Unsubscribe ───────────────────────────────────────────────────────
   const unsubscribe = useCallback(async () => {
-    setLoading(true)
+    if (!businessId) return
+    setState('unsubscribing')
+    setError(null)
+
     try {
-      const reg = await getReadyRegistration()
+      const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
+      if (sub) await sub.unsubscribe()
 
-      if (sub) {
-        // Remove from browser
-        await sub.unsubscribe()
-
-        // Remove from DB
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
         await supabase.from('notification_subscriptions')
           .delete()
-          .eq('endpoint', sub.endpoint)
+          .eq('user_id', user.id)
+          .eq('business_id', businessId)
       }
 
-      setSubscribed(false)
+      setState('idle')
     } catch (err) {
-      logger.error('useNotifications', 'unsubscribe failed', err)
-    } finally {
-      setLoading(false)
+      logger.error('useNotifications', 'Unsubscribe failed', err)
+      setError(err instanceof Error ? err.message : 'Unsubscription failed')
+      setState('subscribed')
     }
-  }, [supabase])
+  }, [businessId, supabase])
 
-  return { state, subscribed, loading, subscribe, unsubscribe }
+  return {
+    state,
+    subscribed: state === 'subscribed',
+    loading: state === 'subscribing' || state === 'unsubscribing',
+    subscribe,
+    unsubscribe,
+    error,
+  }
 }
