@@ -65,6 +65,25 @@ If any command fails, the push is cancelled. Fix the error and retry.
 | `integration` | Push only (not draft PRs) | Integration tests AI → DB |
 | `e2e` | Push to `main` or `develop` | Playwright (chromium, firefox, webkit) |
 
+### Required GitHub Secrets
+
+All secrets must be set in **GitHub → Settings → Secrets and variables → Actions**:
+
+| Secret | Used by |
+|--------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | All jobs |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Build + E2E |
+| `SUPABASE_SERVICE_ROLE_KEY` | Integration tests |
+| `NEXT_PUBLIC_AXIOM_DATASET` | All jobs |
+| `AXIOM_TOKEN` | All jobs |
+| `E2E_TEST_EMAIL` | E2E setup |
+| `E2E_TEST_PASSWORD` | E2E setup |
+
+To add or update secrets from `.env.local`:
+```bash
+grep KEY .env.local | cut -d= -f2 | gh secret set KEY_NAME -R ROMEROLUIS15/cronix
+```
+
 ---
 
 ## ESLint configuration

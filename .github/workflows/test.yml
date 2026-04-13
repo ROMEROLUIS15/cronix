@@ -7,12 +7,13 @@ on:
     branches: ['**']
 
 env:
-  NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-  NEXT_PUBLIC_AXIOM_DATASET: ${{ secrets.NEXT_PUBLIC_AXIOM_DATASET }}
-  AXIOM_TOKEN:               ${{ secrets.AXIOM_TOKEN }}
-  E2E_TEST_EMAIL:            ${{ secrets.E2E_TEST_EMAIL }}
-  E2E_TEST_PASSWORD:         ${{ secrets.E2E_TEST_PASSWORD }}
+  NEXT_PUBLIC_SUPABASE_URL:       ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+  SUPABASE_SERVICE_ROLE_KEY:      ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  NEXT_PUBLIC_AXIOM_DATASET:      ${{ secrets.NEXT_PUBLIC_AXIOM_DATASET }}
+  AXIOM_TOKEN:                    ${{ secrets.AXIOM_TOKEN }}
+  E2E_TEST_EMAIL:                 ${{ secrets.E2E_TEST_EMAIL }}
+  E2E_TEST_PASSWORD:              ${{ secrets.E2E_TEST_PASSWORD }}
 
 jobs:
   # ── Job 1: Unit & Repository Tests ────────────────────────────────────────
