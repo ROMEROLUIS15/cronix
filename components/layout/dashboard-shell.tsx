@@ -8,6 +8,7 @@ import { Topbar } from '@/components/layout/topbar'
 import { LanguageSwitcher } from '@/components/ui/language-switcher'
 import { useInAppNotifications } from '@/lib/hooks/use-in-app-notifications'
 import { Tables } from '@/types/database.types'
+import { hexToHsl } from '@/lib/utils/color'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type UserProfile = Pick<
@@ -15,7 +16,10 @@ type UserProfile = Pick<
   'name' | 'role' | 'business_id' | 'avatar_url' | 'color'
 > | null
 
-type BusinessProfile = Pick<Tables<'businesses'>, 'name' | 'category'> | null
+type BusinessProfile = (Pick<Tables<'businesses'>, 'name' | 'category'> & {
+  logo_url?:   string | null
+  brandColor?: string | null
+}) | null
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -74,10 +78,17 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
     }
   }, [sidebarOpen])
 
+  const brandingStyle: React.CSSProperties = {
+    backgroundColor: '#0F0F12',
+    ...(business?.brandColor
+      ? ({ '--primary': hexToHsl(business.brandColor) } as React.CSSProperties)
+      : {}),
+  }
+
   return (
     <div
       className="shell-height flex w-full overflow-hidden"
-      style={{ backgroundColor: '#0F0F12' }}
+      style={brandingStyle}
     >
 
       {/* Sidebar — desktop */}

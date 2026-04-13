@@ -847,7 +847,21 @@
       "fullAccess": "Accès complet inclus",
       "managePlan": "Gérer le forfait",
       "current": "Forfait {plan, select, free {Gratuit} pro {Pro} enterprise {Entreprise} other {Gratuit}}"
-    }
+    },
+    "brandingTitle": "Image de marque",
+    "brandingSub": "Personnalisez le logo et la couleur de votre entreprise",
+    "brandingLogo": "Logo de l'entreprise",
+    "brandingLogoAlt": "Logo de l'entreprise",
+    "brandingNoLogo": "Sans logo",
+    "brandingUploadLogo": "Télécharger le logo",
+    "brandingLogoHint": "JPG, PNG, WebP · Max 2Mo",
+    "brandingColor": "Couleur principale",
+    "brandingColorHint": "Appliquée aux boutons et éléments actifs du tableau de bord",
+    "brandColorSaved": "Couleur de marque enregistrée",
+    "logoUploaded": "Logo téléchargé avec succès",
+    "invalidImageFormat": "Format d'image invalide",
+    "imageTooLarge": "L'image doit faire moins de 2Mo",
+    "uploadError": "Erreur lors du téléchargement du logo"
   },
   "profile": {
     "title": "Mon Profil",

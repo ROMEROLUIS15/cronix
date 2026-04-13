@@ -844,7 +844,21 @@
       "fullAccess": "Full access included",
       "managePlan": "Manage plan",
       "current": "Plan {plan, select, free {Free} pro {Pro} enterprise {Enterprise} other {Free}}"
-    }
+    },
+    "brandingTitle": "Brand identity",
+    "brandingSub": "Customize your business logo and color",
+    "brandingLogo": "Business logo",
+    "brandingLogoAlt": "Business logo",
+    "brandingNoLogo": "No logo",
+    "brandingUploadLogo": "Upload logo",
+    "brandingLogoHint": "JPG, PNG, WebP · Max 2MB",
+    "brandingColor": "Primary color",
+    "brandingColorHint": "Applied to buttons and active elements in the dashboard",
+    "brandColorSaved": "Brand color saved",
+    "logoUploaded": "Logo uploaded successfully",
+    "invalidImageFormat": "Invalid image format",
+    "imageTooLarge": "Image must be under 2MB",
+    "uploadError": "Error uploading logo"
   },
   "profile": {
     "title": "My Profile",

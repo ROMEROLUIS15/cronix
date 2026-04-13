@@ -6,6 +6,7 @@ import { SessionTimeout } from '@/components/session-timeout'
 import { Providers, ServerBusinessContextProvider } from '@/components/providers'
 import { setSentryUser } from '@/lib/sentry'
 import { VoiceAssistantFab } from '@/components/dashboard/voice-assistant-fab'
+import type { BusinessSettingsJson } from '@/types'
 
 interface DashboardLayoutProps { children: React.ReactNode }
 
@@ -24,7 +25,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   const admin = createAdminClient()
   const { data: dbUser } = await admin
     .from('users')
-    .select('name, role, business_id, avatar_url, color, businesses(name, category, settings)')
+    .select('name, role, business_id, avatar_url, color, businesses(name, category, settings, logo_url)')
     .eq('id', user.id)
     .single()
 
@@ -67,9 +68,15 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         color:       null,
       }
 
-  const businessProfile = dbUser?.businesses && !Array.isArray(dbUser.businesses)
-    ? { name: dbUser.businesses.name, category: dbUser.businesses.category }
-    : null
+  const rawBiz = dbUser?.businesses && !Array.isArray(dbUser.businesses)
+    ? dbUser.businesses : null
+
+  const businessProfile = rawBiz ? {
+    name:       rawBiz.name,
+    category:   rawBiz.category,
+    logo_url:   rawBiz.logo_url ?? null,
+    brandColor: (rawBiz.settings as BusinessSettingsJson | null)?.brandColor ?? null,
+  } : null
 
   return (
     <Providers>

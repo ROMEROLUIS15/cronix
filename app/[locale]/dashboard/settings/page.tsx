@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Store,
   Clock,
@@ -15,6 +16,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Palette,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,14 @@ export default function SettingsPage() {
     getHour,
     DAYS,
     notif,
+    brandColor,
+    setBrandColor,
+    logoUrl,
+    uploadingLogo,
+    savingBrand,
+    logoFileInputRef,
+    handleSaveBrandColor,
+    handleLogoChange,
   } = useSettingsForm();
 
   const [localCopiedLink, setLocalCopiedLink] = useState(false);
@@ -197,6 +207,114 @@ export default function SettingsPage() {
             <Button
               onClick={handleSaveBiz}
               loading={saving}
+              leftIcon={<Save size={16} />}
+            >
+              {t('saveChanges')}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Branding */}
+      <Card>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(0,98,255,0.1)" }}
+          >
+            <Palette size={18} style={{ color: "#0062FF" }} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: "#F2F2F2" }}>
+              {t('brandingTitle')}
+            </h2>
+            <p className="text-xs" style={{ color: "#909098" }}>
+              {t('brandingSub')}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Logo upload */}
+          <div>
+            <label className="block text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
+              {t('brandingLogo')}
+            </label>
+            <div className="flex items-center gap-4">
+              <div
+                className="h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+                style={{ background: "#212125", border: "1px solid #272729" }}
+              >
+                {logoUrl ? (
+                  <Image
+                    src={logoUrl}
+                    alt={t('brandingLogoAlt')}
+                    width={64}
+                    height={64}
+                    className="h-full w-full object-cover"
+                    sizes="64px"
+                  />
+                ) : (
+                  <span className="text-xs" style={{ color: "#909098" }}>
+                    {t('brandingNoLogo')}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={logoFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={handleLogoChange}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={uploadingLogo}
+                  onClick={() => logoFileInputRef.current?.click()}
+                >
+                  {uploadingLogo
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : t('brandingUploadLogo')}
+                </Button>
+                <p className="text-xs" style={{ color: "#909098" }}>
+                  {t('brandingLogoHint')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Color picker */}
+          <div>
+            <label className="block text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
+              {t('brandingColor')}
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(e) => setBrandColor(e.target.value)}
+                className="h-10 w-16 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                aria-label={t('brandingColor')}
+              />
+              <span className="text-sm font-mono" style={{ color: "#909098" }}>
+                {brandColor.toUpperCase()}
+              </span>
+              <div
+                className="h-8 w-8 rounded-lg flex-shrink-0"
+                style={{ backgroundColor: brandColor, border: "1px solid #272729" }}
+              />
+            </div>
+            <p className="text-xs mt-2" style={{ color: "#909098" }}>
+              {t('brandingColorHint')}
+            </p>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => handleSaveBrandColor(brandColor)}
+              loading={savingBrand}
               leftIcon={<Save size={16} />}
             >
               {t('saveChanges')}
