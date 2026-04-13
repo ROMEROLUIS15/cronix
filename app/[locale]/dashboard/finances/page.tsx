@@ -73,7 +73,7 @@ export default function FinancesPage() {
       }
     }
     loadData()
-  }, [supabase, businessId, contextLoading])
+  }, [supabase, businessId, contextLoading, t])
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -31,7 +31,7 @@ export function DeadLetterFeed() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const supabase = createClient()
 
-  const fetchDLQ = async () => {
+  const fetchDLQ = useCallback(async () => {
     const { data, error } = await supabase
       .from('wa_dead_letter_queue')
       .select('*')
@@ -42,7 +42,7 @@ export function DeadLetterFeed() {
       setEntries(data as DLQEntry[])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
   useEffect(() => {
     fetchDLQ()
@@ -57,7 +57,7 @@ export function DeadLetterFeed() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [supabase])
+  }, [supabase, fetchDLQ])
 
   if (loading) {
     return (

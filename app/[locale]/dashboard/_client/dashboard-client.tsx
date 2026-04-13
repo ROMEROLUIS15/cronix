@@ -209,7 +209,7 @@ export function DashboardClient({
     } finally {
       setUpdatingStatus(false)
     }
-  }, [selectedApt, businessId, repos, updateStatusMutation, rangeStart, rangeEnd])
+  }, [selectedApt, businessId, repos, updateStatusMutation])
 
   const deleteAppointment = useCallback(async (id: string) => {
     setDeletingId(id)
