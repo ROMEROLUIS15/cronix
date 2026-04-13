@@ -1,43 +1,33 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { ArrowLeft, UserPlus, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBusinessContext } from "@/lib/hooks/use-business-context";
-import { getRepos } from "@/lib/repositories";
-import { notificationForNewClient } from "@/lib/use-cases/notifications.use-case";
 import {
   PhoneInputFlags,
-  parsePhone,
   buildPhone,
   COUNTRIES,
   Country,
 } from "@/components/ui/phone-input-flags";
 import { useContactPicker } from "@/lib/hooks/use-contact-picker";
 import { useTranslations } from "next-intl";
+import { useNewClientForm } from "./hooks/use-new-client-form";
 
 const TAG_OPTIONS = ["VIP", "Frecuente", "Nuevo"] as const;
-type TagOption = typeof TAG_OPTIONS[number];
 
 export default function NewClientPage() {
-  const router = useRouter();
   const t = useTranslations('clients.form');
-  const { supabase, businessId } = useBusinessContext();
-  const [form, setForm] = useState({
-    name: "",
-    phoneLocal: "",
-    email: "",
-    notes: "",
-  });
-  const [selectedCountry, setSelectedCountry] = useState<Country>(
-    COUNTRIES[0] as Country,
-  );
+  const { businessId } = useBusinessContext();
+  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const { form, setForm, saving, error, handleSubmit } = useNewClientForm(
+    selectedCountry,
+    selectedTags,
+  );
 
   const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
     ({ name, phoneLocal, country }) => {
@@ -51,56 +41,11 @@ export default function NewClientPage() {
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
     );
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId) {
-      setError(t('sessionError'));
-      return;
-    }
-    setSaving(true);
-    setError(null);
-
-    // Combinar dial + número local (normalizado)
+    if (!businessId) return;
     const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
-
-    // Verificar teléfono duplicado dentro del mismo negocio
-    if (fullPhone) {
-      const { data: existing } = await supabase
-        .from("clients")
-        .select("id, name")
-        .eq("business_id", businessId)
-        .eq("phone", fullPhone)
-        .is("deleted_at", null)
-        .maybeSingle();
-
-      if (existing) {
-        setSaving(false);
-        setError(t('duplicatePhone', { name: existing.name }));
-        return;
-      }
-    }
-
-    const { error: insertError } = await supabase.from("clients").insert({
-      business_id: businessId,
-      name: form.name.trim(),
-      phone: fullPhone,
-      email: form.email.trim() || null,
-      notes: form.notes.trim() || null,
-      tags: selectedTags.length > 0 ? selectedTags : null,
-    });
-    setSaving(false);
-    if (insertError) {
-      setError("Error al crear el cliente: " + insertError.message);
-    } else {
-      // In-app notification for new client
-      const notifPayload = notificationForNewClient(businessId, form.name.trim(), fullPhone ?? undefined);
-      // Fire-and-forget: notification failures don't block the flow
-      const repos = getRepos(supabase);
-      repos.notifications.create(notifPayload).catch(() => null);
-
-      router.push("/dashboard/clients");
-      router.refresh();
-    }
+    await handleSubmit(fullPhone);
   };
 
   return (
@@ -141,7 +86,7 @@ export default function NewClientPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={onSubmit} className="space-y-5">
         {error && (
           <div
             className="p-4 rounded-xl flex items-start gap-2 text-sm font-medium"

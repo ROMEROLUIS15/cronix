@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Zap, Activity, Clock, AlertCircle, CheckCircle2, CloudLightning } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -18,7 +18,7 @@ export function SystemStatusGrid() {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     const { data, error } = await supabase
       .from('service_health')
       .select('*')
@@ -28,7 +28,7 @@ export function SystemStatusGrid() {
       setServices(data as ServiceHealth[])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
   useEffect(() => {
     fetchHealth()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, ShieldAlert, RefreshCw } from "lucide-react";
@@ -48,7 +48,7 @@ export default function AdminPulsePage() {
     checkAdmin();
   }, [router, supabase]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     setIsRefreshing(true);
     try {
@@ -73,7 +73,7 @@ export default function AdminPulsePage() {
         .from('service_health')
         .select('*')
         .order('service_name');
-      
+
       const dlqResponse = await supabase
         .from('wa_dead_letter_queue')
         .select('*')
@@ -103,7 +103,7 @@ export default function AdminPulsePage() {
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [user, supabase]);
 
   useEffect(() => {
     let interval: any = null;

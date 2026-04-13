@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { getContainer } from '@/lib/container'
 import { revalidatePath } from 'next/cache'
 
 // ── Zod schemas ───────────────────────────────────────────────────────────
@@ -26,11 +26,12 @@ interface ProfileResult {
 }
 
 export async function updateProfile(formData: FormData): Promise<ProfileResult> {
-  const supabase = await createClient()
+  const container = await getContainer()
 
   // 1. Auth guard
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  const ctx = await container.users.getBusinessContext()
+  if (!ctx.data?.userId) return { error: 'No autenticado' }
+  const userId = ctx.data.userId
 
   // 2. Validate profile fields
   const profileParsed = UpdateProfileSchema.safeParse({
@@ -43,7 +44,7 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
     return { error: profileParsed.error.errors[0]?.message ?? 'Datos inválidos' }
   }
 
-  const { name, phone, email } = profileParsed.data
+  const { name, phone } = profileParsed.data
 
   // 3. Validate password only if provided
   const rawPassword        = (formData.get('password') as string | null)?.trim() ?? ''
@@ -60,14 +61,14 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
     }
   }
 
-  // 4. Update user table
-  await supabase
-    .from('users')
-    .update({ name, phone: phone || null })
-    .eq('id', user.id)
+  // 4. Update user table via container
+  const updateResult = await container.users.updateProfile(userId, { name, phone: phone || null })
+  if (updateResult.error) return { error: updateResult.error }
 
   // 5. Change password (auth infra — stays in action)
   if (rawPassword) {
+    const { createClient } = await import('@/lib/supabase/server')
+    const supabase = await createClient()
     const { error: pwError } = await supabase.auth.updateUser({ password: rawPassword })
     if (pwError) {
       if (pwError.message.toLowerCase().includes('different from the old password')) {
@@ -78,11 +79,17 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
   }
 
   // 6. Change email (auth infra — stays in action)
-  if (email && email !== user.email) {
-    const { error: emailError } = await supabase.auth.updateUser({ email })
-    if (emailError) return { error: 'Error al cambiar email: ' + emailError.message }
-    revalidatePath('/dashboard/profile')
-    return { success: 'Perfil actualizado. Revisa tu nuevo correo para confirmar el cambio de email.' }
+  const email = profileParsed.data.email
+  if (email) {
+    const { createClient } = await import('@/lib/supabase/server')
+    const supabase = await createClient()
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (authUser && email !== authUser.email) {
+      const { error: emailError } = await supabase.auth.updateUser({ email })
+      if (emailError) return { error: 'Error al cambiar email: ' + emailError.message }
+      revalidatePath('/dashboard/profile')
+      return { success: 'Perfil actualizado. Revisa tu nuevo correo para confirmar el cambio de email.' }
+    }
   }
 
   revalidatePath('/dashboard/profile')
@@ -90,17 +97,15 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
 }
 
 export async function updateAvatar(url: string): Promise<ProfileResult> {
-  const supabase = await createClient()
+  const container = await getContainer()
 
   // Auth guard
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  const ctx = await container.users.getBusinessContext()
+  if (!ctx.data?.userId) return { error: 'No autenticado' }
 
-  // Update avatar
-  await supabase
-    .from('users')
-    .update({ avatar_url: url })
-    .eq('id', user.id)
+  // Update avatar via container
+  const result = await container.users.updateAvatar(ctx.data.userId, url)
+  if (result.error) return { error: result.error }
 
   revalidatePath('/dashboard/profile')
   return { success: 'Imagen actualizada' }

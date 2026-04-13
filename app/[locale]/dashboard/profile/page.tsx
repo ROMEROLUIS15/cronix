@@ -1,104 +1,37 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import { User, Mail, Camera, Save, AlertCircle, CheckCircle2, Trash2, Lock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { useProfileForm } from './hooks/use-profile-form'
 import { updateProfile } from './actions'
 import { PasswordInput } from '@/components/ui/password-input'
-import { PhoneInputFlags, parsePhone, type Country, COUNTRIES } from '@/components/ui/phone-input-flags'
+import { PhoneInputFlags, type Country, COUNTRIES } from '@/components/ui/phone-input-flags'
 import { PasskeyRegister } from '@/components/ui/passkey-register'
 import { useTranslations } from 'next-intl'
 
-interface ProfileUser {
-  id: string
-  name: string | null
-  email: string | null
-  phone: string | null
-  avatar_url: string | null
-}
-
 export default function ProfilePage() {
-  const { supabase } = useBusinessContext()
   const t = useTranslations('profile')
-  const [user,           setUser]           = useState<ProfileUser | null>(null)
-  const [loading,        setLoading]        = useState(true)
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [avatarUrl,      setAvatarUrl]      = useState<string | null>(null)
-  const [error,          setError]          = useState<string | null>(null)
-  const [success,        setSuccess]        = useState<string | null>(null)
-  const [isPending,      startTransition]   = useTransition()
+  const {
+    user, loading, uploadingPhoto, avatarUrl, setAvatarUrl,
+    fileInputRef, handlePhotoChange, handleDeletePhoto, showMsg,
+  } = useProfileForm()
+
+  const [isPending, startTransition] = useTransition()
   const [changePassword, setChangePassword] = useState(false)
-  const [phoneCountry,   setPhoneCountry]   = useState<Country>(COUNTRIES[1] as Country)
-  const [localPhone,     setLocalPhone]     = useState('')
+  const [phoneCountry, setPhoneCountry] = useState<Country>(COUNTRIES[1] as Country)
+  const [localPhone, setLocalPhone] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    async function loadUser() {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (authUser) {
-        const { data: dbUser } = await supabase
-          .from('users').select('id, name, email, phone, avatar_url').eq('id', authUser.id).single()
-        if (dbUser) {
-          setUser({ ...dbUser, email: authUser.email ?? dbUser.email })
-          setAvatarUrl(dbUser.avatar_url ?? null)
-          const parsed = parsePhone(dbUser.phone)
-          setPhoneCountry(parsed.country)
-          setLocalPhone(parsed.local)
-        }
-      }
-      setLoading(false)
-    }
-    loadUser()
-  }, [supabase])
-
-  const showMsg = (type: 'error' | 'success', text: string) => {
+  // Override showMsg to also track local error/success state
+  const handleMsg = (type: 'error' | 'success', text: string) => {
     if (type === 'error') { setError(text); setSuccess(null) }
-    else                  { setSuccess(text); setError(null) }
+    else { setSuccess(text); setError(null) }
     setTimeout(() => { setError(null); setSuccess(null) }, 5000)
-  }
-
-  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !user?.id) return
-    if (!file.type.startsWith('image/'))        return showMsg('error', t('errorImgFormat'))
-    if (file.size > 2 * 1024 * 1024)            return showMsg('error', t('errorImgSize'))
-
-    setUploadingPhoto(true)
-    const ext  = file.name.split('.').pop()
-    const path = `avatars/${user.id}.${ext}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars').upload(path, file, { upsert: true })
-
-    if (uploadError) {
-      setUploadingPhoto(false)
-      return showMsg('error', t('errorUpload') + uploadError.message)
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-    await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', user.id)
-    setUploadingPhoto(false)
-    setAvatarUrl(publicUrl + '?t=' + Date.now())
-    showMsg('success', t('successUpload'))
-  }
-
-  const handleDeletePhoto = async () => {
-    if (!user?.id || !avatarUrl) return
-    setUploadingPhoto(true)
-    const pathMatch = avatarUrl.match(/avatars\/([^?]+)/)
-    if (pathMatch?.[1]) {
-      await supabase.storage.from('avatars').remove([`avatars/${pathMatch[1]}`])
-    }
-    const { error: updateError } = await supabase
-      .from('users').update({ avatar_url: null }).eq('id', user.id)
-    setUploadingPhoto(false)
-    if (updateError) return showMsg('error', t('errorDelete'))
-    setAvatarUrl(null)
-    showMsg('success', t('successDelete'))
+    showMsg(type, text)
   }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -112,9 +45,9 @@ export default function ProfilePage() {
     }
     startTransition(async () => {
       const res = await updateProfile(formData)
-      if (res?.error)   showMsg('error', res.error)
+      if (res?.error) handleMsg('error', res.error)
       else if (res?.success) {
-        showMsg('success', res.success)
+        handleMsg('success', res.success)
         if (changePassword) setChangePassword(false)
       }
     })

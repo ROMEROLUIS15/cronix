@@ -111,7 +111,7 @@ export class AssistantService {
     let streamTtsText: string | null = null  // first sentence extracted mid-stream for early TTS
     const toolsAttempted: string[] = []
 
-    const quickRoute = routeIntent(sttRes.text, userId)
+    const quickRoute = routeIntent(sttRes.text, userId, userTimezone)
     if (quickRoute.matched) {
       try {
         replyText = await toolRegistry.execute(

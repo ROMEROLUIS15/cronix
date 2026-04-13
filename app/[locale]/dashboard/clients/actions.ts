@@ -2,9 +2,29 @@
 
 import { z } from 'zod'
 import { isPast } from 'date-fns'
-import { createClient } from '@/lib/supabase/server'
+import { getContainer } from '@/lib/container'
 import { revalidatePath } from 'next/cache'
-import { getRepos } from '@/lib/repositories'
+import type { Client } from '@/types'
+
+// ── Data fetching (container pattern) ──────────────────────────────────────
+
+export async function getClients(businessId: string): Promise<Client[]> {
+  const container = await getContainer()
+  const result = await container.clients.getAll(businessId)
+  return result.data ?? []
+}
+
+export async function getClientDetail(clientId: string, businessId: string) {
+  const container = await getContainer()
+  const clientRes = await container.clients.getById(clientId, businessId)
+  const client = clientRes.error ? null : clientRes.data
+  if (!client) return null
+
+  const aptsRes = await container.clients.getAppointments(client.id, businessId)
+  const clientAppointments = aptsRes.data ?? []
+
+  return { client, clientAppointments }
+}
 
 // ── Zod schema for payment registration ───────────────────────────────────
 const RegisterPaymentSchema = z.object({
@@ -36,16 +56,17 @@ export async function registerClientPayment(
   }
 
   const validData = parsed.data
-  const supabase = await createClient()
-  const repos = getRepos(supabase)
+  const container = await getContainer()
 
   // 2. Auth guard
+  const { createClient } = await import('@/lib/supabase/server')
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autorizado.')
 
   // 3. If a specific appointment is provided, link directly
   if (validData.appointment_id) {
-    const txResult = await repos.finances.createTransaction({
+    const txResult = await container.finances.createTransaction({
       business_id:     validData.business_id,
       amount:          validData.amount,
       net_amount:      validData.amount,
@@ -56,7 +77,7 @@ export async function registerClientPayment(
     if (txResult.error) throw new Error(txResult.error)
   } else {
     // 4. No specific appointment — distribute across unpaid past appointments (oldest first)
-    const apptResult = await repos.clients.getAppointments(
+    const apptResult = await container.clients.getAppointments(
       validData.client_id,
       validData.business_id,
     )
@@ -81,7 +102,7 @@ export async function registerClientPayment(
       const owes = price - paid
       const toApply = Math.min(remaining, owes)
 
-      const txResult = await repos.finances.createTransaction({
+      const txResult = await container.finances.createTransaction({
         business_id:    validData.business_id,
         amount:         toApply,
         net_amount:     toApply,

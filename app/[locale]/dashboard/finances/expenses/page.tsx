@@ -1,57 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft, Receipt, Search, Plus, Loader2 } from 'lucide-react'
+import { Loader2, ArrowLeft, Receipt, Search, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatCurrency, formatDate, expenseCategoryLabels } from '@/lib/utils'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
 import { useTranslations } from 'next-intl'
-import type { ExpenseRow } from '@/types'
+import { useExpensesList } from './hooks/use-expenses-list'
 
 export default function ExpensesPage() {
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const t = useTranslations('finances.expensesPage')
-  const [query, setQuery] = useState('')
-  const [expenses, setExpenses] = useState<ExpenseRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!businessId) {
-      if (!contextLoading) setLoading(false)
-      return
-    }
-
-    async function loadExpenses() {
-      try {
-        const { finances: financesRepoInstance } = getRepos(supabase)
-        const result = await financesRepoInstance.getExpenses(businessId!)
-        
-        if (result.error) throw new Error(result.error)
-
-        setExpenses(result.data ?? [])
-        setFetchError(null)
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los gastos')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadExpenses()
-  }, [supabase, businessId, contextLoading])
-
-  // Filtro con blindaje defensivo
-  const filtered = expenses.filter((e) => {
-    const searchTerm = (query || '').toLowerCase()
-    const description = String(e?.description || '').toLowerCase()
-    const category = String(e?.category || '').toLowerCase()
-    
-    return description.includes(searchTerm) || category.includes(searchTerm)
-  })
+  const { filtered, loading, fetchError, query, setQuery } = useExpensesList()
 
   if (loading) {
     return (
@@ -79,7 +38,7 @@ export default function ExpensesPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Historial de Gastos</h1>
-            <p className="text-muted-foreground text-sm">{expenses.length} egresos registrados</p>
+            <p className="text-muted-foreground text-sm">{filtered.length} egresos registrados</p>
           </div>
         </div>
         <Link href="/dashboard/finances/expense">

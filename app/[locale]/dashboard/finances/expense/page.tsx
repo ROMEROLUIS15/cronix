@@ -1,66 +1,19 @@
 'use client'
 
-import { useState } from 'react'
 import { ArrowLeft, Receipt } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
 import { expenseCategoryLabels } from '@/lib/utils'
 import type { ExpenseCategory } from '@/types'
 import { useTranslations } from 'next-intl'
+import { useNewExpenseForm } from './hooks/use-new-expense-form'
 
 const CATEGORIES = Object.entries(expenseCategoryLabels) as [ExpenseCategory, string][]
 
 export default function NewExpensePage() {
-  const router = useRouter()
   const t = useTranslations('finances.gasto')
-  const { supabase, businessId } = useBusinessContext()
-
-  const [form, setForm] = useState({
-    category: 'supplies' as ExpenseCategory,
-    amount:   '',
-    description: '',
-    date:     new Date().toISOString().split('T')[0] as string,
-  })
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!businessId) return
-
-    const amount = parseFloat(form.amount)
-    if (isNaN(amount) || amount <= 0) {
-      setMsg({ type: 'error', text: t('amountValid') })
-      return
-    }
-
-    setSaving(true)
-    setMsg(null)
-
-    try {
-      const { finances: financesRepo } = getRepos(supabase)
-      const result = await financesRepo.createExpense({
-        business_id:  businessId,
-        category:     form.category,
-        amount,
-        description:  form.description.trim() || null,
-        expense_date: form.date,
-      })
-
-      if (result.error) throw new Error(result.error)
-
-      router.push('/dashboard/finances/expenses')
-      router.refresh()
-    } catch (err) {
-      setMsg({ type: 'error', text: err instanceof Error ? err.message : t('errorSave') })
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { form, setForm, saving, msg, handleSubmit } = useNewExpenseForm()
 
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl">

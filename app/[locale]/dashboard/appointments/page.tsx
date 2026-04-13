@@ -1,89 +1,33 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import {
-  CalendarDays, Plus, ChevronLeft, ChevronRight,
-  Search, Clock, Loader2, CheckCircle2, XCircle, AlertCircle,
-} from 'lucide-react'
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, Search, Clock, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { AppointmentStatusBadge, DualBookingBadge } from '@/components/ui/badge'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
-import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case'
-import { formatDate, formatTime, formatCurrency, appointmentStatusConfig } from '@/lib/utils'
+import { useAppointmentsList } from './hooks/use-appointments-list'
+import { formatTime, formatCurrency } from '@/lib/utils'
 import { getServiceNames, getPrimaryColor, getTotalDuration, getTotalPrice } from '@/lib/utils/appointment-services'
-import type { AppointmentWithRelations, AppointmentStatus } from '@/types'
-import { format } from 'date-fns'
+import type { AppointmentStatus } from '@/types'
 import { useTranslations } from 'next-intl'
 
 export default function AppointmentsPage() {
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
-  const { appointments: appointmentsRepo } = getRepos(supabase)
   const t = useTranslations('appointments')
-  const [appointments,  setAppointments]  = useState<AppointmentWithRelations[]>([])
-  const [loading,       setLoading]       = useState(true)
-  const [resolvingId,   setResolvingId]   = useState<string | null>(null)
-  const [view,          setView]          = useState<'day' | 'week'>('day')
-  const [date,          setDate]          = useState(new Date())
-  const [query,         setQuery]         = useState('')
-
-  const fetchAppointments = useCallback(async () => {
-    if (!businessId) return
-    setLoading(true)
-    const dateStr = format(date, 'yyyy-MM-dd')
-    
-    const result = await appointmentsRepo.getDayAppointments(businessId, dateStr)
-
-    if (result.error) {
-      setAppointments([])
-    } else {
-      setAppointments(result.data ?? [])
-    }
-    setLoading(false)
-  }, [businessId, date, appointmentsRepo])
-
-  useEffect(() => {
-    if (!contextLoading) {
-      fetchAppointments()
-    }
-  }, [fetchAppointments, contextLoading])
-
-  const filteredApts = useMemo(
-    () => appointments.filter(a =>
-      a.client?.name?.toLowerCase().includes(query.toLowerCase()) ||
-      a.service?.name?.toLowerCase().includes(query.toLowerCase())
-    ),
-    [appointments, query]
-  )
-
-  // ── Resolve expired appointment ────────────────────────────────────────
-  const handleResolve = async (
-    aptId: string,
-    resolution: 'completed' | 'no_show'
-  ) => {
-    if (!businessId) return
-    setResolvingId(aptId)
-    const result = await appointmentsRepo.updateStatus(aptId, resolution, businessId)
-    if (!result.error) {
-      setAppointments(prev =>
-        prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
-      )
-    }
-    setResolvingId(null)
-  }
-
-  if (loading || contextLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="animate-spin" style={{ color: '#0062FF' }} />
-      </div>
-    )
-  }
-
-  const handlePrevDay = () => setDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
-  const handleNextDay = () => setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
+  const {
+    filteredApts,
+    loading,
+    resolvingId,
+    view,
+    setView,
+    date,
+    setDate,
+    query,
+    setQuery,
+    handlePrevDay,
+    handleNextDay,
+    handleResolve,
+    isExpired,
+  } = useAppointmentsList()
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -149,10 +93,7 @@ export default function AppointmentsPage() {
         ) : (
           <div className="divide-y divide-border">
             {filteredApts.map(apt => {
-              const expired = isExpiredAppointment({
-                end_at: apt.end_at,
-                status: apt.status ?? 'pending',
-              })
+              const expired = isExpired(apt)
               return (
                 <div key={apt.id}>
                   {/* Main appointment row */}

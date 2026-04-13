@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Store,
   Clock,
@@ -19,258 +19,48 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Business, BusinessSettingsJson } from "@/types";
-import { PhoneInputFlags, parsePhone, buildPhone, COUNTRIES, Country } from "@/components/ui/phone-input-flags";
+import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
-import { useNotifications } from "@/lib/hooks/use-notifications";
-import { useBusinessContext } from "@/lib/hooks/use-business-context";
 import { useTranslations } from "next-intl";
-import { getRepos } from "@/lib/repositories";
-
-const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-type DayKey = typeof DAYS[number];
-
-interface DayHours {
-  open: string;
-  close: string;
-  active: boolean;
-}
-const DEFAULT_DAY: DayHours = { open: "09:00", close: "18:00", active: false };
-
-function buildDefaultHours(): Record<string, DayHours> {
-  const result: Record<string, DayHours> = {};
-  for (const key of DAYS) result[key] = { ...DEFAULT_DAY };
-  return result;
-}
-
-function getHour(hours: Record<string, DayHours>, key: string): DayHours {
-  return hours[key] ?? { ...DEFAULT_DAY };
-}
+import { useSettingsForm, type DayHours } from "./hooks/use-settings-form";
 
 export default function SettingsPage() {
-  // useBusinessContext is cached in React Query — no extra auth queries on navigation
-  const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
   const t = useTranslations("settings");
-  const [biz, setBiz] = useState<Business | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [savingHours, setSavingHours] = useState(false);
-  const [msg, setMsg] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    category: "",
-    phoneLocal: "",
-    address: "",
-  });
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
-  const [hours, setHours] =
-    useState<Record<string, DayHours>>(buildDefaultHours);
-  const [notifSettings, setNotifSettings] = useState<{
-    whatsapp: boolean
-  }>({ whatsapp: false });
-  const [showLuisFab, setShowLuisFab] = useState(true);
-  const [savingFab, setSavingFab] = useState(false);
-  const [savingNotif, setSavingNotif] = useState(false);
-  const notif = useNotifications(bizId);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const {
+    biz,
+    loading,
+    saving,
+    savingHours,
+    savingFab,
+    savingNotif,
+    generatingSlug,
+    form,
+    setForm,
+    selectedCountry,
+    setSelectedCountry,
+    hours,
+    setHours,
+    notifSettings,
+    setNotifSettings,
+    showLuisFab,
+    copiedLink,
+    msg,
+    whatsappLink,
+    updateHour,
+    handleSaveBiz,
+    handleSaveHours,
+    handleSaveNotifications,
+    handleSaveLuisFab,
+    handleGenerateSlug,
+    copyHoursToAll,
+    getHour,
+    DAYS,
+    notif,
+  } = useSettingsForm();
+
+  const [localCopiedLink, setLocalCopiedLink] = useState(false);
 
   const WA_NUMBER = '584147531158';
-  const whatsappLink = biz?.slug
-    ? `https://wa.me/${WA_NUMBER}?text=%23${encodeURIComponent(biz.slug)}`
-    : null;
-  const [generatingSlug, setGeneratingSlug] = useState(false);
-
-  const handleGenerateSlug = async () => {
-    if (!bizId || !biz) return;
-    setGeneratingSlug(true);
-    const base = biz.name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 20);
-    const suffix = Math.random().toString(36).slice(2, 8);
-    const newSlug = base ? `${base}-${suffix}` : suffix;
-    const { businesses: businessesRepoInstance } = getRepos(supabase);
-    const result = await businessesRepoInstance.update(bizId, { slug: newSlug });
-    
-    if (!result.error) setBiz(prev => prev ? { ...prev, slug: newSlug } as any : prev);
-    else showMsg('error', t('generateWaError'));
-    setGeneratingSlug(false);
-  };
-
-  // Only one query needed — auth/business_id come from cached context
-  useEffect(() => {
-    if (contextLoading || !bizId) {
-      if (!contextLoading) setLoading(false);
-      return;
-    }
-    async function load() {
-      const { businesses: businessesRepoInstance } = getRepos(supabase);
-      const result = await businessesRepoInstance.getById(bizId!);
-      
-      if (!result.error && result.data) {
-        const business = result.data;
-        setBiz(business as any);
-        const { country, local } = parsePhone(business.phone ?? '');
-        setSelectedCountry(country);
-        setForm({
-          name: business.name,
-          category: business.category ?? "",
-          phoneLocal: local,
-          address: business.address ?? "",
-        });
-        const wh = (business.settings as unknown as BusinessSettingsJson)?.workingHours ?? {};
-        const loaded = buildDefaultHours();
-        for (const key of DAYS) {
-          const val = wh[key];
-          if (Array.isArray(val) && val.length === 2) {
-            loaded[key] = {
-              open: String(val[0] ?? "09:00"),
-              close: String(val[1] ?? "18:00"),
-              active: true,
-            };
-          }
-        }
-        setHours(loaded);
-        const notifData = (business.settings as unknown as BusinessSettingsJson)?.notifications
-        if (notifData) {
-          setNotifSettings({
-            whatsapp: notifData.whatsapp ?? false,
-          });
-        }
-
-        const uiData = (business.settings as unknown as BusinessSettingsJson)?.uiSettings;
-        if (uiData && typeof uiData.showLuisFab === "boolean") {
-          setShowLuisFab(uiData.showLuisFab);
-        }
-      }
-      setLoading(false);
-    }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextLoading, bizId]);
-
-  const showMsg = (type: "success" | "error", text: string) => {
-    setMsg({ type, text });
-    setTimeout(() => setMsg(null), 4000);
-  };
-
-  const handleSaveBiz = async () => {
-    if (!bizId) return;
-    setSaving(true);
-    
-    // Combinar dial + número local (normalizado)
-    const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
-    const { businesses: businessesRepoInstance } = getRepos(supabase);
-
-    const result = await businessesRepoInstance.update(bizId, {
-      name: form.name.trim(),
-      category: form.category,
-      phone: fullPhone,
-      address: form.address.trim() || null,
-    });
-
-    setSaving(false);
-    result.error
-      ? showMsg("error", t('saveError') + result.error)
-      : showMsg("success", t('saveSuccess'));
-  };
-
-  const handleSaveHours = async () => {
-    if (!bizId || !biz) return;
-    setSavingHours(true);
-    const workingHours: Record<string, [string, string] | null> = {};
-    for (const key of DAYS) {
-      const h = getHour(hours, key);
-      workingHours[key] = h.active ? [h.open, h.close] : null;
-    }
-    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { businesses: businessesRepoInstance } = getRepos(supabase);
-    
-    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, workingHours });
-    
-    setSavingHours(false);
-    result.error
-      ? showMsg("error", t('saveHoursError') + result.error)
-      : showMsg("success", t('saveHoursSuccess'));
-  };
-
-  const updateHour = (
-    key: string,
-    field: keyof DayHours,
-    value: string | boolean,
-  ) => {
-    setHours((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] ?? { ...DEFAULT_DAY }), [field]: value },
-    }));
-  };
-  
-  const handleSaveNotifications = async () => {
-    if (!bizId || !biz) return;
-    setSavingNotif(true);
-    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { businesses: businessesRepoInstance } = getRepos(supabase);
-    
-    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, notifications: notifSettings });
-    
-    setSavingNotif(false);
-    if (!result.error) {
-      setBiz(prev => prev ? {
-        ...prev,
-        settings: { ...(prev.settings as BusinessSettingsJson), notifications: notifSettings } as unknown as Business['settings'],
-      } as any : prev);
-    }
-    result.error
-      ? showMsg("error", t('saveNotifError') + result.error)
-      : showMsg("success", t('saveNotifSuccess'));
-  };
-
-  const handleSaveLuisFab = async (newVal: boolean) => {
-    if (!bizId || !biz) return;
-    setShowLuisFab(newVal);
-    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const { businesses: businessesRepoInstance } = getRepos(supabase);
-    
-    const result = await businessesRepoInstance.updateSettings(bizId, { ...currentSettings, uiSettings: { showLuisFab: newVal } });
-    
-    setSavingFab(false);
-    
-    if (!result.error) {
-      setBiz(prev => prev ? {
-        ...prev,
-        settings: { ...(prev.settings as BusinessSettingsJson), uiSettings: { showLuisFab: newVal } } as unknown as Business['settings'],
-      } as any : prev);
-      
-      // Real-time UI sync without refresh
-      window.dispatchEvent(new CustomEvent('cronix:toggle-fab', { detail: newVal }));
-      showMsg("success", newVal ? t('saveLuisFabActive') : t('saveLuisFabInactive'));
-    } else {
-      showMsg("error", t('saveLuisFabError'));
-      setShowLuisFab(!newVal); // revert
-    }
-  };
-
-  const copyHoursToAll = (sourceKey: string) => {
-    const source = hours[sourceKey];
-    if (!source || !source.active) return;
-    
-    setHours(prev => {
-      const next = { ...prev };
-      DAYS.forEach((key) => {
-        if (key !== sourceKey && next[key]?.active) {
-          next[key] = { ...next[key]!, open: source.open, close: source.close };
-        }
-      });
-      return next;
-    });
-    showMsg("success", t('copyHoursSuccess'));
-  };
-
 
   if (loading)
     return (
@@ -383,7 +173,7 @@ export default function SettingsPage() {
               </label>
               <PhoneInputFlags
                 country={selectedCountry}
-                onCountryChange={(c) => setSelectedCountry(c)}
+                onCountryChange={(c) => setSelectedCountry(c as Country)}
                 localPhone={form.phoneLocal}
                 onLocalPhoneChange={(v) => setForm({ ...form, phoneLocal: v })}
               />
@@ -456,11 +246,11 @@ export default function SettingsPage() {
                 className="flex-shrink-0 gap-1.5"
                 onClick={() => {
                   navigator.clipboard.writeText(whatsappLink);
-                  setCopiedLink(true);
-                  setTimeout(() => setCopiedLink(false), 2000);
+                  setLocalCopiedLink(true);
+                  setTimeout(() => setLocalCopiedLink(false), 2000);
                 }}
               >
-                {copiedLink ? (
+                {localCopiedLink ? (
                   <>
                     <CheckCircle2 size={14} style={{ color: "#30D158" }} />
                     <span style={{ color: "#30D158" }}>{t('copied')}</span>
@@ -493,7 +283,7 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      {/* Working Hours — RESPONSIVE FIX */}
+      {/* Working Hours */}
       <Card>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -515,7 +305,7 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-          
+
           {Object.values(hours).some(h => h.active) && (
             <Button
               variant="ghost"
@@ -534,7 +324,7 @@ export default function SettingsPage() {
 
         <div className="space-y-3">
           {DAYS.map((key) => {
-            const h: DayHours = getHour(hours, key);
+            const h: DayHours = getHour(key);
             return (
               <div
                 key={key}
@@ -551,7 +341,7 @@ export default function SettingsPage() {
                         {t(`days.${key}`)}
                       </span>
                     </div>
-                    
+
                     <label className="flex items-center gap-2 cursor-pointer group">
                       <div className="relative">
                         <input
@@ -575,7 +365,7 @@ export default function SettingsPage() {
                     </label>
                   </div>
 
-                  {/* Time Selectors — Refined for mobile to prevent overflow */}
+                  {/* Time Selectors */}
                   {h.active && (
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-fade-in flex-1 sm:max-w-[340px] w-full items-end">
                       <div className="min-w-0">
@@ -602,7 +392,7 @@ export default function SettingsPage() {
               </div>
             );
           })}
-          
+
           <div className="flex justify-end pt-4">
             <Button
               onClick={handleSaveHours}
@@ -651,11 +441,11 @@ export default function SettingsPage() {
                 {t('waBizSub')}
               </p>
             </div>
-            
+
             {(() => {
               const settings = (biz?.settings as unknown as BusinessSettingsJson) || {};
               const isVerified = settings.wa_verified === true;
-              
+
               if (isVerified && biz?.phone) {
                 return (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20 self-start sm:self-center">
@@ -764,7 +554,7 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {(
             [
-              { key: "whatsapp", label: t('waChannel'), desc: t('waChannelSub') },
+              { key: "whatsapp" as const, label: t('waChannel'), desc: t('waChannelSub') },
             ] as const
           ).map(({ key, label, desc }) => (
             <div

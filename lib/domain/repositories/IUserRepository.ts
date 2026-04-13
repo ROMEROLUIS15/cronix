@@ -85,4 +85,14 @@ export interface IUserRepository {
    * Returns active staff for tool assignment.
    */
   findActiveStaff(businessId: string): Promise<Result<{ id: string; name: string; role: string }[]>>
+
+  /**
+   * Updates the authenticated user's own profile fields (name, phone).
+   */
+  updateProfile(userId: string, payload: { name: string; phone: string | null }): Promise<Result<void>>
+
+  /**
+   * Updates the authenticated user's avatar URL.
+   */
+  updateAvatar(userId: string, avatarUrl: string | null): Promise<Result<void>>
 }

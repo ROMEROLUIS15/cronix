@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
 import {
   Plus,
   Pencil,
@@ -16,174 +15,35 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useBusinessContext } from "@/lib/hooks/use-business-context";
-import type { Service } from "@/types";
-import { logger } from "@/lib/logger";
 import { useTranslations } from "next-intl";
-import { getRepos } from "@/lib/repositories";
-import { 
-  SERVICE_COLORS, 
-  SERVICE_CATEGORIES, 
-  DEFAULT_SERVICE_COLOR,
-  DEFAULT_DURATION 
+import {
+  SERVICE_COLORS,
+  SERVICE_CATEGORIES,
 } from "@/lib/services/constants";
-
-interface ServiceForm {
-  name: string;
-  description: string;
-  duration_min: number;
-  priceStr: string; // ← string para permitir edición libre (borrar el 0)
-  color: string;
-  category: string;
-  is_active: boolean;
-}
-
-const emptyForm = (): ServiceForm => ({
-  name: "",
-  description: "",
-  duration_min: DEFAULT_DURATION,
-  priceStr: "", // vacío — el usuario escribe el precio desde cero
-  color: DEFAULT_SERVICE_COLOR,
-  category: "",
-  is_active: true,
-});
+import { useServiceManager } from "./hooks/use-service-manager";
+import type { Service } from "@/types";
 
 export default function ServicesPage() {
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext();
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ServiceForm>(emptyForm());
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [isCustom, setIsCustom] = useState(false);
+  const {
+    services,
+    loading,
+    showForm,
+    setShowForm,
+    editingId,
+    form,
+    setForm,
+    deletingId,
+    isCustom,
+    setIsCustom,
+    msg,
+    saving,
+    openNew,
+    openEdit,
+    handleSave,
+    handleDelete,
+    toggleActive,
+  } = useServiceManager();
   const t = useTranslations("services");
-  const [msg, setMsg] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const loadServices = useCallback(async (bId: string) => {
-    try {
-      const { services: servicesRepoInstance } = getRepos(supabase);
-      const result = await servicesRepoInstance.getAll(bId);
-      
-      if (!result.error) {
-        setServices(result.data ?? []);
-      } else {
-        logger.error('services', 'Error loading services', result.error);
-      }
-    } catch (err) {
-      logger.error('services', 'Error loading services', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  // Load services when business context is ready
-  useEffect(() => {
-    if (businessId) loadServices(businessId);
-    else if (!contextLoading) setLoading(false);
-  }, [businessId, contextLoading, loadServices]);
-
-  const showMsg = (type: "success" | "error", text: string) => {
-    setMsg({ type, text });
-    setTimeout(() => setMsg(null), 4000);
-  };
-
-  const openNew = () => {
-    setForm(emptyForm());
-    setEditingId(null);
-    setIsCustom(false);
-    setShowForm(true);
-  };
-
-  const openEdit = (s: Service) => {
-    setForm({
-      name: s.name,
-      description: s.description ?? "",
-      duration_min: s.duration_min,
-      priceStr: s.price === 0 ? "" : String(s.price), // vacío si era 0
-      color: s.color ?? "#6366f1",
-      category: s.category ?? "",
-      is_active: s.is_active ?? true,
-    });
-    setEditingId(s.id);
-    setIsCustom(![30, 60, 90, 120, 150].includes(s.duration_min));
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !businessId)
-      return showMsg("error", "El nombre es obligatorio.");
-    setSaving(true);
-    const parsedPrice = parseFloat(form.priceStr.replace(",", ".")) || 0;
-    const payload = {
-      name: form.name.trim(),
-      description: form.description.trim() || null,
-      duration_min: form.duration_min,
-      price: parsedPrice,
-      color: form.color,
-      category: form.category || null,
-      is_active: form.is_active,
-    };
-    try {
-      const { services: servicesRepoInstance } = getRepos(supabase);
-      let result;
-      
-      if (editingId) {
-        result = await servicesRepoInstance.update(editingId, businessId, payload);
-      } else {
-        result = await servicesRepoInstance.create(businessId, payload);
-      }
-
-      if (result.error) throw new Error(result.error);
-
-      showMsg(
-        "success",
-        editingId ? "Servicio actualizado" : "Servicio creado correctamente",
-      );
-      setShowForm(false);
-      await loadServices(businessId);
-    } catch (err) {
-      showMsg("error", "Error al guardar: " + (err instanceof Error ? err.message : 'Error desconocido'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!businessId) return;
-    setDeletingId(id);
-    try {
-      const { services: servicesRepoInstance } = getRepos(supabase);
-      const result = await servicesRepoInstance.delete(id, businessId);
-      
-      if (result.error) throw new Error(result.error);
-
-      showMsg("success", "Servicio eliminado");
-      await loadServices(businessId);
-    } catch (err) {
-      showMsg("error", "Error al eliminar: " + (err instanceof Error ? err.message : 'Error desconocido'));
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const toggleActive = async (s: Service) => {
-    if (!businessId) return;
-    try {
-      const { services: servicesRepoInstance } = getRepos(supabase);
-      const result = await servicesRepoInstance.toggleActive(s.id, s.is_active ?? true);
-      
-      if (result.error) throw new Error(result.error);
-      
-      await loadServices(businessId);
-    } catch (err) {
-      showMsg("error", "Error al cambiar estado: " + (err instanceof Error ? err.message : 'Error desconocido'));
-    }
-  };
 
   if (loading)
     return (
@@ -386,7 +246,6 @@ export default function ServicesPage() {
                     className="absolute left-3 top-1/2 -translate-y-1/2"
                     style={{ color: "#909098" }}
                   />
-                  {/* ← string input: permite borrar todos los caracteres libremente */}
                   <input
                     type="text"
                     inputMode="decimal"
@@ -394,7 +253,6 @@ export default function ServicesPage() {
                     placeholder="0"
                     onChange={(e) => {
                       const val = e.target.value;
-                      // Permitir solo dígitos, punto y coma
                       if (/^[0-9]*[.,]?[0-9]*$/.test(val) || val === "") {
                         setForm((f) => ({ ...f, priceStr: val }));
                       }
@@ -496,7 +354,7 @@ export default function ServicesPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {services.map((s) => (
+          {services.map((s: Service) => (
             <div
               key={s.id}
               className="flex items-center gap-3 p-3 sm:p-4 rounded-2xl transition-all"
