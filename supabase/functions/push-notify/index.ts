@@ -12,10 +12,12 @@
  */
 
 // @deno-types="npm:@supabase/supabase-js@2/dist/module/index.d.ts"
-import { createClient }  from 'npm:@supabase/supabase-js@2'
 import { initSentry, captureException, addBreadcrumb, setSentryTag, flushSentry } from '../_shared/sentry.ts'
 import { sendWebPush }   from './vapid.ts'
-import type { PushSubscription, PushPayload } from './vapid.ts'
+import type { PushPayload } from './vapid.ts'
+import { resolveBusinessIdFromJwt } from './modules/auth.ts'
+import { fetchSubscriptions, purgeExpiredSubscriptions } from './modules/subscription-manager.ts'
+import { fanOutPush } from './modules/push-sender.ts'
 
 initSentry('push-notify')
 
@@ -71,38 +73,17 @@ Deno.serve(async (req: Request) => {
   } else {
     // PATH B — user JWT from the browser
     const authHeader = req.headers.get('authorization') ?? ''
-    const jwt        = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (!jwt) {
+    const resolved = await resolveBusinessIdFromJwt(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      authHeader
+    )
+
+    if (!resolved) {
       await flushSentry()
       return json({ error: 'Unauthorized' }, 401)
     }
-
-    const anonKey  = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-      auth:   { persistSession: false },
-    })
-
-    const { data: { user }, error: authErr } = await userClient.auth.getUser()
-    if (authErr || !user) {
-      await flushSentry()
-      return json({ error: 'Unauthorized' }, 401)
-    }
-
-    const { data: dbUser, error: userErr } = await userClient
-      .from('users')
-      .select('business_id')
-      .eq('id', user.id)
-      .single()
-
-    if (userErr || !dbUser?.business_id) {
-      captureException(userErr ?? new Error('business_id not found for user'), {
-        stage: 'resolve_business_jwt', user_id: user.id,
-      })
-      await flushSentry()
-      return json({ error: 'Business not found' }, 400)
-    }
-    businessId = dbUser.business_id as string
+    businessId = resolved
   }
 
   setSentryTag('business_id', businessId)
@@ -124,69 +105,41 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Fetch subscriptions ──────────────────────────────────────────────────────
-  const adminClient = createClient(
-    supabaseUrl,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  )
-
-  const { data: subs, error: subsErr } = await adminClient
-    .from('notification_subscriptions')
-    .select('id, endpoint, p256dh, auth')
-    .eq('business_id', businessId)
-
-  if (subsErr) {
-    captureException(subsErr, { stage: 'fetch_subscriptions', business_id: businessId })
+  let subs: Awaited<ReturnType<typeof fetchSubscriptions>>
+  try {
+    subs = await fetchSubscriptions(businessId)
+  } catch (err) {
+    captureException(err, { stage: 'fetch_subscriptions', business_id: businessId })
     await flushSentry()
-    return json({ error: subsErr.message }, 500)
+    return json({ error: err instanceof Error ? err.message : 'Unknown error' }, 500)
   }
 
-  if (!subs || subs.length === 0) {
+  if (subs.length === 0) {
     await flushSentry()
     return json({ ok: true, sent: 0, total: 0 })
   }
 
-  const payload: PushPayload = { title: body.title as string, body: body.body as string, url: body.url as string, icon: body.icon as string }
+  const payload: PushPayload = {
+    title: body.title as string,
+    body: body.body as string,
+    url: body.url as string,
+    icon: body.icon as string,
+  }
 
   addBreadcrumb('Sending push notifications', 'push', 'info', { business_id: businessId, count: subs.length })
 
   // ── Fan out ──────────────────────────────────────────────────────────────────
-  const results = await Promise.allSettled(
-    (subs as PushSubscription[]).map(sub =>
-      sendWebPush(sub, payload, vapidPubKey, vapidPrivKey, vapidSubject)
-    )
-  )
+  const result = await fanOutPush(subs, payload, vapidPubKey, vapidPrivKey, vapidSubject)
 
-  let sent   = 0
-  let failed = 0
-  const expiredEndpoints: string[] = []
-
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i]!
-    if (result.status === 'fulfilled' && result.value.ok) {
-      sent++
-    } else {
-      failed++
-      const sub = (subs as PushSubscription[])[i]!
-      if (result.status === 'fulfilled' && (result.value.status === 410 || result.value.status === 404)) {
-        expiredEndpoints.push(sub.endpoint)
-      } else if (result.status === 'rejected') {
-        captureException(result.reason, { stage: 'send_web_push', business_id: businessId })
-      }
+  // Purge expired subscriptions (best-effort)
+  if (result.expiredEndpoints.length > 0) {
+    try {
+      await purgeExpiredSubscriptions(result.expiredEndpoints)
+    } catch (err) {
+      captureException(err, { stage: 'purge_expired_subs', business_id: businessId })
     }
   }
 
-  // Purge expired subscriptions asynchronously (best-effort)
-  if (expiredEndpoints.length > 0) {
-    adminClient
-      .from('notification_subscriptions')
-      .delete()
-      .in('endpoint', expiredEndpoints)
-      .then(({ error }) => {
-        if (error) captureException(error, { stage: 'purge_expired_subs', business_id: businessId })
-      })
-  }
-
   await flushSentry()
-  return json({ ok: true, sent, failed, total: subs.length })
+  return json({ ok: true, sent: result.sent, failed: result.failed, total: subs.length })
 })
