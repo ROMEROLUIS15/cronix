@@ -10,7 +10,7 @@ import {
   formatLocalTime,
   buildMinimalSystemPrompt,
   renderBookingSuccessTemplate,
-} from '../../supabase/functions/process-whatsapp/prompt-builder.ts'
+} from '../../supabase/functions/process-whatsapp/prompt-builder'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@ import type { BusinessRagContext } from "./types.ts"
  * Used in both system prompt and success templates.
  */
 export function formatLocalTime(time: string): string {
-  const [h, m] = time.split(':')
+  const [h, m] = time.split(':') as [string, string]
   let hour     = parseInt(h, 10)
   const ampm   = hour >= 12 ? 'pm' : 'am'
   hour         = hour % 12
@@ -129,24 +129,30 @@ export function renderBookingSuccessTemplate(
 ): string {
   switch (toolName) {
     case 'confirm_booking': {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || !/^\d{2}:\d{2}$/.test(data.time)) {
-        return `✅ ¡Listo! Tu cita para *${data.service_name}* quedó agendada. ¿En qué más puedo ayudarte?`
+      const date        = data['date']         ?? ''
+      const time        = data['time']         ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+        return `✅ ¡Listo! Tu cita para *${serviceName}* quedó agendada. ¿En qué más puedo ayudarte?`
       }
-      const [cy, cm, cd] = data.date.split('-').map(Number)
+      const [cy, cm, cd] = date.split('-').map(Number) as [number, number, number]
       const dateObj = new Date(Date.UTC(cy, cm - 1, cd))
       const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
-      const timeStr = formatLocalTime(data.time)
-      return `✅ ¡Listo! Tu cita para *${data.service_name}* quedó agendada para el ${dateStr} a las ${timeStr}. ¿En qué más puedo ayudarte?`
+      const timeStr = formatLocalTime(time)
+      return `✅ ¡Listo! Tu cita para *${serviceName}* quedó agendada para el ${dateStr} a las ${timeStr}. ¿En qué más puedo ayudarte?`
     }
     case 'reschedule_booking': {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(data.new_date) || !/^\d{2}:\d{2}$/.test(data.new_time)) {
-        return `✅ ¡Cita reagendada! Te esperamos en tu nuevo horario para *${data.service_name}*. ¿Necesitas algo más?`
+      const newDate     = data['new_date']     ?? ''
+      const newTime     = data['new_time']     ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || !/^\d{2}:\d{2}$/.test(newTime)) {
+        return `✅ ¡Cita reagendada! Te esperamos en tu nuevo horario para *${serviceName}*. ¿Necesitas algo más?`
       }
-      const [ry, rm, rd] = data.new_date.split('-').map(Number)
+      const [ry, rm, rd] = newDate.split('-').map(Number) as [number, number, number]
       const dateObj = new Date(Date.UTC(ry, rm - 1, rd))
       const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
-      const timeStr = formatLocalTime(data.new_time)
-      return `✅ ¡Cita reagendada! Ahora te esperamos el ${dateStr} a las ${timeStr} para *${data.service_name}*. ¿Necesitas algo más?`
+      const timeStr = formatLocalTime(newTime)
+      return `✅ ¡Cita reagendada! Ahora te esperamos el ${dateStr} a las ${timeStr} para *${serviceName}*. ¿Necesitas algo más?`
     }
     case 'cancel_booking':
       return `✅ Tu cita de *${data.service_name}* ha sido cancelada. Cuando quieras agendar de nuevo, aquí estamos. 😊`
