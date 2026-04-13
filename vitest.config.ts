@@ -10,7 +10,8 @@ export default defineConfig({
       '**/node_modules/**',
       '**/tests/e2e/**',           // Playwright tests — run with `npx playwright test`
       '**/*.spec.ts',              // Playwright spec files use .spec.ts convention
-      '**/tests/integration/**',   // Integration tests — run separately (see below)
+      '**/tests/integration/**',   // Integration tests — run separately
+      '__tests__/components/**',   // Component tests — run with vitest.components.config.ts
     ],
     alias: {
       '@': path.resolve(__dirname, './'),
