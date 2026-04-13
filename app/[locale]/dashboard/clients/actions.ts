@@ -5,6 +5,7 @@ import { isPast } from 'date-fns'
 import { getContainer } from '@/lib/container'
 import { revalidatePath } from 'next/cache'
 import type { Client } from '@/types'
+import type { BatchTransactionItem } from '@/lib/domain/repositories/IFinanceRepository'
 
 // ── Data fetching (container pattern) ──────────────────────────────────────
 
@@ -70,12 +71,13 @@ export async function createNewClient(input: {
 
 // ── Zod schema for payment registration ───────────────────────────────────
 const RegisterPaymentSchema = z.object({
-  business_id:     z.string().uuid('ID de negocio inválido'),
-  client_id:       z.string().uuid('ID de cliente inválido'),
-  amount:          z.number().positive('El monto debe ser mayor a cero.'),
-  method:          z.enum(['cash', 'card', 'transfer', 'qr', 'other']),
-  notes:           z.string().max(200).optional(),
-  appointment_id:  z.string().uuid().optional(),
+  business_id:      z.string().uuid('ID de negocio inválido'),
+  client_id:        z.string().uuid('ID de cliente inválido'),
+  amount:           z.number().positive('El monto debe ser mayor a cero.'),
+  method:           z.enum(['cash', 'card', 'transfer', 'qr', 'other']),
+  notes:            z.string().max(200).optional(),
+  appointment_id:   z.string().uuid().optional(),
+  idempotency_key:  z.string().uuid().optional(),
 })
 
 type RegisterPaymentInput = z.infer<typeof RegisterPaymentSchema>
@@ -109,16 +111,19 @@ export async function registerClientPayment(
   // 3. If a specific appointment is provided, link directly
   if (validData.appointment_id) {
     const txResult = await container.finances.createTransaction({
-      business_id:     validData.business_id,
-      amount:          validData.amount,
-      net_amount:      validData.amount,
-      method:          validData.method,
-      notes:           validData.notes ?? null,
-      appointment_id:  validData.appointment_id,
+      business_id:      validData.business_id,
+      amount:           validData.amount,
+      net_amount:       validData.amount,
+      method:           validData.method,
+      notes:            validData.notes ?? null,
+      appointment_id:   validData.appointment_id,
+      idempotency_key:  validData.idempotency_key,
     })
     if (txResult.error) throw new Error(txResult.error)
   } else {
-    // 4. No specific appointment — distribute across unpaid past appointments (oldest first)
+    // 4. No specific appointment — distribute across unpaid past appointments (oldest first).
+    // Distribution logic runs in TypeScript; atomicity is delegated to createTransactionBatch
+    // so all inserts succeed or all are rolled back together.
     const apptResult = await container.clients.getAppointments(
       validData.client_id,
       validData.business_id,
@@ -135,7 +140,9 @@ export async function registerClientPayment(
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
 
+    const batchItems: BatchTransactionItem[] = []
     let remaining = validData.amount
+    let aptIndex  = 0
 
     for (const apt of unpaid) {
       if (remaining <= 0) break
@@ -144,17 +151,31 @@ export async function registerClientPayment(
       const owes = price - paid
       const toApply = Math.min(remaining, owes)
 
-      const txResult = await container.finances.createTransaction({
-        business_id:    validData.business_id,
-        amount:         toApply,
-        net_amount:     toApply,
-        method:         validData.method,
-        notes:          validData.notes ?? null,
-        appointment_id: apt.id,
+      // Derive a stable per-appointment key from the base key so distributing a
+      // payment across N appointments produces N idempotent inserts.
+      const aptKey = validData.idempotency_key
+        ? `${validData.idempotency_key}-${aptIndex}`
+        : undefined
+
+      batchItems.push({
+        amount:          toApply,
+        net_amount:      toApply,
+        method:          validData.method,
+        notes:           validData.notes ?? null,
+        appointment_id:  apt.id,
+        idempotency_key: aptKey,
       })
-      if (txResult.error) throw new Error(txResult.error)
 
       remaining -= toApply
+      aptIndex++
+    }
+
+    if (batchItems.length > 0) {
+      const batchResult = await container.finances.createTransactionBatch(
+        validData.business_id,
+        batchItems,
+      )
+      if (batchResult.error) throw new Error(batchResult.error)
     }
   }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { logger } from '@/lib/logger'
-import { redisRateLimit, isRedisAvailable } from '@/lib/rate-limit/redis-rate-limiter'
+import { redisRateLimit, isRedisAvailable, markRequestSeen } from '@/lib/rate-limit/redis-rate-limiter'
 import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
 import { assistantRateLimiter } from '@/lib/api/rate-limit'
 import type { VoiceAssistantContext } from '@/lib/ai/types'
@@ -60,6 +60,21 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
       return NextResponse.json(
         { error: `Demasiadas solicitudes. Reintenta en ${retryAfter}s.` },
         { status: 429 },
+      )
+    }
+  }
+
+  // 1b. Deduplication — prevent double-execution when the client retries the same request.
+  // The client must set x-request-id to a stable UUID for the lifetime of the request.
+  // A second request with the same (userId, requestId) within 60 s is rejected with 409.
+  const requestId = req.headers.get('x-request-id')
+  if (requestId && isRedisAvailable()) {
+    const isDuplicate = await markRequestSeen(`voice:${identifier}:${requestId}`, 60)
+    if (isDuplicate) {
+      logger.warn('AI-ASSISTANT', 'Duplicate voice request rejected', { userId: identifier, requestId })
+      return NextResponse.json(
+        { error: 'Solicitud duplicada. Por favor espera la respuesta anterior.' },
+        { status: 409 },
       )
     }
   }

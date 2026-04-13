@@ -79,3 +79,23 @@ export async function redisRateLimit(
 export function isRedisAvailable(): boolean {
   return getRedis() !== null
 }
+
+/**
+ * Marks a request key as seen using SET NX (set-if-not-exists).
+ * Returns true if this key was already seen before (duplicate), false if it is new.
+ * Fails open: returns false on any Redis error so the request is never blocked.
+ *
+ * Use for idempotent deduplication of one-shot operations (e.g. voice requests).
+ * Key format convention: `<scope>:<userId>:<requestId>`
+ */
+export async function markRequestSeen(key: string, ttlSecs: number): Promise<boolean> {
+  const redis = getRedis()
+  if (!redis) return false
+  try {
+    // SET NX returns 'OK' when the key was set (new), null when it already existed (duplicate).
+    const result = await redis.set(key, '1', { nx: true, ex: ttlSecs })
+    return result === null
+  } catch {
+    return false // fail-open
+  }
+}

@@ -974,6 +974,25 @@ export type Database = {
       }
     }
     Functions: {
+      fn_batch_create_transactions: {
+        Args: {
+          p_business_id: string
+          p_transactions: Json
+        }
+        Returns: Json
+      }
+      fn_create_business_and_link_owner: {
+        Args: {
+          p_owner_id: string
+          p_owner_name: string
+          p_owner_email: string
+          p_name: string
+          p_category: string
+          p_timezone: string
+          p_plan: string
+        }
+        Returns: Json
+      }
       fn_book_appointment_wa: {
         Args: {
           p_business_id: string

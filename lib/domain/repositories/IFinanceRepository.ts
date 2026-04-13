@@ -20,6 +20,8 @@ export type CreateTransactionPayload = {
   method: string
   notes?: string | null
   paid_at?: string
+  /** Client-generated UUID. When present, duplicate inserts with the same key are silently ignored. */
+  idempotency_key?: string
 }
 
 export type CreateExpensePayload = {
@@ -34,6 +36,13 @@ export type RevenueDataPoint = {
   net_amount: number
   paid_at: string
 }
+
+/**
+ * A single item in an atomic batch insert.
+ * Omits business_id — it is passed once at the batch level to avoid
+ * repetition and prevent cross-business data leaks.
+ */
+export type BatchTransactionItem = Omit<CreateTransactionPayload, 'business_id'>
 
 export interface IFinanceRepository {
   /**
@@ -77,4 +86,14 @@ export interface IFinanceRepository {
     from: string,
     to: string
   ): Promise<Result<number>>
+
+  /**
+   * Atomically inserts multiple transactions in a single DB transaction.
+   * If any insert fails, all are rolled back — prevents partial payment state.
+   * Respects idempotency_key per item (same semantics as createTransaction).
+   */
+  createTransactionBatch(
+    businessId: string,
+    items: BatchTransactionItem[]
+  ): Promise<Result<void>>
 }

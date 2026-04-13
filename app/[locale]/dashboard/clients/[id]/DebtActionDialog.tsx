@@ -26,6 +26,8 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
     method: 'cash' as 'other' | 'cash' | 'card' | 'transfer' | 'qr',
     reference: ''
   })
+  // New UUID per modal open — guarantees submit is idempotent even on double-click or retry.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
   const t = useTranslations('clients.debt')
 
   const reset = () => {
@@ -33,6 +35,8 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
     setMode('options')
     setError(null)
     setForm({ amount: '', method: 'cash', reference: '' })
+    // Rotate key so a future re-open of the modal gets a fresh key.
+    setIdempotencyKey(crypto.randomUUID())
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -43,11 +47,12 @@ export function DebtActionDialog({ businessId, clientId, totalDebt }: Props) {
 
     try {
       await registerClientPayment({
-        business_id: businessId,
-        client_id: clientId,
-        amount: amountToRegister,
-        method: form.method,
-        notes: form.reference ? `Ref: ${form.reference}` : undefined
+        business_id:     businessId,
+        client_id:       clientId,
+        amount:          amountToRegister,
+        method:          form.method,
+        notes:           form.reference ? `Ref: ${form.reference}` : undefined,
+        idempotency_key: idempotencyKey,
       })
       reset()
     } catch {

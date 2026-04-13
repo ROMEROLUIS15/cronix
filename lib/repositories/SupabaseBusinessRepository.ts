@@ -5,7 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
 import { Result, ok, fail } from '@/types/result'
-import { IBusinessRepository } from '@/lib/domain/repositories/IBusinessRepository'
+import { IBusinessRepository, CreateBusinessWithOwnerParams } from '@/lib/domain/repositories/IBusinessRepository'
 import type { Json } from '@/types/database.types'
 
 type Client = SupabaseClient<Database>
@@ -92,5 +92,22 @@ export class SupabaseBusinessRepository implements IBusinessRepository {
 
     if (error) return fail(`Error updating business settings: ${error.message}`)
     return ok(undefined)
+  }
+
+  async createWithOwnerLink(params: CreateBusinessWithOwnerParams): Promise<Result<BusinessRow>> {
+    const { data, error } = await this.supabase.rpc('fn_create_business_and_link_owner', {
+      p_owner_id:    params.ownerId,
+      p_owner_name:  params.ownerName,
+      p_owner_email: params.ownerEmail,
+      p_name:        params.name,
+      p_category:    params.category,
+      p_timezone:    params.timezone,
+      p_plan:        params.plan,
+    })
+
+    if (error) return fail(`Error creating business: ${error.message}`)
+
+    const result = data as { business_id: string }
+    return this.getById(result.business_id)
   }
 }

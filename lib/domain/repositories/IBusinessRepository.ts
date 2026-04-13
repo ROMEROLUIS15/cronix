@@ -8,6 +8,21 @@ import { Database } from '@/types/database.types'
 type BusinessInsert = Database['public']['Tables']['businesses']['Insert']
 type BusinessRow = Database['public']['Tables']['businesses']['Row']
 
+/**
+ * Parameters for atomically creating a business and linking its owner.
+ * Contains no Supabase or infrastructure references — future backends
+ * implement this via a transactional HTTP endpoint or equivalent.
+ */
+export interface CreateBusinessWithOwnerParams {
+  ownerId:    string
+  ownerName:  string
+  ownerEmail: string
+  name:       string
+  category:   string
+  timezone:   string
+  plan:       string
+}
+
 export interface IBusinessRepository {
   /**
    * Returns the settings JSON for a business.
@@ -38,4 +53,11 @@ export interface IBusinessRepository {
    * Updates business settings JSON.
    */
   updateSettings(businessId: string, settings: Record<string, unknown>): Promise<Result<void>>
+
+  /**
+   * Atomically creates a business AND links the owner user in one transaction.
+   * Prevents the orphaned-business state that occurs when the two-step pattern
+   * (create → link) fails between steps.
+   */
+  createWithOwnerLink(params: CreateBusinessWithOwnerParams): Promise<Result<BusinessRow>>
 }

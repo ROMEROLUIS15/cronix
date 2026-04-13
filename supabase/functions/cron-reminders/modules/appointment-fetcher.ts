@@ -24,17 +24,26 @@ export async function getTomorrowAppointments(
   return (appointments ?? []) as unknown as AppointmentWithClient[]
 }
 
-export async function getCancelledReminders(
+/**
+ * Returns the set of appointment IDs that should be skipped when sending reminders.
+ * Skips both:
+ *   - 'cancelled'  — user opted out or appointment was cancelled
+ *   - 'sent'       — reminder was already delivered in a previous cron run this cycle
+ *
+ * This makes the cron function idempotent: if pg_cron fires twice within the same
+ * hour window, the second run sees the 'sent' records and sends nothing again.
+ */
+export async function getSkippedReminderIds(
   appointmentIds: string[]
 ): Promise<Set<string>> {
   if (appointmentIds.length === 0) return new Set()
 
   const supabase = createAdminClient()
-  const { data: cancelledReminders } = await supabase
+  const { data } = await supabase
     .from('appointment_reminders')
     .select('appointment_id')
     .in('appointment_id', appointmentIds)
-    .eq('status', 'cancelled')
+    .in('status', ['cancelled', 'sent'])
 
-  return new Set((cancelledReminders ?? []).map(r => r.appointment_id))
+  return new Set((data ?? []).map(r => r.appointment_id))
 }

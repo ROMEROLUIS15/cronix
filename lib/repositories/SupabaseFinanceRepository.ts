@@ -9,7 +9,8 @@ import {
   IFinanceRepository,
   CreateTransactionPayload,
   CreateExpensePayload,
-  RevenueDataPoint
+  RevenueDataPoint,
+  BatchTransactionItem,
 } from '@/lib/domain/repositories/IFinanceRepository'
 import type { ExpenseRow, TransactionRow } from '@/types'
 
@@ -49,15 +50,25 @@ export class SupabaseFinanceRepository implements IFinanceRepository {
   }
 
   async createTransaction(payload: CreateTransactionPayload): Promise<Result<void>> {
-    const { error } = await this.supabase
-      .from('transactions')
-      .insert({
-        ...payload,
-        paid_at: payload.paid_at ?? new Date().toISOString(),
-        method: payload.method as Database['public']['Enums']['payment_method']
-      })
+    const { idempotency_key, ...rest } = payload
+    const row = {
+      ...rest,
+      paid_at: payload.paid_at ?? new Date().toISOString(),
+      method: payload.method as Database['public']['Enums']['payment_method'],
+      ...(idempotency_key ? { idempotency_key } : {}),
+    }
 
-    if (error) return fail(`Error creating transaction: ${error.message}`)
+    if (idempotency_key) {
+      // ON CONFLICT DO NOTHING: a second insert with the same key is silently dropped.
+      const { error } = await this.supabase
+        .from('transactions')
+        .upsert(row, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+      if (error) return fail(`Error creating transaction: ${error.message}`)
+    } else {
+      const { error } = await this.supabase.from('transactions').insert(row)
+      if (error) return fail(`Error creating transaction: ${error.message}`)
+    }
+
     return ok(undefined)
   }
 
@@ -111,5 +122,27 @@ export class SupabaseFinanceRepository implements IFinanceRepository {
     // PostgREST returns aggregate as { sum: string | number } when using select='sum:net_amount.sum()'
     const aggregate = data as { sum: number | string } | null
     return ok(aggregate ? Number(aggregate.sum) : 0)
+  }
+
+  async createTransactionBatch(
+    businessId: string,
+    items: BatchTransactionItem[]
+  ): Promise<Result<void>> {
+    const serializable = items.map(item => ({
+      appointment_id:  item.appointment_id ?? null,
+      amount:          item.amount,
+      net_amount:      item.net_amount,
+      method:          item.method,
+      notes:           item.notes ?? null,
+      idempotency_key: item.idempotency_key ?? null,
+    }))
+
+    const { error } = await this.supabase.rpc('fn_batch_create_transactions', {
+      p_business_id:  businessId,
+      p_transactions: serializable,
+    })
+
+    if (error) return fail(`Error creating transaction batch: ${error.message}`)
+    return ok(undefined)
   }
 }

@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+// createAdminClient is still needed for getUserContextById (bypasses recursive RLS on users table)
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { getRepos } from '@/lib/repositories'
@@ -58,12 +59,21 @@ export async function createBusiness(
     redirect('/dashboard')
   }
 
-  // 4. Create business via repo
+  // 4+5. Atomically create business AND link owner in one DB transaction.
+  // The RPC fn_create_business_and_link_owner uses SECURITY DEFINER, so it
+  // can UPDATE users.business_id without requiring the admin client here.
   const repos = getRepos(supabase)
-  const businessResult = await repos.businesses.create({
+  const ownerName =
+    (user.user_metadata as Record<string, string> | null)?.full_name ||
+    user.email?.split('@')[0] ||
+    'Usuario'
+
+  const businessResult = await repos.businesses.createWithOwnerLink({
+    ownerId:    user.id,
+    ownerName,
+    ownerEmail: user.email ?? '',
     name,
     category,
-    owner_id: user.id,
     timezone,
     plan: 'pro',
   })
@@ -71,22 +81,6 @@ export async function createBusiness(
   if (businessResult.error) {
     return { error: 'Error al crear el negocio: ' + businessResult.error }
   }
-  const business = businessResult.data
-  if (!business) return { error: 'Error al crear el negocio.' }
-
-  // 5. Link user to business and activate (admin bypasses RLS for this privileged op)
-  const { error: linkError } = await adminClient
-    .from('users')
-    .update({
-      name: (user.user_metadata as Record<string, string> | null)?.full_name || user.email?.split('@')[0] || 'Usuario',
-      email: user.email ?? '',
-      business_id: business.id,
-      role: 'owner',
-      status: 'active',
-    })
-    .eq('id', user.id)
-
-  if (linkError) return { error: 'Error al vincular el usuario al negocio.' }
 
   revalidatePath('/dashboard')
   // Return success so the client can clear the React Query cache before navigating.

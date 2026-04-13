@@ -23,7 +23,7 @@
 import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
 import { getBusinessesAt8PM, getTomorrowRange }         from './modules/business-scheduler.ts'
-import { getTomorrowAppointments, getCancelledReminders } from './modules/appointment-fetcher.ts'
+import { getTomorrowAppointments, getSkippedReminderIds } from './modules/appointment-fetcher.ts'
 import { sendWhatsAppReminders }                        from './modules/whatsapp-sender.ts'
 import { buildReminderNotification, buildWhatsAppFailureNotification,
          insertNotification, sendPushNotification }     from './modules/notification-builder.ts'
@@ -112,9 +112,9 @@ Deno.serve(async (req: Request) => {
       count: apts.length,
     })
 
-    // ── Get cancelled reminders ───────────────────────────────────────────
+    // ── Get skipped reminders (cancelled OR already sent) ─────────────────
     const aptIds = apts.map(a => a.id)
-    const skippedAptIds = await getCancelledReminders(aptIds)
+    const skippedAptIds = await getSkippedReminderIds(aptIds)
 
     // ── 1. Send WhatsApp reminders ────────────────────────────────────────
     const waResult = await sendWhatsAppReminders(biz, apts, skippedAptIds, cronSecret)
