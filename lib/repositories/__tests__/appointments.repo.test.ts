@@ -61,29 +61,19 @@ describe('SupabaseAppointmentRepository', () => {
 
   describe('updateStatus', () => {
     it('returns ok when successfully updated', async () => {
-      // Mock chain for UPDATE query
+      // .update().eq('id', ...).eq('business_id', ...) — two eq calls chained
+      const eqBusinessId = vi.fn().mockResolvedValue({ error: null })
       const updateMock = {
         update: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockResolvedValue({ error: null }),
+        eq: vi.fn().mockReturnValue({ eq: eqBusinessId }),
       }
-      
-      // Mock chain for SELECT query (cache invalidation)
-      const selectMock = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: { business_id: 'biz_123' }, error: null }),
-      }
-      
-      // Return different mocks based on which method is called first
-      let callCount = 0
-      mockSupabase.from.mockImplementation(() => {
-        callCount++
-        return callCount === 1 ? (updateMock as any) : (selectMock as any)
-      })
+      mockSupabase.from.mockReturnValue(updateMock as any)
 
       const result = await repository.updateStatus('apt_1', 'confirmed', 'biz_1')
 
       expect(isOk(result)).toBe(true)
+      expect(updateMock.eq).toHaveBeenCalledWith('id', 'apt_1')
+      expect(eqBusinessId).toHaveBeenCalledWith('business_id', 'biz_1')
     })
   })
 })

@@ -201,10 +201,10 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
         updated_at: new Date().toISOString()
       })
       .eq('id', appointmentId)
+      .eq('business_id', businessId)
 
     if (error) return fail(`Error updating appointment status: ${error.message}`)
 
-    // businessId passed directly — no extra SELECT needed
     await cache.invalidate(businessId, 'appointments')
     await cache.invalidateKey(businessId, 'dashboard', 'stats')
 
@@ -226,6 +226,7 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
         updated_at: new Date().toISOString(),
       })
       .eq('id', appointmentId)
+      .eq('business_id', businessId)
 
     if (error) return fail(`Error rescheduling appointment: ${error.message}`)
 

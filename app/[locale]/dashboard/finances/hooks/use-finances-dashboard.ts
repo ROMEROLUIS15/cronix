@@ -6,16 +6,13 @@
 
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
+import { calculateMonthlySummary, type FinanceMonthlySummary } from '@/lib/use-cases/finances.use-case';
 import type { TransactionRow, ExpenseRow } from '@/types';
 
-export interface FinanceSummary {
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-}
+export type FinanceSummary = FinanceMonthlySummary;
 
 export interface UseFinancesDashboardReturn {
   summary: FinanceSummary;
@@ -27,9 +24,11 @@ export interface UseFinancesDashboardReturn {
   expensePct: number;
 }
 
+const RECENT_ITEMS_LIMIT = 5;
+
 export function useFinancesDashboard(): UseFinancesDashboardReturn {
   const { businessId, loading: contextLoading } = useBusinessContext();
-  const [summary, setSummary] = useState<FinanceSummary>({ totalRevenue: 0, totalExpenses: 0, netProfit: 0 });
+  const [summary, setSummary] = useState<FinanceMonthlySummary>({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, marginPct: 0, expensePct: 0 });
   const [recentTransactions, setRecentTransactions] = useState<TransactionRow[]>([]);
   const [recentExpenses, setRecentExpenses] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,25 +48,14 @@ export function useFinancesDashboard(): UseFinancesDashboardReturn {
       if (txnsRes.error) throw new Error(txnsRes.error);
       if (expsRes.error) throw new Error(expsRes.error);
 
-      const txns = txnsRes.data ?? [];
-      const exps = expsRes.data ?? [];
+      const { monthTransactions, monthExpenses, summary } = calculateMonthlySummary(
+        txnsRes.data ?? [],
+        expsRes.data ?? [],
+      );
 
-      // Filter to current month
-      const startOfMonth = new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        1,
-      ).toISOString();
-
-      const monthTxns = txns.filter(t => (t.paid_at ?? '') >= startOfMonth);
-      const monthExps = exps.filter(e => (e.expense_date ?? '') >= startOfMonth);
-
-      const totalRevenue = monthTxns.reduce((acc, t) => acc + (t.net_amount ?? 0), 0);
-      const totalExpenses = monthExps.reduce((acc, e) => acc + (e.amount ?? 0), 0);
-
-      setRecentTransactions(monthTxns.slice(0, 5));
-      setRecentExpenses(monthExps.slice(0, 5));
-      setSummary({ totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses });
+      setRecentTransactions(monthTransactions.slice(0, RECENT_ITEMS_LIMIT) as TransactionRow[]);
+      setRecentExpenses(monthExpenses.slice(0, RECENT_ITEMS_LIMIT) as ExpenseRow[]);
+      setSummary(summary);
       setFetchError(null);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Error loading data');
@@ -84,25 +72,13 @@ export function useFinancesDashboard(): UseFinancesDashboardReturn {
     }
   }, [businessId, contextLoading, loadData]);
 
-  const marginPct = useMemo(() =>
-    summary.totalRevenue > 0
-      ? Math.round((summary.netProfit / summary.totalRevenue) * 100)
-      : 0
-  , [summary.totalRevenue, summary.netProfit]);
-
-  const expensePct = useMemo(() =>
-    summary.totalRevenue > 0
-      ? Math.min((summary.totalExpenses / summary.totalRevenue) * 100, 100)
-      : 0
-  , [summary.totalRevenue, summary.totalExpenses]);
-
   return {
     summary,
     recentTransactions,
     recentExpenses,
     loading,
     fetchError,
-    marginPct,
-    expensePct,
+    marginPct:  summary.marginPct,
+    expensePct: summary.expensePct,
   };
 }

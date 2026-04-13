@@ -1,11 +1,12 @@
 /**
  * Finances Use Case — Pure business logic for financial calculations.
  *
- * NO framework dependencies.
+ * NO framework dependencies. All functions are pure and independently testable.
  *
  * Exposes:
- *  - calculateClientDebt:     compute total debt from appointment + transaction data
+ *  - calculateClientDebt:      compute total debt from appointment + transaction data
  *  - calculateAppointmentDebt: compute debt for a single appointment
+ *  - calculateMonthlySummary:  aggregate revenue, expenses and profit for a given month
  */
 
 interface AppointmentWithPayment {
@@ -59,4 +60,72 @@ export function calculateAppointmentDebt(apt: AppointmentWithPayment): number {
   ) ?? 0
 
   return Math.max(0, price - paid)
+}
+
+// ── Monthly finance summary ────────────────────────────────────────────────
+
+interface TransactionInput {
+  paid_at:    string | null
+  net_amount: number | null
+}
+
+interface ExpenseInput {
+  expense_date: string | null
+  amount:       number | null
+}
+
+export interface FinanceMonthlySummary {
+  totalRevenue:  number
+  totalExpenses: number
+  netProfit:     number
+  marginPct:     number
+  expensePct:    number
+}
+
+export interface MonthlySlices<T extends TransactionInput, E extends ExpenseInput> {
+  monthTransactions: T[]
+  monthExpenses:     E[]
+  summary:           FinanceMonthlySummary
+}
+
+/**
+ * Filters transactions and expenses to the current calendar month,
+ * then computes revenue, expenses, profit and derived percentages.
+ *
+ * Pure function — no side effects, framework-agnostic, easily testable.
+ * Safe to migrate: depends only on plain data shapes, not on Supabase types.
+ *
+ * @param transactions  Full list of transactions for the business
+ * @param expenses      Full list of expenses for the business
+ * @param referenceDate Month to compute (defaults to current month)
+ */
+export function calculateMonthlySummary<
+  T extends TransactionInput,
+  E extends ExpenseInput,
+>(
+  transactions: T[],
+  expenses: E[],
+  referenceDate: Date = new Date(),
+): MonthlySlices<T, E> {
+  const startOfMonth = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    1,
+  ).toISOString()
+
+  const monthTransactions = transactions.filter(t => (t.paid_at ?? '') >= startOfMonth)
+  const monthExpenses     = expenses.filter(e => (e.expense_date ?? '') >= startOfMonth)
+
+  const totalRevenue  = monthTransactions.reduce((acc, t) => acc + (t.net_amount ?? 0), 0)
+  const totalExpenses = monthExpenses.reduce((acc, e) => acc + (e.amount ?? 0), 0)
+  const netProfit     = totalRevenue - totalExpenses
+
+  const marginPct  = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0
+  const expensePct = totalRevenue > 0 ? Math.min((totalExpenses / totalRevenue) * 100, 100) : 0
+
+  return {
+    monthTransactions,
+    monthExpenses,
+    summary: { totalRevenue, totalExpenses, netProfit, marginPct, expensePct },
+  }
 }

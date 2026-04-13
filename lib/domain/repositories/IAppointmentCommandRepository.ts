@@ -22,7 +22,8 @@ export interface IAppointmentCommandRepository {
 
   /**
    * Updates appointment status.
-   * Requires businessId for cache invalidation (avoids extra DB round-trip).
+   * Requires businessId as a security guard — the update is scoped to both
+   * appointmentId AND businessId so cross-tenant mutations are impossible.
    */
   updateStatus(
     appointmentId: string,
@@ -32,7 +33,8 @@ export interface IAppointmentCommandRepository {
 
   /**
    * Reschedules an appointment to a new time slot.
-   * Requires businessId for cache invalidation (avoids extra DB round-trip).
+   * Requires businessId as a security guard — the update is scoped to both
+   * appointmentId AND businessId so cross-tenant mutations are impossible.
    */
   reschedule(
     appointmentId: string,
