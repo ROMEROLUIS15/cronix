@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getRepos } from '@/lib/repositories'
 import { withActionRateLimit } from '@/lib/actions/rate-limit-action'
@@ -35,21 +35,17 @@ const EmployeeIdSchema = z.object({
  * SECURITY: Derives business_id from the authenticated session, NOT from client input.
  */
 async function assertOwnerAndGetBusinessContext(): Promise<{ userId: string; businessId: string }> {
-  const supabase = await createClient()
+  const supabase = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autorizado.')
 
-  const { data: dbUser, error: dbError } = await supabase
-    .from('users')
-    .select('role, business_id')
-    .eq('id', user.id)
-    .single()
+  const { users: usersRepoInstance } = getRepos(supabase)
+  const ctxResult = await usersRepoInstance.getUserContextById(user.id)
+  if (ctxResult.error || !ctxResult.data) throw new Error('No se pudo verificar el rol del usuario.')
+  if (!ctxResult.data.business_id) throw new Error('El usuario no pertenece a ningún negocio.')
+  if (ctxResult.data.role !== 'owner') throw new Error('Solo el dueño puede gestionar el equipo.')
 
-  if (dbError || !dbUser) throw new Error('No se pudo verificar el rol del usuario.')
-  if (!dbUser.business_id) throw new Error('El usuario no pertenece a ningún negocio.')
-  if (dbUser.role !== 'owner') throw new Error('Solo el dueño puede gestionar el equipo.')
-
-  return { userId: user.id, businessId: dbUser.business_id }
+  return { userId: user.id, businessId: ctxResult.data.business_id }
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────

@@ -31,11 +31,10 @@ export async function createBusiness(
   // platform_admin never creates a business — read role via admin client
   // (bypasses the recursive RLS policy on the users table)
   const adminClient = createAdminClient()
-  const { data: callerUser } = await adminClient
-    .from('users')
-    .select('role, business_id')
-    .eq('id', user.id)
-    .maybeSingle()
+  const { users: usersRepoInstance } = getRepos(adminClient)
+  const callerCtx = await usersRepoInstance.getUserContextById(user.id)
+  const callerUser = callerCtx.data
+
   if (callerUser?.role === 'platform_admin') {
     redirect('/dashboard')
   }
@@ -76,8 +75,7 @@ export async function createBusiness(
   if (!business) return { error: 'Error al crear el negocio.' }
 
   // 5. Link user to business and activate (admin bypasses RLS for this privileged op)
-  const admin = createAdminClient()
-  const { error: linkError } = await admin
+  const { error: linkError } = await adminClient
     .from('users')
     .update({
       name: (user.user_metadata as Record<string, string> | null)?.full_name || user.email?.split('@')[0] || 'Usuario',

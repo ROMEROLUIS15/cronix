@@ -1,9 +1,9 @@
 'use server'
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getRepos } from '@/lib/repositories'
 import { registerSchema } from '@/lib/validations/auth'
 import { headers } from 'next/headers'
-import { generateBusinessSlug } from '@/lib/repositories/SupabaseBusinessRepository'
 
 export async function register(formData: FormData) {
   const data = Object.fromEntries(formData.entries())
@@ -17,15 +17,13 @@ export async function register(formData: FormData) {
   const timezone = (data.timezone as string) || 'America/Caracas'
   const supabase = await createClient()
   const admin = createAdminClient()
+  const { users: usersRepoInstance } = getRepos(admin)
 
   // Verificar que el email no esté registrado antes de crear el auth user
-  const { data: existingUser } = await admin
-    .from('users')
-    .select('id, provider')
-    .eq('email', email)
-    .maybeSingle()
+  const existingCheck = await usersRepoInstance.getUserProfileByEmail(email)
 
-  if (existingUser) {
+  if (existingCheck.data) {
+    const existingUser = existingCheck.data
     const method = existingUser.provider === 'google' ? 'Google' : 'correo y contraseña'
     return { error: `Ya existe una cuenta con este correo (registrada con ${method}). Inicia sesión en lugar de registrarte.` }
   }
@@ -69,40 +67,34 @@ export async function register(formData: FormData) {
 
   // 3. Si no requiere confirmación (raro), crear el negocio directamente.
   //    El trigger on_auth_user_created ya creó el row en public.users.
-  const { data: bizData, error: bizError } = await supabase
-    .from('businesses')
-    .insert({
-      name:     bizName,
-      owner_id: user.id,
-      category: bizCategory,
-      timezone,
-      plan:     'pro',
-      slug:     generateBusinessSlug(bizName),
-    })
-    .select()
-    .single()
+  const repos = getRepos(supabase)
+  const businessResult = await repos.businesses.create({
+    name: bizName,
+    category: bizCategory,
+    owner_id: user.id,
+    timezone,
+    plan: 'pro',
+  })
 
-  if (bizError) {
-    // Log structured error — user sees generic message below
+  if (businessResult.error) {
     const { logger } = await import('@/lib/logger')
-    logger.error('register', 'Error creating business', bizError)
-    return { error: 'Error al crear el negocio: ' + bizError.message }
+    logger.error('register', 'Error creating business', businessResult.error)
+    return { error: 'Error al crear el negocio: ' + businessResult.error }
   }
+  const bizData = businessResult.data
+  if (!bizData) return { error: 'Error al crear el negocio.' }
 
   // 4. Vincular usuario al negocio y activarlo (usa admin para evitar restricciones RLS)
-  const { error: linkError } = await admin
-    .from('users')
-    .update({
-      name: `${firstName} ${lastName}`.trim(),
-      business_id: bizData.id,
-      role: 'owner',
-      status: 'active',
-    })
-    .eq('id', user.id)
+  const linkResult = await usersRepoInstance.linkUserToBusiness(user.id, {
+    name: `${firstName} ${lastName}`.trim(),
+    business_id: bizData.id,
+    role: 'owner',
+    status: 'active',
+  })
 
-  if (linkError) {
+  if (linkResult.error) {
     const { logger } = await import('@/lib/logger')
-    logger.error('register', 'Error linking user to business', linkError)
+    logger.error('register', 'Error linking user to business', linkResult.error)
     return { error: 'Error al vincular tu cuenta con el negocio. Intenta iniciar sesión.' }
   }
 

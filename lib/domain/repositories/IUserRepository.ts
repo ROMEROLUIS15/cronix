@@ -95,4 +95,33 @@ export interface IUserRepository {
    * Updates the authenticated user's avatar URL.
    */
   updateAvatar(userId: string, avatarUrl: string | null): Promise<Result<void>>
+
+  /**
+   * Returns the user's role, business_id, name, and provider by ID (used by server actions for auth checks).
+   * This is an admin-level operation that bypasses RLS.
+   */
+  getUserContextById(userId: string): Promise<Result<{
+    role: string | null
+    business_id: string | null
+    name: string | null
+    provider: string | null
+  } | null>>
+
+  /**
+   * Finds a user by email (used by registration to check duplicates).
+   */
+  getUserProfileByEmail(email: string): Promise<Result<{
+    id: string
+    provider: string | null
+  } | null>>
+
+  /**
+   * Links a user to a business (used by registration flow).
+   */
+  linkUserToBusiness(userId: string, payload: {
+    name: string
+    business_id: string
+    role: string
+    status: string
+  }): Promise<Result<void>>
 }

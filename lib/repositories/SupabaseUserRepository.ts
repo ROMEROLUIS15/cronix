@@ -201,4 +201,64 @@ export class SupabaseUserRepository implements IUserRepository {
     if (error) return fail(`Error updating avatar: ${error.message}`)
     return ok(undefined)
   }
+
+  async getUserContextById(userId: string): Promise<Result<{
+    role: string | null
+    business_id: string | null
+    name: string | null
+    provider: string | null
+  } | null>> {
+    const { data, error } = await this.supabase
+      .from('users')
+      .select('role, business_id, name, provider')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (error) return fail(`Error fetching user context: ${error.message}`)
+    if (!data) return ok(null)
+    return ok({
+      role: data.role ?? null,
+      business_id: data.business_id ?? null,
+      name: data.name ?? null,
+      provider: data.provider ?? null,
+    })
+  }
+
+  async getUserProfileByEmail(email: string): Promise<Result<{
+    id: string
+    provider: string | null
+  } | null>> {
+    const { data, error } = await this.supabase
+      .from('users')
+      .select('id, provider')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (error) return fail(`Error finding user by email: ${error.message}`)
+    if (!data) return ok(null)
+    return ok({
+      id: data.id,
+      provider: data.provider ?? null,
+    })
+  }
+
+  async linkUserToBusiness(userId: string, payload: {
+    name: string
+    business_id: string
+    role: string
+    status: string
+  }): Promise<Result<void>> {
+    const { error } = await this.supabase
+      .from('users')
+      .update({
+        name: payload.name,
+        business_id: payload.business_id,
+        role: payload.role as Database['public']['Enums']['user_role'],
+        status: payload.status as Database['public']['Enums']['user_status'],
+      })
+      .eq('id', userId)
+
+    if (error) return fail(`Error linking user to business: ${error.message}`)
+    return ok(undefined)
+  }
 }

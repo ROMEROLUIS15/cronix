@@ -34,7 +34,8 @@
       "Bash(@if *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "WebFetch(api.github.com)"
     ]
   },
   "$version": 3

@@ -27,6 +27,7 @@ import { GroqProvider } from '@/lib/ai/providers/groq-provider'
 import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
 import { AssistantService } from '@/lib/ai/assistant-service'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getRepos } from '@/lib/repositories'
 
 // ── CONFIG ───────────────────────────────────────────────────────────────
 const GROQ_API_KEY     = process.env.LLM_API_KEY || process.env.GROQ_API_KEY
@@ -67,14 +68,13 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
   // Use admin client to bypass RLS on users table (same pattern as dashboard layout).
   // The regular client can return null due to RLS policy recursion on some accounts.
   const admin = createAdminClient()
-  const { data: dbUser } = await admin
-    .from('users')
-    .select('business_id, name, role, business:businesses(name)')
-    .eq('id', user.id)
-    .single()
+  const { users: usersRepoInstance, businesses: businessesRepoInstance } = getRepos(admin)
+  const ctxResult = await usersRepoInstance.getUserContextById(user.id)
+  const dbUser = ctxResult.data
 
   const businessId   = dbUser?.business_id
-  const businessName = (dbUser?.business as { name: string } | null)?.name || 'tu negocio'
+  const businessNameResult = businessId ? await businessesRepoInstance.getById(businessId) : { data: null }
+  const businessName = businessNameResult.data?.name || 'tu negocio'
   const userName     = dbUser?.name || 'Usuario'
   const userRole     = (dbUser?.role as string) || 'employee'
 

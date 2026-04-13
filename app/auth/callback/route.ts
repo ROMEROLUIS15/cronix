@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getRepos } from '@/lib/repositories'
 import { logger } from '@/lib/logger'
 import type { EmailOtpType, User } from '@supabase/supabase-js'
-import { generateBusinessSlug } from '@/lib/repositories/SupabaseBusinessRepository'
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url)
@@ -50,15 +50,13 @@ export async function GET(request: Request) {
  */
 async function ensureUserProfile(user: User): Promise<void> {
   const admin = createAdminClient()
+  const { users: usersRepoInstance } = getRepos(admin)
   const authProvider = user.app_metadata?.provider as string | undefined
   const email = user.email ?? ''
 
   // 1. Check by auth ID first (normal case)
-  const { data: dbUser } = await admin
-    .from('users')
-    .select('id, provider')
-    .eq('id', user.id)
-    .maybeSingle()
+  const profileCheck = await usersRepoInstance.getUserContextById(user.id)
+  const dbUser = profileCheck.data
 
   if (dbUser) {
     // Account linking: email user now also has Google → mark as hybrid
@@ -72,11 +70,8 @@ async function ensureUserProfile(user: User): Promise<void> {
 
   // 2. Check by email — handles identity linking (same email, different auth ID)
   if (email) {
-    const { data: emailUser } = await admin
-      .from('users')
-      .select('id, provider')
-      .eq('email', email)
-      .maybeSingle()
+    const emailCheck = await usersRepoInstance.getUserProfileByEmail(email)
+    const emailUser = emailCheck.data
 
     if (emailUser) {
       // Link: update the existing row to point to the new auth ID and mark hybrid
@@ -118,45 +113,36 @@ async function ensureUserProfile(user: User): Promise<void> {
  */
 async function ensureBusinessFromMetadata(user: User): Promise<void> {
   const admin       = createAdminClient()
+  const { users: usersRepoInstance, businesses: businessesRepoInstance } = getRepos(admin)
   const bizName     = user.user_metadata?.biz_name     as string | undefined
   const bizCategory = user.user_metadata?.biz_category as string | undefined
   const bizTimezone = user.user_metadata?.biz_timezone as string | undefined
   if (!bizName) return
 
-  const { data: dbUser } = await admin
-    .from('users')
-    .select('id, business_id')
-    .eq('id', user.id)
-    .maybeSingle()
+  const userCtx = await usersRepoInstance.getUserContextById(user.id)
+  const dbUser = userCtx.data
 
   if (!dbUser || dbUser.business_id) return  // already has a business
 
-  const { data: bizData, error: bizError } = await admin
-    .from('businesses')
-    .insert({
-      name:     bizName,
-      owner_id: user.id,
-      category: bizCategory ?? 'General',
-      timezone: bizTimezone ?? 'America/Caracas',
-      plan:     'pro',
-      slug:     generateBusinessSlug(bizName),
-    })
-    .select('id')
-    .single()
+  const { data: bizData, error: bizError } = await businessesRepoInstance.create({
+    name:     bizName,
+    owner_id: user.id,
+    category: bizCategory ?? 'General',
+    timezone: bizTimezone ?? 'America/Caracas',
+    plan:     'pro',
+  })
 
   if (bizError || !bizData) {
     logger.error('auth-callback', 'Failed to auto-create business from metadata', bizError)
     return
   }
 
-  await admin
-    .from('users')
-    .update({
-      business_id: bizData.id,
-      role:        'owner',
-      status:      'active',
-    })
-    .eq('id', user.id)
+  await usersRepoInstance.linkUserToBusiness(user.id, {
+    name: dbUser.name ?? user.email?.split('@')[0] ?? 'Usuario',
+    business_id: bizData.id,
+    role: 'owner',
+    status: 'active',
+  })
 }
 
 /**
@@ -167,12 +153,10 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
  */
 async function getRedirectDestination(user: User, next: string): Promise<string> {
   const admin = createAdminClient()
+  const { users: usersRepoInstance } = getRepos(admin)
 
-  const { data: dbUser } = await admin
-    .from('users')
-    .select('role, business_id')
-    .eq('id', user.id)
-    .maybeSingle()
+  const ctxResult = await usersRepoInstance.getUserContextById(user.id)
+  const dbUser = ctxResult.data
 
   if (dbUser?.business_id || dbUser?.role === 'platform_admin') return next
   return '/dashboard/setup'

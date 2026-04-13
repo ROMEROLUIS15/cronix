@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getRepos } from '@/lib/repositories'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { GroqProvider } from '@/lib/ai/providers/groq-provider'
 import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
@@ -7,13 +8,15 @@ import { logger } from '@/lib/logger'
 
 /**
  * GET /api/assistant/proactive
- * 
+ *
  * Generates a proactive welcome message for the dashboard mount.
  */
 export const GET = withErrorHandler(async (req, _context, supabase, user) => {
   // Admin client bypasses RLS on users table — prevents infinite recursion in users_isolation policy
   const admin = createAdminClient()
-  const { data: dbUser } = await admin.from('users').select('business_id, name').eq('id', user.id).single()
+  const { users: usersRepoInstance } = getRepos(admin)
+  const ctxResult = await usersRepoInstance.getUserContextById(user.id)
+  const dbUser = ctxResult.data
   const businessId = dbUser?.business_id
 
   if (!businessId) {
