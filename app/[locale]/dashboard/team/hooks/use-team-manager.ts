@@ -8,7 +8,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { useTranslations } from 'next-intl';
 import type { TeamMember } from '@/lib/domain/repositories/IUserRepository';
@@ -91,7 +91,7 @@ export function useTeamManager(): UseTeamManagerReturn {
   // Data loading — uses container pattern
   const loadMembers = useCallback(async (bId: string) => {
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.users.getTeamMembers(bId);
       setMembers(result.error ? [] : result.data as TeamMember[]);
     } catch {

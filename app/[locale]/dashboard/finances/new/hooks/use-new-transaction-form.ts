@@ -10,7 +10,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import type { PaymentMethod, Client } from '@/types';
 
 export interface NewTransactionForm {
@@ -55,7 +55,7 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
     }
 
     async function loadClients() {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const res = await container.clients.getAll(businessId!);
       setClients(res.error ? [] : res.data as Client[]);
       setLoadingData(false);
@@ -73,7 +73,7 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
     setSaving(true);
     const amount = parseFloat(form.amount);
 
-    const container = await getContainer();
+    const container = getBrowserContainer();
     const result = await container.finances.createTransaction({
       business_id: businessId!,
       client_id: form.client_id,

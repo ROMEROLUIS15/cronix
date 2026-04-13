@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getContainer, runWithContainer } from '@/lib/container'
-import { createClient } from '@/lib/supabase/server'
+import { getBrowserContainer } from '@/lib/browser-container'
+import { createClient } from '@/lib/supabase/client'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
@@ -129,8 +129,8 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
       return
     }
     async function init() {
-      const container = await getContainer()
-      const supabase  = await createClient()
+      const container = getBrowserContainer()
+      const supabase  = createClient()
 
       const [clientsResult, servicesResult, membersResult, aptResult, bizSettingsResult, existingReminder] = await Promise.all([
         container.clients.getAll(businessId!),
@@ -196,7 +196,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
       return { slotBlocked: false, bookingLevel: 'allowed' as DoubleBookingLevel, bookingMsg: '' }
     }
 
-    const container = await getContainer()
+    const container = getBrowserContainer()
 
     const selectedSvcs = services.filter(s => form.service_ids.includes(s.id))
     const duration     = selectedSvcs.reduce((sum, s) => sum + s.duration_min, 0) || 30
@@ -335,7 +335,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
     const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
     // Update appointment — container doesn't support update yet, use supabase directly
-    const supabase = await createClient()
+    const supabase = createClient()
     const { error } = await supabase
       .from('appointments')
       .update({
@@ -372,7 +372,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
 
     // Handle reminders and notifications via container
     if (!error) {
-      const container = await getContainer()
+      const container = getBrowserContainer()
       await container.reminders.cancelByAppointment(appointmentId).catch(() => null)
       if (bizNotif.whatsapp) {
         const remindAt = new Date(Date.UTC(

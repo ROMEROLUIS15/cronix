@@ -7,7 +7,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import type { TransactionRow, ExpenseRow } from '@/types';
 
@@ -39,7 +39,7 @@ export function useFinancesDashboard(): UseFinancesDashboardReturn {
     if (!businessId) return;
 
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
 
       const [txnsRes, expsRes] = await Promise.all([
         container.finances.getTransactions(businessId),

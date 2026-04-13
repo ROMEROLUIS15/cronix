@@ -10,7 +10,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths } from 'date-fns'
-import { getContainer } from '@/lib/container'
+import { getBrowserContainer } from '@/lib/browser-container'
 import {
   notificationForAppointmentConfirmed,
   notificationForAppointmentCancelled,
@@ -84,7 +84,7 @@ export function useDashboardData({
     queryKey: ['appointments', businessId, rangeStart, rangeEnd],
     queryFn: async () => {
       if (!businessId) return []
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.appointments.getMonthAppointments(businessId, rangeStart, rangeEnd)
       if (result.error) throw new Error(result.error)
       return result.data ?? []
@@ -100,7 +100,7 @@ export function useDashboardData({
       if (!businessId) return { todayCount: 0, totalClients: 0, monthRevenue: 0, pending: 0 }
       const todayStr = format(new Date(), 'yyyy-MM-dd')
       const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd')
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.appointments.getDashboardStats(businessId, todayStr, monthStart)
       if (result.error) throw new Error(result.error)
       return result.data ?? { todayCount: 0, totalClients: 0, monthRevenue: 0, pending: 0 }
@@ -115,7 +115,7 @@ export function useDashboardData({
     queryKey: ['has-services', businessId],
     queryFn: async () => {
       if (!businessId) return false
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.services.hasAny(businessId)
       if (result.error) throw new Error(result.error)
       return result.data ?? false
@@ -148,7 +148,7 @@ export function useDashboardData({
   const updateStatusMutation = useMutation({
     mutationFn: async ({ appointmentId, status }: { appointmentId: string; status: string }) => {
       if (!businessId) throw new Error('No business ID')
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.appointments.updateStatus(appointmentId, status, businessId)
       if (result.error) throw new Error(result.error)
       return { appointmentId, status }
@@ -187,7 +187,7 @@ export function useDashboardData({
           selectedApt.service?.name ?? 'servicio',
           new Date(selectedApt.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
         )
-        const container = await getContainer()
+        const container = getBrowserContainer()
         void container.notifications.create(payload)
           .catch((err: Error) => logger.error('dashboard', `Failed to create confirmation notification: ${err.message}`))
       } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
@@ -196,7 +196,7 @@ export function useDashboardData({
           selectedApt.client?.name ?? 'cliente',
           selectedApt.service?.name ?? 'servicio',
         )
-        const container = await getContainer()
+        const container = getBrowserContainer()
         void container.notifications.create(payload)
           .catch((err: Error) => logger.error('dashboard', `Failed to create cancellation notification: ${err.message}`))
       }
@@ -216,7 +216,7 @@ export function useDashboardData({
     setDeletingId(id)
     try {
       if (!businessId) throw new Error('No business ID')
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.appointments.updateStatus(id, 'cancelled', businessId)
       if (result.error) throw new Error(result.error)
       setConfirmDelete(null)
@@ -232,7 +232,7 @@ export function useDashboardData({
     setUpdatingStatus(true)
     try {
       if (!businessId) throw new Error('No business ID')
-      const container = await getContainer()
+      const container = getBrowserContainer()
       const result = await container.appointments.updateStatus(aptId, 'confirmed', businessId)
       if (result.error) logger.error('dashboard', `Quick confirm failed: ${result.error}`)
     } finally {

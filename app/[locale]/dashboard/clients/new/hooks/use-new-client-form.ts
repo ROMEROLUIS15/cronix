@@ -1,17 +1,9 @@
-/**
- * use-new-client-form — Extracts form state and creation logic for the
- * new client page.
- *
- * Uses getContainer() from @/lib/container instead of getRepos(supabase).
- */
-
 'use client';
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
-import { getContainer } from '@/lib/container';
-import { notificationForNewClient } from '@/lib/use-cases/notifications.use-case';
+import { createNewClient } from '@/app/[locale]/dashboard/clients/actions';
 import type { Country } from '@/components/ui/phone-input-flags';
 
 export interface NewClientForm {
@@ -30,7 +22,7 @@ export interface UseNewClientFormReturn {
 }
 
 export function useNewClientForm(
-  selectedCountry: Country,
+  _selectedCountry: Country,
   selectedTags: string[],
 ): UseNewClientFormReturn {
   const router = useRouter();
@@ -50,58 +42,28 @@ export function useNewClientForm(
         setError('No se pudo identificar el negocio. Recarga la página.');
         return;
       }
-      setSaving(true);
-      setError(null);
-
-      // Check duplicate phone
-      if (fullPhone) {
-        const container = await getContainer();
-        const { clients: clientsRepo } = container;
-        // Use raw Supabase check for duplicate (repository doesn't expose this)
-        const { createClient } = await import('@/lib/supabase/server');
-        const supabase = await createClient();
-        const { data: existing } = await supabase
-          .from('clients')
-          .select('id, name')
-          .eq('business_id', businessId)
-          .eq('phone', fullPhone)
-          .is('deleted_at', null)
-          .maybeSingle();
-
-        if (existing) {
-          setSaving(false);
-          setError(`El número ya está registrado para el cliente "${existing.name}".`);
-          return;
-        }
-      }
-
       if (!fullPhone) {
-        setSaving(false);
         setError('Número de teléfono inválido.');
         return;
       }
 
-      const container = await getContainer();
-      const result = await container.clients.insert({
-        business_id: businessId,
+      setSaving(true);
+      setError(null);
+
+      const result = await createNewClient({
+        businessId,
         name: form.name.trim(),
         phone: fullPhone,
         email: form.email.trim() || undefined,
+        tags: selectedTags,
       });
 
       setSaving(false);
+
       if (result.error) {
-        setError('Error al crear el cliente: ' + result.error);
+        setError(result.error);
         return;
       }
-
-      // In-app notification for new client
-      const notifPayload = notificationForNewClient(
-        businessId,
-        form.name.trim(),
-        fullPhone ?? undefined,
-      );
-      container.notifications.create(notifPayload).catch(() => null);
 
       router.push('/dashboard/clients');
       router.refresh();

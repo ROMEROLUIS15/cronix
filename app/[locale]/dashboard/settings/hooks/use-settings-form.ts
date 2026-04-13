@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Business, BusinessSettingsJson } from '@/types';
 import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 
@@ -117,7 +117,7 @@ export function useSettingsForm(): SettingsFormReturn {
       return;
     }
     async function load() {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.businesses.getById(bizId!);
 
       if (!result.error && result.data) {
@@ -167,7 +167,7 @@ export function useSettingsForm(): SettingsFormReturn {
     setSaving(true);
 
     const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
-    const container = await getContainer();
+    const container = getBrowserContainer();
 
     const result = await container.businesses.update(bizId, {
       name: form.name.trim(),
@@ -191,7 +191,7 @@ export function useSettingsForm(): SettingsFormReturn {
       workingHours[key] = h.active ? [h.open, h.close] : null;
     }
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const container = await getContainer();
+    const container = getBrowserContainer();
 
     const result = await container.businesses.updateSettings(bizId, { ...currentSettings, workingHours });
 
@@ -215,7 +215,7 @@ export function useSettingsForm(): SettingsFormReturn {
     if (!bizId || !biz) return;
     setSavingNotif(true);
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const container = await getContainer();
+    const container = getBrowserContainer();
 
     const result = await container.businesses.updateSettings(bizId, {
       ...currentSettings,
@@ -246,7 +246,7 @@ export function useSettingsForm(): SettingsFormReturn {
       if (!bizId || !biz) return;
       setShowLuisFab(newVal);
       const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-      const container = await getContainer();
+      const container = getBrowserContainer();
 
       const result = await container.businesses.updateSettings(bizId, {
         ...currentSettings,
@@ -291,7 +291,7 @@ export function useSettingsForm(): SettingsFormReturn {
       .slice(0, 20);
     const suffix = Math.random().toString(36).slice(2, 8);
     const newSlug = base ? `${base}-${suffix}` : suffix;
-    const container = await getContainer();
+    const container = getBrowserContainer();
     const result = await container.businesses.update(bizId, { slug: newSlug });
 
     if (!result.error)

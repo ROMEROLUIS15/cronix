@@ -10,7 +10,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { useContactPicker } from '@/lib/hooks/use-contact-picker';
 
@@ -91,7 +91,7 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
       return;
     }
     async function load() {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const clientResult = await container.clients.getById(clientId, businessId!);
       const client = clientResult.data;
       if (!client) return router.push('/dashboard/clients');

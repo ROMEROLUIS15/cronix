@@ -9,7 +9,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { Service } from '@/types';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import {
   DEFAULT_SERVICE_COLOR,
@@ -76,7 +76,7 @@ export function useServiceManager(): UseServiceManagerReturn {
   // Data loading — uses container pattern
   const loadServices = useCallback(async (bId: string) => {
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.services.getAll(bId);
 
       if (!result.error) {
@@ -133,7 +133,7 @@ export function useServiceManager(): UseServiceManagerReturn {
       is_active: form.is_active,
     };
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       let result;
 
       if (editingId) {
@@ -161,7 +161,7 @@ export function useServiceManager(): UseServiceManagerReturn {
     if (!businessId) return;
     setDeletingId(id);
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.services.delete(id, businessId);
 
       if (result.error) throw new Error(result.error);
@@ -178,7 +178,7 @@ export function useServiceManager(): UseServiceManagerReturn {
   const toggleActive = useCallback(async (s: Service) => {
     if (!businessId) return;
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.services.toggleActive(s.id, s.is_active ?? true);
 
       if (result.error) throw new Error(result.error);

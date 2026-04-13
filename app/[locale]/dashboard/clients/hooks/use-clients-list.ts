@@ -8,7 +8,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { Client } from '@/types';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 
 export interface UseClientsListReturn {
@@ -23,7 +23,7 @@ export function useClientsList(): UseClientsListReturn {
 
   const loadClients = useCallback(async (bId: string) => {
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.clients.getAll(bId);
       setClients(result.data ?? []);
     } catch {

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getContainer } from '@/lib/container'
+import { getBrowserContainer } from '@/lib/browser-container'
 import { notifyOwner } from '@/lib/services/push-notify.service'
 import { parseVoiceCommand } from '@/lib/actions/voice-assistant'
 import { notificationForAppointmentCreated } from '@/lib/use-cases/notifications.use-case'
@@ -146,7 +146,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     async function init() {
       try {
         setFetchError(null)
-        const container = await getContainer()
+        const container = getBrowserContainer()
 
         const [clientsRes, servicesRes, membersRes, bizRes] = await Promise.all([
           container.clients.getAll(businessId!),
@@ -185,7 +185,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
       return { slotBlocked: false, bookingLevel: 'allowed' as DoubleBookingLevel, bookingMsg: '' }
     }
 
-    const container = await getContainer()
+    const container = getBrowserContainer()
 
     const selectedSvcs = services.filter(s => form.service_ids.includes(s.id))
     const duration     = selectedSvcs.reduce((sum, s) => sum + s.duration_min, 0) || 30
@@ -327,7 +327,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
-    const container = await getContainer()
+    const container = getBrowserContainer()
 
     let newApt: { id: string } | null = null
     const result = await container.appointments.create({

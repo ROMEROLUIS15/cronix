@@ -8,7 +8,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 
 export interface ProfileUser {
@@ -44,7 +44,7 @@ export function useProfileForm(): ProfileFormReturn {
   // Data loading — uses container pattern
   useEffect(() => {
     async function loadUser() {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
         const result = await container.users.getUserProfile(authUser.id);
@@ -91,7 +91,7 @@ export function useProfileForm(): ProfileFormReturn {
     }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-    const container = await getContainer();
+    const container = getBrowserContainer();
     await container.users.updateAvatar(user.id, publicUrl);
     setUploadingPhoto(false);
     setAvatarUrl(publicUrl + '?t=' + Date.now());
@@ -105,7 +105,7 @@ export function useProfileForm(): ProfileFormReturn {
     if (pathMatch?.[1]) {
       await supabase.storage.from('avatars').remove([pathMatch[1]]);
     }
-    const container = await getContainer();
+    const container = getBrowserContainer();
     await container.users.updateAvatar(user.id, null);
     setUploadingPhoto(false);
     setAvatarUrl(null);

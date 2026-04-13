@@ -8,7 +8,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case';
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types';
@@ -48,7 +48,7 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     const dateStr = format(date, 'yyyy-MM-dd');
 
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.appointments.getDayAppointments(businessId, dateStr);
       setAppointments(result.error ? [] : result.data ?? []);
     } catch {
@@ -82,7 +82,7 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     if (!businessId) return;
     setResolvingId(aptId);
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.appointments.updateStatus(aptId, resolution, businessId);
       if (!result.error) {
         setAppointments(prev =>

@@ -8,7 +8,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import type { TransactionRow } from '@/types';
 
@@ -32,7 +32,7 @@ export function useTransactionsList(): UseTransactionsListReturn {
     if (!businessId) return;
 
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.finances.getTransactions(businessId);
 
       if (result.error) throw new Error(result.error);

@@ -10,7 +10,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
-import { getContainer } from '@/lib/container';
+import { getBrowserContainer } from '@/lib/browser-container';
 import type { ExpenseCategory } from '@/types';
 
 export interface NewExpenseForm {
@@ -56,7 +56,7 @@ export function useNewExpenseForm(): UseNewExpenseFormReturn {
     setMsg(null);
 
     try {
-      const container = await getContainer();
+      const container = getBrowserContainer();
       const result = await container.finances.createExpense({
         business_id: businessId!,
         category: form.category,
