@@ -178,4 +178,27 @@ export class SupabaseUserRepository implements IUserRepository {
       role: (row.role ?? 'employee') as string
     })))
   }
+
+  async updateProfile(
+    userId: string,
+    payload: { name: string; phone: string | null }
+  ): Promise<Result<void>> {
+    const { error } = await this.supabase
+      .from('users')
+      .update({ name: payload.name, phone: payload.phone })
+      .eq('id', userId)
+
+    if (error) return fail(`Error updating profile: ${error.message}`)
+    return ok(undefined)
+  }
+
+  async updateAvatar(userId: string, avatarUrl: string | null): Promise<Result<void>> {
+    const { error } = await this.supabase
+      .from('users')
+      .update({ avatar_url: avatarUrl })
+      .eq('id', userId)
+
+    if (error) return fail(`Error updating avatar: ${error.message}`)
+    return ok(undefined)
+  }
 }

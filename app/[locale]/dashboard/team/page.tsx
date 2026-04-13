@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
 import {
   Plus,
   Pencil,
@@ -19,156 +18,39 @@ import {
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { PhoneInputFlags } from '@/components/ui/phone-input-flags'
 import { useTranslations } from 'next-intl'
-import { getRepos } from '@/lib/repositories'
+import { useTeamManager } from './hooks/use-team-manager'
+import { COLORS } from './hooks/use-team-manager'
 import type { TeamMember } from '@/lib/domain/repositories/IUserRepository'
-import {
-  PhoneInputFlags,
-  parsePhone,
-  buildPhone,
-  type Country,
-  COUNTRIES,
-} from '@/components/ui/phone-input-flags'
-import {
-  createEmployeeAction,
-  updateEmployeeAction,
-  toggleEmployeeActiveAction,
-  deleteEmployeeAction,
-} from './actions'
-
-// ── Form state ──────────────────────────────────────────────────────────────
-
-interface EmployeeForm {
-  name:       string
-  email:      string
-  country:    Country
-  localPhone: string
-  color:      string
-}
-
-const COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
-  '#10b981', '#3b82f6', '#ef4444', '#14b8a6',
-]
-
-const emptyForm = (): EmployeeForm => ({
-  name:       '',
-  email:      '',
-  country:    COUNTRIES[0] as Country,
-  localPhone: '',
-  color:      '#6366f1',
-})
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function TeamPage() {
-  const { supabase, businessId, userRole, loading: contextLoading } = useBusinessContext()
+  const {
+    employees,
+    owner,
+    loading,
+    isOwner,
+    showForm,
+    setShowForm,
+    editingId,
+    form,
+    setForm,
+    deletingId,
+    saving,
+    msg,
+    openNew,
+    openEdit,
+    handleSave,
+    handleToggleActive,
+    handleDelete,
+  } = useTeamManager()
   const t = useTranslations('team')
-  const [members, setMembers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<EmployeeForm>(emptyForm())
-  const [saving, setSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  const isOwner = userRole === 'owner' || userRole === 'platform_admin'
-
-  const loadMembers = useCallback(async (bId: string) => {
-    const { users: usersRepoInstance } = getRepos(supabase)
-    const result = await usersRepoInstance.getTeamMembers(bId)
-    setMembers(result.error ? [] : result.data as any)
-    setLoading(false)
-  }, [supabase])
-
-  useEffect(() => {
-    if (businessId) loadMembers(businessId)
-    else if (!contextLoading) setLoading(false)
-  }, [businessId, contextLoading, loadMembers])
-
-  const showMsg = (type: 'success' | 'error', text: string) => {
-    setMsg({ type, text })
-    setTimeout(() => setMsg(null), 4000)
-  }
-
-  const openNew = () => {
-    setForm(emptyForm())
-    setEditingId(null)
-    setShowForm(true)
-  }
-
-  const openEdit = (m: TeamMember) => {
-    const { country, local } = parsePhone(m.phone)
-    setForm({
-      name:       m.name,
-      email:      m.email ?? '',
-      country,
-      localPhone: local,
-      color:      m.color ?? '#6366f1',
-    })
-    setEditingId(m.id)
-    setShowForm(true)
-  }
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !businessId) return showMsg('error', t('errNameReq'))
-    setSaving(true)
-
-    const payload = {
-      name:  form.name.trim(),
-      email: form.email.trim() || null,
-      phone: buildPhone(form.country, form.localPhone),
-      color: form.color,
-    }
-
-    if (editingId) {
-      await updateEmployeeAction({ employeeId: editingId, ...payload })
-        .then(() => {
-          showMsg('success', t('toastUpdated'))
-          setShowForm(false)
-          loadMembers(businessId)
-        })
-        .catch((err: Error) => showMsg('error', err.message))
-    } else {
-      await createEmployeeAction(payload)
-        .then(() => {
-          showMsg('success', t('toastAdded'))
-          setShowForm(false)
-          loadMembers(businessId)
-        })
-        .catch((err: Error) => showMsg('error', err.message))
-    }
-
-    setSaving(false)
-  }
-
-  const handleToggleActive = async (m: TeamMember) => {
-    if (!businessId) return
-    await toggleEmployeeActiveAction({
-      employeeId: m.id,
-      currentlyActive: m.is_active ?? true,
-    })
-      .then(() => loadMembers(businessId))
-      .catch((err: Error) => showMsg('error', err.message))
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!businessId) return
-    setDeletingId(id)
-    await deleteEmployeeAction({ employeeId: id })
-      .then(() => {
-        showMsg('success', t('toastDeleted'))
-        loadMembers(businessId)
-      })
-      .catch((err: Error) => showMsg('error', err.message))
-    setDeletingId(null)
-  }
 
   // ── Access guard ────────────────────────────────────────────────────────
 
-  if (!contextLoading && !isOwner) {
+  if (!loading && !isOwner) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Card className="text-center py-12 px-6 max-w-sm">
@@ -192,9 +74,6 @@ export default function TeamPage() {
     )
   }
 
-  const employees = members.filter(m => m.role === 'employee')
-  const owner = members.find(m => m.role === 'owner')
-
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl w-full overflow-x-hidden">
       {/* Header */}
@@ -205,7 +84,7 @@ export default function TeamPage() {
           </h1>
           <p className="text-sm" style={{ color: '#909098' }}>
             {employees.length === 0
-              ? t('subtitleOnlyYou')
+              ? t('subtitleOnlyOwner')
               : t('subtitleMembers', { count: employees.length })}
           </p>
         </div>

@@ -1,148 +1,30 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, UserPen, ChevronDown, Mail,
+  ArrowLeft, UserPen, Mail,
   Tag, FileText, Save, AlertCircle, CheckCircle2, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
-import { PhoneInputFlags, parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
-import { useContactPicker } from '@/lib/hooks/use-contact-picker'
+import { PhoneInputFlags, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
 import { useTranslations } from 'next-intl'
+import { useClientEditForm } from './hooks/use-client-edit-form'
 
 const TAG_OPTIONS = ['VIP', 'Frecuente', 'Nuevo'] as const
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ClientEditPage() {
-  const router          = useRouter()
   const { id: clientId } = useParams<{ id: string }>()
-  const t               = useTranslations('clients.form')
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
+  const t = useTranslations('clients.form')
 
-  const [loading,        setLoading]        = useState(true)
-  const [saving,         setSaving]         = useState(false)
-  const [deleting,       setDeleting]       = useState(false)
-  const [confirmDelete,  setConfirmDelete]  = useState(false)
-  const [legacyPhone,    setLegacyPhone]    = useState(false)
-  const [msg,            setMsg]            = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  const [form, setForm] = useState({
-    name:       '',
-    phoneLocal: '',
-    email:      '',
-    notes:      '',
-    tags:       [] as string[],
-  })
-
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country)
-
-  const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
-    ({ name, phoneLocal, country }) => {
-      setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
-      setSelectedCountry(country);
-    }
-  );
-
-  useEffect(() => {
-    if (!businessId) {
-      if (!contextLoading) router.push('/dashboard/setup')
-      return
-    }
-    async function load() {
-      const repos = getRepos(supabase)
-      const clientResult = await repos.clients.getById(clientId, businessId!)
-      const client = clientResult.data
-      if (!client) return router.push('/dashboard/clients')
-
-      setLegacyPhone(!isE164Phone(client.phone))
-      const { country, local } = parsePhone(client.phone ?? '')
-      setSelectedCountry(country)
-      setForm({
-        name:       client.name      ?? '',
-        phoneLocal: local,
-        email:      client.email     ?? '',
-        notes:      client.notes     ?? '',
-        tags:       client.tags      ?? [],
-      })
-      setLoading(false)
-    }
-    load()
-  }, [supabase, businessId, contextLoading, clientId, router])
-
-  const showMsg = (type: 'success' | 'error', text: string) => {
-    setMsg({ type, text })
-    setTimeout(() => setMsg(null), 4000)
-  }
-
-  const toggleTag = (tag: string) =>
-    setForm(prev => ({
-      ...prev,
-      tags: prev.tags.includes(tag)
-        ? prev.tags.filter(t => t !== tag)
-        : [...prev.tags, tag],
-    }))
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return showMsg('error', 'El nombre es obligatorio.')
-    if (!businessId) return
-    setSaving(true)
-
-    const fullPhone = buildPhone(selectedCountry, form.phoneLocal)
-
-    // Verificar teléfono duplicado (excluir el cliente actual)
-    if (fullPhone) {
-      const { data: existing } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('business_id', businessId)
-        .eq('phone', fullPhone)
-        .is('deleted_at', null)
-        .neq('id', clientId)
-        .maybeSingle()
-
-      if (existing) {
-        setSaving(false)
-        return showMsg('error', `El número ya está registrado para el cliente "${existing.name}".`)
-      }
-    }
-
-    const { error } = await supabase
-      .from('clients')
-      .update({
-        name:       form.name.trim(),
-        phone:      fullPhone,
-        email:      form.email.trim()    || null,
-        notes:      form.notes.trim()    || null,
-        tags:       form.tags.length > 0 ? form.tags : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', clientId)
-      .eq('business_id', businessId)
-
-    setSaving(false)
-    if (error) return showMsg('error', 'Error al guardar: ' + error.message)
-    setLegacyPhone(false)
-    showMsg('success', 'Cliente actualizado correctamente')
-    setTimeout(() => router.push(`/dashboard/clients/${clientId}`), 1200)
-  }
-
-  const handleDelete = async () => {
-    if (!businessId) return
-    setDeleting(true)
-    const { error } = await supabase
-      .from('clients')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', clientId)
-      .eq('business_id', businessId)
-
-    setDeleting(false)
-    if (error) return showMsg('error', 'Error al eliminar: ' + error.message)
-    router.push('/dashboard/clients')
-  }
+  const {
+    loading, saving, deleting, confirmDelete, setConfirmDelete,
+    legacyPhone, form, setForm, selectedCountry, setSelectedCountry,
+    msg, handleSave, handleDelete, toggleTag,
+    pickContact, cpSupported, cpLoading,
+  } = useClientEditForm(clientId)
 
   if (loading) {
     return (

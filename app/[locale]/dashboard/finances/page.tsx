@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 import {
   TrendingUp, TrendingDown, DollarSign, CreditCard,
-  Receipt, Plus, ArrowRight, Loader2,
+  Receipt, Plus, ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import { StatCard, Card } from '@/components/ui/card'
@@ -12,68 +12,14 @@ import {
   formatCurrency, formatDate,
   paymentMethodLabels, expenseCategoryLabels,
 } from '@/lib/utils'
-import type { TransactionRow, ExpenseRow, PaymentMethod, ExpenseCategory } from '@/types'
+import type { PaymentMethod, ExpenseCategory } from '@/types'
 import { useTranslations } from 'next-intl'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
+import { useFinancesDashboard } from './hooks/use-finances-dashboard'
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function FinancesPage() {
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const t = useTranslations('finances')
-
-  const [loading,            setLoading]            = useState(true)
-  const [fetchError,         setFetchError]         = useState<string | null>(null)
-  const [summary,            setSummary]            = useState({ totalRevenue: 0, totalExpenses: 0, netProfit: 0 })
-  const [recentTransactions, setRecentTransactions] = useState<TransactionRow[]>([])
-  const [recentExpenses,     setRecentExpenses]     = useState<ExpenseRow[]>([])
-
-  useEffect(() => {
-    if (!businessId) {
-      if (!contextLoading) setLoading(false)
-      return
-    }
-
-    async function loadData() {
-      try {
-        const { finances: financesRepoInstance } = getRepos(supabase)
-        
-        const [txnsRes, expsRes] = await Promise.all([
-          financesRepoInstance.getTransactions(businessId!),
-          financesRepoInstance.getExpenses(businessId!),
-        ])
-
-        if (txnsRes.error) throw new Error(txnsRes.error)
-        if (expsRes.error) throw new Error(expsRes.error)
-
-        const txns = txnsRes.data ?? []
-        const exps = expsRes.data ?? []
-
-        // Filter to current month
-        const startOfMonth = new Date(
-          new Date().getFullYear(),
-          new Date().getMonth(),
-          1,
-        ).toISOString()
-
-        const monthTxns = txns.filter(t => (t.paid_at ?? '') >= startOfMonth)
-        const monthExps = exps.filter(e => (e.expense_date ?? '') >= startOfMonth)
-
-        const totalRevenue  = monthTxns.reduce((acc, t) => acc + (t.net_amount ?? 0), 0)
-        const totalExpenses = monthExps.reduce((acc, e) => acc + (e.amount     ?? 0), 0)
-
-        setRecentTransactions(monthTxns.slice(0, 5))
-        setRecentExpenses(monthExps.slice(0, 5))
-        setSummary({ totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses })
-        setFetchError(null)
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : t('errorLoading'))
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadData()
-  }, [supabase, businessId, contextLoading, t])
+  const { summary, recentTransactions, recentExpenses, loading, fetchError, marginPct, expensePct } = useFinancesDashboard()
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
@@ -92,14 +38,6 @@ export default function FinancesPage() {
       </div>
     )
   }
-
-  const marginPct = summary.totalRevenue > 0
-    ? Math.round((summary.netProfit / summary.totalRevenue) * 100)
-    : 0
-
-  const expensePct = summary.totalRevenue > 0
-    ? Math.min((summary.totalExpenses / summary.totalRevenue) * 100, 100)
-    : 0
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

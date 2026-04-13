@@ -1,51 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft, DollarSign, Search, Plus, Loader2 } from 'lucide-react'
+import { Loader2, ArrowLeft, DollarSign, Search, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatCurrency, formatDate, paymentMethodLabels } from '@/lib/utils'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
 import { useTranslations } from 'next-intl'
-import type { TransactionRow } from '@/types'
+import { useTransactionsList } from './hooks/use-transactions-list'
 
 export default function TransactionsPage() {
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
   const t = useTranslations('finances.transactionsPage')
-  const [query, setQuery] = useState('')
-  const [transactions, setTransactions] = useState<TransactionRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!businessId) {
-      if (!contextLoading) setLoading(false)
-      return
-    }
-    async function loadTransactions() {
-      try {
-        const { finances: financesRepoInstance } = getRepos(supabase)
-        const result = await financesRepoInstance.getTransactions(businessId!)
-        
-        if (result.error) throw new Error(result.error)
-
-        setTransactions(result.data ?? [])
-        setFetchError(null)
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'No se pudieron cargar los cobros')
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadTransactions()
-  }, [supabase, businessId, contextLoading])
-
-  const filtered = transactions.filter((t) =>
-    (t.notes ?? '').toLowerCase().includes(query.toLowerCase()) ||
-    String(t.method || '').toLowerCase().includes(query.toLowerCase())
-  )
+  const { filtered, loading, fetchError, query, setQuery } = useTransactionsList()
 
   if (loading) {
     return (
@@ -73,7 +38,7 @@ export default function TransactionsPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Historial de Cobros</h1>
-            <p className="text-muted-foreground text-sm">{transactions.length} ingresos registrados</p>
+            <p className="text-muted-foreground text-sm">{filtered.length} ingresos registrados</p>
           </div>
         </div>
         <Link href="/dashboard/finances/new">

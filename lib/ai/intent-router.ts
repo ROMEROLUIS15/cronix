@@ -86,6 +86,44 @@ function wordSimilarity(a: string, b: string): number {
   return 1 - dist / Math.max(a.length, b.length, 1)
 }
 
+// ── Timezone-aware date helpers ────────────────────────────────────────────────
+// All date arithmetic uses the USER'S local date, not the UTC server date.
+// A user in UTC-4 at 11 PM: server thinks it's tomorrow, user thinks it's today.
+// Using Intl.DateTimeFormat with 'en-CA' locale produces the YYYY-MM-DD format
+// natively without any string manipulation.
+
+/**
+ * Returns today's date in the given IANA timezone as 'YYYY-MM-DD'.
+ * Falls back to UTC on invalid timezone.
+ */
+function localDateStr(timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year:     'numeric',
+      month:    '2-digit',
+      day:      '2-digit',
+    }).format(new Date())
+  } catch {
+    return new Date().toISOString().split('T')[0]!
+  }
+}
+
+/**
+ * Adds `days` to an ISO date string (YYYY-MM-DD) and returns the result.
+ * Pure date arithmetic — no timezone conversion needed after the initial local date is obtained.
+ */
+function addDaysToIso(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(y!, m! - 1, d!)
+  date.setDate(date.getDate() + days)
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 // ── Intent pattern table ───────────────────────────────────────────────────────
 // Orden importa: más específico → más general.
 // Cada entrada puede tener múltiples keywords; basta con que UNO haga match.
@@ -110,12 +148,8 @@ const INTENT_PATTERNS: Array<{
       'citas para manana',
       'quien viene manana',
     ],
-    // Compute tomorrow's date at route time so the fast-path handler has a valid `date` arg
-    get args() {
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      return { date: tomorrow.toISOString().split('T')[0] }
-    },
+    // args.date is intentionally absent here — routeIntent computes it from the
+    // user's timezone so "mañana" means the correct calendar day for their location.
   },
 
   // ─ Resumen del día ──────────────────────────────────────────────────────────
@@ -265,7 +299,12 @@ const NUMERIC_DAY_PATTERNS: RegExp[] = [
   /\bdia\s+(\d{1,2})\b/,             // "dia 16" (looser — last resort)
 ]
 
-function extractNumericDate(normalized: string): string | null {
+/**
+ * Extracts a specific day number from the query and resolves it to an ISO date.
+ * @param normalized  - norm(userText)
+ * @param todayIso    - User's local today as 'YYYY-MM-DD' (from localDateStr)
+ */
+function extractNumericDate(normalized: string, todayIso: string): string | null {
   // Require appointment context to avoid false positives
   if (!APPOINTMENT_CONTEXT_SIGNALS.some(s => normalized.includes(s))) return null
 
@@ -279,25 +318,26 @@ function extractNumericDate(normalized: string): string | null {
   }
   if (dayNum === null) return null
 
-  // Check for explicit month name ("el 16 de abril", "citas del 20 de mayo")
-  const now    = new Date()
-  let year     = now.getFullYear()
-  let month    = now.getMonth() + 1  // 1-based
+  // Parse user's local today
+  const [ty, tm, td] = todayIso.split('-').map(Number)
+  let year  = ty!
+  let month = tm!
+  const todayDay = td!
 
+  // Check for explicit month name ("el 16 de abril", "citas del 20 de mayo")
   for (const [name, num] of Object.entries(MONTH_MAP)) {
     if (normalized.includes(name)) {
       month = num
-      // If the named month is earlier than the current month, it must be next year
-      if (num < now.getMonth() + 1) year++
+      // If the named month is earlier than the current local month, assume next year
+      if (num < tm!) year++
       break
     }
   }
 
-  // No explicit month — resolve by comparing day against today
+  // No explicit month — roll to next month if the day has already passed locally
   const monthExplicit = Object.keys(MONTH_MAP).some(m => normalized.includes(m))
-  if (!monthExplicit && dayNum < now.getDate()) {
-    // Day has already passed this month → roll to next month
-    month = now.getMonth() + 2
+  if (!monthExplicit && dayNum < todayDay) {
+    month++
     if (month > 12) { month = 1; year++ }
   }
 
@@ -366,8 +406,11 @@ const NUMERIC_DATE_RE = /\b(el\s+dia\s+\d+|para\s+el\s+\d+|del\s+dia\s+\d+|el\s+
 // Tools whose data scope is strictly TODAY — must not fire on future-date queries
 const TODAY_ONLY_TOOLS = new Set(['get_today_summary', 'get_upcoming_gaps'])
 
-export function routeIntent(userText: string, userId?: string): RouterResult {
-  const normalized = norm(userText)
+export function routeIntent(userText: string, userId?: string, userTimezone?: string): RouterResult {
+  const normalized  = norm(userText)
+  const timezone    = userTimezone ?? 'UTC'
+  const todayIso    = localDateStr(timezone)
+  const tomorrowIso = addDaysToIso(todayIso, 1)
 
   // Guard: queries muy cortas son ambiguas — dejar al LLM razonar
   if (normalized.length < 8) {
@@ -398,9 +441,38 @@ export function routeIntent(userText: string, userId?: string): RouterResult {
     FUTURE_DATE_SIGNALS.some(sig => normalized.includes(norm(sig))) ||
     NUMERIC_DATE_RE.test(normalized)
 
+  // ── Layer 0: Numeric date fast-path ───────────────────────────────────────
+  // "citas para el día 16", "qué hay el 20", "agenda del 5 de mayo"
+  // Date is resolved HERE from the user's local timezone — never delegated to the LLM.
+  const specificDate = extractNumericDate(normalized, todayIso)
+  if (specificDate) {
+    logger.info('AI-ROUTER', '[numeric-date] Intent matched: get_appointments_by_date', {
+      userId,
+      query:    normalized.slice(0, 60),
+      date:     specificDate,
+      timezone,
+    })
+    return {
+      matched:   true,
+      matchType: 'exact',
+      intent:    { toolName: 'get_appointments_by_date', args: { date: specificDate } },
+    }
+  }
+
+  // ── Helper: resolve args for get_appointments_by_date ─────────────────────
+  // The "mañana" pattern has no pre-computed args — we inject the timezone-correct
+  // tomorrow here so "mañana" always means the right calendar day regardless of
+  // whether the server is in a different UTC offset than the user.
+  function resolveArgs(pattern: (typeof INTENT_PATTERNS)[number]): Record<string, unknown> {
+    if (pattern.toolName === 'get_appointments_by_date' && !pattern.args) {
+      const isTomorrow = pattern.keywords.some(kw => normalized.includes(norm(kw)) && kw.includes('manana'))
+      if (isTomorrow) return { date: tomorrowIso }
+    }
+    return pattern.args ?? {}
+  }
+
   // ── Layer 1: Exact substring match ────────────────────────────────────────
   for (const pattern of INTENT_PATTERNS) {
-    // Skip today-only tools when the query references a future date
     if (hasFutureDate && TODAY_ONLY_TOOLS.has(pattern.toolName)) continue
 
     const hasExact = pattern.keywords.some(kw => normalized.includes(norm(kw)))
@@ -413,18 +485,13 @@ export function routeIntent(userText: string, userId?: string): RouterResult {
       return {
         matched:   true,
         matchType: 'exact',
-        intent: {
-          toolName: pattern.toolName,
-          args:     pattern.args ?? {},
-        },
+        intent:    { toolName: pattern.toolName, args: resolveArgs(pattern) },
       }
     }
   }
 
   // ── Layer 2: Fuzzy word-level match ───────────────────────────────────────
-  // Only runs if exact matching failed — avoids redundant work on common queries.
   for (const pattern of INTENT_PATTERNS) {
-    // Skip today-only tools when the query references a future date
     if (hasFutureDate && TODAY_ONLY_TOOLS.has(pattern.toolName)) continue
 
     const hasFuzzy = pattern.keywords.some(kw => fuzzyKeywordMatch(normalized, norm(kw)))
@@ -437,10 +504,7 @@ export function routeIntent(userText: string, userId?: string): RouterResult {
       return {
         matched:   true,
         matchType: 'fuzzy',
-        intent: {
-          toolName: pattern.toolName,
-          args:     pattern.args ?? {},
-        },
+        intent:    { toolName: pattern.toolName, args: resolveArgs(pattern) },
       }
     }
   }

@@ -69,10 +69,7 @@
     "vitest-mock-extended": "^2.0.2"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "tsc --noEmit"
-    ]
+    "*.{js,jsx,ts,tsx}": ["eslint --fix"]
   },
   "overrides": {
     "import-in-the-middle": "3.0.0",

@@ -1,76 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft, DollarSign, Loader2, User } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { ArrowLeft, DollarSign, User } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ClientSelect } from '@/components/ui/client-select'
-import { useBusinessContext } from '@/lib/hooks/use-business-context'
-import { getRepos } from '@/lib/repositories'
-import type { PaymentMethod, Client } from '@/types'
+import type { PaymentMethod } from '@/types'
 import { useTranslations } from 'next-intl'
+import { useNewTransactionForm } from './hooks/use-new-transaction-form'
 
 export default function NewFinancePage() {
-  const router = useRouter()
   const t = useTranslations('finances.cobro')
-  const { supabase, businessId, loading: contextLoading } = useBusinessContext()
-
-  const [form, setForm] = useState({
-    client_id: '',
-    amount:    '',
-    method:    'cash' as PaymentMethod,
-    notes:     '',
-    date:      new Date().toISOString().split('T')[0] as string,
-  })
-  
-  const [clients, setClients] = useState<Client[]>([])
-  const [loadingData, setLoadingData] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  const { clients: clientsRepo, finances: financesRepo } = getRepos(supabase)
-
-  useEffect(() => {
-    if (!businessId) {
-      if (!contextLoading) setLoadingData(false)
-      return
-    }
-    clientsRepo.getAll(businessId).then(res => {
-      setClients(res.error ? [] : res.data as Client[])
-      setLoadingData(false)
-    })
-  }, [businessId, contextLoading, clientsRepo])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!businessId || !form.client_id) {
-      setMsg({ type: 'error', text: t('errorClient') })
-      return
-    }
-    setSaving(true)
-
-    const amount = parseFloat(form.amount)
- 
-    const result = await financesRepo.createTransaction({
-      business_id: businessId,
-      client_id:   form.client_id,
-      amount,
-      net_amount:  amount,
-      method:      form.method,
-      notes:       form.notes.trim() || null,
-      paid_at:     form.date ? new Date(form.date).toISOString() : new Date().toISOString(),
-    })
-
-    setSaving(false)
-    if (result.error) {
-      setMsg({ type: 'error', text: t('errorSave') })
-    } else {
-      router.push('/dashboard/finances')
-      router.refresh()
-    }
-  }
+  const { form, setForm, clients, loadingData, saving, msg, handleSubmit } = useNewTransactionForm()
 
   if (loadingData) {
     return (
@@ -176,7 +118,7 @@ export default function NewFinancePage() {
                   className="input-base"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="notes">
                   {t('notes')}
