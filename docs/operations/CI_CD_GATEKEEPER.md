@@ -63,10 +63,7 @@ If any command fails, the push is cancelled. Fix the error and retry.
 | `unit` | All pushes and PRs on all branches | Unit tests + ESLint |
 | `build` | PRs + pushes to `main` / `develop` | Next.js production build |
 | `integration` | Push only (not draft PRs) | Integration tests AI → DB |
-| `e2e` | Push to `main` only | Playwright (chromium, firefox, webkit) |
-
-> **E2E shows as "skipped" on develop** — this is expected. E2E tests are expensive
-> (~5 min) and only run before production deploys on `main`.
+| `e2e` | Push to `main` or `develop` | Playwright (chromium, firefox, webkit) |
 
 ---
 
