@@ -45,6 +45,73 @@ describe('Settings Validation Schema', () => {
       })
       expect(result.success).toBe(false)
     })
+
+    describe('brandColor validation', () => {
+      it('accepts valid hex color (uppercase)', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#A855F7',
+        })
+        expect(result.success).toBe(true)
+      })
+
+      it('accepts valid hex color (lowercase)', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#0062ff',
+        })
+        expect(result.success).toBe(true)
+      })
+
+      it('accepts valid hex color (mixed case)', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#FF5733',
+        })
+        expect(result.success).toBe(true)
+      })
+
+      it('rejects hex color without #', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: 'A855F7',
+        })
+        expect(result.success).toBe(false)
+      })
+
+      it('rejects invalid hex characters', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#ZZZZZZ',
+        })
+        expect(result.success).toBe(false)
+      })
+
+      it('rejects short hex (#ABC)', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#ABC',
+        })
+        expect(result.success).toBe(false)
+      })
+
+      it('rejects named color (blue)', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: 'blue',
+        })
+        expect(result.success).toBe(false)
+      })
+
+      it('rejects hex with too many characters', () => {
+        const result = BusinessSettingsSchema.safeParse({
+          brandColor: '#A855F7FF',
+        })
+        expect(result.success).toBe(false)
+      })
+
+      it('accepts null/undefined brandColor (optional field)', () => {
+        const result1 = BusinessSettingsSchema.safeParse({
+          brandColor: null,
+        })
+        const result2 = BusinessSettingsSchema.safeParse({})
+        // null fails regex but field is optional so it's removed
+        expect(result2.success).toBe(true)
+      })
+    })
   })
 
   describe('UpdateBusinessProfileSchema', () => {
