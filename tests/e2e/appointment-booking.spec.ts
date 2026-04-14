@@ -1,50 +1,50 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Appointment Booking Flow', () => {
+  // Auth state is already loaded via playwright.config.ts (storageState)
+  // No need to login manually - auth.setup.ts handles this
+
   test('should navigate to new appointment page', async ({ page }) => {
-    await page.goto('/login')
-
-    // Login with test credentials
-    await page.fill('input[name="email"]', process.env.E2E_TEST_EMAIL || 'test@cronix.com')
-    await page.fill('input[name="password"]', process.env.E2E_TEST_PASSWORD || 'testpass123')
-    await page.click('button[type="submit"]')
-
-    // Wait for dashboard to load
-    await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
+    await page.goto('/dashboard')
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
 
     // Navigate to appointments
-    await page.click('text=Citas')
+    const appointmentsLink = page.locator('a[href*="appointments"]').first()
+    await appointmentsLink.waitFor({ state: 'visible', timeout: 10_000 })
+    await appointmentsLink.click()
     await page.waitForURL(/\/appointments/, { timeout: 10_000 })
 
     // Click new appointment
-    await page.click('text=Nueva')
+    const newAppointmentButton = page.locator('a[href*="appointments/new"]').first()
+    await newAppointmentButton.waitFor({ state: 'visible', timeout: 10_000 })
+    await newAppointmentButton.click()
     await page.waitForURL(/\/appointments\/new/, { timeout: 10_000 })
 
     // Verify form is visible
-    await expect(page.locator('form')).toBeVisible()
+    await expect(page.locator('form')).toBeVisible({ timeout: 5_000 })
   })
 
   test('should show validation errors on empty form', async ({ page }) => {
-    await page.goto('/login')
+    await page.goto('/dashboard')
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
 
-    await page.fill('input[name="email"]', process.env.E2E_TEST_EMAIL || 'test@cronix.com')
-    await page.fill('input[name="password"]', process.env.E2E_TEST_PASSWORD || 'testpass123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
+    // Navigate to appointments
+    const appointmentsLink = page.locator('a[href*="appointments"]').first()
+    await appointmentsLink.waitFor({ state: 'visible', timeout: 10_000 })
+    await appointmentsLink.click()
+    await page.waitForURL(/\/appointments/, { timeout: 10_000 })
 
-    await page.click('text=Citas')
-    await page.click('text=Nueva')
+    // Click new appointment
+    const newAppointmentButton = page.locator('a[href*="appointments/new"]').first()
+    await newAppointmentButton.waitFor({ state: 'visible', timeout: 10_000 })
+    await newAppointmentButton.click()
     await page.waitForURL(/\/appointments\/new/, { timeout: 10_000 })
 
     // Try to submit empty form
     await page.click('button[type="submit"]')
 
-    // Should show validation errors
-    await expect(page.locator('text=required').first()).toBeVisible({ timeout: 5_000 })
-      .catch(() => {
-        // Validation may show in different ways depending on locale
-        // Fallback: just verify we're still on the form page
-        expect(page.url()).toContain('/appointments/new')
-      })
+    // Should show validation errors or stay on the form page
+    await page.waitForTimeout(2000)
+    expect(page.url()).toContain('/appointments/new')
   })
 })

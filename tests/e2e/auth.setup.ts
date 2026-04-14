@@ -117,12 +117,23 @@ setup('authenticate as E2E test user', async ({ page, context }) => {
   await page.goto(`${BASE_URL}/dashboard`)
 
   // The middleware should NOT redirect us back to login if the session is valid.
+  // Wait for DOM content to be loaded before checking URL
+  await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
+  
   // We accept any URL that does NOT match /login.
-  await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 20_000 })
+  const currentUrl = page.url()
+  if (currentUrl.includes('/login')) {
+    // Retry navigation - sometimes SSR needs extra time
+    await page.waitForTimeout(2000)
+    await page.goto(`${BASE_URL}/dashboard`)
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
+  }
 
   // Confirm we are on the dashboard or redirected somewhere inside the app
-  const currentUrl = page.url()
-  console.log(`✅ Auth setup: navigated to ${currentUrl}`)
+  const finalUrl = page.url()
+  console.log(`✅ Auth setup: navigated to ${finalUrl}`)
+  
+  expect(finalUrl).not.toContain('/login')
 
   // ── Step 4: Save storageState for reuse ───────────────────────────────────
   await context.storageState({ path: AUTH_FILE })
