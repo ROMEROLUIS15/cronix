@@ -48,7 +48,10 @@ interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
   user?: Pick<User, 'name' | 'role' | 'avatar_url'> | null;
-  business?: Pick<Business, 'name' | 'category'> | null;
+  business?: (Pick<Business, 'name' | 'category'> & {
+    logo_url?:   string | null
+    brandColor?: string | null
+  }) | null;
 }
 
 export function Sidebar({
@@ -97,14 +100,25 @@ export function Sidebar({
             className="flex items-center gap-3 group min-w-0"
           >
             <div className="h-9 w-9 flex-shrink-0 rounded-xl overflow-hidden">
-              <Image
-                src="/cronix-logo.jpg"
-                alt="Cronix"
-                width={36}
-                height={36}
-                className="h-full w-full object-cover"
-                sizes="36px"
-              />
+              {business?.logo_url ? (
+                <Image
+                  src={business.logo_url}
+                  alt={business.name ?? 'Logo'}
+                  width={36}
+                  height={36}
+                  className="h-full w-full object-cover"
+                  sizes="36px"
+                />
+              ) : (
+                <Image
+                  src="/cronix-logo.jpg"
+                  alt="Cronix"
+                  width={36}
+                  height={36}
+                  className="h-full w-full object-cover"
+                  sizes="36px"
+                />
+              )}
             </div>
             <div className="relative h-6 w-24 flex-shrink-0">
               <Image

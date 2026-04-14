@@ -110,7 +110,12 @@ test.describe('Calendar Visual Sync', () => {
     await page.goto('/dashboard/appointments')
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
     
-    // Wait for any dynamic content to load
+    // Wait for React Query to fetch data
+    await page.waitForTimeout(3000)
+    
+    // Sometimes need to reload to get fresh data
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
     // The client name should appear somewhere in the appointments view.
@@ -123,6 +128,11 @@ test.describe('Calendar Visual Sync', () => {
     test.skip(!clientName, 'No test client available')
     
     await page.goto('/dashboard/appointments')
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
+    await page.waitForTimeout(3000)
+    
+    // Reload to ensure fresh data
+    await page.reload()
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 
@@ -146,6 +156,11 @@ test.describe('Calendar Visual Sync', () => {
     test.skip(!clientName, 'No test client available')
     
     await page.goto('/dashboard/appointments')
+    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
+    await page.waitForTimeout(3000)
+    
+    // Reload to ensure fresh data
+    await page.reload()
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
     await page.waitForTimeout(2000)
 

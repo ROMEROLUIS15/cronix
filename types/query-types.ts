@@ -135,4 +135,5 @@ export interface BusinessSettingsJson {
   }
   wa_verified?: boolean
   maxDailyBookingsPerClient?: number
+  brandColor?: string  // hex format, e.g. "#A855F7"
 }
