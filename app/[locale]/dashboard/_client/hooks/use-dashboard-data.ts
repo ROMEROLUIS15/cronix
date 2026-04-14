@@ -15,6 +15,7 @@ import {
   notificationForAppointmentConfirmed,
   notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
+import { notifyOwner } from '@/lib/services/push-notify.service'
 import { logger } from '@/lib/logger'
 import type { AppointmentStatus, AppointmentWithRelations } from '@/types'
 import type { DashboardStats } from '@/app/[locale]/dashboard/_hooks/useDashboard'
@@ -190,6 +191,13 @@ export function useDashboardData({
         const container = getBrowserContainer()
         void container.notifications.create(payload)
           .catch((err: Error) => logger.error('dashboard', `Failed to create confirmation notification: ${err.message}`))
+
+        // Web push notification
+        notifyOwner({
+          title: payload.title,
+          body: payload.content,
+          url: '/dashboard',
+        })
       } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
         const payload = notificationForAppointmentCancelled(
           businessId,
@@ -199,6 +207,13 @@ export function useDashboardData({
         const container = getBrowserContainer()
         void container.notifications.create(payload)
           .catch((err: Error) => logger.error('dashboard', `Failed to create cancellation notification: ${err.message}`))
+
+        // Web push notification
+        notifyOwner({
+          title: payload.title,
+          body: payload.content,
+          url: '/dashboard',
+        })
       }
       onSuccess?.()
     } catch (err: unknown) {
@@ -219,6 +234,26 @@ export function useDashboardData({
       const container = getBrowserContainer()
       const result = await container.appointments.updateStatus(id, 'cancelled', businessId)
       if (result.error) throw new Error(result.error)
+
+      // Create notification for cancellation
+      if (selectedApt) {
+        const payload = notificationForAppointmentCancelled(
+          businessId,
+          selectedApt.client?.name ?? 'cliente',
+          selectedApt.service?.name ?? 'servicio',
+        )
+        const container = getBrowserContainer()
+        void container.notifications.create(payload)
+          .catch((err: Error) => logger.error('dashboard', `Failed to create cancellation notification: ${err.message}`))
+
+        // Web push notification
+        notifyOwner({
+          title: payload.title,
+          body: payload.content,
+          url: '/dashboard',
+        })
+      }
+
       setConfirmDelete(null)
       if (selectedApt?.id === id) onDone?.()
     } catch (err: unknown) {
@@ -233,8 +268,44 @@ export function useDashboardData({
     try {
       if (!businessId) throw new Error('No business ID')
       const container = getBrowserContainer()
+      
+      // Fetch appointment details before confirming
+      const todayStr = new Date().toISOString().split('T')[0]
+      if (!todayStr) return
+      
+      const aptResult = await container.appointments.getMonthAppointments(
+        businessId,
+        todayStr,
+        todayStr,
+      )
+      
+      const apt = aptResult.data?.find(a => a.id === aptId)
+
       const result = await container.appointments.updateStatus(aptId, 'confirmed', businessId)
-      if (result.error) logger.error('dashboard', `Quick confirm failed: ${result.error}`)
+      if (result.error) {
+        logger.error('dashboard', `Quick confirm failed: ${result.error}`)
+        return
+      }
+
+      // Create notification for confirmation
+      if (apt) {
+        const payload = notificationForAppointmentConfirmed(
+          businessId,
+          apt.client?.name ?? 'cliente',
+          apt.service?.name ?? 'servicio',
+          new Date(apt.start_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+        )
+        const container = getBrowserContainer()
+        void container.notifications.create(payload)
+          .catch((err: Error) => logger.error('dashboard', `Failed to create confirmation notification: ${err.message}`))
+
+        // Web push notification
+        notifyOwner({
+          title: payload.title,
+          body: payload.content,
+          url: '/dashboard',
+        })
+      }
     } finally {
       setUpdatingStatus(false)
     }

@@ -75,6 +75,7 @@ export interface BusinessRagContext {
     id:       string
     name:     string
     timezone: string
+    phone:    string | null
     settings: WaBusinessSettings
     slug:     string | null
   }

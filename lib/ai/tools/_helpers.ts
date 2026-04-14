@@ -77,23 +77,46 @@ export async function fireToolNotification(
   }
 
   // Web Push via Edge Function (fire-and-forget)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const cronSecret  = process.env.CRON_SECRET
-  if (!supabaseUrl || !cronSecret) return
-
-  fetch(`${supabaseUrl}/functions/v1/push-notify`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-internal-secret': cronSecret,
-    },
-    body: JSON.stringify({ business_id, title, body: content, url: '/dashboard' }),
-  }).catch((err: unknown) => {
-    logger.warn('TOOL-NOTIFY', 'push-notify fetch failed', {
+  // Try CRON_SECRET first (server-side), fall back to dynamic import if needed
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const cronSecret  = process.env.CRON_SECRET
+    
+    if (supabaseUrl && cronSecret) {
+      // Server-side: direct fetch to Edge Function
+      fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':      'application/json',
+          'x-internal-secret': cronSecret,
+        },
+        body: JSON.stringify({ business_id, title, body: content, url: '/dashboard' }),
+      }).catch((err: unknown) => {
+        logger.warn('TOOL-NOTIFY', 'push-notify fetch failed', {
+          business_id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    } else {
+      // Fallback: use notifyOwner service (client-side or missing secrets)
+      const { notifyOwner } = await import('@/lib/services/push-notify.service')
+      notifyOwner({
+        title,
+        body: content,
+        url: '/dashboard',
+      }).catch((err: Error) => {
+        logger.warn('TOOL-NOTIFY', 'notifyOwner fallback failed', {
+          business_id,
+          error: err.message,
+        })
+      })
+    }
+  } catch (err) {
+    logger.error('TOOL-NOTIFY', 'web push failed', {
       business_id,
       error: err instanceof Error ? err.message : String(err),
     })
-  })
+  }
 }
 
 // ── Date guard ──────────────────────────────────────────────────────────────

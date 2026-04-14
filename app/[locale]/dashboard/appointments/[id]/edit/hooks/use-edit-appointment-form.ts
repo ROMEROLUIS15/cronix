@@ -409,6 +409,14 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
         },
       }
       container.notifications.create(notifPayload).catch(() => null)
+
+      // Web push notification
+      const { notifyOwner } = await import('@/lib/services/push-notify.service')
+      notifyOwner({
+        title: notifPayload.title,
+        body: notifPayload.content,
+        url: '/dashboard',
+      })
     }
 
     setSaving(false)

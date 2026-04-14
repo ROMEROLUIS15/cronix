@@ -258,6 +258,7 @@ export async function handleMessage(req: Request): Promise<Response> {
         id:       business.id,
         name:     business.name,
         timezone,
+        phone:    business.phone ?? null,
         slug:     business.slug ?? null,
         settings: (business.settings ?? {}) as WaBusinessSettings,
       },
