@@ -11,13 +11,19 @@ test.describe('Cronix Smoke Test', () => {
     await expect(page).toHaveTitle(/Cronix/, { timeout: 10_000 });
   });
 
-  test('should load the login page', async ({ page }) => {
+  test('should load the login page', async ({ browser }) => {
+    // Create a fresh context to ensure no auth cookies
+    const context = await browser.newContext({
+      storageState: undefined
+    })
+    const page = await context.newPage()
+    
     // The app uses i18n routing: /login → /es/login
     await page.goto('/login');
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
 
     // Wait a bit for client-side hydration (Next.js App Router)
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
 
     // The login form always has these inputs regardless of locale/translation
     // Using the email input is more reliable than a translated heading text
@@ -27,5 +33,8 @@ test.describe('Cronix Smoke Test', () => {
     // Also verify the submit button contains login text
     const submitButton = page.locator('button[type="submit"]');
     await expect(submitButton).toBeVisible({ timeout: 5_000 });
+    
+    await page.close()
+    await context.close()
   });
 });
