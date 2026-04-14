@@ -70,6 +70,7 @@ supabase/.temp/
 # Archivos de documentación no publicables
 docs/architecture/LUIS_IA_PROMPT_ENGINEERING.md
 docs/architecture/TECHNICAL_DOCUMENTATION.md
+docs/architecture/TECHNICAL_DOCUMENTATION_ES.md
 
 
 # TypeScript
