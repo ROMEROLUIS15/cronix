@@ -162,7 +162,7 @@ test.describe('Tenant Branding E2E', () => {
   })
 
   test.describe('Backward Compatibility', () => {
-    test('business without branding uses Cronix defaults', async ({ browser }) => {
+    test('business without branding uses Cronix defaults', async ({ page }) => {
       // This test verifies that businesses without brandColor/logo
       // still render correctly with default Cronix styling
       
