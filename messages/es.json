@@ -838,21 +838,7 @@
       "current": "Plan {plan, select, free {Gratuito} pro {Pro} enterprise {Empresa} other {Gratuito}}",
       "fullAccess": "Acceso completo incluido",
       "managePlan": "Gestionar plan"
-    },
-    "brandingTitle": "Imagen de marca",
-    "brandingSub": "Personaliza el logo y color de tu negocio",
-    "brandingLogo": "Logo del negocio",
-    "brandingLogoAlt": "Logo del negocio",
-    "brandingNoLogo": "Sin logo",
-    "brandingUploadLogo": "Subir logo",
-    "brandingLogoHint": "JPG, PNG, WebP · Máx. 2MB",
-    "brandingColor": "Color principal",
-    "brandingColorHint": "Se aplica a botones y elementos activos del panel",
-    "brandColorSaved": "Color de marca guardado",
-    "logoUploaded": "Logo subido correctamente",
-    "invalidImageFormat": "Formato de imagen no válido",
-    "imageTooLarge": "La imagen debe ser menor a 2MB",
-    "uploadError": "Error al subir el logo"
+    }
   },
   "profile": {
     "title": "Mi Perfil",

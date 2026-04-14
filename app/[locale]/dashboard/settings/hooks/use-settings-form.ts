@@ -7,8 +7,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import type { Business, BusinessSettingsJson } from '@/types';
 import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { getBrowserContainer } from '@/lib/browser-container';
@@ -73,19 +72,10 @@ export interface SettingsFormReturn {
   getHour: (key: string) => DayHours;
   DAYS: readonly DayKey[];
   notif: ReturnType<typeof useNotifications>;
-  brandColor: string;
-  setBrandColor: React.Dispatch<React.SetStateAction<string>>;
-  logoUrl: string | null;
-  uploadingLogo: boolean;
-  savingBrand: boolean;
-  logoFileInputRef: React.RefObject<HTMLInputElement | null>;
-  handleSaveBrandColor: (color: string) => Promise<void>;
-  handleLogoChange: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 }
 
 export function useSettingsForm(): SettingsFormReturn {
   const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
-  const router = useRouter();
   const [biz, setBiz] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,11 +96,6 @@ export function useSettingsForm(): SettingsFormReturn {
   const [showLuisFab, setShowLuisFab] = useState(true);
   const [savingFab, setSavingFab] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
-  const [brandColor, setBrandColor] = useState<string>('#0062FF');
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [savingBrand, setSavingBrand] = useState(false);
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
   const notif = useNotifications(bizId);
   const [copiedLink, setCopiedLink] = useState(false);
   const [generatingSlug, setGeneratingSlug] = useState(false);
@@ -171,9 +156,6 @@ export function useSettingsForm(): SettingsFormReturn {
           setShowLuisFab(uiData.showLuisFab);
         }
 
-        const storedColor = (business.settings as unknown as BusinessSettingsJson)?.brandColor;
-        if (storedColor) setBrandColor(storedColor);
-        setLogoUrl(business.logo_url ?? null);
       }
       setLoading(false);
     }
@@ -338,63 +320,6 @@ export function useSettingsForm(): SettingsFormReturn {
     [hours, showMsg],
   );
 
-  const handleSaveBrandColor = useCallback(async (color: string) => {
-    if (!bizId || !biz) return;
-    setSavingBrand(true);
-    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
-    const container = getBrowserContainer();
-    const result = await container.businesses.updateSettings(bizId, {
-      ...currentSettings,
-      brandColor: color,
-    });
-    setSavingBrand(false);
-    if (result.error) {
-      showMsg('error', 'saveError');
-    } else {
-      showMsg('success', 'brandColorSaved');
-      router.refresh();
-    }
-  }, [bizId, biz, showMsg, router]);
-
-  const handleLogoChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      // Reset input so the same file can be selected again after an error
-      if (e.target) e.target.value = '';
-
-      if (!file || !bizId) return;
-      if (!file.type.startsWith('image/')) { showMsg('error', 'invalidImageFormat'); return; }
-      if (file.size > 2 * 1024 * 1024) { showMsg('error', 'imageTooLarge'); return; }
-
-      setUploadingLogo(true);
-      const ext = file.name.split('.').pop() ?? 'jpg';
-      const path = `business-logos/${bizId}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('logos').upload(path, file, { upsert: true });
-
-      if (uploadError) {
-        setUploadingLogo(false);
-        showMsg('error', 'uploadError');
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path);
-      const container = getBrowserContainer();
-      const result = await container.businesses.update(bizId, { logo_url: publicUrl });
-
-      setUploadingLogo(false);
-      if (result.error) {
-        showMsg('error', 'saveError');
-      } else {
-        setLogoUrl(publicUrl + '?t=' + Date.now());
-        showMsg('success', 'logoUploaded');
-        router.refresh();
-      }
-    },
-    [bizId, supabase, showMsg, router],
-  );
-
   return {
     biz,
     loading,
@@ -426,13 +351,5 @@ export function useSettingsForm(): SettingsFormReturn {
     getHour: (key: string) => getHour(hours, key),
     DAYS,
     notif,
-    brandColor,
-    setBrandColor,
-    logoUrl,
-    uploadingLogo,
-    savingBrand,
-    logoFileInputRef,
-    handleSaveBrandColor,
-    handleLogoChange,
   };
 }

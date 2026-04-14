@@ -37,7 +37,6 @@ export interface BusinessSettings {
   }
   workingHours: Record<string, [string, string] | null>
   maxDailyBookingsPerClient: number
-  brandColor?: string  // hex format, e.g. "#A855F7"
 }
 
 // ── DTOs (Insert/Update types) ──────────────────────────────
