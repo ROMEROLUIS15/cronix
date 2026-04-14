@@ -37,7 +37,10 @@
       "Bash(git push)",
       "WebFetch(api.github.com)",
       "Read(c:\\Users\\luisc.BOOTSKTOP-LGM74MM\\Documents\\PROYECTOS PROGRAMACION\\cronix/**)",
-      "Read(c:\\Users\\luisc.BONAPLATZVM\\Documents\\PROYECTOS PROGRAMACION\\cronix/**)"
+      "Read(c:\\Users\\luisc.BONAPLATZVM\\Documents\\PROYECTOS PROGRAMACION\\cronix/**)",
+      "Bash(git stash)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
     ]
   },
   "$version": 3

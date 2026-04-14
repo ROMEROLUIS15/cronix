@@ -105,84 +105,47 @@ test.describe('Calendar Visual Sync', () => {
 
   test('[V1] seeded appointment appears on the appointments list', async ({ page }) => {
     test.skip(!clientName, 'No test client available')
-    
-    // Navigate directly to the appointments view
+
     await page.goto('/dashboard/appointments')
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    
-    // Wait for React Query to fetch data
-    await page.waitForTimeout(3000)
-    
-    // Sometimes need to reload to get fresh data
-    await page.reload()
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/appointments/, { timeout: 20_000 })
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
 
-    // If redirected to login, auth isn't working - skip gracefully
-    if (page.url().includes('/login')) {
-      console.warn('⚠️ Auth state not loaded, skipping')
-      return
-    }
-
-    // The client name should appear somewhere in the appointments view.
-    // Use a broad locator to find any element containing the client name.
     const clientLocator = page.getByText(clientName, { exact: false }).first()
     await expect(clientLocator).toBeVisible({ timeout: 15_000 })
   })
 
   test('[V2] appointment card shows "pending" status indicator', async ({ page }) => {
     test.skip(!clientName, 'No test client available')
-    
+
     await page.goto('/dashboard/appointments')
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    await page.waitForTimeout(3000)
-    
-    // Reload to ensure fresh data
-    await page.reload()
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/appointments/, { timeout: 20_000 })
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
 
-    if (page.url().includes('/login')) return
-
-    // Find the row/card containing our client — the status chip should be nearby
     const card = page.locator('[data-testid="appointment-card"]', {
       has: page.getByText(clientName, { exact: false })
     }).or(
-      // Fallback: find any container with the client name
       page.locator('li, article, div').filter({
         has: page.getByText(clientName, { exact: false })
       }).first()
     )
 
-    // Appointments for today should have a "pending" or similar status label.
-    // Accept any of the known status labels rendered in the UI.
     const statusChip = card.getByText(/pendiente|pending|por confirmar/i).first()
     await expect(statusChip).toBeVisible({ timeout: 10_000 })
   })
 
   test('[V3] clicking an appointment opens its detail without error', async ({ page }) => {
     test.skip(!clientName, 'No test client available')
-    
+
     await page.goto('/dashboard/appointments')
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    await page.waitForTimeout(3000)
-    
-    // Reload to ensure fresh data
-    await page.reload()
-    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/appointments/, { timeout: 20_000 })
+    await page.waitForLoadState('networkidle', { timeout: 20_000 })
 
-    if (page.url().includes('/login')) return
-
-    // Click the first occurrence of the client name
     const clientLink = page.getByText(clientName, { exact: false }).first()
     await expect(clientLink).toBeVisible({ timeout: 15_000 })
     await clientLink.click()
-    
-    // Wait for navigation
+
     await page.waitForLoadState('domcontentloaded', { timeout: 10_000 })
 
-    // The page should not show any error UI
     const errorIndicator = page.getByText(/error|500|not found/i).first()
     await expect(errorIndicator).not.toBeVisible({ timeout: 5_000 })
   })
