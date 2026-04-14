@@ -1,15 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { logger } from '@/lib/logger'
 import { redisRateLimit, isRedisAvailable, markRequestSeen } from '@/lib/rate-limit/redis-rate-limiter'
 import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
 import { assistantRateLimiter } from '@/lib/api/rate-limit'
-import type { VoiceAssistantContext } from '@/lib/ai/types'
+import { GroqProvider } from '@/lib/ai/providers/groq-provider'
+import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
+import { shieldOutput } from '@/lib/ai/output-shield'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getRepos } from '@/lib/repositories'
+import { createProductionOrchestrator } from '@/lib/ai/orchestrator/orchestrator-factory'
+import type { AiInput, UserRole } from '@/lib/ai/orchestrator'
+import type { LlmMessage } from '@/lib/ai/providers/types'
 
-// ── EDGE VALIDATION SCHEMA (ZOD) ──────────────────────────────────────────
+// ── SCHEMA ────────────────────────────────────────────────────────────────────
+
 const assistantPayloadSchema = z.object({
-  text: z.string().max(2000, "Texto excede longitud máxima permitida").nullable().optional(),
+  text: z.string().max(2000, 'Texto excede longitud máxima permitida').nullable().optional(),
   timezone: z.string().min(2).max(50).default('UTC'),
   history: z.array(
     z.object({
@@ -17,40 +25,32 @@ const assistantPayloadSchema = z.object({
       content: z.string().max(4000).nullable().optional(),
       tool_call_id: z.string().optional(),
       name: z.string().optional(),
-      tool_calls: z.any().optional()
+      tool_calls: z.any().optional(),
     }).passthrough()
-  ).max(20, "El historial excede los límites por seguridad").default([])
+  ).max(20, 'El historial excede los límites por seguridad').default([]),
 })
 
-// Infrastructure & Domain
-import { GroqProvider } from '@/lib/ai/providers/groq-provider'
-import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
-import { AssistantService } from '@/lib/ai/assistant-service'
-import { createAdminClient } from '@/lib/supabase/server'
-import { getRepos } from '@/lib/repositories'
+// ── MODULE-LEVEL SINGLETONS ────────────────────────────────────────────────────
+// Only TTS and keys — no AssistantService.
 
-// ── CONFIG ───────────────────────────────────────────────────────────────
-const GROQ_API_KEY     = process.env.LLM_API_KEY || process.env.GROQ_API_KEY
+const GROQ_API_KEY     = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
 
-// ── PROVIDER SINGLETONS — reused across requests, no per-request init overhead
-const sttEngine  = GROQ_API_KEY     ? new GroqProvider(GROQ_API_KEY)     : null
-const llmEngine  = GROQ_API_KEY     ? new GroqProvider(GROQ_API_KEY)     : null
-const ttsEngine  = DEEPGRAM_API_KEY ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es') : null
-const assistant  = (sttEngine && llmEngine && ttsEngine)
-  ? new AssistantService(sttEngine, llmEngine, ttsEngine)
+const ttsEngine = DEEPGRAM_API_KEY
+  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
   : null
 
-// ── HANDLER ───────────────────────────────────────────────────────────────
-export const POST = withErrorHandler(async (req, _context, supabase, user) => {
+// ── HANDLER ───────────────────────────────────────────────────────────────────
 
-  // 1. Protection: Rate Limiting (Redis distributed → in-memory fallback)
+export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
+
+  // 1. Rate Limiting (Redis distributed → in-memory fallback)
   const identifier = user.id
   if (isRedisAvailable()) {
-    const result = await redisRateLimit(identifier, 'assistant', 10, 60)
-    if (!result.allowed) {
+    const rl = await redisRateLimit(identifier, 'assistant', 10, 60)
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: `Demasiadas solicitudes. Reintenta en ${result.retryAfter}s.` },
+        { error: `Demasiadas solicitudes. Reintenta en ${rl.retryAfter}s.` },
         { status: 429 },
       )
     }
@@ -64,9 +64,7 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     }
   }
 
-  // 1b. Deduplication — prevent double-execution when the client retries the same request.
-  // The client must set x-request-id to a stable UUID for the lifetime of the request.
-  // A second request with the same (userId, requestId) within 60 s is rejected with 409.
+  // 1b. Deduplication
   const requestId = req.headers.get('x-request-id')
   if (requestId && isRedisAvailable()) {
     const isDuplicate = await markRequestSeen(`voice:${identifier}:${requestId}`, 60)
@@ -79,23 +77,24 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     }
   }
 
-  // 2. Context: Business Isolation & Identity + Role
-  // Use admin client to bypass RLS on users table (same pattern as dashboard layout).
-  // The regular client can return null due to RLS policy recursion on some accounts.
+  // 2. Business context
   const admin = createAdminClient()
-  const { users: usersRepoInstance, businesses: businessesRepoInstance } = getRepos(admin)
-  const ctxResult = await usersRepoInstance.getUserContextById(user.id)
-  const dbUser = ctxResult.data
+  const { users: usersRepo, businesses: businessesRepo } = getRepos(admin)
 
+  const ctxResult    = await usersRepo.getUserContextById(user.id)
+  const dbUser       = ctxResult.data
   const businessId   = dbUser?.business_id
-  const businessNameResult = businessId ? await businessesRepoInstance.getById(businessId) : { data: null }
-  const businessName = businessNameResult.data?.name || 'tu negocio'
-  const userName     = dbUser?.name || 'Usuario'
-  const userRole     = (dbUser?.role as string) || 'employee'
+  const businessName = businessId
+    ? (await businessesRepo.getById(businessId)).data?.name ?? 'tu negocio'
+    : 'tu negocio'
+  const userName = dbUser?.name ?? 'Usuario'
+  const userRole = (dbUser?.role as string) ?? 'employee'
 
-  if (!businessId) return NextResponse.json({ error: 'No business attached' }, { status: 403 })
+  if (!businessId) {
+    return NextResponse.json({ error: 'No business attached' }, { status: 403 })
+  }
 
-  // 2b. Token Quota — prevents runaway LLM costs
+  // 2b. Token quota
   const quota = await checkTokenQuota(businessId)
   if (!quota.allowed) {
     logger.warn('AI-ASSISTANT', `Token quota exceeded: ${quota.used}/${quota.limit}`, { businessId })
@@ -105,77 +104,138 @@ export const POST = withErrorHandler(async (req, _context, supabase, user) => {
     )
   }
 
-  // 3. Payload Extraction & Input Switch
+  // 3. Payload extraction
   let audioFile: Blob | null = null
   let text: string | null = null
   let timezone = 'UTC'
-  let clientHistory: any[] = []
+  let clientHistory: unknown[] = []
 
-  const contentType = req.headers.get('content-type') || ''
+  const contentType = req.headers.get('content-type') ?? ''
   if (contentType.includes('application/json')) {
-    const body = await req.json()
-    text = body.text
-    timezone = body.timezone || 'UTC'
-    clientHistory = body.history || []
+    const body = await req.json() as { text?: string; timezone?: string; history?: unknown[] }
+    text          = body.text ?? null
+    timezone      = body.timezone ?? 'UTC'
+    clientHistory = body.history ?? []
   } else {
     const formData = await req.formData()
     audioFile = formData.get('audio') as Blob | null
-    timezone = formData.get('timezone') as string || 'UTC'
-
-    const historyString = formData.get('history') as string
-    if (historyString) {
-      try {
-        clientHistory = JSON.parse(historyString)
-      } catch (e) {
-        logger.warn('AI-ASSISTANT', 'Could not parse history from FormData')
-      }
+    timezone  = (formData.get('timezone') as string | null) ?? 'UTC'
+    const histStr = formData.get('history') as string | null
+    if (histStr) {
+      try { clientHistory = JSON.parse(histStr) as unknown[] } catch { /* ignore */ }
     }
   }
 
-  // 4. Input Shielding (Zod Parsing)
+  // 4. Zod shield
   try {
-    const validated = assistantPayloadSchema.parse({
-      text: text,
-      timezone: timezone,
-      history: clientHistory
-    })
-    text = validated.text ?? null
-    timezone = validated.timezone
+    const validated   = assistantPayloadSchema.parse({ text, timezone, history: clientHistory })
+    text          = validated.text ?? null
+    timezone      = validated.timezone
     clientHistory = validated.history
-  } catch (zodError: any) {
-    logger.warn('AI-ASSISTANT-SHIELD', `Validation breach attempt: ${zodError.message}`)
-    return NextResponse.json({ error: 'Payload structure is invalid and was blocked by the security shield.' }, { status: 400 })
+  } catch (zodError: unknown) {
+    const msg = zodError instanceof Error ? zodError.message : 'Payload inválido'
+    logger.warn('AI-ASSISTANT-SHIELD', `Validation breach: ${msg}`)
+    return NextResponse.json(
+      { error: 'Payload structure is invalid and was blocked by the security shield.' },
+      { status: 400 },
+    )
   }
 
   if (!audioFile && !text) {
     return NextResponse.json({ error: 'No input provided (require audio or text)' }, { status: 400 })
   }
 
-  // 5. Platinum Orchestration — singleton initialized at module level
-  if (!DEEPGRAM_API_KEY) return NextResponse.json({ error: 'TTS provider not configured' }, { status: 500 })
-  if (!assistant) return NextResponse.json({ error: 'AI service not initialized' }, { status: 500 })
+  if (!GROQ_API_KEY) {
+    return NextResponse.json({ error: 'LLM API key not configured' }, { status: 500 })
+  }
 
-  // 6. Execution (Business Layer)
-  const context: VoiceAssistantContext = {
+  // 5. STT — audio transcription (stays in route, not orchestrator's job)
+  let finalText = text ?? ''
+  let sttLatencyMs = 0
+
+  if (audioFile) {
+    const sttProvider = new GroqProvider(GROQ_API_KEY)
+    const sttStart    = Date.now()
+    const sttRes      = await sttProvider.transcribe(audioFile, { language: 'es' })
+    sttLatencyMs      = Date.now() - sttStart
+
+    if (!sttRes.text?.trim()) {
+      logger.warn('AI-ASSISTANT', 'Empty transcription received', { userId: user.id })
+      return NextResponse.json({
+        text: 'No logré captar lo que dijiste. ¿Podrías repetirlo un poco más claro?',
+        audioUrl: null,
+        useNativeFallback: true,
+        actionPerformed: false,
+      })
+    }
+
+    finalText = sttRes.text.trim()
+    logger.info('AI-ASSISTANT-STT', `Escuchado: "${finalText}"`, { userId: user.id, latencyMs: sttLatencyMs })
+  }
+
+  // 6. Build AiInput and process through production orchestrator
+  const aiInput: AiInput = {
+    text:       finalText,
+    userId:     user.id,
     businessId,
-    userId: user.id,
-    businessName,
-    userTimezone: timezone,
-    userRole: userRole as VoiceAssistantContext['userRole'],
+    userRole:   (userRole as UserRole),
+    timezone,
+    channel:    'web',
+    history:    clientHistory as LlmMessage[],
+    requestId:  requestId ?? undefined,
     userName,
-    requestId: req.headers.get('x-request-id') ?? undefined,
-  }
-  const result = await assistant.processVoiceRequest(audioFile || text!, context)
-
-  // 7. Record token usage (fire-and-forget — non-blocking)
-  if (result.debug?.steps) {
-    // Estimate: ~4 tokens per word, ~1 token per 4 chars
-    const inputTokens = text ? Math.ceil(text.length / 4) : 0
-    const outputTokens = result.text ? Math.ceil(result.text.length / 4) : 0
-    const totalTokens = inputTokens + outputTokens + result.debug.steps * 50 // steps include tool calls
-
-    void recordTokenUsage(businessId, totalTokens)
+    context: {
+      businessId,
+      businessName,
+      timezone,
+    },
   }
 
-  return NextResponse.json(result)
+  const orchestrator = createProductionOrchestrator(admin, GROQ_API_KEY)
+  const output = await orchestrator.process(aiInput)
+
+  // 7. Token usage (fire-and-forget)
+  void recordTokenUsage(businessId, output.tokens)
+
+  // 8. TTS
+  let audioUrl: string | null = null
+  let ttsLatencyMs = 0
+
+  if (ttsEngine && output.text) {
+    // Shield before vocalizing — prevents jailbroken text from being spoken
+    const shielded = shieldOutput(output.text, user.id)
+
+    // Truncate to first ~220 chars at a sentence boundary for lower TTS latency
+    const ttsInput = (() => {
+      if (shielded.length <= 220) return shielded
+      const cut     = shielded.slice(0, 220)
+      const lastDot = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('?'), cut.lastIndexOf('!'))
+      return lastDot > 80 ? shielded.slice(0, lastDot + 1) : cut
+    })()
+
+    const ttsStart = Date.now()
+    const ttsRes   = await ttsEngine.synthesize(ttsInput)
+    ttsLatencyMs   = Date.now() - ttsStart
+    audioUrl       = ttsRes.audioUrl ?? null
+  }
+
+  logger.metric({
+    requestId:    requestId ?? 'unknown',
+    businessId,
+    userId:       user.id,
+    sttLatencyMs,
+    ttsLatencyMs,
+    llmSteps:     output.toolTrace.length,
+    intentSource: 'react',
+    toolsUsed:    output.toolTrace.map((t) => t.tool),
+    totalMs:      sttLatencyMs + ttsLatencyMs,
+  })
+
+  return NextResponse.json({
+    text:              output.text,
+    audioUrl,
+    useNativeFallback: !audioUrl,
+    actionPerformed:   output.actionPerformed,
+    history:           output.history,
+  })
 })

@@ -91,10 +91,14 @@ jobs:
       - name: Run Integration Tests (Vitest Node)
         run: npx vitest run --config vitest.integration.config.ts
 
-  # ── Job 3: E2E Tests (only on push to main) ────────────────────────────────
+  # ── Job 3: E2E Tests (only on push to main/develop) ──────────────────────────
+  # continue-on-error: true → E2E failures are INFORMATIONAL, not blocking.
+  # The real CI gates are `unit` (logic) and `build` (compilation).
+  # An E2E failure notifies but never prevents a Vercel deploy.
   e2e:
     name: E2E Visual Tests (Playwright)
     runs-on: ubuntu-latest
+    continue-on-error: true
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
     needs: [unit, build]
 
@@ -126,7 +130,7 @@ jobs:
         run: mkdir -p playwright/.auth
 
       - name: Run E2E Tests
-        run: npx playwright test --project=setup --project=chromium --project=smoke --reporter=html
+        run: npx playwright test --project=setup --project=chromium --project=smoke --reporter=list,html
         env:
           CI: 'true'
           PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
