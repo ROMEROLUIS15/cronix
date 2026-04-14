@@ -7,7 +7,7 @@ import { addDays } from 'date-fns'
 import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
 import type { ToolContext } from './_context'
-import { fmtUserDate } from './_helpers'
+import { fmtUserDate, formatForSpeech } from './_helpers'
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ export async function get_client_debt(
 
   const unpaid = apptsResult.data
   if (!unpaid.length) return `El cliente ${client.name} está al día.`
-  return `El cliente ${client.name} (tel: ${client.phone ?? 'sin teléfono'}) tiene ${unpaid.length} cita(s) completada(s) recientes sin registrar pago.`
+  return `El cliente ${client.name} tiene ${unpaid.length} cita(s) completada(s) recientes sin registrar pago.`
 }
 
 // ── READ: Citas próximas de un cliente ────────────────────────────────────
@@ -109,7 +109,7 @@ export async function get_client_appointments(
     return `- ${serviceName} el ${dateStr}`
   }).join('\n')
 
-  return `Citas próximas de ${client.name}:\n${list}`
+  return formatForSpeech(`Citas próximas de ${client.name}:\n${list}`)
 }
 
 // ── READ: Listar clientes ──────────────────────────────────────────────────
@@ -138,17 +138,17 @@ export async function get_clients(
     const fuzzyResult = fuzzyFind(result.data, query)
     if (fuzzyResult.status === 'found') {
       const c = fuzzyResult.match
-      return `He encontrado a ${c.name}${c.phone ? ` (Tel: ${c.phone})` : ''}. ¿Es a quien te refieres?`
+      return `Encontré al cliente ${c.name}. ¿Es a quien te refieres?`
     }
     if (fuzzyResult.status === 'ambiguous') {
       const candidates = fuzzyResult.candidates.map(c => `- ${c.name}`).join('\n')
-      return `Encontré varios clientes parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`
+      return formatForSpeech(`Encontré varios clientes parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`)
     }
-    return `No encontré ningún cliente llamado "${query}". ¿Te gustaría que lo registre?`
+    return `No encontré ningún cliente llamado "${query}".`
   }
 
-  const list = result.data.map(c => `- ${c.name}${c.phone ? ` (Tel: ${c.phone})` : ''}`).join('\n')
-  return `Aquí tienes a tus clientes registrados:\n${list}`
+  const list = result.data.map(c => `- ${c.name}`).join('\n')
+  return formatForSpeech(`Clientes registrados:\n${list}`)
 }
 
 // ── STRATEGIC: Clientes inactivos ─────────────────────────────────────────
@@ -169,7 +169,7 @@ export async function get_inactive_clients(
   if (!result.data.length) return '¡Excelente! Todos tus clientes han venido en los últimos 2 meses.'
 
   const names = result.data.map(c => c.name).join(', ')
-  return `He identificado a ${result.data.length} clientes inactivos por más de 60 días: ${names}. Podrías enviarles un WhatsApp de reactivación.`
+  return `Hay ${result.data.length} clientes sin visita en más de 60 días: ${names}.`
 }
 
 // ── WRITE: Crear cliente nuevo ────────────────────────────────────────────

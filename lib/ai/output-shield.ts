@@ -40,12 +40,14 @@ const INJECTION_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
 
   // ── Data exfiltration — PII and tenant data ───────────────────────────────
   { name: 'uuid_leak',            pattern: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
-  { name: 'phone_leak',           pattern: /\b\+?\d[\d\s\-(). ]{9,}\d\b/ },
+  // Matches phone-like digit sequences (10-15 digits with phone separators: spaces/hyphens/parens).
+  // Deliberately excludes '.' to avoid false positives on currency amounts like "$15.000.000".
+  { name: 'phone_leak',           pattern: /\b\+?\d[\d\s\-()]{8,}\d\b/ },
 
   // ── Tool name leakage — complete list of all registered tools ────────────
   {
     name: 'tool_name_leak',
-    pattern: /\b(get_today_summary|book_appointment|cancel_appointment|reschedule_appointment|register_payment|get_client_debt|get_client_appointments|get_inactive_clients|get_revenue_stats|get_monthly_forecast|send_reactivation_message|create_client|get_clients|get_staff|get_services|get_upcoming_gaps|confirm_booking|reschedule_booking|cancel_booking)\b/,
+    pattern: /\b(get_today_summary|book_appointment|cancel_appointment|reschedule_appointment|register_payment|get_client_debt|get_client_appointments|get_inactive_clients|get_revenue_stats|get_monthly_forecast|get_month_report|send_reactivation_message|create_client|get_clients|get_staff|get_services|get_upcoming_gaps|confirm_booking|reschedule_booking|cancel_booking)\b/,
   },
 
   // ── Structural attacks ───────────────────────────────────────────────────

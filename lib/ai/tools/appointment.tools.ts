@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import { startOfDay, endOfDay, format } from 'date-fns'
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
@@ -19,6 +19,7 @@ import {
   calcEndISO,
   validateApptDate,
   fireToolNotification,
+  formatForSpeech,
 } from './_helpers'
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
@@ -100,11 +101,11 @@ export async function get_appointments_by_date(
       const svcName    = (a.service as { name: string } | null)?.name
         ?? (a.appointment_services as { service: { name: string } }[] | null)?.[0]?.service?.name
         ?? 'Servicio'
-      return `- ${timeStr}: ${clientName} (${svcName})`
+      return `- ${timeStr}: ${clientName}, ${svcName}`
     })
     .join('\n')
 
-  return `Citas para el ${dateLabel} — ${appts.length} en total:\n${list}`
+  return formatForSpeech(`El ${dateLabel} hay ${appts.length} cita${appts.length !== 1 ? 's' : ''}:\n${list}`)
 }
 
 // ── READ: Huecos libres hoy ────────────────────────────────────────────────
@@ -369,6 +370,54 @@ export async function reschedule_appointment(
   void fireToolNotification(ctx, business_id, 'Cita Reagendada', `${client.name} movió su cita de ${serviceName} del ${oldDateStr} al ${newDateStr}`, 'info')
 
   return `Listo. Reagendé la cita de ${client.name} (${serviceName}) del ${oldDateStr} al ${newDateStr}.`
+}
+
+// ── STRATEGIC: Reporte histórico de un mes ────────────────────────────────
+
+export const GetMonthReportSchema = z.object({
+  business_id: z.string().uuid(),
+  month: z.number().int().min(1).max(12),
+  year:  z.number().int().min(2020).max(2100),
+})
+
+/**
+ * Genera un resumen histórico de citas e ingresos para un mes y año específicos.
+ * Owner-only: incluye facturación. Employees sólo ven conteo de citas.
+ */
+export async function get_month_report(
+  args: z.infer<typeof GetMonthReportSchema>,
+  ctx: ToolContext
+): Promise<string> {
+  const parse = GetMonthReportSchema.safeParse(args)
+  if (!parse.success) return `Error de parámetros: ${parse.error.issues[0]?.message}`
+  const { business_id, month, year } = parse.data
+
+  try { await ctx.tenantGuard.verify(business_id) } catch { return 'No autorizado.' }
+
+  const refDate   = new Date(year, month - 1, 1)
+  const fromISO   = startOfMonth(refDate).toISOString()
+  const toISO     = endOfMonth(refDate).toISOString()
+  const monthName = format(refDate, 'MMMM yyyy', { locale: es })
+
+  const [apptsResult, txsResult] = await Promise.all([
+    ctx.appointmentRepo.findByDateRange(business_id, fromISO, toISO),
+    ctx.financeRepo.findByPaidAtRange(business_id, fromISO, toISO),
+  ])
+
+  if (apptsResult.error || !apptsResult.data) return 'No pude obtener las citas de ese mes.'
+  if (txsResult.error  || !txsResult.data)   return 'No pude obtener los ingresos de ese mes.'
+
+  const appts     = apptsResult.data
+  const completed = appts.filter(a => a.status === 'completed').length
+  const cancelled = appts.filter(a => a.status === 'cancelled' || a.status === 'no_show').length
+  const pending   = appts.filter(a => a.status === 'pending'   || a.status === 'confirmed').length
+  const revenue   = txsResult.data.reduce((acc, t) => acc + Number(t.net_amount), 0)
+
+  const revenueStr = revenue > 0
+    ? ` Ingresos facturados: $${revenue.toLocaleString('es-CO')}.`
+    : ' Sin ingresos registrados.'
+
+  return `Reporte de ${monthName}: ${appts.length} cita${appts.length !== 1 ? 's' : ''} en total. ${completed} atendida${completed !== 1 ? 's' : ''}, ${cancelled} cancelada${cancelled !== 1 ? 's' : ''}, ${pending} pendiente${pending !== 1 ? 's' : ''}.${revenueStr}`
 }
 
 // ── STRATEGIC: Proyección mensual ─────────────────────────────────────────

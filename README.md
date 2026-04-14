@@ -80,8 +80,8 @@
 
 Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) still manage appointments via paper, personal WhatsApp chats, or generic tools not designed for the region. Cronix solves this with:
 
--   **⚙️ UX Persistence**: Movable assistant FAB with remembered position. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/UX_ENGINEERING.md)
--   **⚡ Resilience Layer (Groq/Deepgram)**: Automatic model fallback (70b -> 8b) and browser-TTS fallback. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md)
+- **⚙️ UX Persistence**: Movable assistant FAB with remembered position. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/UX_ENGINEERING.md)
+- **⚡ Resilience Layer (Groq/Deepgram)**: Automatic model fallback (70b -> 8b) and browser-TTS fallback. [Docs](file:///c:/Users/luisc.DESKTOP-LGM74MM/Documents/PROYECTOS%20PROGRAMACION/cronix/docs/architecture/RELIABILITY.md)
 - **🛡️ Global Reliability (Blindaje)**: Centralized Error Handler (HOF), Request ID traceability, and Dead Letter Queue (DLQ) for webhooks.
 - **A full business dashboard** (PWA) for managing clients, team, finances, and analytics
 - **Multi-tenant architecture** where multiple businesses share infrastructure securely — each one fully isolated at the database level via PostgreSQL Row Level Security
@@ -94,7 +94,7 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 | Area                    | Implementation                                                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **AI Agent**            | Conversational actuator using Groq + Llama-3.3-70B with Structured In-Memory RAG and Action Tag routing (see [AI Architecture](#ai-agent-architecture))             |
-| **Security**            | Passkeys (WebAuthn), Meta HMAC-SHA256, 7-layer security suite, PII scrubbing, PostgreSQL RLS with **45+ pgTAP tests**                                                        |
+| **Security**            | Passkeys (WebAuthn), Meta HMAC-SHA256, 7-layer security suite, PII scrubbing, PostgreSQL RLS with **45+ pgTAP tests**                                               |
 | **High Concurrency**    | Asynchronous message processing via **Upstash QStash**, decoupling the Meta webhook from heavy AI inference to prevent timeouts and message drops                   |
 | **Voice Support**       | Real-time voice note transcription via Groq Whisper (`whisper-large-v3-turbo`), converting spoken Spanish into scheduled appointments                               |
 | **Push & WA Alerts**    | Multi-channel notifications for business owners including direct WhatsApp alerts for new bookings, reschedules, and cancellations to keep their agenda synchronized |
@@ -108,29 +108,37 @@ Service businesses in Latin America (barbershops, beauty salons, clinics, gyms) 
 ---
 
 ## 🎙️ Luis IA: Executive Assistant v8.0 (Hardened)
+
 Luis has evolved into a **Production-Grade Agentic Orchestrator** with multi-step reasoning and deep security shields. This version introduces:
 
 ### 1. Agentic ReAct Orchestration (Reason + Act) 🧠
+
 Luis no longer just maps commands. He performs a **Reasoning Loop** to determine the best sequence of tools. If a tool fails, Luis can reason and attempt a correction or explain the failure in natural language.
 
 ### 2. Zero-Latency Intent Router ⚡
+
 Ultra-fast keyword-based interceptor that skips LLM inference for common administrative queries (gaps, summaries, prices), reducing latency to **< 500ms** and saving 100% of tokens for these requests.
 
 ### 3. Output Shield & PII Protection 🛡️
+
 A dedicated security layer that intercepts LLM responses before they reach the user. It scrubs **Personally Identifiable Information (PII)** like phone numbers and UUIDs, and blocks **Prompt Injection** patterns or internal system leaks (tool names, table names).
 
 ### 4. Persistent Session Store (Upstash Redis) 💾
+
 Consolidated global session management. Luis maintains context across serverless instances using Redis, ensuring that long-term reasoning isn't lost during high-traffic horizontal scaling.
 
 ### 5. Multi-Tier Model Routing (Groq LPU)
+
 Luis automatically balances cost and intelligence. He routes simple "Read" queries to **Llama-3.1-8B (500k TPD)** and critical "Write" actions to **Llama-3.3-70B (100k TPD)** with a 4-point validation firewall.
 
 ### 6. Universal Executive Voice 🎨
+
 Powered by **Deepgram Aura 2** with a Siri-style visual waveform. If the high-performance synthesis fails, Luis gracefully falls back to native browser speech to ensure the business never stays silent.
 
 > 📖 **Deep Dive**: For the full technical breakdown, see the [AI Master Architecture Guide](./docs/architecture/AI_MASTER_GUIDE.md).
 
 ---
+
 1.  **Observability**: Deep integration with Sentry and a Centralized Logger.
 2.  **Traceability**: `x-request-id` system for error traceability across services.
 3.  **Webhook Resilience**: Dead Letter Queue (DLQ) to guarantee **Zero Data Loss** in critical integrations.
@@ -142,34 +150,34 @@ Check the [Reliability Technical Documentation](./docs/architecture/RELIABILITY.
 
 ## Tech Stack
 
-| Layer                 | Technology                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Framework             | Next.js 15 (App Router, Server Components, Server Actions)                                                    |
-| Language              | TypeScript 5 — strict mode, zero `any`                                                                        |
-| Database              | PostgreSQL via Supabase (RLS, ENUMs, optimized indexes, 17 versioned migrations)                              |
-| Authentication        | Supabase Auth + WebAuthn/Passkeys (biometrics) + Google OAuth                                                 |
-| Data Access           | Supabase JS SDK with typed repositories                                                                       |
-| Cache / Data Fetching | React Query v5 (`@tanstack/react-query`) with global cache                                                    |
-| Styles                | Tailwind CSS 3 + CVA (class-variance-authority)                                                               |
-| Validation            | Zod (shared schemas in client and server)                                                                     |
-| Forms                 | React Hook Form + Zod resolvers                                                                               |
-| Dates                 | date-fns v4                                                                                                   |
-| Icons                 | Lucide React                                                                                                  |
-| Unit Testing          | Vitest + jsdom                                                                                                |
-| DB Testing            | pgTAP (RLS tests against real Postgres)                                                                       |
-| Error Tracking        | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions)                                                 |
-| WhatsApp              | WhatsApp Cloud API v19.0 (Meta) — approved template                                                           |
-| Message Queue         | Upstash QStash (Serverless background jobs with automatic retries)                                            |
-| Web Push              | RFC 8291 — VAPID + AES-128-GCM, native Service Worker                                                         |
-| AI Observability      | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant)                                 |
-| AI Engine             | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing)                                  |
-| Voice Transcription   | Groq Whisper (`whisper-large-v3-turbo`) + **Deepgram Nova-2 WebSocket** (streaming STT)    |
-| Long-term Memory      | Supabase `pgvector` (384-dim GTE-small via `embed-text` Edge Function)                     |
-| Event Engine          | Supabase Database Webhooks (pg_net)                                                         |
+| Layer                 | Technology                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framework             | Next.js 15 (App Router, Server Components, Server Actions)                                                                                                                     |
+| Language              | TypeScript 5 — strict mode, zero `any`                                                                                                                                         |
+| Database              | PostgreSQL via Supabase (RLS, ENUMs, optimized indexes, 17 versioned migrations)                                                                                               |
+| Authentication        | Supabase Auth + WebAuthn/Passkeys (biometrics) + Google OAuth                                                                                                                  |
+| Data Access           | Supabase JS SDK with typed repositories                                                                                                                                        |
+| Cache / Data Fetching | React Query v5 (`@tanstack/react-query`) with global cache                                                                                                                     |
+| Styles                | Tailwind CSS 3 + CVA (class-variance-authority)                                                                                                                                |
+| Validation            | Zod (shared schemas in client and server)                                                                                                                                      |
+| Forms                 | React Hook Form + Zod resolvers                                                                                                                                                |
+| Dates                 | date-fns v4                                                                                                                                                                    |
+| Icons                 | Lucide React                                                                                                                                                                   |
+| Unit Testing          | Vitest + jsdom                                                                                                                                                                 |
+| DB Testing            | pgTAP (RLS tests against real Postgres)                                                                                                                                        |
+| Error Tracking        | Sentry (Next.js Client/Server/Edge + Supabase Deno Functions)                                                                                                                  |
+| WhatsApp              | WhatsApp Cloud API v19.0 (Meta) — approved template                                                                                                                            |
+| Message Queue         | Upstash QStash (Serverless background jobs with automatic retries)                                                                                                             |
+| Web Push              | RFC 8291 — VAPID + AES-128-GCM, native Service Worker                                                                                                                          |
+| AI Observability      | Helicone Proxy Gateway (Latency, Cost tracking, Threat monitoring per tenant)                                                                                                  |
+| AI Engine             | Groq API + Llama-3.3-70b-versatile (In-Context Learning, Action Tag Routing)                                                                                                   |
+| Voice Transcription   | Groq Whisper (`whisper-large-v3-turbo`) + **Deepgram Nova-2 WebSocket** (streaming STT)                                                                                        |
+| Long-term Memory      | Supabase `pgvector` (384-dim GTE-small via `embed-text` Edge Function)                                                                                                         |
+| Event Engine          | Supabase Database Webhooks (pg_net)                                                                                                                                            |
 | Edge Functions        | Supabase (Deno) — 6 functions, 30+ modules: `whatsapp-webhook`, `process-whatsapp` (15 modules), `whatsapp-service`, `push-notify` (2 modules), `cron-reminders`, `embed-text` |
-| Scheduler             | Supabase pg_cron — hourly trigger with per-timezone 8 PM targeting                                            |
-| PWA                   | next-pwa — installable on iOS, Android, desktop                                                               |
-| Deploy                | Vercel (auto-deploy from `main`)                                                                              |
+| Scheduler             | Supabase pg_cron — hourly trigger with per-timezone 8 PM targeting                                                                                                             |
+| PWA                   | next-pwa — installable on iOS, Android, desktop                                                                                                                                |
+| Deploy                | Vercel (auto-deploy from `main`)                                                                                                                                               |
 
 ---
 
@@ -569,13 +577,13 @@ Cronix includes a native **Executive Voice Assistant** (codenamed "Luis") direct
 Luis acts as a controller for the following backend functions (see `lib/ai/assistant-tools.ts`):
 
 ```typescript
-get_today_summary()
-get_upcoming_gaps()
-get_client_debt(client_name)
-get_services()                              // → catalog: name, price, duration
-cancel_appointment(client_name)
-book_appointment(client_name, service_name, date, time)
-register_payment(client_name, amount, method)
+get_today_summary();
+get_upcoming_gaps();
+get_client_debt(client_name);
+get_services(); // → catalog: name, price, duration
+cancel_appointment(client_name);
+book_appointment(client_name, service_name, date, time);
+register_payment(client_name, amount, method);
 ```
 
 ### AI Agent End-to-End Workflow & QStash Architecture
@@ -885,17 +893,17 @@ Full-stack Sentry integration across all execution environments:
 | `wa_booking_rate_limit`           | Atomic booking limiter (`fn_wa_check_booking_limit`)                                     |
 | `fn_find_client_by_phone`         | Client lookup by cleaned phone digits                                                    |
 | `wa_booking_auto_confirm`         | Auto-confirmed bookings (Silent Execution pattern)                                       |
-| `wa_business_usage`            | Aggregated usage tracking per business                                                   |
-| `web_rate_limiting`            | IP-based rate limiting for Web & API                                                     |
-| `web_monitoring`               | View and logic for suspicious activity monitoring                                        |
-| `circuit_breaker`              | Service health tracking and auto-recovery logic                                          |
-| `token_quota`                  | Precision cost control via daily token usage tracking                                    |
+| `wa_business_usage`               | Aggregated usage tracking per business                                                   |
+| `web_rate_limiting`               | IP-based rate limiting for Web & API                                                     |
+| `web_monitoring`                  | View and logic for suspicious activity monitoring                                        |
+| `circuit_breaker`                 | Service health tracking and auto-recovery logic                                          |
+| `token_quota`                     | Precision cost control via daily token usage tracking                                    |
 
 ---
 
 ## Performance Metrics
 
-| Metric                         | Value |
+| Metric                         | Value                                                  |
 | ------------------------------ | ------------------------------------------------------ |
 | WhatsApp message → AI response | < 2 seconds (Groq Llama latency ~1.2s, overhead ~0.8s) |
 | Voice note → transcription     | < 3 seconds (Groq Whisper)                             |
@@ -1108,16 +1116,16 @@ supabase db push
 
 ## Scalability & Future Roadmap
 
-| Area              | Current State | Future |
-| ----------------- | ------------- | ------ |
-| Language          | Spanish (hardcoded) | Dynamic language per business setting |
-| LLM Provider      | Groq + Llama-3.3-8B | Helicone proxy for semantic caching |
-| Voice             | Spanish via Whisper + Deepgram Nova-2 | Dynamic language detection |
-| Memory            | pgvector (user-scoped) | Cross-tenant business knowledge base |
-| Reminders         | WhatsApp only | SMS and email channels |
-| Analytics         | Dashboard reports | CSV/PDF export |
-| AI Observability  | Sentry breadcrumbs | Helicone per-tenant cost & latency |
-| Booking Conflicts | Basic overlap detection | Staff-aware time-slot collision |
+| Area              | Current State                         | Future                                |
+| ----------------- | ------------------------------------- | ------------------------------------- |
+| Language          | Spanish (hardcoded)                   | Dynamic language per business setting |
+| LLM Provider      | Groq + Llama-3.3-8B                   | Helicone proxy for semantic caching   |
+| Voice             | Spanish via Whisper + Deepgram Nova-2 | Dynamic language detection            |
+| Memory            | pgvector (user-scoped)                | Cross-tenant business knowledge base  |
+| Reminders         | WhatsApp only                         | SMS and email channels                |
+| Analytics         | Dashboard reports                     | CSV/PDF export                        |
+| AI Observability  | Sentry breadcrumbs                    | Helicone per-tenant cost & latency    |
+| Booking Conflicts | Basic overlap detection               | Staff-aware time-slot collision       |
 
 ---
 

@@ -89,11 +89,12 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Build for production first, then start the prod server
-    command: 'npm run build && npm run start',
+    // In CI the build is a separate explicit step — just start the pre-built server.
+    // Locally, build + start in one go for convenience.
+    command: process.env.CI ? 'npm run start' : 'npm run build && npm run start',
     url: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 180_000, // 3 min to account for build time
+    timeout: process.env.CI ? 60_000 : 180_000, // CI: only next start (~5s); local: full build
     stdout: 'pipe',
     stderr: 'pipe',
   },

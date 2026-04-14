@@ -119,6 +119,31 @@ export async function fireToolNotification(
   }
 }
 
+// ── Speech formatting ───────────────────────────────────────────────────────
+
+/**
+ * Converts list-style tool output text into speech-friendly prose.
+ *
+ * TTS engines read literal characters — newlines become silent pauses
+ * and bullet dashes ("- ") are sometimes vocalised as "guión".
+ * This function collapses list items into comma/period-separated sentences
+ * so the assistant sounds natural when read aloud.
+ *
+ * Example:
+ *   "Citas:\n- 9:00 AM: María (Corte)\n- 10:30 AM: Juan (Depilación)"
+ *   → "Citas: 9:00 AM: María (Corte). 10:30 AM: Juan (Depilación)."
+ */
+export function formatForSpeech(text: string): string {
+  return text
+    .replace(/\n[\s]*[-•]\s*/g, '. ')  // "\n- item" → ". item"
+    .replace(/^[-•]\s*/gm,       '')   // leading bullet on first line → remove
+    .replace(/\n+/g,            '. ')  // remaining newlines → sentence break
+    .replace(/:\.\s*/g,         ': ') // ":." artefact → ": "
+    .replace(/\.\s*\.\s*/g,     '. ') // double period → single
+    .replace(/\s{2,}/g,          ' ') // collapse spaces
+    .trim()
+}
+
 // ── Date guard ──────────────────────────────────────────────────────────────
 
 /**

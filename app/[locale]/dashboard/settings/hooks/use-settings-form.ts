@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Business, BusinessSettingsJson } from '@/types';
 import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { getBrowserContainer } from '@/lib/browser-container';
@@ -84,6 +85,7 @@ export interface SettingsFormReturn {
 
 export function useSettingsForm(): SettingsFormReturn {
   const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
+  const router = useRouter();
   const [biz, setBiz] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -346,14 +348,20 @@ export function useSettingsForm(): SettingsFormReturn {
       brandColor: color,
     });
     setSavingBrand(false);
-    result.error
-      ? showMsg('error', 'saveError')
-      : showMsg('success', 'brandColorSaved');
-  }, [bizId, biz, showMsg]);
+    if (result.error) {
+      showMsg('error', 'saveError');
+    } else {
+      showMsg('success', 'brandColorSaved');
+      router.refresh();
+    }
+  }, [bizId, biz, showMsg, router]);
 
   const handleLogoChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
+      // Reset input so the same file can be selected again after an error
+      if (e.target) e.target.value = '';
+
       if (!file || !bizId) return;
       if (!file.type.startsWith('image/')) { showMsg('error', 'invalidImageFormat'); return; }
       if (file.size > 2 * 1024 * 1024) { showMsg('error', 'imageTooLarge'); return; }
@@ -381,9 +389,10 @@ export function useSettingsForm(): SettingsFormReturn {
       } else {
         setLogoUrl(publicUrl + '?t=' + Date.now());
         showMsg('success', 'logoUploaded');
+        router.refresh();
       }
     },
-    [bizId, supabase, showMsg],
+    [bizId, supabase, showMsg, router],
   );
 
   return {

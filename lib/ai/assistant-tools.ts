@@ -22,6 +22,7 @@ export {
   book_appointment,
   reschedule_appointment,
   get_monthly_forecast,
+  get_month_report,
 } from './tools/appointment.tools'
 
 export {

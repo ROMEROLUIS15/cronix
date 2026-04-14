@@ -17,6 +17,8 @@ import {
   Smartphone,
   Sparkles,
   Palette,
+  ImageIcon,
+  Upload,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -237,76 +239,96 @@ export default function SettingsPage() {
         <div className="space-y-6">
           {/* Logo upload */}
           <div>
-            <label className="block text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
+            <p className="text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
               {t('brandingLogo')}
-            </label>
-            <div className="flex items-center gap-4">
+            </p>
+            <input
+              ref={logoFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              onChange={handleLogoChange}
+            />
+            <div className="flex items-center gap-5">
+              {/* Preview */}
               <div
-                className="h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
-                style={{ background: "#212125", border: "1px solid #272729" }}
+                className="relative h-20 w-20 rounded-2xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+                style={{ background: "#1A1A1F", border: "1px solid #272729" }}
               >
                 {logoUrl ? (
                   <Image
                     src={logoUrl}
                     alt={t('brandingLogoAlt')}
-                    width={64}
-                    height={64}
-                    className="h-full w-full object-cover"
-                    sizes="64px"
+                    fill
+                    className="object-cover"
+                    sizes="80px"
                   />
                 ) : (
-                  <span className="text-xs" style={{ color: "#909098" }}>
-                    {t('brandingNoLogo')}
-                  </span>
+                  <ImageIcon size={28} style={{ color: "#3A3A42" }} />
                 )}
               </div>
-              <div className="space-y-2">
-                <input
-                  ref={logoFileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="sr-only"
-                  onChange={handleLogoChange}
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
+
+              {/* Upload action */}
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
                   disabled={uploadingLogo}
                   onClick={() => logoFileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    background: "#212125",
+                    border: "1px solid #2E2E35",
+                    color: "#F2F2F2",
+                  }}
                 >
                   {uploadingLogo
                     ? <Loader2 size={14} className="animate-spin" />
-                    : t('brandingUploadLogo')}
-                </Button>
-                <p className="text-xs" style={{ color: "#909098" }}>
+                    : <Upload size={14} />}
+                  {uploadingLogo ? '...' : t('brandingUploadLogo')}
+                </button>
+                <p className="text-xs" style={{ color: "#606068" }}>
                   {t('brandingLogoHint')}
                 </p>
               </div>
             </div>
           </div>
 
+          {/* Divider */}
+          <div style={{ borderTop: "1px solid #1E1E22" }} />
+
           {/* Color picker */}
           <div>
-            <label className="block text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
+            <p className="text-sm font-medium mb-3" style={{ color: "#F2F2F2" }}>
               {t('brandingColor')}
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                type="color"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
-                className="h-10 w-16 rounded-lg cursor-pointer border-0 bg-transparent p-0"
-                aria-label={t('brandingColor')}
-              />
-              <span className="text-sm font-mono" style={{ color: "#909098" }}>
-                {brandColor.toUpperCase()}
-              </span>
+            </p>
+            <div className="flex items-center gap-3">
+              {/* Styled swatch trigger */}
+              <div className="relative h-10 w-10 flex-shrink-0">
+                <div
+                  className="h-full w-full rounded-xl border-2"
+                  style={{
+                    backgroundColor: brandColor,
+                    borderColor: "#2E2E35",
+                  }}
+                />
+                <input
+                  type="color"
+                  value={brandColor}
+                  onChange={(e) => setBrandColor(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  aria-label={t('brandingColor')}
+                />
+              </div>
+
+              {/* Hex code pill */}
               <div
-                className="h-8 w-8 rounded-lg flex-shrink-0"
-                style={{ backgroundColor: brandColor, border: "1px solid #272729" }}
-              />
+                className="px-3 py-2 rounded-xl text-sm font-mono"
+                style={{ background: "#1A1A1F", color: "#909098", border: "1px solid #272729" }}
+              >
+                {brandColor.toUpperCase()}
+              </div>
             </div>
-            <p className="text-xs mt-2" style={{ color: "#909098" }}>
+            <p className="text-xs mt-2" style={{ color: "#606068" }}>
               {t('brandingColorHint')}
             </p>
           </div>

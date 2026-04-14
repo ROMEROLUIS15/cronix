@@ -7,6 +7,7 @@ import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
 import { sendReactivationMessage } from '@/lib/services/whatsapp.service'
 import type { ToolContext } from './_context'
+import { formatForSpeech } from './_helpers'
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
@@ -42,8 +43,8 @@ export async function get_services(
     const data = result.data
     if (!data.length) return 'No hay servicios registrados en este negocio.'
 
-    const list = data.map(s => `- ${s.name} ($${s.price}, ${s.duration_min} min)`).join('\n')
-    return `Servicios disponibles:\n${list}`
+    const list = data.map(s => `- ${s.name}: $${s.price}, ${s.duration_min} minutos`).join('\n')
+    return formatForSpeech(`Servicios disponibles:\n${list}`)
   } catch (err: unknown) {
     logger.error('TOOL-DB', `get_services failed: ${err instanceof Error ? err.message : String(err)}`, { business_id })
     return 'Error al obtener la lista de servicios.'
@@ -75,17 +76,17 @@ export async function get_staff(
     const matchResult = fuzzyFind(team, query)
     if (matchResult.status === 'found') {
       const s = matchResult.match
-      return `He encontrado a ${s.name} (${s.role === 'owner' ? 'Dueño' : 'Empleado'}). ¿Es a quien buscas?`
+      return `Encontré a ${s.name}, ${s.role === 'owner' ? 'dueño' : 'empleado'}. ¿Es a quien buscas?`
     }
     if (matchResult.status === 'ambiguous') {
       const candidates = matchResult.candidates.map(c => `- ${c.name}`).join('\n')
-      return `Encontré varios empleados parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`
+      return formatForSpeech(`Encontré varios empleados parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`)
     }
     return `No encontré ningún empleado llamado "${query}".`
   }
 
-  const list = team.map(s => `- ${s.name} (${s.role === 'owner' ? 'Dueño' : 'Empleado'})`).join('\n')
-  return `Aquí tienes al equipo de trabajo:\n${list}`
+  const list = team.map(s => `- ${s.name}, ${s.role === 'owner' ? 'dueño' : 'empleado'}`).join('\n')
+  return formatForSpeech(`Equipo de trabajo:\n${list}`)
 }
 
 // ── STRATEGIC: WhatsApp CRM ────────────────────────────────────────────────

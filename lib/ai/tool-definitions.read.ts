@@ -102,12 +102,36 @@ export const readToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'get_monthly_forecast',
-      description: 'Proyección de ingresos al cierre del mes.',
+      description: 'Proyección de ingresos al cierre del mes actual (mes en curso).',
       parameters: { type: 'object', properties: {}, required: [] },
     },
     handler: makeHandler(
       (bizId) => ({ business_id: bizId }),
       tools.get_monthly_forecast as any,
+    ),
+  },
+
+  {
+    type: 'function',
+    function: {
+      name: 'get_month_report',
+      description: 'Reporte histórico de un mes específico: total de citas, completadas, canceladas e ingresos facturados. Usar cuando el usuario pide "el reporte de enero", "cómo estuvo marzo", "resumen de febrero", etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          month: { type: 'number', description: 'Número del mes (1=enero, 12=diciembre).' },
+          year:  { type: 'number', description: 'Año de 4 dígitos (ej: 2026).' },
+        },
+        required: ['month', 'year'],
+      },
+    },
+    handler: makeHandler(
+      (bizId, args) => ({
+        business_id: bizId,
+        month: Number(args.month ?? 1),
+        year:  Number(args.year  ?? new Date().getFullYear()),
+      }),
+      tools.get_month_report as any,
     ),
   },
 
