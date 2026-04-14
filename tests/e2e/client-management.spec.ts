@@ -33,7 +33,8 @@ test.describe('Client Management', () => {
     await newClientButton.click()
     
     await page.waitForURL(/\/clients\/new/, { timeout: 10_000 })
-    await expect(page.locator('form')).toBeVisible({ timeout: 5_000 })
+    // Use .first() to avoid strict mode violation with multiple forms
+    await expect(page.locator('form').first()).toBeVisible({ timeout: 5_000 })
   })
 
   test('should show client detail when clicking a client', async ({ page }) => {

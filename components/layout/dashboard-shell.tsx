@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { usePathname } from '@/i18n/navigation'
+import { hexToHsl } from '@/lib/utils/color'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { LanguageSwitcher } from '@/components/ui/language-switcher'
 import { useInAppNotifications } from '@/lib/hooks/use-in-app-notifications'
 import { Tables } from '@/types/database.types'
-import { hexToHsl } from '@/lib/utils/color'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type UserProfile = Pick<
@@ -81,7 +81,7 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
   const brandingStyle: React.CSSProperties = {
     backgroundColor: '#0F0F12',
     ...(business?.brandColor
-      ? ({ '--primary': hexToHsl(business.brandColor) } as React.CSSProperties)
+      ? { '--primary': hexToHsl(business.brandColor) } as React.CSSProperties
       : {}),
   }
 

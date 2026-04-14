@@ -8,7 +8,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import type { Business, BusinessSettingsJson } from '@/types';
 import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { getBrowserContainer } from '@/lib/browser-container';
@@ -85,7 +84,6 @@ export interface SettingsFormReturn {
 
 export function useSettingsForm(): SettingsFormReturn {
   const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
-  const router = useRouter();
   const [biz, setBiz] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,14 +104,14 @@ export function useSettingsForm(): SettingsFormReturn {
   const [showLuisFab, setShowLuisFab] = useState(true);
   const [savingFab, setSavingFab] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
+  const notif = useNotifications(bizId);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [generatingSlug, setGeneratingSlug] = useState(false);
   const [brandColor, setBrandColor] = useState<string>('#0062FF');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingBrand, setSavingBrand] = useState(false);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
-  const notif = useNotifications(bizId);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [generatingSlug, setGeneratingSlug] = useState(false);
 
   const WA_NUMBER = '584147531158';
   const whatsappLink = biz?.slug
@@ -174,6 +172,7 @@ export function useSettingsForm(): SettingsFormReturn {
         const storedColor = (business.settings as unknown as BusinessSettingsJson)?.brandColor;
         if (storedColor) setBrandColor(storedColor);
         setLogoUrl(business.logo_url ?? null);
+
       }
       setLoading(false);
     }
@@ -319,25 +318,6 @@ export function useSettingsForm(): SettingsFormReturn {
     setGeneratingSlug(false);
   }, [bizId, biz, showMsg]);
 
-  const copyHoursToAll = useCallback(
-    (sourceKey: string) => {
-      const source = hours[sourceKey];
-      if (!source || !source.active) return;
-
-      setHours((prev) => {
-        const next = { ...prev };
-        DAYS.forEach((key) => {
-          if (key !== sourceKey && next[key]?.active) {
-            next[key] = { ...next[key]!, open: source.open, close: source.close };
-          }
-        });
-        return next;
-      });
-      showMsg('success', 'copyHoursSuccess');
-    },
-    [hours, showMsg],
-  );
-
   const handleSaveBrandColor = useCallback(async (color: string) => {
     if (!bizId || !biz) return;
     setSavingBrand(true);
@@ -348,20 +328,14 @@ export function useSettingsForm(): SettingsFormReturn {
       brandColor: color,
     });
     setSavingBrand(false);
-    if (result.error) {
-      showMsg('error', 'saveError');
-    } else {
-      showMsg('success', 'brandColorSaved');
-      router.refresh();
-    }
-  }, [bizId, biz, showMsg, router]);
+    result.error
+      ? showMsg('error', 'saveError')
+      : showMsg('success', 'brandColorSaved');
+  }, [bizId, biz, showMsg]);
 
   const handleLogoChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      // Reset input so the same file can be selected again after an error
-      if (e.target) e.target.value = '';
-
       if (!file || !bizId) return;
       if (!file.type.startsWith('image/')) { showMsg('error', 'invalidImageFormat'); return; }
       if (file.size > 2 * 1024 * 1024) { showMsg('error', 'imageTooLarge'); return; }
@@ -384,15 +358,30 @@ export function useSettingsForm(): SettingsFormReturn {
       const result = await container.businesses.update(bizId, { logo_url: publicUrl });
 
       setUploadingLogo(false);
-      if (result.error) {
-        showMsg('error', 'saveError');
-      } else {
-        setLogoUrl(publicUrl + '?t=' + Date.now());
-        showMsg('success', 'logoUploaded');
-        router.refresh();
-      }
+      result.error
+        ? showMsg('error', 'saveError')
+        : (() => { setLogoUrl(publicUrl + '?t=' + Date.now()); showMsg('success', 'logoUploaded'); })();
     },
-    [bizId, supabase, showMsg, router],
+    [bizId, supabase, showMsg],
+  );
+
+  const copyHoursToAll = useCallback(
+    (sourceKey: string) => {
+      const source = hours[sourceKey];
+      if (!source || !source.active) return;
+
+      setHours((prev) => {
+        const next = { ...prev };
+        DAYS.forEach((key) => {
+          if (key !== sourceKey && next[key]?.active) {
+            next[key] = { ...next[key]!, open: source.open, close: source.close };
+          }
+        });
+        return next;
+      });
+      showMsg('success', 'copyHoursSuccess');
+    },
+    [hours, showMsg],
   );
 
   return {
