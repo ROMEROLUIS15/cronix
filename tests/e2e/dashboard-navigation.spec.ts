@@ -59,7 +59,7 @@ test.describe('Dashboard Navigation', () => {
     
     await newPage.goto('/dashboard')
     await newPage.waitForLoadState('domcontentloaded', { timeout: 10_000 })
-    await page.waitForTimeout(1000)
+    await newPage.waitForTimeout(1000)
     
     // Should be redirected to login (or showing login page)
     const url = newPage.url()
