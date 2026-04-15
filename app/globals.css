@@ -38,6 +38,7 @@
     --muted-foreground: 240 4% 58%; /* #909098 */
     --primary: 220 100% 50%; /* #0062FF */
     --primary-foreground: 0 0% 100%;
+    --primary-rgb: 0, 98, 255; /* R, G, B — used for rgba(var(--primary-rgb), opacity) */
     --radius: 1rem;
 
     /* Accent colors */
@@ -270,10 +271,10 @@
     }
   }
   .nav-item-active {
-    background-color: rgba(0, 98, 255, 0.12);
-    color: #4d83ff;
-    border: 1px solid rgba(0, 98, 255, 0.22);
-    box-shadow: 0 0 12px rgba(0, 98, 255, 0.08);
+    background-color: rgba(var(--primary-rgb), 0.12);
+    color: hsl(var(--primary));
+    border: 1px solid rgba(var(--primary-rgb), 0.22);
+    box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.08);
   }
   .nav-item-inactive {
     color: #909098;
@@ -282,7 +283,7 @@
   .nav-item-inactive:hover {
     background-color: #212125;
     color: #f2f2f2;
-    border-color: rgba(0, 98, 255, 0.12);
+    border-color: rgba(var(--primary-rgb), 0.12);
   }
 
   /* ── Badges ── */

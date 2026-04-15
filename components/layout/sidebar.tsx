@@ -120,15 +120,25 @@ export function Sidebar({
                 />
               )}
             </div>
-            <div className="relative h-6 w-24 flex-shrink-0">
-              <Image
-                src="/cronix-letras.jpg"
-                alt="Cronix"
-                fill
-                className="object-contain object-left"
-                sizes="96px"
-              />
-            </div>
+            {/* Show business name when custom logo, Cronix wordmark when default */}
+            {business?.logo_url ? (
+              <span
+                className="text-sm font-bold truncate flex-1"
+                style={{ color: "#F5F5F5" }}
+              >
+                {business.name}
+              </span>
+            ) : (
+              <div className="relative h-6 w-24 flex-shrink-0">
+                <Image
+                  src="/cronix-letras.jpg"
+                  alt="Cronix"
+                  fill
+                  className="object-contain object-left"
+                  sizes="96px"
+                />
+              </div>
+            )}
           </Link>
 
           {/* Close button — mobile only */}
@@ -149,13 +159,13 @@ export function Sidebar({
           <div
             className="mx-3 mt-4 px-3 py-2.5 rounded-xl flex-shrink-0"
             style={{
-              backgroundColor: "rgba(0,98,255,0.08)",
-              border: "1px solid rgba(0,98,255,0.15)",
+              backgroundColor: "rgba(var(--primary-rgb), 0.08)",
+              border: "1px solid rgba(var(--primary-rgb), 0.15)",
             }}
           >
             <p
               className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
-              style={{ color: "#0062FF" }}
+              style={{ color: "hsl(var(--primary))" }}
             >
               {t('activeBusiness')}
             </p>
@@ -214,7 +224,7 @@ export function Sidebar({
                   {isActive && (
                     <ChevronRight
                       size={14}
-                      style={{ color: "#0062FF" }}
+                      style={{ color: "hsl(var(--primary))" }}
                       className="flex-shrink-0"
                     />
                   )}
@@ -241,11 +251,11 @@ export function Sidebar({
               style={{
                 backgroundColor:
                   pathname === "/dashboard/profile"
-                    ? "rgba(0,98,255,0.1)"
+                    ? "rgba(var(--primary-rgb), 0.1)"
                     : "#1E1E21",
                 border:
                   pathname === "/dashboard/profile"
-                    ? "1px solid rgba(0,98,255,0.2)"
+                    ? "1px solid rgba(var(--primary-rgb), 0.2)"
                     : "1px solid #262629",
               }}
             >
@@ -266,8 +276,8 @@ export function Sidebar({
                   <div
                     className="h-full w-full flex items-center justify-center text-xs font-bold"
                     style={{
-                      backgroundColor: "rgba(0,98,255,0.15)",
-                      color: "#4D83FF",
+                      backgroundColor: "rgba(var(--primary-rgb), 0.15)",
+                      color: "hsl(var(--primary))",
                     }}
                   >
                     {initials}

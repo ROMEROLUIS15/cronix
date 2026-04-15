@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { usePathname } from '@/i18n/navigation'
-import { hexToHsl } from '@/lib/utils/color'
+import { hexToHsl, hexToRgb } from '@/lib/utils/color'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { LanguageSwitcher } from '@/components/ui/language-switcher'
@@ -80,9 +80,10 @@ export function DashboardShell({ children, user, business }: DashboardShellProps
 
   const brandingStyle: React.CSSProperties = {
     backgroundColor: '#0F0F12',
-    ...(business?.brandColor
-      ? { '--primary': hexToHsl(business.brandColor) } as React.CSSProperties
-      : {}),
+    ...(business?.brandColor ? {
+      '--primary':     hexToHsl(business.brandColor),
+      '--primary-rgb': hexToRgb(business.brandColor),
+    } as React.CSSProperties : {}),
   }
 
   return (

@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Business, BusinessSettingsJson } from '@/types';
 import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { getBrowserContainer } from '@/lib/browser-container';
@@ -84,6 +85,7 @@ export interface SettingsFormReturn {
 
 export function useSettingsForm(): SettingsFormReturn {
   const { supabase, businessId: bizId, loading: contextLoading } = useBusinessContext();
+  const router = useRouter();
   const [biz, setBiz] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -328,10 +330,13 @@ export function useSettingsForm(): SettingsFormReturn {
       brandColor: color,
     });
     setSavingBrand(false);
-    result.error
-      ? showMsg('error', 'saveError')
-      : showMsg('success', 'brandColorSaved');
-  }, [bizId, biz, showMsg]);
+    if (result.error) {
+      showMsg('error', 'saveError');
+    } else {
+      showMsg('success', 'brandColorSaved');
+      router.refresh(); // Re-fetches server layout → injects new CSS variable
+    }
+  }, [bizId, biz, showMsg, router]);
 
   const handleLogoChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,10 +347,17 @@ export function useSettingsForm(): SettingsFormReturn {
 
       setUploadingLogo(true);
       const ext = file.name.split('.').pop() ?? 'jpg';
-      const path = `business-logos/${bizId}.${ext}`;
+      const newPath = `business-logos/${bizId}.${ext}`;
+
+      // Delete all existing logos for this business before uploading new one
+      // to avoid orphan files with different extensions
+      const KNOWN_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      await Promise.allSettled(
+        KNOWN_EXTS.map(e => supabase.storage.from('logos').remove([`business-logos/${bizId}.${e}`]))
+      );
 
       const { error: uploadError } = await supabase.storage
-        .from('logos').upload(path, file, { upsert: true });
+        .from('logos').upload(newPath, file, { upsert: true });
 
       if (uploadError) {
         setUploadingLogo(false);
@@ -353,16 +365,20 @@ export function useSettingsForm(): SettingsFormReturn {
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(newPath);
       const container = getBrowserContainer();
       const result = await container.businesses.update(bizId, { logo_url: publicUrl });
 
       setUploadingLogo(false);
-      result.error
-        ? showMsg('error', 'saveError')
-        : (() => { setLogoUrl(publicUrl + '?t=' + Date.now()); showMsg('success', 'logoUploaded'); })();
+      if (result.error) {
+        showMsg('error', 'saveError');
+      } else {
+        setLogoUrl(publicUrl + '?t=' + Date.now()); // Update settings preview immediately
+        showMsg('success', 'logoUploaded');
+        router.refresh(); // Refresh server data → sidebar shows new logo
+      }
     },
-    [bizId, supabase, showMsg],
+    [bizId, supabase, showMsg, router],
   );
 
   const copyHoursToAll = useCallback(
