@@ -11,8 +11,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useSettingsForm } from '@/app/[locale]/dashboard/settings/hooks/use-settings-form'
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
+// ─ Mocks ────────────────────────────────────────────────────────────────────
 
+// Mock Next.js useRouter
+const mockPush = vi.fn()
+const mockRefresh = vi.fn()
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    refresh: mockRefresh,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+  }),
+}))
+
+const mockRemove = vi.fn()
 const mockUpload = vi.fn()
 const mockGetPublicUrl = vi.fn()
 
@@ -23,9 +39,10 @@ const mockSupabase = {
         return {
           upload: mockUpload,
           getPublicUrl: mockGetPublicUrl,
+          remove: mockRemove,
         }
       }
-      return { upload: vi.fn(), getPublicUrl: vi.fn() }
+      return { upload: vi.fn(), getPublicUrl: vi.fn(), remove: vi.fn() }
     },
   },
 }
@@ -84,6 +101,9 @@ afterEach(() => {
   vi.clearAllMocks()
   mockUpload.mockReset()
   mockGetPublicUrl.mockReset()
+  mockRemove.mockReset()
+  mockPush.mockReset()
+  mockRefresh.mockReset()
 })
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -157,6 +177,7 @@ describe('useSettingsForm — Brand Handlers', () => {
     })
 
     it('uploads valid image successfully', async () => {
+      mockRemove.mockResolvedValue({ error: null })
       mockUpload.mockResolvedValue({ error: null })
       mockGetPublicUrl.mockReturnValue({
         data: { publicUrl: 'https://supabase.co/logos/test-biz-id.png' },
@@ -178,6 +199,7 @@ describe('useSettingsForm — Brand Handlers', () => {
     })
 
     it('handles upload error gracefully', async () => {
+      mockRemove.mockResolvedValue({ error: null })
       mockUpload.mockResolvedValue({ error: { message: 'Upload failed' } })
 
       const { result } = renderHook(() => useSettingsForm())
@@ -195,6 +217,7 @@ describe('useSettingsForm — Brand Handlers', () => {
     })
 
     it('adds cache-busting timestamp to logo URL on success', async () => {
+      mockRemove.mockResolvedValue({ error: null })
       mockUpload.mockResolvedValue({ error: null })
       mockGetPublicUrl.mockReturnValue({
         data: { publicUrl: 'https://supabase.co/logos/test-biz-id.png' },
@@ -215,6 +238,7 @@ describe('useSettingsForm — Brand Handlers', () => {
     })
 
     it('handles DB update error after successful upload', async () => {
+      mockRemove.mockResolvedValue({ error: null })
       mockUpload.mockResolvedValue({ error: null })
       mockGetPublicUrl.mockReturnValue({
         data: { publicUrl: 'https://supabase.co/logos/test-biz-id.png' },
