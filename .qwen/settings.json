@@ -40,7 +40,8 @@
       "Read(c:\\Users\\luisc.BONAPLATZVM\\Documents\\PROYECTOS PROGRAMACION\\cronix/**)",
       "Bash(git stash)",
       "Bash(git checkout *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(git branch *)"
     ]
   },
   "$version": 3
