@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ExecutionEngine, type IToolExecutor, type IMockLlmProvider, type MockLlmResponse } from '@/lib/ai/orchestrator/execution-engine'
 import type { Decision, ConversationState, AiInput } from '@/lib/ai/orchestrator/types'
+import type { LlmMessage } from '@/lib/ai/providers/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ function immediateDecision(intent = 'confirm_booking', args = {}): Extract<Decis
   return { type: 'execute_immediately', intent, args }
 }
 
-function llmDecision(messages = [{ role: 'system' as const, content: 'test' }]): Extract<Decision, { type: 'reason_with_llm' }> {
+function llmDecision(messages: LlmMessage[] = [{ role: 'system', content: 'test' }]): Extract<Decision, { type: 'reason_with_llm' }> {
   return {
     type:     'reason_with_llm',
     messages,
