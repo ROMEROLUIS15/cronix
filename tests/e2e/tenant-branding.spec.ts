@@ -126,9 +126,10 @@ test.describe('Tenant Branding E2E', () => {
         await page.waitForTimeout(1000)
 
         // Should show invalid image format error
-        const errorMsg = page.locator('text=invalid, text=imagen, text=image, text=format, text=tipo').first()
+        // Messages: "Invalid image format" (en) or "Formato de imagen no válido" (es)
+        const errorMsg = page.locator('text=Invalid image format, text=Formato de imagen').first()
         const hasError = await errorMsg.isVisible().catch(() => false)
-        
+
         expect(hasError).toBeTruthy()
       }
     })
@@ -153,9 +154,10 @@ test.describe('Tenant Branding E2E', () => {
         await page.waitForTimeout(1000)
 
         // Should show file too large error
-        const errorMsg = page.locator('text=large, text=grande, text=2MB, text=size, text=tamaño').first()
+        // Messages: "Image must be under 2MB" (en) or "La imagen debe ser menor a 2MB" (es)
+        const errorMsg = page.locator('text=under 2MB, text=menor a 2MB').first()
         const hasError = await errorMsg.isVisible().catch(() => false)
-        
+
         expect(hasError).toBeTruthy()
       }
     })
