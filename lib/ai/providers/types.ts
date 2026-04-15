@@ -58,6 +58,8 @@ export interface LlmResult {
   model:   string
   latency: number
   error?:  string
+  /** Total tokens consumed (prompt + completion). 0 when unavailable. */
+  tokens:  number
 }
 
 export interface TtsResult {

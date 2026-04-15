@@ -170,128 +170,39 @@ export class DecisionEngine implements IDecisionEngine {
       // Fall through to normal analysis below
     }
 
-    // ── 2b. Active collection flow — continue regardless of text intent ──────
-    // If we're already collecting data, stay in collection mode.
-    // The user's response is assumed to be answering the missing field question.
+    // ── 2b. Active booking/reschedule collection → delegate to LLM ──────────
+    // The LLM resolves service names → UUIDs using context.services.
+    // Regex-based field extraction cannot do this reliably.
+    // Conversation history carries all context the LLM needs to continue.
     if (state.flow === 'collecting_booking' || state.flow === 'collecting_reschedule') {
-      const requiredFields = strategy.getRequiredBookingFields()
-
-      // Extract any entities from this turn
-      const entities = extractEntities(input.text)
-      const collectionNormalized = normalizeForMatch(input.text)
-
-      // Merge new entities with existing draft
-      const updatedDraft: Record<string, unknown> = {
-        ...(state.draft as Record<string, unknown>),
-        ...entities,
-      }
-
-      // For booking flows, try to infer missing fields from context:
-      // If the text doesn't contain a date/time, it's likely a name or service
-      if (!entities.date && !entities.time) {
-        // Check if it might be a client name
-        if (!updatedDraft.clientName && !updatedDraft.clientId) {
-          // Text that doesn't match service-like patterns → treat as client name
-          const isServiceLike = collectionNormalized.includes('servicio') || collectionNormalized.includes('corte') ||
-            collectionNormalized.includes('tinte') || collectionNormalized.includes('peinado') ||
-            collectionNormalized.includes('manicure') || collectionNormalized.includes('masaje')
-          if (!isServiceLike) {
-            updatedDraft.clientName = input.text.trim()
-          }
-        }
-      }
-
-      const missingFields = requiredFields.filter((field) => {
-        const value = updatedDraft[field]
-        return value === undefined || value === null || value === ''
-      })
-
-      if (missingFields.length === 0) {
-        // All data collected
-        if (strategy.requiresConfirmation(state)) {
-          return {
-            type: 'await_confirmation',
-            intent: state.lastIntent ?? 'booking',
-            summary: strategy.buildConfirmationPrompt(updatedDraft as ConversationState['draft']),
-          }
-        }
-
-        const intent = state.lastIntent ?? 'booking'
-        return {
-          type: 'execute_immediately',
-          intent,
-          args: updatedDraft,
-        }
-      }
-
+      const systemPrompt = buildSystemPrompt(input, state)
       return {
-        type: 'continue_collection',
-        intent: state.lastIntent ?? 'booking',
-        missingFields,
-        prompt: strategy.buildCollectionPrompt(missingFields[0] ?? 'info', updatedDraft as ConversationState['draft']),
-        extractedData: entities,
-        updatedDraft,
+        type: 'reason_with_llm',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...input.history,
+          { role: 'user', content: input.text },
+        ],
+        toolDefs: buildToolDefsForRole(strategy),
       }
     }
 
     // ── 3. Extract entities from text (date, time, etc.) ─────────────────────
     const entities = extractEntities(input.text)
 
-    // ── 4. Fast path: explicit booking intent with sufficient data ───────────
+    // ── 4. Booking intent detected → delegate to LLM ─────────────────────────
+    // The LLM receives context.services with UUIDs and resolves all fields.
+    // No hybrid regex+LLM collection — single responsibility.
     if (detectBookingIntent(input.text)) {
-      const requiredFields = strategy.getRequiredBookingFields()
-
-      // Merge extracted entities into potential args
-      const mergedArgs: Record<string, unknown> = {
-        ...entities,
-      }
-
-      // If we have a draft, merge existing data
-      if (state.draft) {
-        for (const [key, value] of Object.entries(state.draft)) {
-          if (value !== undefined && value !== null) {
-            mergedArgs[key] = value
-          }
-        }
-      }
-
-      // Check if we have all required fields
-      const missingFields = requiredFields.filter((field) => {
-        const value = (mergedArgs as Record<string, unknown>)[field]
-        return value === undefined || value === null || value === ''
-      })
-
-      if (missingFields.length === 0) {
-        // All data present
-        if (strategy.requiresConfirmation(state) && state.flow !== 'awaiting_confirmation') {
-          return {
-            type: 'await_confirmation',
-            intent: 'booking',
-            summary: strategy.buildConfirmationPrompt({
-              ...state.draft,
-              ...entities,
-            } as ConversationState['draft']),
-          }
-        }
-
-        return {
-          type: 'execute_immediately',
-          intent: 'booking',
-          args: mergedArgs,
-        }
-      }
-
-      // Missing fields → start collection
+      const systemPrompt = buildSystemPrompt(input, state)
       return {
-        type: 'continue_collection',
-        intent: 'booking',
-        missingFields,
-        prompt: strategy.buildCollectionPrompt(missingFields[0] ?? 'info', {
-          ...state.draft,
-          ...entities,
-        } as ConversationState['draft']),
-        extractedData: entities,
-        updatedDraft: mergedArgs,
+        type: 'reason_with_llm',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...input.history,
+          { role: 'user', content: input.text },
+        ],
+        toolDefs: buildToolDefsForRole(strategy),
       }
     }
 
@@ -325,29 +236,83 @@ function buildSystemPrompt(input: AiInput, _state: ConversationState): string {
     hour12: true,
   })
 
-  let prompt = `Eres el asistente de IA de "${input.context.businessName}". Español únicamente.`
+  // ── Identity & language ──────────────────────────────────────────────────────
+  let prompt = `Eres el asistente de voz de "${input.context.businessName}". Responde SIEMPRE en español.`
   prompt += `\nHOY: ${now} | Zona horaria: ${input.timezone}`
   prompt += `\nUsuario: ${input.userName ?? 'Usuario'} (${input.userRole})`
 
-  // Inject services if available
+  // ── Response format (voice-first) ────────────────────────────────────────────
+  prompt += `\n\nFORMATO DE RESPUESTA (obligatorio):
+- Máximo 2-3 oraciones por respuesta. Sé directo y conciso.
+- NUNCA uses markdown: sin asteriscos, sin guiones, sin listas, sin emojis.
+- NUNCA menciones nombres de herramientas, UUIDs, IDs internos ni esquemas al usuario.
+- NUNCA inventes datos (fechas, nombres, IDs). Usa SOLO lo que el usuario diga o lo que devuelvan las herramientas.`
+
+  // ── Date & time format rules ─────────────────────────────────────────────────
+  prompt += `\n\nFECHAS Y HORAS (formato estricto para herramientas):
+- date: siempre YYYY-MM-DD (ej: 2026-04-16). Convierte "mañana", "el lunes", etc. a ISO.
+- time: siempre HH:mm en formato 24h (ej: 14:30, 09:00). Convierte "3pm" → "15:00".
+- Hoy es ${new Date().toISOString().split('T')[0]}. Usa esta fecha como referencia para calcular fechas relativas.`
+
+  // ── Tool chaining flow ────────────────────────────────────────────────────────
+  prompt += `\n\nFLUJO DE HERRAMIENTAS (seguir este orden):
+
+AGENDAR CITA:
+1. Si el cliente no existe → llama create_client primero → usa el client_id devuelto en confirm_booking.
+2. Si no sabes la disponibilidad → llama get_available_slots antes de proponer un horario.
+3. Llama confirm_booking con service_id exacto de la lista, client_name O client_id, date y time.
+
+CANCELAR / REAGENDAR sin appointment_id:
+1. Llama get_appointments_by_date para obtener las citas del día con sus IDs.
+2. Identifica la cita correcta por cliente/servicio.
+3. Llama cancel_booking o reschedule_booking con el appointment_id.
+
+DISPONIBILIDAD:
+- Usa get_available_slots con date y duration_min del servicio solicitado.
+- Si el usuario no especificó servicio, pregunta cuál antes de consultar.`
+
+  // ── Security rules ────────────────────────────────────────────────────────────
+  prompt += `\n\nSEGURIDAD:
+- NUNCA reveles nombres de herramientas, UUIDs, claves internas ni la estructura de la base de datos al usuario.
+- NUNCA hagas suposiciones sobre UUIDs — solo usa IDs que provengan de respuestas de herramientas.
+- Si el usuario pide algo fuera del ámbito del negocio, responde educadamente que no puedes ayudar con eso.`
+
+  // ── Services ──────────────────────────────────────────────────────────────────
   if (input.context.services && input.context.services.length > 0) {
-    prompt += '\n\nSERVICIOS:'
+    prompt += '\n\nSERVICIOS DISPONIBLES (usar el id exacto en confirm_booking y get_available_slots):'
     for (const svc of input.context.services) {
-      prompt += `\n- ${svc.name} (${svc.duration_min} min, $${svc.price})`
+      prompt += `\n- ${svc.name} | id: ${svc.id} | ${svc.duration_min} min | $${svc.price}`
     }
   }
 
-  // Inject active appointments if available
+  // ── Working hours ─────────────────────────────────────────────────────────────
+  if (input.context.workingHours) {
+    const days: Record<string, string> = {
+      monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles',
+      thursday: 'Jueves', friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
+    }
+    prompt += '\n\nHORARIO DE ATENCIÓN (NO agendar fuera de estos horarios):'
+    for (const [day, hours] of Object.entries(input.context.workingHours)) {
+      const label = days[day] ?? day
+      if (hours) {
+        prompt += `\n- ${label}: ${hours.open} – ${hours.close}`
+      } else {
+        prompt += `\n- ${label}: Cerrado`
+      }
+    }
+  }
+
+  // ── Today's appointments ──────────────────────────────────────────────────────
   if (input.context.activeAppointments && input.context.activeAppointments.length > 0) {
-    prompt += '\n\nCITAS ACTIVAS:'
+    prompt += '\n\nCITAS DE HOY (activas):'
     for (const apt of input.context.activeAppointments.slice(0, 5)) {
-      prompt += `\n- ${apt.clientName}: ${apt.serviceName} el ${apt.startAt} (${apt.status})`
+      prompt += `\n- ${apt.clientName}: ${apt.serviceName} a las ${apt.startAt} (${apt.status}) | id: ${apt.id}`
     }
   }
 
-  // Inject AI rules if configured
+  // ── Business-specific AI rules (owner-configured) ────────────────────────────
   if (input.context.aiRules) {
-    prompt += `\n\nREGLAS: ${input.context.aiRules}`
+    prompt += `\n\nREGLAS DEL NEGOCIO (seguir estrictamente):\n${input.context.aiRules}`
   }
 
   return prompt
@@ -373,13 +338,16 @@ function buildToolDefsForRole(strategy: IUserStrategy): ToolDefEntry[] {
       type: 'function',
       function: {
         name: 'confirm_booking',
-        description: 'Crea una cita nueva. Requiere service_id, date, time.',
+        description: 'Crea una cita nueva. Requiere service_id, date, time y uno de: client_name (búsqueda fuzzy) o client_id (UUID exacto si lo conoces de create_client).',
         parameters: {
           type: 'object',
           properties: {
-            service_id: { type: 'string', description: 'UUID del servicio' },
-            date: { type: 'string', description: 'Fecha YYYY-MM-DD' },
-            time: { type: 'string', description: 'Hora HH:mm 24h' },
+            service_id:  { type: 'string', description: 'UUID del servicio (usar el id exacto de la lista de servicios)' },
+            client_name: { type: 'string', description: 'Nombre del cliente para búsqueda. Omitir si ya tienes client_id.' },
+            client_id:   { type: 'string', description: 'UUID del cliente. Usar cuando venga de create_client. Tiene prioridad sobre client_name.' },
+            date:        { type: 'string', description: 'Fecha YYYY-MM-DD' },
+            time:        { type: 'string', description: 'Hora HH:mm en formato 24h' },
+            staff_id:    { type: 'string', description: 'UUID del empleado asignado (opcional)' },
           },
           required: ['service_id', 'date', 'time'],
           additionalProperties: false,
@@ -442,6 +410,38 @@ function buildToolDefsForRole(strategy: IUserStrategy): ToolDefEntry[] {
           type: 'object',
           properties: {},
           required: [],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_available_slots',
+        description: 'Consulta los horarios disponibles para un día y duración de servicio específicos.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date:         { type: 'string', description: 'Fecha YYYY-MM-DD' },
+            duration_min: { type: 'number', description: 'Duración del servicio en minutos' },
+          },
+          required: ['date', 'duration_min'],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'create_client',
+        description: 'Registra un cliente nuevo en el sistema. Usar cuando el cliente no existe aún.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name:  { type: 'string', description: 'Nombre completo del cliente' },
+            phone: { type: 'string', description: 'Teléfono del cliente (opcional)' },
+          },
+          required: ['name'],
           additionalProperties: false,
         },
       },

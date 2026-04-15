@@ -1,87 +1,149 @@
-# 🛠️ Luis IA: Assistant Tools Reference (API)
+# Luis IA — Assistant Tools Reference
 
-## 📄 Documentación Técnica de Luis IA V4
-- [Estrategia de Resiliencia (Shield)](/docs/architecture/RELIABILITY.md)
-- [Ingeniería de UX (Premium interactions)](/docs/architecture/UX_ENGINEERING.md)
-- [Orquestación de IA (The Brain)](/docs/architecture/AI_ORCHESTRATION.md)
-- [Catálogo de Herramientas (V4 Powers)](/docs/api/ASSISTANT_TOOLS.md)
+> Current tool catalog as of 2026-04-14. All tool definitions live in `lib/ai/orchestrator/decision-engine.ts` (`buildToolDefsForRole`). Execution logic lives in `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts`.
 
 ---
 
-This is the technical catalog of capabilities (Tools) available to the Cronix AI Executive Assistant.
+## Tool Parameter Conventions
 
-### `get_inactive_clients`
-Identifica clientes que no han tenido citas en más de 60 días para reactivación.
-- **Parámetros**: `ninguno`.
-- **Lógica**: Filtra clientes por `last_appointment_at` comparando contra la fecha actual - 60 días.
-- **Uso**: Luis sugiere contactar a estos clientes para recuperar ingresos.
+- `date`: always `YYYY-MM-DD` (e.g. `2026-04-16`)
+- `time`: always `HH:mm` in 24-hour format (e.g. `14:30`, `09:00`)
+- `appointment_id`, `service_id`, `client_id`: UUIDs — only use values from tool responses or the system prompt context. Never hallucinate UUIDs.
 
-### `get_revenue_stats`
-Muestra un resumen de facturación de esta semana comparado con la anterior.
-- **Parámetros**: `ninguno`.
-- **Lógica**: Agrega montos de `transactions` de los últimos 7 días y los compara contra los 7 días previos, calculando el cambio porcentual.
+---
 
-### `send_reactivation_message` [V4]
-Envía un mensaje de reactivación por WhatsApp a un cliente inactivo.
-- **Parámetros**: `client_name`.
-- **Lógica**: Obtiene el teléfono del cliente y el nombre del negocio, y dispara la Edge Function `whatsapp-service` con el template `reactivation_promo`.
+## `confirm_booking`
 
-## 📅 Appointments Management
+Creates a new appointment.
 
-### `book_appointment` [V4 UPDATED]
-Agenda una nueva cita para un cliente, servicio y fecha específica.
-- **Novedad V4**: Ahora soporta el parámetro opcional `staff_name`.
-- **Lógica**: Si se proporciona un nombre de empleado, Luis realiza un fuzzy matching en la tabla de equipo y asigna el `staff_id` a la cita.
-- **Parameters**: `client_name`, `service_name`, `date`, `time`.
-- **Logic**: Uses fuzzy matching for client/service name. Calculates end time based on service duration.
-- **Side-effects**: Inserts rows in `appointments` and `appointment_services` tables.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `service_id` | `string` (UUID) | yes | Exact UUID from the services list in the system prompt |
+| `client_name` | `string` | yes* | Client name for fuzzy match resolution |
+| `client_id` | `string` (UUID) | no | Client UUID (takes priority over `client_name` when provided) |
+| `date` | `string` | yes | `YYYY-MM-DD` |
+| `time` | `string` | yes | `HH:mm` 24h |
+| `staff_id` | `string` (UUID) | no | Assigned staff member |
 
-### `cancel_appointment`
-Cancels the next upcoming appointment for a client.
-- **Parameters**: `client_name`.
-- **Logic**: Searches for the first active (pending/confirmed) appointment in the future. updates status to `cancelled`.
+*`client_name` is required in the tool definition; `client_id` can replace it functionally if known from a prior `create_client` call.
 
-### `get_upcoming_gaps`
-Consults occupied slots to determine availability.
-- **Parameters**: `none`.
-- **Logic**: Returns a list of occupied time blocks.
+**Flow**: resolves client (by ID or fuzzy match) → resolves service duration → checks conflict → inserts appointment.
 
-## 💰 Finance & Business
+**Error cases**: client not found, service not found, slot already occupied.
 
-### `get_today_summary`
-Strategic daily report for the business owner.
-- **Parameters**: `none`.
-- **Logic**: Aggregate net income and appointment status (completed, pending, cancelled).
+---
 
-### `register_payment`
-Quickly records a transaction/payment.
-- **Parameters**: `client_name`, `amount`, `method`.
-- **Logic**: Normalizes payment method (cash, card, transfer, qr) and creates a transaction record.
+## `cancel_booking`
 
-### `get_client_debt`
-Consults potential unpaid appointments.
-- **Parameters**: `client_name`.
-- **Logic**: Searches for completed appointments without associated transactions.
+Cancels an existing appointment by ID.
 
-## 🛡️ Security Guardrails (Hardening V4)
-Para garantizar la integridad del sistema, cada herramienta cuenta con validaciones de seguridad automáticas:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appointment_id` | `string` (UUID) | yes | UUID of the appointment to cancel |
 
-1. **Multi-tenant Isolation**: El `business_id` se inyecta desde el servidor; el LLM no puede acceder a datos de otros negocios.
-2. **Input Validation**:
-   - `register_payment`: Rechaza montos $\le 0$ o superiores a limites de seguridad.
-   - `book_appointment`: Valida que la fecha no sea anterior a un año del presente.
-   - `send_reactivation_message`: Verifica la propiedad del cliente antes de disparar el mensaje.
-3. **Error Sanitization**: Los fallos técnicos (DB timeouts, etc.) se ocultan tras mensajes amigables para evitar la exposición de la arquitectura interna.
+**Prerequisite**: If the appointment ID is not known, call `get_appointments_by_date` first to list appointments with their IDs.
 
-## 🚀 How to Add a Tool
-1. Define the logic in `lib/ai/assistant-tools.ts`.
-2. Register the tool schema and its handler in `lib/ai/tool-registry.ts`.
-3. Luis IA will automatically "learn" the new skill on the next mount.
+---
 
-### 2. Memoria Conversacional (Short-term Context)
-Luis utiliza un `MemoryStore` en memoria de servidor (expandible a Redis) que mantiene los últimos 6 mensajes de la sesión del usuario.
-- **Propósito**: Permitir referencias anafóricas (ej: "Agenda a Juan... ¿Cuánto me debe **él**?").
-- **Flujo**: Antes de cada petición al LLM, el servicio inyecta el historial relevante, dando a Luis "conciencia" de la conversación actual.
+## `reschedule_booking`
 
-### 3. El Puente LLM Multi-Pass (Multi-Respuesta)
-Luis IA realiza una lógica de **razonamiento de dos pasos**:
+Moves an existing appointment to a new date and time.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appointment_id` | `string` (UUID) | yes | UUID of the appointment |
+| `new_date` | `string` | yes | `YYYY-MM-DD` |
+| `new_time` | `string` | yes | `HH:mm` 24h |
+
+**Flow**: fetches existing appointment to determine service duration → calculates new end time → checks conflicts → updates.
+
+---
+
+## `get_appointments_by_date`
+
+Returns all active appointments for a given day.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `date` | `string` | yes | `YYYY-MM-DD` |
+
+**Returns**: list of appointments with `time`, `clientName`, `serviceName`, `status`, and `id`. Use the `id` values for subsequent `cancel_booking` or `reschedule_booking` calls.
+
+**Filters**: excludes `cancelled` and `no_show` statuses.
+
+---
+
+## `get_services`
+
+Lists all active services for the business.
+
+No parameters.
+
+**Returns**: service name, duration in minutes, and price per service.
+
+**Note**: The system prompt already includes services with UUIDs. Use this tool when the user explicitly asks for the services list during a conversation.
+
+---
+
+## `get_available_slots`
+
+Returns free time slots for a specific day and service duration.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `date` | `string` | yes | `YYYY-MM-DD` |
+| `duration_min` | `number` | yes | Service duration in minutes (from services list) |
+
+**Logic**: generates 30-minute interval slots within working hours, subtracts booked intervals, returns slots with enough consecutive free time for `duration_min`.
+
+**Returns**: list of available slots as `{ time: 'HH:mm', label: '9:00 am' }`.
+
+**Usage**: call before `confirm_booking` when the user asks "what times are available?" or when a specific time slot needs validation.
+
+---
+
+## `create_client`
+
+Registers a new client in the system.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | yes | Full client name (1–120 characters) |
+| `phone` | `string` | no | Phone number (up to 30 characters) |
+
+**Returns**: response string includes the new `client_id` UUID explicitly, e.g.:
+```
+Cliente "María García" registrado (client_id: <uuid>). Usa client_id: <uuid> al llamar confirm_booking.
+```
+
+**Chaining**: after `create_client`, pass the returned `client_id` to `confirm_booking` instead of `client_name` to avoid fuzzy matching and ensure the correct client is linked.
+
+**Access**: internal users only (`owner` / `staff`). Not available to external callers.
+
+---
+
+## Tool Chaining Patterns
+
+### New client booking
+```
+1. create_client { name, phone? }
+   → returns client_id
+
+2. confirm_booking { service_id, client_id, date, time }
+```
+
+### Cancel without knowing the ID
+```
+1. get_appointments_by_date { date }
+   → returns list with appointment IDs
+
+2. cancel_booking { appointment_id }
+```
+
+### Check availability before booking
+```
+1. get_available_slots { date, duration_min }
+   → returns available time labels
+
+2. confirm_booking { service_id, client_name, date, time }
+```

@@ -33,11 +33,13 @@ import { StrategyFactory } from './strategy'
 // Phase 1: Mock implementation. Phase 2: replaced with ToolAdapterRegistry.
 
 export interface ToolExecuteParams {
-  toolName: string
-  args: Record<string, unknown>
-  businessId: string
-  userId: string
-  timezone: string
+  toolName:     string
+  args:         Record<string, unknown>
+  businessId:   string
+  userId:       string
+  timezone:     string
+  /** Business working hours per day — passed to availability tools */
+  workingHours?: Record<string, { open: string; close: string }>
 }
 
 export interface IToolExecutor {
@@ -120,6 +122,8 @@ export interface MockLlmResponse {
     type: 'function'
     function: { name: string; arguments: string }
   }>
+  /** Real token count from the LLM provider (0 when unavailable). */
+  tokens?: number
 }
 
 export interface IMockLlmProvider {
@@ -235,11 +239,12 @@ export class ExecutionEngine implements IExecutionEngine {
     }
 
     const result = await this.toolExecutor.execute({
-      toolName: decision.intent,
-      args: decision.args,
-      businessId: input.businessId,
-      userId: input.userId,
-      timezone: input.timezone,
+      toolName:     decision.intent,
+      args:         decision.args,
+      businessId:   input.businessId,
+      userId:       input.userId,
+      timezone:     input.timezone,
+      workingHours: input.context.workingHours as Record<string, { open: string; close: string }> | undefined,
     })
 
     const trace: ToolTrace = {
@@ -352,11 +357,12 @@ export class ExecutionEngine implements IExecutionEngine {
     }
 
     const result = await this.toolExecutor.execute({
-      toolName: decision.toolName,
-      args: decision.args,
-      businessId: input.businessId,
-      userId: input.userId,
-      timezone: input.timezone,
+      toolName:     decision.toolName,
+      args:         decision.args,
+      businessId:   input.businessId,
+      userId:       input.userId,
+      timezone:     input.timezone,
+      workingHours: input.context.workingHours as Record<string, { open: string; close: string }> | undefined,
     })
 
     const trace: ToolTrace = {
@@ -387,6 +393,7 @@ export class ExecutionEngine implements IExecutionEngine {
   ): Promise<ExecutionResult> {
     const MAX_STEPS = 3
     let step = 0
+    let totalTokens = 0
     const traces: ToolTrace[] = []
     const messages: LlmMessage[] = [...decision.messages]
     let responseText = ''
@@ -397,6 +404,7 @@ export class ExecutionEngine implements IExecutionEngine {
       step++
 
       lastLlmResponse = await this.llmProvider.chat(messages, decision.toolDefs)
+      totalTokens += lastLlmResponse.tokens ?? 0
 
       if (!lastLlmResponse.content && !lastLlmResponse.tool_calls?.length) {
         responseText = 'No pude procesar esa solicitud. Por favor, inténtalo de nuevo.'
@@ -451,11 +459,12 @@ export class ExecutionEngine implements IExecutionEngine {
         }
 
         const result = await this.toolExecutor.execute({
-          toolName: toolCall.function.name,
+          toolName:     toolCall.function.name,
           args,
-          businessId: input.businessId,
-          userId: input.userId,
-          timezone: input.timezone,
+          businessId:   input.businessId,
+          userId:       input.userId,
+          timezone:     input.timezone,
+          workingHours: input.context.workingHours as Record<string, { open: string; close: string }> | undefined,
         })
 
         messages.push({
@@ -485,7 +494,14 @@ export class ExecutionEngine implements IExecutionEngine {
       responseText = 'Intenté procesar tu solicitud pero no pude completarla. Por favor, inténtalo de nuevo.'
     }
 
-    const estimatedTokens = step * 200 + responseText.split(/\s+/).length
+    // Use real tokens if available, fall back to rough estimate when provider returns 0
+    const estimatedTokens = totalTokens > 0
+      ? totalTokens
+      : step * 200 + responseText.split(/\s+/).length
+
+    // Collect all messages produced in this turn (excluding the system prompt at index 0)
+    // so the orchestrator can include tool call context in the returned history.
+    const turnMessages = messages.slice(decision.messages.length) as LlmMessage[]
 
     return {
       text: responseText,
@@ -493,6 +509,7 @@ export class ExecutionEngine implements IExecutionEngine {
       toolTrace: traces,
       tokens: estimatedTokens,
       nextState: { ...state, lastToolCalls: lastLlmResponse?.tool_calls ?? null },
+      llmMessages: turnMessages,
     }
   }
 

@@ -1,84 +1,98 @@
-# 🤖 Dashboard Executive Assistant ("Luis") — Technical Overview v6.5
+# Dashboard AI Assistant — Technical Overview
 
-Beyond the WhatsApp customer-facing bot, Cronix includes a specialized **Executive Voice Assistant** (codenamed **"Luis"**) designed strictly for business owners to manage operations hands-free directly from the PWA dashboard.
-
----
-
-## 🏗️ AI Interaction Model: Tool Dispatching
-
-Unlike the WhatsApp agent which uses "Action Tags" in natural language, "Luis" uses **OpenAI-compatible Function Calling (Tools)** via the Groq API. This allows for a more deterministic and structured interaction with the database.
-
-### Core Capabilities (Tools)
-The assistant is equipped with the following toolset (see `lib/ai/assistant-tools.ts`):
-
-| Tool Name | Type | Description |
-|---|---|---|
-| `get_today_summary` | **READ** | Calculates total income and appointment status for the current day. |
-| `get_upcoming_gaps` | **READ** | Identifies free time slots in the business agenda. |
-| `get_client_debt` | **READ** | Checks for unpaid services linked to a specific client. |
-| `get_services` | **READ** | Lists all active services with name, price, and duration for the business. |
-| `cancel_appointment`| **WRITE**| Cancels the next upcoming appointment for a client. |
-| `book_appointment`  | **WRITE**| Schedules a new service. Requires 4-point validation: Client, Service, Date & Time. |
-| `register_payment`  | **WRITE**| Records a transaction (Cash, Card, Transfer, QR). |
+> Current architecture as of 2026-04-14. Replaces v6.5 (AssistantService, tool-registry.ts, book_appointment, 7 old tools).
 
 ---
 
-## 🔍 Fuzzy Matching Engine (Levenshtein)
+## Overview
 
-A critical challenge for voice assistants is resolving spoken names (which often contain transcription errors) to unique database UUIDs. "Luis" uses a custom **Levenshtein Distance** algorithm (see `lib/ai/fuzzy-match.ts`) with zero external dependencies.
-
-### The Resolution Pipeline:
-1.  **Normalization:** Strips accents, collapses whitespace, and converts to lowercase.
-2.  **Similarity Scoring:** Calculates the edit distance between the transcript and the entity names (clients/services).
-3.  **Thresholding:** Filters matches with a similarity score below **0.45**.
-4.  **Disambiguation:**
-    *   **Single Winner:** Gap of >0.15 between the top matches → Auto-resolve.
-    *   **Ambiguous:** Multiple close matches → Assistant asks: *"I found several people named 'Maria'. Do you mean Maria Garcia or Maria Lopez?"*
+The Dashboard AI Assistant ("Luis") is a voice-first executive assistant for business owners and staff. It runs entirely server-side via `app/api/assistant/voice/route.ts`, backed by an AI orchestrator built on clean architecture principles.
 
 ---
 
-## 🎤 Voice Pipeline (STT & TTS) — v6.5
+## AI Interaction Model
 
-"Luis" implements a full-duplex voice interface optimized for mobile browsers:
+Luis uses **OpenAI-compatible Function Calling** via the Groq API. The LLM receives a structured system prompt and a set of tool definitions, then decides which tool to call based on user intent. Tool calls are executed server-side by `RealToolExecutor`, which maps each tool name to a domain UseCase.
 
-### 1. Speech-to-Text (STT)
-- **Capture:** `MediaRecorder` API (WebM/Opus) on the client.
-- **Inference:** **Groq Whisper** (`whisper-large-v3`) processed via a Next.js API route.
-- **Latency:** <1s for typical 5-second commands.
+### Tool Catalog (7 tools)
 
-### 2. Decision Engine
-- **Model:** `llama-3.3-8b` (optimized for speed over reasoning depth).
-- **Execution:** Server-side tools execute queries/mutations using the authenticated user's `business_id`.
+| Tool | Type | Description |
+|------|------|-------------|
+| `confirm_booking` | WRITE | Creates a new appointment. Requires `service_id`, `client_name` or `client_id`, `date`, `time`. |
+| `cancel_booking` | WRITE | Cancels an appointment by `appointment_id`. |
+| `reschedule_booking` | WRITE | Moves an appointment to a new date/time. Requires `appointment_id`, `new_date`, `new_time`. |
+| `get_appointments_by_date` | READ | Returns all active appointments for a given `date`. Includes appointment IDs for cancel/reschedule chaining. |
+| `get_services` | READ | Lists all active services with name, price, and duration. |
+| `get_available_slots` | READ | Returns free time slots for a given `date` and `duration_min`. Subtracts booked intervals from working hours. |
+| `create_client` | WRITE | Registers a new client. Returns the new `client_id` so the LLM can immediately chain to `confirm_booking`. |
 
-### 3. Text-to-Speech (TTS)
-- **Primary Path:** **Deepgram Aura 2** (`aura-2-nestor-es`) — ultra-low latency, natural Spanish male voice with consistent brand identity.
-- **Fallback Path:** Browser `SpeechSynthesis` API for zero-cost execution in case of API unavailability.
-
-> **Note:** ElevenLabs has been fully replaced by Deepgram Aura 2 as of v6.5. Deepgram provides lower latency and a more natural Spanish voice for Latin American markets.
+### Tool Parameter Format
+- `date`: always `YYYY-MM-DD`
+- `time`: always `HH:mm` in 24-hour format
+- `appointment_id`, `service_id`, `client_id`: UUIDs from tool responses or system prompt context
 
 ---
 
-## 🌍 Multi-Country Timezone Support (v6.5)
+## Architecture Stack
 
-Luis is globally timezone-aware. The user's local timezone is detected automatically on the client via:
-
-```javascript
-Intl.DateTimeFormat().resolvedOptions().timeZone // e.g., "America/Bogota", "Europe/Madrid"
+```
+app/api/assistant/voice/route.ts
+  ├── Groq Whisper (STT) → transcript
+  ├── AiOrchestrator.process(AiInput)
+  │     ├── DecisionEngine → Decision (reason_with_llm / execute_immediately / reject)
+  │     └── ExecutionEngine → ReAct loop → RealToolExecutor → UseCases → Supabase
+  └── Deepgram Aura 2 (TTS) → audio/mpeg response
 ```
 
-This value is passed through the request pipeline (`FormData → route.ts → AssistantService → getSystemPrompt`) and injected into Luis's system prompt, ensuring that when a user in Mexico City says "10 AM", the appointment is recorded as 10 AM in `America/Mexico_City`, not UTC.
+### State Management
+- `ConversationState` is persisted in **Upstash Redis** (TTL: 2 hours) via `RedisStateManager`.
+- State includes: `flow`, `turnCount`, `maxTurns`, `draft`, `lastIntent`, `lastToolResult`.
+- History: up to 20 messages (tool call chains included, not condensed).
+
+### Conversation Flows
+- `idle` → `collecting_booking` → `idle` (after successful booking)
+- `idle` → `awaiting_confirmation` → `idle` (after confirm/reject)
+- `turnCount` resets to 0 after each successful action.
 
 ---
 
-## 🛡️ Security & Multi-Tenancy
+## Fuzzy Matching Engine
 
-Every tool execution in `assistant-tools.ts` is explicitly scoped to the `business_id` derived from the user's active session. The system uses a PostgreSQL function `get_my_business_id()` enforced via **Row Level Security (RLS)**, making it mathematically impossible for Luis to access data from another business — even if the AI hallucinates a UUID.
+Located at `lib/ai/fuzzy-match.ts`. Used by `RealToolExecutor.resolveClient()` when `client_id` is not provided.
 
-**4-Point Booking Validation:** Luis is prohibited from calling `book_appointment` without all four confirmed:
-1. Client name
-2. Service name (verified via `get_services`)
-3. Exact date
-4. Exact time
+Resolution priority:
+1. If `client_id` is present → direct DB lookup (no fuzzy match needed).
+2. If `client_name` only → `fuzzyFind()` against all active clients for the business.
+3. `create_client` tool response includes the new `client_id` — subsequent `confirm_booking` calls use it directly, bypassing fuzzy match.
 
 ---
-*Documentation updated by Antigravity V3 - Cronix AI Team — v6.5 Geolocation & Deepgram Aura 2 Release.*
+
+## Voice Pipeline
+
+- **STT**: Groq Whisper (`whisper-large-v3-turbo`) — server-side, <1s for 5s audio.
+- **LLM**: Groq (`llama-3.3-70b-versatile` or fast equivalent) — function calling enabled.
+- **TTS**: Deepgram Aura 2 (`aura-2-nestor-es`) — low-latency natural Spanish voice.
+- **Fallback TTS**: Browser `SpeechSynthesis` API (client-side, zero cost).
+
+---
+
+## RBAC (Role-Based Tool Access)
+
+| Role | Available Tools |
+|------|----------------|
+| `owner` / `staff` | All 7 tools including `create_client` |
+| `external` | `confirm_booking`, `cancel_booking`, `reschedule_booking`, `get_appointments_by_date`, `get_services`, `get_available_slots` |
+
+`create_client` is reserved for internal users only. External callers must already be registered in the system.
+
+---
+
+## Context Injected per Request
+
+Each AI request loads from the database and injects into the system prompt:
+- Business name (`businesses.name`)
+- Active services list with UUIDs and prices
+- Working hours (`businesses.settings.workingHours`)
+- Custom AI rules (`businesses.settings.aiRules`)
+- Today's active appointments (up to 5, with IDs)
+- Current date/time in business timezone

@@ -1,4 +1,4 @@
-import { ISttProvider, ILlmProvider, SttOptions, SttResult, LlmMessage, LlmResult, LlmStreamResult, LlmTier } from './types'
+import { ISttProvider, ILlmProvider, SttOptions, SttResult, LlmMessage, LlmResult, LlmStreamResult, LlmTier, ToolSchema } from './types'
 import { safeSTT, safeLLM } from '../resilience'
 import { logger } from '@/lib/logger'
 
@@ -37,24 +37,36 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
     }
   }
 
-  async chat(messages: LlmMessage[], tools?: any[], tier: LlmTier = 'fast'): Promise<LlmResult> {
+  async chat(messages: LlmMessage[], tools?: ToolSchema[], tier: LlmTier = 'fast'): Promise<LlmResult> {
     const { primary, fallback } = MODEL_BY_TIER[tier]
-    const res = await safeLLM(messages, tools || [], this.apiKey, primary, fallback)
+    const res = await safeLLM(messages, tools ?? [], this.apiKey, primary, fallback)
 
     if (res.error || !res.data) {
       return {
         message: { role: 'assistant', content: '' },
-        model: res.modelUsed || 'unknown',
+        model:   res.modelUsed ?? 'unknown',
         latency: res.latency,
-        error: res.error || 'LLM error'
+        tokens:  0,
+        error:   res.error ?? 'LLM error',
       }
     }
 
-    const choice = res.data.choices[0]
+    const data   = res.data as { choices: { message: LlmMessage }[]; usage?: { total_tokens?: number } }
+    const choice = data.choices?.[0]
+    if (!choice) {
+      return {
+        message: { role: 'assistant', content: '' },
+        model:   res.modelUsed ?? 'unknown',
+        latency: res.latency,
+        tokens:  0,
+        error:   'Empty response from LLM',
+      }
+    }
     return {
-      message: choice.message as LlmMessage,
-      model: res.modelUsed || choice.model,
-      latency: res.latency
+      message: choice.message,
+      model:   res.modelUsed ?? 'unknown',
+      latency: res.latency,
+      tokens:  data.usage?.total_tokens ?? 0,
     }
   }
 

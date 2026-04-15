@@ -51,7 +51,7 @@ export class ExternalUserStrategy implements IUserStrategy {
   }
 
   canExecute(toolName: string): boolean {
-    // External users can only interact with their own appointments
+    // External users can only interact with their own appointments — no client management
     const allowed = new Set([
       'confirm_booking',
       'reschedule_booking',

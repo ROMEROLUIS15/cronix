@@ -16,7 +16,7 @@
  */
 
 // ── Core ──────────────────────────────────────────────────────────────────────
-export { AiOrchestrator, orchestrator } from './ai-orchestrator'
+export { AiOrchestrator } from './ai-orchestrator'
 export type { IAiOrchestrator } from './ai-orchestrator'
 
 // ── Decision Engine ───────────────────────────────────────────────────────────

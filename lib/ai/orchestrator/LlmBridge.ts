@@ -23,6 +23,7 @@ export class LlmBridge implements IMockLlmProvider {
 
     return {
       content: result.message.content ?? null,
+      tokens:  result.tokens,
       tool_calls: result.message.tool_calls?.map((tc) => ({
         id:       tc.id,
         type:     'function' as const,

@@ -15,11 +15,12 @@ export class RegisterPaymentUseCase {
 
   async execute(input: RegisterPaymentInput): Promise<Result<void>> {
     const result = await this.financeRepo.createTransaction({
-      business_id: input.businessId,
+      business_id:    input.businessId,
       appointment_id: input.appointmentId,
-      net_amount: input.amount,
-      payment_method: input.method,
-      notes: input.notes ?? null,
+      amount:         input.amount,
+      net_amount:     input.amount,
+      method:         input.method,
+      notes:          input.notes ?? null,
     })
 
     if (result.error) {

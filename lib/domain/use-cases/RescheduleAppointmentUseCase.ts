@@ -20,7 +20,7 @@ export class RescheduleAppointmentUseCase {
       input.newEndAt,
       input.appointmentId, // exclude the appointment being rescheduled
     )
-    if (conflicts.error) {
+    if (conflicts.error || !conflicts.data) {
       return fail('No se pudo verificar la disponibilidad del nuevo horario.')
     }
     if (conflicts.data.length > 0) {

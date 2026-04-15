@@ -10,7 +10,13 @@
  *   4. State reset
  */
 
-import { orchestrator } from './ai-orchestrator'
+import { AiOrchestrator } from './ai-orchestrator'
+import { stateManager } from './state-manager'
+import { DecisionEngine } from './decision-engine'
+import { ExecutionEngine } from './execution-engine'
+
+// Local mock instance for dev/demo use only — NOT for production
+const orchestrator = new AiOrchestrator(stateManager, new DecisionEngine(), new ExecutionEngine())
 import type { AiInput, BusinessContext } from './types'
 
 // ── Shared mock context ──────────────────────────────────────────────────────

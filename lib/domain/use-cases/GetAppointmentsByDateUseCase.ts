@@ -39,7 +39,7 @@ export class GetAppointmentsByDateUseCase {
           time: timeStr,
           clientName,
           serviceName,
-          status: a.status,
+          status: a.status ?? 'pending',
         }
       })
 

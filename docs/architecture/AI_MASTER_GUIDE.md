@@ -1,124 +1,171 @@
-# 🧠 Luis IA: Master Architecture & Orchestration Guide
+# Luis IA — Master Architecture Guide
 
-> **"The Brain of the Business: A Hardened, Agentic Executive Assistant."**
-
-Luis IA is a production-grade AI orchestrator designed for service businesses. It manages real-time voice and text interactions, executing complex business logic across a multi-tenant architecture with high reliability and strict security standards.
+> Current architecture as of 2026-04-14. Prior versions (V8.0 / AssistantService) are fully retired.
 
 ---
 
-## 1. System Philosophy (Vibe + Solidez)
+## 1. System Philosophy
 
-Luis is built on the principle of **Agentic Resilience**. Unlike simple chatbots, Luis utilizes a **ReAct (Reason + Act)** loop to navigate ambiguity. It prioritizes:
-1.  **Low Latency**: Intent-based routing to skip slow LLM calls.
-2.  **Safety**: Multi-layer shields to prevent data leaks and prompt injections.
-3.  **Persistence**: Global session storage via Redis for serverless consistency.
-4.  **Auditability**: Granular logging of every tool execution and reasoning step.
+Luis IA is a production-grade AI orchestrator for multi-tenant service businesses. It handles real-time voice and text interactions, executing business logic through a clean-architecture stack with strict TypeScript typing, zero mocks in production, and full Redis-backed session persistence.
+
+Core design principles:
+- **Domain isolation**: UseCases never import Supabase, HTTP, or AI concerns.
+- **Repository pattern**: All DB access behind typed interfaces (`IAppointmentQueryRepository`, `IClientRepository`, etc.).
+- **Result<T> contract**: Every repository and use case returns `Result<T>` — never throws.
+- **Stateless route handlers**: All state lives in Redis, never in module-level singletons.
 
 ---
 
-## 2. High-Level Orchestration Pipeline
+## 2. Orchestration Pipeline
 
-The current architecture (V8.0) utilizes a decoupled, asynchronous pipeline to ensure responsiveness even during heavy AI inference.
-
-```mermaid
-sequenceDiagram
-    participant User as USER (Voice/Text)
-    participant Router as Intent Router
-    participant Orchestrator as AssistantService (ReAct)
-    participant LLM as Groq LPU (70B/8B)
-    participant Redis as Session Store (Upstash)
-    participant Tools as Tool Registry
-    participant Shield as Output Shield
-    participant TTS as Deepgram Aura 2
-
-    User->>Router: "How many gaps today?"
-    alt Known Intent (Fast Path)
-        Router->>Tools: execute(get_upcoming_gaps)
-        Tools-->>User: Instant Voice Reply (<500ms)
-    else Complex Intent (Agentic Path)
-        Router->>Orchestrator: process(request)
-        Orchestrator->>Redis: getSession(ctx)
-        loop ReAct Loop (Max 5 steps)
-            Orchestrator->>LLM: "Think: What tools do I need?"
-            LLM-->>Orchestrator: call_tool(book_appointment)
-            Orchestrator->>Tools: execute(args)
-            Tools-->>Orchestrator: "Listo. ID: 123"
-        end
-        Orchestrator->>Shield: validateResponse(text)
-        Shield-->>Orchestrator: Cleaned Text (PII Scrubbed)
-        Orchestrator->>TTS: synthesize(audio)
-        TTS-->>User: Seamless Voice Response
-    end
+```
+Voice/Text Input (route.ts)
+        │
+        ▼
+  AiOrchestrator.process(AiInput)
+        │
+        ├── Redis: load ConversationState (turnCount, flow, draft, history)
+        │
+        ▼
+  DecisionEngine.analyze(input, state)
+        │
+        ├── Fast path: reject / execute_immediately (awaiting_confirmation + "sí")
+        └── LLM path: reason_with_llm (Decision with messages + toolDefs)
+        │
+        ▼
+  ExecutionEngine.execute(Decision)
+        │
+        ├── LlmBridge.call(messages, toolDefs)  →  GroqProvider.chat()
+        │         LLM returns: text or tool_call
+        │
+        ├── [tool_call] RealToolExecutor.execute(toolName, args, businessId)
+        │         → UseCase (CreateAppointment, CancelAppointment, etc.)
+        │         → Supabase via IRepository
+        │
+        └── [text] ExecutionResult (text, actionPerformed, tokens, llmMessages)
+        │
+        ▼
+  AiOrchestrator: update ConversationState, persist to Redis
+        │
+        ▼
+  route.ts: TTS (Deepgram) + HTTP response
 ```
 
 ---
 
-## 3. Core Architectural Components
+## 3. Component Reference
 
-### A. The ReAct Orchestrator (`AssistantService.ts`)
-The heart of Luis IA. It manages the conversation state and the reasoning loop.
-- **Max Steps**: 5 (prevents infinite reasoning loops).
-- **Tool Awareness**: Dynamically injects available tools based on the current user's role and business context.
-- **Success Prefix**: Enforces a `"Listo."` protocol for tools to signal successful state changes.
+### `AiOrchestrator` (`lib/ai/orchestrator/ai-orchestrator.ts`)
+- Public facade. Receives `AiInput`, returns `AiOutput`.
+- Loads and saves `ConversationState` via `RedisStateManager`.
+- Appends tool call history as LLM messages (not condensed text).
+- Resets `turnCount` to 0 after `actionPerformed && flow === 'idle'`.
+- Caps conversation history at 20 messages.
 
-### B. Intent Router (`intent-router.ts`)
-A zero-inference layer that uses high-performance regex and keyword matching.
-- **Efficiency**: Saves ~2000 tokens per administrative query.
-- **Latency**: Reduces TTF (Time to First-word) by ~80% for common status checks.
+### `DecisionEngine` (`lib/ai/orchestrator/decision-engine.ts`)
+- Pure function: `analyze(input, state) → Decision`.
+- Detects booking intent, confirmation/rejection signals, and turn limits.
+- Builds system prompt with: services list, working hours, today's appointments, AI rules, voice format instructions, tool chaining flow, security rules.
+- Builds `toolDefs` filtered by user role strategy (`IUserStrategy`).
 
-### C. Output Shield & PII Protection (`output-shield.ts`)
-A defensive perimeter that scans LLM outputs before they leave the server.
-- **PII Scrubbing**: Automatically masks Phone Numbers, UUIDs, and Email addresses.
-- **System Hardening**: Blocks responses containing internal tool names (e.g., `book_appointment`) or database schema hints.
-- **Anti-Injection**: Detects and blocks LLM-generated attempts to "pretend" to be a system administrator.
+### `ExecutionEngine` (`lib/ai/orchestrator/execution-engine.ts`)
+- Runs the ReAct loop (max 5 steps).
+- Calls `LlmBridge` → receives text or tool call.
+- If tool call: delegates to `IToolExecutor`, appends result to message chain, loops.
+- Accumulates real token counts from Groq `usage.total_tokens`.
+- Returns `llmMessages` (full message chain for history propagation).
 
-### D. Global Session Store (`session-store.ts`)
-Utilizes **Upstash Redis** to maintain "Conversation Memory" in stateless serverless environments (Vercel).
-- **Atomicity**: Prevents race conditions when a user sends multiple voice notes in rapid succession.
-- **TTL**: Sessions are automatically purged after 30 minutes of inactivity to respect privacy.
+### `LlmBridge` (`lib/ai/orchestrator/LlmBridge.ts`)
+- Thin adapter: converts `ExecutionEngine` message format → `GroqProvider.chat()`.
+- Returns `MockLlmResponse` with text, tool call (if any), and token count.
 
----
+### `RealToolExecutor` (`lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts`)
+- Implements `IToolExecutor`. Routes by tool name to private methods.
+- All Zod schemas use **snake_case** — must match LLM tool definition field names exactly.
+- Instantiates UseCases on demand (no singletons).
+- Client resolution: `clientId` takes priority → fuzzy match on `client_name` fallback.
 
-## 4. Multi-Tenant Tool Registry
-
-Luis is empowered with 16+ specialized tools, all isolated at the database level via **PostgreSQL Row Level Security (RLS)**.
-
-| Category | Tools | Security Constraint |
-|:---:|:---|:---|
-| **Write** | `book_appointment`, `cancel_appointment`, `create_client` | Rate-limited (20 ops/hour), Audit Logged |
-| **Read** | `get_today_summary`, `get_upcoming_gaps`, `get_revenue_stats` | Business-scoped only |
-| **Integrations**| `send_whatsapp_message` | Webhook-authorized |
-
----
-
-## 5. Model Tiering Strategy
-
-To optimize for the **Groq Free Tier** (100k TPD), Luis uses a dual-model strategy:
-
-1.  **Quality Tier (Llama-3.3-70B)**: Used for all **WRITE** operations. High precision is required to avoid scheduling conflicts or data corruption.
-2.  **Fast Tier (Llama-3.1-8B)**: Used for **READ** operations and conversational chit-chat. Near-instant response times.
+### `RedisStateManager` (`lib/ai/orchestrator/RedisStateManager.ts`)
+- Persists `ConversationState` in Upstash Redis (TTL: 2 hours).
+- Key format: `session:{sessionId}`.
+- Handles JSON serialization/deserialization with type safety.
 
 ---
 
-## 6. How to Extend (Developer Operations)
+## 4. Strategy & RBAC
 
-### Adding a New Tool
-1.  **Implement**: Add the logic in `lib/ai/assistant-tools.ts`.
-2.  **Declare**: Add the JSON Schema in `lib/ai/tool-registry.ts`.
-3.  **Audit**: Ensure the tool returns a string starting with `"Listo."` for the ReAct loop to recognize success.
+`StrategyFactory.forRole(userRole)` returns an `IUserStrategy`:
 
-### Debugging the Loop
-Luis logs his internal monologue to the console and **Sentry** with specialized breadcrumbs:
-- `THOUGHT`: The LLM's reasoning.
-- `ACTION`: The tool being called.
-- `OBSERVATION`: The raw data returned by the database.
+| Role | Strategy | Allowed Tools |
+|------|----------|--------------|
+| `owner` / `staff` | `InternalUserStrategy` | All 7 tools |
+| `external` | `ExternalUserStrategy` | `confirm_booking`, `cancel_booking`, `reschedule_booking`, `get_appointments_by_date`, `get_services`, `get_available_slots` |
+
+`create_client` is internal-only — external callers must already be registered clients.
 
 ---
 
-## 7. Security Standards (The "Shield" Layer)
-- **Rate Limiting**: 10 requests/min (General) | 20 actions/hour (Critical Writes).
-- **JWT Mapping**: Business ID is NEVER accepted from the client; it is retrieved from the verified Supabase Auth session on the server.
-- **Data Scrubbing**: Sentry integration excludes `Authorization` headers and `PII` from error logs.
+## 5. Conversation State Machine
+
+```
+idle
+  └─[booking intent]──► collecting_booking
+  └─[reschedule intent]► collecting_reschedule
+  └─[cancel intent]────► awaiting_confirmation
+
+collecting_booking
+  └─[LLM calls confirm_booking]──► idle (reset turnCount)
+  └─[turnCount >= maxTurns]──────► idle (abort)
+
+awaiting_confirmation
+  └─["sí"]──► execute_immediately ──► idle (reset turnCount)
+  └─["no"]──► idle
+```
+
+`maxTurns` defaults to 5 per flow segment. After a successful action, `turnCount` resets to 0.
 
 ---
-*Last Updated: April 2026 | Version: 8.0 (Hardened)*
+
+## 6. Tool Call History Propagation
+
+The full LLM message chain is preserved across turns:
+
+```
+Turn N:
+  history = [...previous messages]
+  LLM returns tool_call → append [assistant+tool_calls, tool+result] → get text response
+  Save llmMessages = [user, assistant+tool_calls, tool+result, assistant+text]
+
+Turn N+1:
+  history = [...previous, ...llmMessages].slice(-20)
+```
+
+This allows the LLM to see full tool results in context, enabling multi-step reasoning across turns (e.g., `create_client` → `confirm_booking` using the returned `client_id`).
+
+---
+
+## 7. Voice Pipeline
+
+```
+Client (browser)
+  └─ MediaRecorder (WebM/Opus)
+         │
+         ▼ POST /api/assistant/voice
+  route.ts
+    ├─ Groq Whisper (whisper-large-v3-turbo) → transcript
+    ├─ AiOrchestrator.process() → response text
+    └─ Deepgram Aura 2 (aura-2-nestor-es) → audio Buffer
+         │
+         ▼
+  Audio response (audio/mpeg)
+```
+
+---
+
+## 8. Key Design Rules
+
+- All Zod schemas in `RealToolExecutor` must use **snake_case** (matching LLM tool definitions).
+- `create_client` response includes the UUID so LLM can chain directly to `confirm_booking` with `client_id`.
+- `get_available_slots` uses `workingHours` from `businesses.settings` JSON blob — passed through `AiInput.context.workingHours`.
+- `date` is always `YYYY-MM-DD`, `time` is always `HH:mm` 24h in all tool parameters.
+- No `any` types. No `console.log`. No module-level singletons in production.

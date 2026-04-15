@@ -4,11 +4,11 @@
  * Replaces MockToolExecutor. Maps tool names to real UseCases backed by
  * Supabase repositories. Zero mocks, zero hardcoded strings.
  *
- * Client resolution: findActiveForAI() + fuzzyFind() (same pattern as
- * the existing appointment.tools.ts — no new DB methods required).
+ * All Zod schemas use snake_case — must match the tool definitions in
+ * decision-engine.ts exactly, since the LLM sends exactly those field names.
  *
- * Service resolution: getActive() + Array.find() by serviceId.
- *
+ * Client resolution: findActiveForAI() + fuzzyFind()
+ * Service resolution: getActive() + Array.find() by service_id
  * Date building: `${date}T${time}:00` consistent with existing tools.
  */
 
@@ -21,32 +21,44 @@ import { CreateAppointmentUseCase }     from '@/lib/domain/use-cases/CreateAppoi
 import { CancelAppointmentUseCase }     from '@/lib/domain/use-cases/CancelAppointmentUseCase'
 import { RescheduleAppointmentUseCase } from '@/lib/domain/use-cases/RescheduleAppointmentUseCase'
 import { GetAppointmentsByDateUseCase } from '@/lib/domain/use-cases/GetAppointmentsByDateUseCase'
+import { CreateClientUseCase }          from '@/lib/domain/use-cases/CreateClientUseCase'
+import { GetAvailableSlotsUseCase }     from '@/lib/domain/use-cases/GetAvailableSlotsUseCase'
 import { fuzzyFind }                    from '@/lib/ai/fuzzy-match'
 import { logger }                       from '@/lib/logger'
 
-// ── Schemas ────────────────────────────────────────────────────────────────────
+// ── Schemas (snake_case — matches LLM tool definitions exactly) ────────────────
 
 const ConfirmBookingSchema = z.object({
-  serviceId:  z.string().uuid(),
-  date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  time:       z.string().regex(/^\d{2}:\d{2}$/),
-  clientName: z.string().optional(),
-  clientId:   z.string().uuid().optional(),
-  staffId:    z.string().uuid().optional(),
+  service_id:  z.string().uuid(),
+  date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time:        z.string().regex(/^\d{2}:\d{2}$/),
+  client_name: z.string().optional(),
+  client_id:   z.string().uuid().optional(),
+  staff_id:    z.string().uuid().optional(),
 })
 
 const CancelBookingSchema = z.object({
-  appointmentId: z.string().uuid(),
+  appointment_id: z.string().uuid(),
 })
 
 const RescheduleBookingSchema = z.object({
-  appointmentId: z.string().uuid(),
-  newDate:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  newTime:       z.string().regex(/^\d{2}:\d{2}$/),
+  appointment_id: z.string().uuid(),
+  new_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  new_time:       z.string().regex(/^\d{2}:\d{2}$/),
 })
 
 const GetByDateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+})
+
+const CreateClientSchema = z.object({
+  name:  z.string().min(1).max(120),
+  phone: z.string().max(30).optional(),
+})
+
+const GetAvailableSlotsSchema = z.object({
+  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  duration_min: z.number().int().min(5).max(480),
 })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -71,6 +83,8 @@ export class RealToolExecutor implements IToolExecutor {
         case 'reschedule_booking':       return this.rescheduleBooking(p)
         case 'get_appointments_by_date': return this.getByDate(p)
         case 'get_services':             return this.getServices(p)
+        case 'create_client':            return this.createClient(p)
+        case 'get_available_slots':      return this.getAvailableSlots(p)
         default:
           return { success: false, result: `Tool "${p.toolName}" no implementada.`, error: 'TOOL_NOT_FOUND' }
       }
@@ -126,15 +140,15 @@ export class RealToolExecutor implements IToolExecutor {
       return { success: false, result: `Faltan datos para agendar: ${fields}` }
     }
 
-    const { serviceId, date, time, clientName, clientId: clientIdArg, staffId } = parsed.data
+    const { service_id, date, time, client_name, client_id, staff_id } = parsed.data
 
-    const client = await this.resolveClient(p.businessId, clientName, clientIdArg)
+    const client = await this.resolveClient(p.businessId, client_name, client_id)
     if (!client) {
-      const label = clientName ?? clientIdArg ?? 'el cliente'
+      const label = client_name ?? client_id ?? 'el cliente'
       return { success: false, result: `No encontré al cliente "${label}". ¿Está registrado?` }
     }
 
-    const service = await this.resolveService(p.businessId, serviceId)
+    const service = await this.resolveService(p.businessId, service_id)
     if (!service) {
       return { success: false, result: 'No encontré el servicio seleccionado.' }
     }
@@ -145,10 +159,10 @@ export class RealToolExecutor implements IToolExecutor {
     const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:     p.businessId,
       clientId:       client.id,
-      serviceIds:     [serviceId],
+      serviceIds:     [service_id],
       startAt:        startISO,
       endAt:          endISO,
-      assignedUserId: staffId ?? null,
+      assignedUserId: staff_id ?? null,
     })
 
     if (result.error) return { success: false, result: result.error }
@@ -167,7 +181,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     const result = await new CancelAppointmentUseCase(this.commandRepo).execute({
       businessId:    p.businessId,
-      appointmentId: parsed.data.appointmentId,
+      appointmentId: parsed.data.appointment_id,
     })
 
     if (result.error) return { success: false, result: result.error }
@@ -180,7 +194,7 @@ export class RealToolExecutor implements IToolExecutor {
       return { success: false, result: 'Necesito la cita, la nueva fecha y hora para reagendar.' }
     }
 
-    const appt = await this.queryRepo.getForEdit(parsed.data.appointmentId, p.businessId)
+    const appt = await this.queryRepo.getForEdit(parsed.data.appointment_id, p.businessId)
     if (appt.error || !appt.data) {
       return { success: false, result: 'No encontré la cita.' }
     }
@@ -191,12 +205,12 @@ export class RealToolExecutor implements IToolExecutor {
       if (svc) durationMin = svc.duration_min
     }
 
-    const newStartISO = `${parsed.data.newDate}T${parsed.data.newTime}:00`
+    const newStartISO = `${parsed.data.new_date}T${parsed.data.new_time}:00`
     const newEndISO   = this.buildEndISO(newStartISO, durationMin)
 
     const result = await new RescheduleAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:    p.businessId,
-      appointmentId: parsed.data.appointmentId,
+      appointmentId: parsed.data.appointment_id,
       newStartAt:    newStartISO,
       newEndAt:      newEndISO,
     })
@@ -205,7 +219,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result: `Listo. La cita fue reagendada para el ${parsed.data.newDate} a las ${parsed.data.newTime}.`,
+      result: `Listo. La cita fue reagendada para el ${parsed.data.new_date} a las ${parsed.data.new_time}.`,
     }
   }
 
@@ -229,6 +243,61 @@ export class RealToolExecutor implements IToolExecutor {
 
     const lines = result.data.map((s) => `• ${s.time} — ${s.clientName} (${s.serviceName})`)
     return { success: true, result: `Citas del ${parsed.data.date}:\n${lines.join('\n')}` }
+  }
+
+  private async getAvailableSlots(p: ToolExecuteParams): Promise<ExecResult> {
+    const parsed = GetAvailableSlotsSchema.safeParse(p.args)
+    if (!parsed.success) {
+      return { success: false, result: 'Necesito la fecha y duración del servicio para consultar disponibilidad.' }
+    }
+
+    // Extract working hours for the requested day of week.
+    // Distinguish "not configured" (workingHours undefined) from "explicitly closed"
+    // (workingHours defined but day absent/null) — the use case handles them differently.
+    const dayOfWeek = new Date(`${parsed.data.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+    const isConfigured = p.workingHours !== undefined
+    const dayHours     = p.workingHours?.[dayOfWeek] ?? null
+
+    if (isConfigured && !dayHours) {
+      return { success: true, result: `El negocio está cerrado el ${parsed.data.date}. No hay horarios disponibles.` }
+    }
+
+    const result = await new GetAvailableSlotsUseCase(this.queryRepo).execute({
+      businessId:      p.businessId,
+      date:            parsed.data.date,
+      durationMin:     parsed.data.duration_min,
+      workingHours:    dayHours,
+      slotIntervalMin: 30,
+    })
+
+    if (result.error || !result.data) return { success: false, result: result.error ?? 'Error al consultar disponibilidad.' }
+
+    if (!result.data.length) {
+      return { success: true, result: `No hay horarios disponibles para el ${parsed.data.date}.` }
+    }
+
+    const labels = result.data.map((s) => s.label).join(', ')
+    return { success: true, result: `Horarios disponibles el ${parsed.data.date}: ${labels}.` }
+  }
+
+  private async createClient(p: ToolExecuteParams): Promise<ExecResult> {
+    const parsed = CreateClientSchema.safeParse(p.args)
+    if (!parsed.success) {
+      return { success: false, result: 'Necesito al menos el nombre del cliente para registrarlo.' }
+    }
+
+    const result = await new CreateClientUseCase(this.clientRepo).execute({
+      businessId: p.businessId,
+      name:       parsed.data.name,
+      phone:      parsed.data.phone,
+    })
+
+    if (result.error || !result.data) return { success: false, result: result.error ?? 'No se pudo registrar al cliente.' }
+
+    return {
+      success: true,
+      result: `Cliente "${result.data.name}" registrado (client_id: ${result.data.id}). Usa client_id: ${result.data.id} al llamar confirm_booking.`,
+    }
   }
 
   private async getServices(p: ToolExecuteParams): Promise<ExecResult> {

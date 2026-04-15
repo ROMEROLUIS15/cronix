@@ -79,16 +79,27 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
 
   // 2. Business context
   const admin = createAdminClient()
-  const { users: usersRepo, businesses: businessesRepo } = getRepos(admin)
+  const repos = getRepos(admin)
+  const { users: usersRepo, businesses: businessesRepo } = repos
 
-  const ctxResult    = await usersRepo.getUserContextById(user.id)
-  const dbUser       = ctxResult.data
-  const businessId   = dbUser?.business_id
-  const businessName = businessId
-    ? (await businessesRepo.getById(businessId)).data?.name ?? 'tu negocio'
-    : 'tu negocio'
-  const userName = dbUser?.name ?? 'Usuario'
-  const userRole = (dbUser?.role as string) ?? 'employee'
+  const ctxResult  = await usersRepo.getUserContextById(user.id)
+  const dbUser     = ctxResult.data
+  const businessId = dbUser?.business_id
+  const userName   = dbUser?.name ?? 'Usuario'
+  const userRole   = (dbUser?.role as string) ?? 'employee'
+
+  // Fetch full business row: name + settings JSON (single call, no extra query)
+  let businessName = 'tu negocio'
+  let aiRules: string | undefined
+  let workingHours: Record<string, { open: string; close: string }> | undefined
+  if (businessId) {
+    const bizRes  = await businessesRepo.getById(businessId)
+    const bizData = bizRes.data
+    businessName  = bizData?.name ?? 'tu negocio'
+    const settings = (bizData?.settings ?? null) as Record<string, unknown> | null
+    aiRules      = typeof settings?.aiRules === 'string' ? settings.aiRules : undefined
+    workingHours = settings?.workingHours as Record<string, { open: string; close: string }> | undefined
+  }
 
   if (!businessId) {
     return NextResponse.json({ error: 'No business attached' }, { status: 403 })
@@ -173,7 +184,16 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     logger.info('AI-ASSISTANT-STT', `Escuchado: "${finalText}"`, { userId: user.id, latencyMs: sttLatencyMs })
   }
 
-  // 6. Build AiInput and process through production orchestrator
+  // 6. Load business context for LLM
+  // Services: LLM needs names + UUIDs to resolve user-spoken service names.
+  // Today's appointments: LLM needs IDs to cancel/reschedule same-day bookings.
+  // Future appointments are fetched on-demand via get_appointments_by_date tool.
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: timezone })
+  const [servicesRes, todayApptRes] = await Promise.all([
+    repos.services.getActive(businessId),
+    repos.appointments.getDayAppointments(businessId, todayStr),
+  ])
+
   const aiInput: AiInput = {
     text:       finalText,
     userId:     user.id,
@@ -188,6 +208,24 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
       businessId,
       businessName,
       timezone,
+      aiRules,
+      workingHours,
+      services: (servicesRes.data ?? []).map((s) => ({
+        id:           s.id,
+        name:         s.name,
+        duration_min: s.duration_min,
+        price:        s.price,
+      })),
+      activeAppointments: (todayApptRes.data ?? [])
+        .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+        .map((a) => ({
+          id:          a.id,
+          serviceName: (a.service as { name: string } | null)?.name ?? '',
+          clientName:  (a.client as { name: string } | null)?.name ?? '',
+          startAt:     a.start_at,
+          endAt:       a.end_at,
+          status:      a.status ?? 'pending',
+        })),
     },
   }
 

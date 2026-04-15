@@ -7,6 +7,8 @@ export { CancelAppointmentUseCase } from './CancelAppointmentUseCase'
 export { RescheduleAppointmentUseCase } from './RescheduleAppointmentUseCase'
 export { GetAppointmentsByDateUseCase } from './GetAppointmentsByDateUseCase'
 export { GetClientsUseCase } from './GetClientsUseCase'
+export { CreateClientUseCase } from './CreateClientUseCase'
+export { GetAvailableSlotsUseCase } from './GetAvailableSlotsUseCase'
 export { RegisterPaymentUseCase } from './RegisterPaymentUseCase'
 
 export type {

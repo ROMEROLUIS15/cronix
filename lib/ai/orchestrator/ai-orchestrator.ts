@@ -77,17 +77,35 @@ export class AiOrchestrator implements IAiOrchestrator {
     // 5. Execute decision → produce result
     const result = await this.executionEngine.execute(decision, state, input)
 
-    // 6. Build updated history (append user message + assistant response)
+    // 6. Reset turn counter when an action completes successfully (flow back to idle)
+    if (result.actionPerformed && result.nextState.flow === 'idle') {
+      result.nextState.turnCount = 0
+    }
+
+    // 7. Build updated history
+    // When the LLM executed tool calls, include the full message chain
+    // (assistant+tool_calls, tool results, final assistant text) so the
+    // next turn has complete context — not just the condensed text reply.
+    // Always prepend the user message so history is always complete.
+    const newMessages: typeof input.history = result.llmMessages?.length
+      ? [
+          { role: 'user' as const, content: input.text },
+          ...result.llmMessages,
+        ]
+      : [
+          { role: 'user' as const, content: input.text },
+          { role: 'assistant' as const, content: result.text },
+        ]
+
     const updatedHistory = [
       ...input.history,
-      { role: 'user' as const, content: input.text },
-      { role: 'assistant' as const, content: result.text },
-    ].slice(-8) // Cap at 8 messages
+      ...newMessages,
+    ].slice(-20) // Cap at 20 — allows ~4 full tool-call turns
 
-    // 7. Persist state
+    // 8. Persist state
     await this.stateManager.persist(result.nextState)
 
-    // 8. Return output
+    // 9. Return output
     return {
       text: result.text,
       actionPerformed: result.actionPerformed,
@@ -107,12 +125,7 @@ export class AiOrchestrator implements IAiOrchestrator {
   }
 }
 
-// ── Default Instance ──────────────────────────────────────────────────────────
-// Ready to use out of the box. Dependencies use mock implementations for
-// Phase 1. Replace individual components as they are built in later phases.
-
-export const orchestrator = new AiOrchestrator(
-  stateManager,
-  new DecisionEngine(),
-  new ExecutionEngine(),
-)
+// ── Production factory ────────────────────────────────────────────────────────
+// Use createProductionOrchestrator() from orchestrator-factory.ts.
+// This module does not export a ready-made singleton — channel adapters must
+// wire their own dependencies to prevent accidental mock usage in production.

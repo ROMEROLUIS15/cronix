@@ -25,7 +25,7 @@ export class CreateAppointmentUseCase {
       input.startAt,
       input.endAt,
     )
-    if (conflicts.error) {
+    if (conflicts.error || !conflicts.data) {
       return fail('No se pudo verificar la disponibilidad del horario.')
     }
     if (conflicts.data.length > 0) {
@@ -45,8 +45,8 @@ export class CreateAppointmentUseCase {
       is_dual_booking: false,
     })
 
-    if (result.error) {
-      return fail(`Error al crear la cita: ${result.error}`)
+    if (result.error || !result.data) {
+      return fail(`Error al crear la cita: ${result.error ?? 'respuesta vacía'}`)
     }
 
     return ok({

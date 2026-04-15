@@ -200,6 +200,13 @@ export interface ExecutionResult {
   toolTrace: ToolTrace[]
   tokens: number
   nextState: ConversationState
+  /**
+   * Full LLM message chain from this turn (system excluded).
+   * Includes: user → assistant+tool_calls → tool results → assistant text.
+   * When populated, the orchestrator uses these instead of the plain
+   * user+assistant pair so the next turn's LLM has complete tool context.
+   */
+  llmMessages?: LlmMessage[]
 }
 
 // ── AiOutput ──────────────────────────────────────────────────────────────────
