@@ -105,6 +105,20 @@ export interface DraftPayload {
   [key: string]: string | undefined
 }
 
+// ── LastAction ─────────────────────────────────────────────────────────────────
+// Snapshot of the most recent write-action executed in this session.
+// Persisted in ConversationState so owner can say "cancela lo último" /
+// "reagenda lo último" across turns without involving the LLM.
+
+export interface LastAction {
+  type:          'created' | 'cancelled' | 'rescheduled'
+  appointmentId: string
+  clientName:    string
+  serviceName:   string
+  date:          string  // YYYY-MM-DD
+  time:          string  // HH:mm
+}
+
 export interface ConversationState {
   sessionId: string
   userId: string
@@ -119,6 +133,8 @@ export interface ConversationState {
   // Tracking
   lastIntent: string | null
   lastToolCalls: ToolCall[] | null
+  /** Last write-action executed — enables "cancela lo último" / "reagenda lo último" fast-paths. */
+  lastAction?: LastAction | null
   turnCount: number
   maxTurns: number
 

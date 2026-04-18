@@ -86,6 +86,18 @@ function detectBookingIntent(text: string): boolean {
   return BOOKING_SIGNALS.some((signal) => normalized.includes(signal))
 }
 
+// ── Owner fast-path patterns ─────────────────────────────────────────────────────────
+// Matched against RAW input text (not normalized) using the `i` flag.
+// Short-circuit the LLM entirely for zero-latency owner operations.
+
+/** "qué tengo hoy", "citas de hoy", "agenda de hoy", "mis citas" */
+const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\s+d[e]?\s+hoy|mis\s+citas/i
+/** "qué tengo mañana", "citas de mañana", "agenda de mañana" */
+const TOMORROW_QUERY_PATTERN = /qu[eé]\s+tengo\s+ma[nñ]ana|citas?\s+de\s+ma[nñ]ana|agenda\s+d[e]?\s+ma[nñ]ana/i
+/** "cancela la última", "cancela lo último", "cancela eso" */
+const CANCEL_LAST_PATTERN    = /cancel[ae][rs]?\s+(l[ao]\s+)?[úu]ltim[ao]|cancela\s+eso/i
+
+
 // ── Helper: Extract known entities from text ──────────────────────────────────
 // Lightweight extraction to populate the draft before involving the LLM.
 // Handles dates, times, and known service/client name patterns.
@@ -176,6 +188,22 @@ export function buildConfirmationSummary(
   return '¿Confirmas esta acción?'
 }
 
+// ── Helper: Draft completeness check ──────────────────────────────────────────
+// Used as a fast-path guard in analyze() to skip the LLM loop entirely when all
+// required booking fields are already present in the conversation draft.
+// Does NOT validate field values — only checks presence.
+
+function isDraftComplete(draft: ConversationState['draft']): boolean {
+  if (!draft) return false
+  const d = draft as Record<string, unknown>
+  return (
+    Boolean(d['service_id']) &&
+    Boolean(d['date']) &&
+    Boolean(d['time']) &&
+    Boolean(d['client_name'] ?? d['client_id'])
+  )
+}
+
 // ── Implementation ────────────────────────────────────────────────────────────
 
 export class DecisionEngine implements IDecisionEngine {
@@ -198,6 +226,44 @@ export class DecisionEngine implements IDecisionEngine {
       return {
         type: 'reject',
         reason: 'Llevamos varios intercambios sin poder completar la acción. ¿Podrías empezar de nuevo indicando qué necesitas?',
+      }
+    }
+
+    // ── Owner fast-paths: zero-LLM execution for common operations ────────────────
+    // Bypass the LLM entirely for latency-sensitive owner/admin actions.
+    // These run before the awaiting_confirmation check so they always fire,
+    // even if the owner was mid-flow (signals intent to start a new operation).
+    if (input.userRole === 'owner' || input.userRole === 'platform_admin') {
+
+      // Fast path A — "¿qué tengo hoy?" → direct date query, no LLM
+      if (TODAY_QUERY_PATTERN.test(input.text)) {
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: input.timezone })
+        logger.info('DECISION-ENGINE', 'Owner fast-path: today query', { userId: input.userId, date: todayStr })
+        return { type: 'answer_query', toolName: 'get_appointments_by_date', args: { date: todayStr } }
+      }
+
+      // Fast path B — "¿qué tengo mañana?" → direct date query, no LLM
+      if (TOMORROW_QUERY_PATTERN.test(input.text)) {
+        const d = new Date()
+        d.setDate(d.getDate() + 1)
+        const tomorrowStr = d.toLocaleDateString('en-CA', { timeZone: input.timezone })
+        logger.info('DECISION-ENGINE', 'Owner fast-path: tomorrow query', { userId: input.userId, date: tomorrowStr })
+        return { type: 'answer_query', toolName: 'get_appointments_by_date', args: { date: tomorrowStr } }
+      }
+
+      // Fast path C — "cancela la última" + session has appointmentId → direct cancel
+      // Only fires if state.lastAction is populated (i.e. a write-action was performed
+      // in this session). Never invents an appointmentId.
+      if (CANCEL_LAST_PATTERN.test(input.text) && state.lastAction?.appointmentId) {
+        logger.info('DECISION-ENGINE', 'Owner fast-path: cancel last action', {
+          userId:        input.userId,
+          appointmentId: state.lastAction.appointmentId,
+        })
+        return {
+          type:   'execute_immediately',
+          intent: 'cancel_booking',
+          args:   { appointment_id: state.lastAction.appointmentId },
+        }
       }
     }
 
@@ -230,6 +296,26 @@ export class DecisionEngine implements IDecisionEngine {
     // Tool set is restricted to the booking/reschedule tools only —
     // the LLM cannot cancel or query other data while in collection flow.
     if (state.flow === 'collecting_booking' || state.flow === 'collecting_reschedule') {
+      // ── Fast path: if draft already has all required fields, skip the LLM ──
+      // Going into the LLM loop with a complete draft causes it to ask more
+      // questions needlessly. Go directly to await_confirmation instead.
+      if (state.flow === 'collecting_booking' && isDraftComplete(state.draft)) {
+        logger.info('DECISION-ENGINE', 'Draft complete — fast-path to await_confirmation', {
+          userId:    input.userId,
+          serviceId: (state.draft as Record<string, unknown>)?.['service_id'],
+          date:      (state.draft as Record<string, unknown>)?.['date'],
+        })
+        return {
+          type:    'await_confirmation',
+          intent:  'confirm_booking',
+          summary: buildConfirmationSummary(
+            'confirm_booking',
+            state.draft as Record<string, unknown>,
+            input.context.services,
+          ),
+        }
+      }
+
       const entities = extractEntities(input.text, input.timezone)
       const systemPrompt = buildSystemPrompt(input, state, entities)
       return {
@@ -293,7 +379,7 @@ export class DecisionEngine implements IDecisionEngine {
 
 function buildSystemPrompt(
   input: AiInput,
-  _state: ConversationState,
+  state: ConversationState,
   resolvedEntities?: { date?: string; time?: string },
 ): string {
   const now = new Date().toLocaleString('es-ES', {
@@ -340,7 +426,8 @@ REGLAS CRÍTICAS — ANTI-ALUCINACIÓN (cumplimiento absoluto):
   prompt += `\n\nFECHAS Y HORAS (formato estricto para herramientas):
 - date: siempre YYYY-MM-DD (ej: 2026-04-16). Convierte "mañana", "el lunes", etc. a ISO.
 - time: siempre HH:mm en formato 24h (ej: 14:30, 09:00). Convierte "3pm" → "15:00".
-- Hoy es ${new Date().toISOString().split('T')[0]}. Usa esta fecha como referencia para calcular fechas relativas.`
+- Hoy es ${new Date().toISOString().split('T')[0]}. Usa esta fecha como referencia para calcular fechas relativas.
+- NUNCA menciones el día de la semana (lunes, martes, etc.) en tus respuestas. Usa solo la fecha numérica (YYYY-MM-DD) o el texto exacto devuelto por las herramientas. El día de semana lo calcula el sistema internamente — si lo dices tú, puede ser incorrecto.`
 
   // ── Tool chaining flow ────────────────────────────────────────────────────────
   prompt += `\n\nFLUJO DE HERRAMIENTAS (seguir este orden):
@@ -365,7 +452,18 @@ DATO FALTANTE:
 - Si falta servicio → pregunta: "¿Para qué servicio?"
 - Si falta fecha → pregunta: "¿Para qué día?"
 - Si falta hora → pregunta: "¿A qué hora?"
-- Pide UN dato a la vez. No lances la herramienta con datos incompletos.`
+- Pide UN dato a la vez. No lances la herramienta con datos incompletos.
+
+CUANDO YA TIENES TODOS LOS DATOS (servicio + fecha + hora + cliente identificado):
+- DETÉN el flujo conversacional INMEDIATAMENTE. No hagas más preguntas ni ofrezcas alternativas.
+- RESPONDE SOLO con el resumen: "Perfecto. ¿Confirmo tu cita para [servicio] el [fecha] a las [hora] a nombre de [cliente]?"
+- ESPERA la respuesta del usuario (sí/no). No continúes el flujo bajo ningún concepto.
+
+SERVICIOS — RESOLUCIÓN PRECISA:
+- Para verificar si un servicio existe, consulta EXCLUSIVELY la lista SERVICIOS DISPONIBLES de este prompt.
+- Si el usuario pide un servicio que NO aparece en esa lista textualmente o por similitud → responde: "No veo ese servicio registrado. Los servicios disponibles son: [lista de nombres]."
+- NUNCA digas "no tengo" ni "ese servicio no existe" sin haber revisado la lista completa primero.
+- Si hay servicios parecidos al solicitado → sugiere el más cercano: "¿Querías decir [nombre del servicio]?"`
 
   // ── Security rules ────────────────────────────────────────────────────────────
   prompt += `\n\nSEGURIDAD Y LÍMITES:
@@ -376,7 +474,42 @@ DATO FALTANTE:
 - Si el usuario pide algo fuera del ámbito del negocio, responde educadamente que no puedes ayudar con eso.
 - Ante cualquier duda sobre datos reales → llama la herramienta. La incertidumbre no se responde con suposiciones.`
 
+  // ── Output visibility rules (CRITICAL — non-negotiable) ────────────────────────
+  // This section is an absolute output contract. Any violation causes a hard block
+  // at the runtime level (execution-engine.ts sanitizeOutput + containsInternalSyntax).
+  prompt += `\n\nREGLAS CRÍTICAS — VISIBILIDAD (incumplimiento invalida la respuesta):
+- NUNCA muestres nombres de funciones o herramientas al usuario (confirm_booking, cancel_booking, get_available_slots, etc.).
+- NUNCA muestres JSON, objetos, arrays ni estructuras de datos al usuario.
+- NUNCA muestres identificadores internos: service_id, client_id, appointment_id, UUIDs, ni ninguna clave de base de datos.
+- NUNCA muestres marcadores internos como [CONFIRM_booking], [CONFIRM_*] ni ninguna sintaxis entre corchetes de uso interno.
+- Las herramientas se usan INTERNAMENTE y en silencio. El usuario solo ve el resultado final en lenguaje natural.
+- Si vas a llamar una herramienta, hazlo sin anunciarlo. No digas "voy a llamar confirm_booking" ni nada similar.
+- El canal de salida (WhatsApp, web) es SOLO para texto conversacional en español. Nada más.`
+
   // ── Services ──────────────────────────────────────────────────────────────────
+  // ── Owner / Admin mode ────────────────────────────────────────────────────────
+  // Must appear before Services so the LLM reads behavioral rules first.
+  if (input.userRole === 'owner' || input.userRole === 'platform_admin') {
+    prompt += `\n\nMODO OPERADOR (eres el dueño del negocio, comandos del panel):
+- RESPUESTAS ULTRA-CORTAS. Máximo 1 oración. Sin introducciones, sin despedidas, sin preguntas de seguimiento.
+- Si el cliente no existe en el sistema, llama create_client automáticamente SIN preguntar. Luego usa el client_id devuelto en confirm_booking.
+- Después de agendar: "Listo. [ClientName] — [ServiceName] el [date] a las [time]."
+- Después de cancelar: "Cancelado."
+- Después de reagendar: "Reagendado para el [date] a las [time]."
+- NO pidas confirmación al usuario antes de actuar — ejecuta directamente.
+- Si falta un solo dato, pregunta SOLO ese dato en una palabra: "¿Hora?" "¿Servicio?" "¿Fecha?"`
+
+    if (state.lastAction) {
+      prompt += `\n\nÚLTIMA ACCIÓN DE SESIÓN:
+- Tipo: ${state.lastAction.type}
+- Cliente: ${state.lastAction.clientName}
+- Servicio: ${state.lastAction.serviceName}
+- Fecha: ${state.lastAction.date} | Hora: ${state.lastAction.time}
+- appointment_id: ${state.lastAction.appointmentId}
+Si el usuario dice "reagenda lo último" → usa este appointment_id en reschedule_booking.`
+    }
+  }
+
   if (input.context.services && input.context.services.length > 0) {
     prompt += '\n\nSERVICIOS DISPONIBLES (usar el id exacto en confirm_booking y get_available_slots):'
     for (const svc of input.context.services) {

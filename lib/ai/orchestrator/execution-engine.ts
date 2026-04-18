@@ -233,6 +233,46 @@ function buildEventFromData(
   }
 }
 
+// ── Output sanitization ─────────────────────────────────────────────────────
+// Applied to every LLM-generated text before it reaches the user.
+// Prevents internal syntax (function calls, markers, JSON) from leaking
+// into the WhatsApp / web channel.
+
+/**
+ * Strips internal syntax that must never reach the user:
+ *   - <function=name>...</function> blocks (attribute-style, e.g. Groq fallback format)
+ *   - <function>...</function> blocks (tag-style, legacy format)
+ *   - [CONFIRM_*] or similar internal bracket markers
+ *   - Raw JSON objects exposing internal field names
+ */
+function sanitizeOutput(text: string): string {
+  if (!text) return text
+
+  return text
+    // Remove <function=name>...</function> blocks (attribute-style — the primary leak vector)
+    .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, '')
+    // Remove <function>...</function> blocks (tag-style, multi-line)
+    .replace(/<function>[\s\S]*?<\/function>/gi, '')
+    // Remove [CONFIRM_*] markers and bracket-style internal markers
+    .replace(/\[CONFIRM_[^\]]+\]/gi, '')
+    // Remove raw JSON objects that expose internal field names
+    .replace(/\{[\s\S]*?"(?:service_id|client_id|appointment_id|date|time)":[\s\S]*?\}/gi, '')
+    .trim()
+}
+
+/**
+ * Hard guard: returns true if the text STILL contains internal syntax
+ * after sanitization. Triggers a safe fallback response.
+ * Covers both <function> (tag-style) and <function=name> (attribute-style).
+ */
+function containsInternalSyntax(text: string): boolean {
+  return /<function[=\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"/i.test(text)
+}
+
+/** Safe fallback shown when sanitization cannot fully clean the LLM output. */
+const INTERNAL_SYNTAX_FALLBACK =
+  'Estoy verificando la información para confirmarte correctamente. ¿Te parece bien ese horario?'
+
 export class ExecutionEngine implements IExecutionEngine {
   /**
    * Set de eventIds emitidos en este request.
@@ -346,6 +386,18 @@ export class ExecutionEngine implements IExecutionEngine {
       newState.draft = null
       newState.missingFields = []
       newState.lastIntent = null
+
+      // Persist lastAction for owner session memory ("cancela lo último" fast-path)
+      if (result.data && TOOL_TO_EVENT[decision.intent]) {
+        newState.lastAction = {
+          type:          result.data.action,
+          appointmentId: result.data.appointmentId,
+          clientName:    result.data.clientName,
+          serviceName:   result.data.serviceName,
+          date:          result.data.date,
+          time:          result.data.time,
+        }
+      }
 
       // ── Event dispatch (fire-and-forget) ──────────────────────────────────
       // Solo emitir si hay servicio de notificaciones, el tool es de escritura,
@@ -504,12 +556,61 @@ export class ExecutionEngine implements IExecutionEngine {
     // Do NOT give the LLM another iteration — it may generate an optimistic response.
     let writeToolFailed = false
     const WRITE_TOOLS = new Set(['confirm_booking', 'cancel_booking', 'reschedule_booking'])
+    /** Tracks the last successful write-tool payload for session memory ("cancela/reagenda lo último"). */
+    let lastSuccessfulWriteData: BookingEventData | null = null
 
     while (step < MAX_STEPS) {
       step++
 
       lastLlmResponse = await this.llmProvider.chat(messages, decision.toolDefs)
       totalTokens += lastLlmResponse.tokens ?? 0
+
+      // ── Embedded function recovery ──────────────────────────────────────────
+      // ROOT CAUSE: some LLM configurations serialize tool calls as raw text
+      //   <function=confirm_booking>{"date":"2026-04-24","time":"08:00"}</function>
+      // instead of structured tool_calls. This bypasses normal tool execution
+      // and, without this guard, reaches the user verbatim.
+      //
+      // RECOVERY: detect the pattern, parse args, and synthesize a proper
+      // tool_call so the standard execution path handles it transparently.
+      // If args are not parseable, force a safe fallback and exit the loop.
+      if (lastLlmResponse.content && !lastLlmResponse.tool_calls?.length) {
+        const embeddedMatch = lastLlmResponse.content.match(
+          /<function=([a-z_]+)>([\s\S]*?)<\/function>/i
+        )
+        if (embeddedMatch) {
+          const fnName  = embeddedMatch[1] ?? ''
+          const argsRaw = embeddedMatch[2] ?? ''
+          logger.warn('EXECUTION-ENGINE', 'LLM emitted embedded <function=> syntax — attempting recovery', {
+            reason:  'internal_syntax_leak',
+            tool:    fnName,
+            snippet: lastLlmResponse.content.slice(0, 120),
+          })
+          let argsValid = false
+          try { JSON.parse(argsRaw); argsValid = true } catch { /* non-parseable — cannot recover */ }
+
+          if (argsValid && fnName) {
+            // Inject as synthetic tool_call so the existing execution path handles it
+            lastLlmResponse = {
+              ...lastLlmResponse,
+              content:    null,
+              tool_calls: [{
+                id:       `recovered-${Date.now()}`,
+                type:     'function' as const,
+                function: { name: fnName, arguments: argsRaw },
+              }],
+            }
+          } else {
+            // Cannot recover: block output and exit with safe message
+            logger.warn('EXECUTION-ENGINE', 'Embedded function args unparseable — using safe fallback', {
+              reason: 'internal_syntax_leak',
+              argsRaw,
+            })
+            responseText = INTERNAL_SYNTAX_FALLBACK
+            break
+          }
+        }
+      }
 
       if (!lastLlmResponse.content && !lastLlmResponse.tool_calls?.length) {
         responseText = 'No pude procesar esa solicitud. Por favor, inténtalo de nuevo.'
@@ -692,6 +793,11 @@ export class ExecutionEngine implements IExecutionEngine {
         if (result.success) {
           actionPerformed = true
 
+          // Session memory: capture last write-action for owner fast-path commands
+          if (result.data && WRITE_TOOLS.has(toolCall.function.name)) {
+            lastSuccessfulWriteData = result.data
+          }
+
           // ── Event dispatch per write-tool success (fire-and-forget) ──────────
           // processedEvents evita duplicados si el mismo tool se llama dos veces.
           // Requiere `result.data` — contrato obligatorio de write-tools.
@@ -747,6 +853,17 @@ export class ExecutionEngine implements IExecutionEngine {
       }
     }
 
+    // ── Output enforcement: strip internal syntax before reaching the user ────
+    // Layer 1 — sanitize: remove known patterns unconditionally.
+    responseText = sanitizeOutput(responseText)
+    // Layer 2 — hard guard: if any internal syntax survived, use a safe fallback.
+    if (containsInternalSyntax(responseText)) {
+      logger.warn('EXECUTION-ENGINE', 'Internal syntax detected after sanitization — using fallback', {
+        snippet: responseText.slice(0, 120),
+      })
+      responseText = INTERNAL_SYNTAX_FALLBACK
+    }
+
     // Use real tokens if available, fall back to rough estimate when provider returns 0
     const estimatedTokens = totalTokens > 0
       ? totalTokens
@@ -761,7 +878,22 @@ export class ExecutionEngine implements IExecutionEngine {
       actionPerformed,
       toolTrace: traces,
       tokens: estimatedTokens,
-      nextState: { ...state, lastToolCalls: lastLlmResponse?.tool_calls ?? null },
+      nextState: {
+        ...state,
+        lastToolCalls: lastLlmResponse?.tool_calls ?? null,
+        // Propagate lastAction: use the new write-tool result if one succeeded this turn,
+        // otherwise carry forward the existing session lastAction (or null if none).
+        lastAction: lastSuccessfulWriteData
+          ? {
+              type:          lastSuccessfulWriteData.action,
+              appointmentId: lastSuccessfulWriteData.appointmentId,
+              clientName:    lastSuccessfulWriteData.clientName,
+              serviceName:   lastSuccessfulWriteData.serviceName,
+              date:          lastSuccessfulWriteData.date,
+              time:          lastSuccessfulWriteData.time,
+            }
+          : (state.lastAction ?? null),
+      },
       llmMessages: turnMessages,
     }
   }
