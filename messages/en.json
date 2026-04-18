@@ -1096,6 +1096,180 @@
     "keepSession": "Keep session"
   },
   "voiceAssistant": {
-    "fabTitle": "AI Executive Assistant — Hold or click to speak"
+    "fabTitle": "AI Executive Assistant — Hold or click to speak",
+    "noAccess": "No access to assistant",
+    "contactError": "Error contacting Luis",
+    "networkError": "Network error — retry",
+    "permissionDenied": "Allow microphone in the 🔒 in the address bar and reload the page",
+    "noMicrophone": "No microphone detected on your device",
+    "micInUse": "Microphone is being used by another application. Close it and try again.",
+    "micAccessError": "Could not access microphone",
+    "notHeard": "I didn't hear you. Please try again.",
+    "processingError": "Could not process your voice command. Try again.",
+    "processingSttError": "Could not process your voice message correctly. Could you write it or try again?",
+    "processingNoUnderstand": "I couldn't understand your voice message. Could you speak more clearly, get closer to the microphone, or write your question?",
+    "maintenanceMode": "Sorry, my voice system is in brief maintenance. Could you write to me, please?",
+    "aiMaintenance": "Sorry, my AI brain is in brief maintenance. Please try again in a minute.",
+    "dailyLimitReached": "Sorry, this business has reached its daily processing limit. Please try again tomorrow or contact the administrator.",
+    "technicalError": "Sorry, I had a technical issue processing your message. Please try again in a moment."
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "notFoundDesc": "The page you're looking for doesn't exist or has been moved. The link may be broken or the resource may have been deleted.",
+    "goToDashboard": "Go to Dashboard",
+    "goBack": "Go back",
+    "errorOccurred": "Something went wrong",
+    "unexpectedError": "Unexpected error. Please try again.",
+    "retry": "Retry",
+    "sessionError": "Could not get session. Reload the page.",
+    "businessNotFound": "Could not identify business. Reload the page.",
+    "unauthorized": "Not authenticated",
+    "forbiddenError": "Not authorized for this business",
+    "invalidData": "Invalid data",
+    "invalidPayload": "Payload structure is invalid and was blocked by the security shield.",
+    "connectionError": "Connection error",
+    "duplicatePhone": "This number is already registered for client \"{name}\". Each phone must be unique per business.",
+    "invalidPhone": "Invalid phone number.",
+    "invalidEmail": "Invalid email",
+    "passwordError": "Password error",
+    "passwordMismatch": "New password must be different from the current one.",
+    "linkGenerationError": "Could not generate link.",
+    "googleLinkError": "Could not generate Google link.",
+    "csrfToken": "Invalid security token (CSRF). Reload the page and try again.",
+    "noInput": "Input required",
+    "noBusinessAttached": "No business attached",
+    "dupRequest": "Too many requests. Retry in {seconds}s.",
+    "rateLimit": "AI daily limit reached. Resume tomorrow.",
+    "ttsProvider": "TTS provider not configured",
+    "llmApiKey": "LLM API key not configured",
+    "vapidKeys": "VAPID keys not configured",
+    "businessLinkNotFound": "No business found with that link.",
+    "businessIdentifierNotFound": "No business found with identifier \"{slug}\". Verify the link is correct.",
+    "rateLimitWhatsapp": "You're sending messages too fast. Please wait a minute before continuing."
+  },
+  "formValidation": {
+    "nameRequired": "Name is required",
+    "amountGreaterThanZero": "Amount must be greater than zero.",
+    "amountValid": "Enter a valid amount greater than 0",
+    "clientRequired": "Select a client",
+    "serviceRequired": "Service is required",
+    "selectAction": "Select an action",
+    "imageFormatInvalid": "Invalid image format",
+    "imageTooLarge": "Image must be less than 2MB",
+    "errorSavingForm": "Error saving information. Try again.",
+    "errorLoadingForm": "Error loading form data.",
+    "errorDeleteRecord": "Error deleting: {error}",
+    "errorSavingRecord": "Error saving: {error}",
+    "errorChangingState": "Error changing status: {error}",
+    "errorRegisteringClient": "Could not register client.",
+    "errorCreatingBusiness": "Error creating business: {error}",
+    "errorUnknown": "Unknown error",
+    "errorVerifyingRole": "Could not verify user role.",
+    "errorCreatingEmployee": "Could not create employee.",
+    "errorRegisteringUser": "Could not create user.",
+    "errorUnableChangeEmail": "Error changing email: {error}",
+    "errorUnableChangePassword": "Error changing password: {error}",
+    "errorLinkingAccount": "Error linking your account with the business. Try signing in again."
+  },
+  "appointments": {
+    "errors": {
+      "couldNotCancel": "Could not cancel appointment: {error}",
+      "couldNotVerifyAvailability": "Could not verify time availability.",
+      "couldNotVerifyNewAvailability": "Could not verify new time availability.",
+      "couldNotReschedule": "Could not reschedule appointment: {error}",
+      "createFailed": "Error creating appointment. Try again.",
+      "updateFailed": "Error updating: {error}"
+    }
+  },
+  "clients": {
+    "errors": {
+      "couldNotCreate": "Could not register client.",
+      "createFailed": "Error creating client: {error}",
+      "updateFailed": "Error saving changes."
+    },
+    "validations": {
+      "namePlaceholder": "E.g. John Smith",
+      "emailPlaceholder": "email@example.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frequent",
+        "new": "New"
+      }
+    }
+  },
+  "finances": {
+    "errors": {
+      "savingExpense": "Error saving expense",
+      "savingPayment": "Error saving payment",
+      "paymentError": "Error registering payment. Try again."
+    }
+  },
+  "monthNames": {
+    "january": "January",
+    "february": "February",
+    "march": "March",
+    "april": "April",
+    "may": "May",
+    "june": "June",
+    "july": "July",
+    "august": "August",
+    "september": "September",
+    "october": "October",
+    "november": "November",
+    "december": "December"
+  },
+  "monthNamesShort": {
+    "jan": "Jan",
+    "feb": "Feb",
+    "mar": "Mar",
+    "apr": "Apr",
+    "may": "May",
+    "jun": "Jun",
+    "jul": "Jul",
+    "aug": "Aug",
+    "sep": "Sep",
+    "oct": "Oct",
+    "nov": "Nov",
+    "dec": "Dec"
+  },
+  "whatsappMessages": {
+    "businessNotFound": "❌ *Linking Error*\n\nNo business found with identifier \"{slug}\". Verify the link is correct.",
+    "rateLimitWarning": "⚠️ You're sending messages too fast. Please wait a minute before continuing.",
+    "unknownBusiness": "❌ No business found with that link.",
+    "voiceMaintenance": "🤖 Sorry, my voice system is in brief maintenance. Could you write to me, please?",
+    "voiceProcessingError": "Could not process your voice message correctly. Could you write it or try again?",
+    "dailyLimitReached": "🤖 Sorry, this business has reached its daily processing limit. Please try again tomorrow or contact the administrator.",
+    "aiMaintenance": "🤖 Sorry, my AI brain is in brief maintenance. Please try again in a minute.",
+    "technicalError": "⚠️ Sorry, I had a technical issue processing your message. Please try again in a moment.",
+    "reminderTitle": "Appointment reminder",
+    "reminderFailed": "Could not send reminder to {name} • {service} at {time}"
+  },
+  "adminPanel": {
+    "deadLetterQueue": {
+      "noFailures": "No failures in queue",
+      "noFailuresMsg": "Great. There are no messages in the Dead Letter Queue. The Luis AI engine is processing everything correctly.",
+      "unknownPhone": "Unknown",
+      "noText": "No text"
+    },
+    "systemStatus": {
+      "noFailures": "No failures recorded"
+    }
+  },
+  "formPlaceholders": {
+    "amount": "0.00",
+    "searchClient": "Search client...",
+    "noClients": "No clients found"
+  },
+  "privacyTerms": {
+    "privacyLastUpdate": "Last update: March 25, 2026",
+    "termsLastUpdate": "Last update: March 25, 2026"
+  },
+  "appStatus": {
+    "newClient": "New Client",
+    "newAppointment": "New appointment",
+    "newClientsLabel": "New client"
+  },
+  "passkey": {
+    "verifyError": "Could not verify biometrics. Use your password."
   }
 }

@@ -14,26 +14,46 @@
  * (Mexico, Spain, US Eastern, etc.) and fixed-offset zones (Colombia, Venezuela, etc.).
  */
 export function localTimeToUTC(dateStr: string, timeStr: string, timezone: string): string {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'longOffset' })
-
-  // Step 1: Anchor to get approximate offset (naive — treats local time as UTC)
-  const naive      = new Date(`${dateStr}T${timeStr}:00Z`)
-  const offsetStr  = (fmt.formatToParts(naive).find(p => p.type === 'timeZoneName')?.value ?? 'GMT')
-    .replace('GMT', '')
-
-  if (!offsetStr) return `${dateStr}T${timeStr}:00Z`
-
-  // Step 2: Apply offset to get approximate UTC
-  const approxUtc = new Date(`${dateStr}T${timeStr}:00${offsetStr}`)
-
-  // Step 3: Re-check offset at the approximate UTC (DST correction)
-  const verifiedOffsetStr = (fmt.formatToParts(approxUtc).find(p => p.type === 'timeZoneName')?.value ?? 'GMT')
-    .replace('GMT', '')
-
-  // Step 4: If offset changed across the DST boundary, recalculate with the real offset
-  if (verifiedOffsetStr && verifiedOffsetStr !== offsetStr) {
-    return new Date(`${dateStr}T${timeStr}:00${verifiedOffsetStr}`).toISOString()
+  // Method 1: The standard formatToParts (may fail if edge runtime lacks full ICU)
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'longOffset' })
+    const naive = new Date(`${dateStr}T${timeStr}:00Z`)
+    const offsetStr = (fmt.formatToParts(naive).find(p => p.type === 'timeZoneName')?.value ?? '')
+      .replace('GMT', '')
+      .replace('UTC', '')
+    
+    if (offsetStr && offsetStr.includes(':')) {
+      const approxUtc = new Date(`${dateStr}T${timeStr}:00${offsetStr}`)
+      return approxUtc.toISOString()
+    }
+  } catch (e) {
+    // Ignore and fallback
   }
 
-  return approxUtc.toISOString()
+  // Method 2: Fallback — Calculate the offset manually by comparing locales
+  // If we want 15:30 in Caracas, we find the UTC time that produces 15:30 in Caracas.
+  const targetTime = new Date(`${dateStr}T${timeStr}:00`).getTime() // Local naive timestamp
+  let guess = new Date(targetTime) // Start guess at local time
+
+  for (let i = 0; i < 3; i++) { // Max 3 iterations for DST stability
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).formatToParts(guess)
+
+    const map = Object.fromEntries(parts.map(p => [p.type, p.value]))
+    // Reconstruct the naive timestamp of what the guess produced IN the target timezone
+    // JS dates treat this generic string as local system time, which matches our targetTime's perspective
+    const guessProduced = new Date(
+      `${map.year}-${map.month}-${map.day}T${map.hour === '24' ? '00' : map.hour}:${map.minute}:${map.second}`
+    ).getTime()
+
+    const diff = targetTime - guessProduced
+    if (diff === 0) break
+    guess = new Date(guess.getTime() + diff)
+  }
+
+  return guess.toISOString()
 }

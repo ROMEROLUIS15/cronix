@@ -43,6 +43,24 @@ import { BOOKING_TOOLS, executeToolCall }                         from "./tool-e
 
 export { LlmRateLimitError, CircuitBreakerError }
 
+// ── Output Sanitization ────────────────────────────────────────────────────────
+
+function sanitizeOutput(text: string): string {
+  if (!text) return text
+  return text
+    .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, '')
+    .replace(/<function>[\s\S]*?<\/function>/gi, '')
+    .replace(/\[CONFIRM_[^\]]+\]/gi, '')
+    .replace(/\{[\s\S]*?"(?:service_id|client_id|appointment_id|date|time)":[\s\S]*?\}/gi, '')
+    .trim()
+}
+
+function containsInternalSyntax(text: string): boolean {
+  return /<function[=\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"/i.test(text)
+}
+
+const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
+
 // ── Public API: Agent Loop ────────────────────────────────────────────────────
 
 /**
@@ -109,6 +127,36 @@ export async function runAgentLoop(
 
     const assistantMsg = response.choices?.[0]?.message
     if (!assistantMsg) break
+
+    // ── Embedded function recovery ─────────────────────────────────────────
+    if (assistantMsg.content && (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0)) {
+      const match1 = assistantMsg.content.match(/<function=([a-z_]+)>([\s\S]*?)<\/function>/i)
+      const match2 = assistantMsg.content.match(/<function>\s*([a-z_]+)\s*<\/function>\s*(\{[\s\S]*\})/i)
+      let fnName = ''
+      let argsRaw = ''
+      
+      if (match1) { fnName = match1[1] ?? ''; argsRaw = match1[2] ?? '' }
+      else if (match2) { fnName = match2[1] ?? ''; argsRaw = match2[2] ?? '' }
+
+      if (fnName) {
+        addBreadcrumb(`LLM emitted embedded <function> syntax — recovering ${fnName}`, 'agent', 'warning')
+        let argsValid = false
+        try { JSON.parse(argsRaw); argsValid = true } catch {}
+        
+        if (argsValid) {
+          assistantMsg.tool_calls = [{
+            id:       `call_${Date.now()}`,
+            type:     'function',
+            function: { name: fnName, arguments: argsRaw },
+          }]
+          // Hide leaked content from LLM
+          assistantMsg.content = null
+        } else {
+          loopText = INTERNAL_SYNTAX_FALLBACK
+          break
+        }
+      }
+    }
 
     // Add assistant turn to history (include tool_calls if present — required by API)
     messages.push({
@@ -256,6 +304,14 @@ Si se creó, reagendó o canceló una cita, confírmalo de forma celebratoria y 
   }
 
   addBreadcrumb('Agent loop finished', 'agent', 'info', { total_tokens: totalTokens, steps: step })
+
+  finalText = sanitizeOutput(finalText)
+  if (containsInternalSyntax(finalText)) {
+    addBreadcrumb('Internal syntax detected after sanitization — using fallback', 'agent', 'error', {
+      snippet: finalText.slice(0, 100)
+    })
+    finalText = INTERNAL_SYNTAX_FALLBACK
+  }
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }
 }

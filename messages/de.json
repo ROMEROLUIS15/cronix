@@ -1096,6 +1096,180 @@
     "keepSession": "Sitzung behalten"
   },
   "voiceAssistant": {
-    "fabTitle": "KI Executive Assistent — Gedrückt halten oder klicken zum Sprechen"
+    "fabTitle": "KI Executive Assistent — Gedrückt halten oder klicken zum Sprechen",
+    "noAccess": "Kein Zugriff auf den Assistenten",
+    "contactError": "Fehler beim Kontaktieren von Luis",
+    "networkError": "Netzwerkfehler — versuchen Sie es erneut",
+    "permissionDenied": "Erlauben Sie das Mikrofon im 🔒 der Adressleiste und laden Sie die Seite neu",
+    "noMicrophone": "Kein Mikrofon auf Ihrem Gerät erkannt",
+    "micInUse": "Das Mikrofon wird von einer anderen Anwendung verwendet. Schließen Sie sie und versuchen Sie es erneut.",
+    "micAccessError": "Konnte nicht auf das Mikrofon zugreifen",
+    "notHeard": "Ich habe Sie nicht gehört. Bitte versuchen Sie es erneut.",
+    "processingError": "Konnte Ihren Sprachbefehl nicht verarbeiten. Versuchen Sie es erneut.",
+    "processingSttError": "Ich konnte Ihre Sprachnachricht nicht richtig verarbeiten. Könnten Sie sie schreiben oder es erneut versuchen?",
+    "processingNoUnderstand": "Ich konnte Ihre Sprachnachricht nicht verstehen. Könnten Sie deutlicher sprechen, näher an das Mikrofon herantreten oder Ihre Frage schreiben?",
+    "maintenanceMode": "Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könnten Sie mir bitte schreiben?",
+    "aiMaintenance": "Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuchen Sie es in einer Minute erneut.",
+    "dailyLimitReached": "Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuchen Sie es morgen erneut oder kontaktieren Sie den Administrator.",
+    "technicalError": "Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung Ihrer Nachricht. Bitte versuchen Sie es in einem Moment erneut."
+  },
+  "errors": {
+    "notFound": "Seite nicht gefunden",
+    "notFoundDesc": "Die gesuchte Seite existiert nicht oder wurde verschoben. Der Link ist möglicherweise beschädigt oder die Ressource wurde gelöscht.",
+    "goToDashboard": "Zum Dashboard gehen",
+    "goBack": "Zurück",
+    "errorOccurred": "Etwas ist schief gelaufen",
+    "unexpectedError": "Unerwarteter Fehler. Bitte versuchen Sie es erneut.",
+    "retry": "Erneut versuchen",
+    "sessionError": "Sitzung konnte nicht abgerufen werden. Laden Sie die Seite neu.",
+    "businessNotFound": "Das Unternehmen konnte nicht identifiziert werden. Laden Sie die Seite neu.",
+    "unauthorized": "Nicht authentifiziert",
+    "forbiddenError": "Nicht autorisiert für dieses Unternehmen",
+    "invalidData": "Ungültige Daten",
+    "invalidPayload": "Die Payload-Struktur ist ungültig und wurde durch das Sicherheitsschild blockiert.",
+    "connectionError": "Verbindungsfehler",
+    "duplicatePhone": "Diese Nummer ist bereits für den Kunden \"{name}\" registriert. Jedes Telefon muss pro Unternehmen eindeutig sein.",
+    "invalidPhone": "Ungültige Telefonnummer.",
+    "invalidEmail": "Ungültige E-Mail",
+    "passwordError": "Passwortfehler",
+    "passwordMismatch": "Das neue Passwort muss sich von dem aktuellen unterscheiden.",
+    "linkGenerationError": "Konnte den Link nicht generieren.",
+    "googleLinkError": "Konnte den Google-Link nicht generieren.",
+    "csrfToken": "Ungültiges Sicherheitstoken (CSRF). Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "noInput": "Eingabe erforderlich",
+    "noBusinessAttached": "Kein Unternehmen verbunden",
+    "dupRequest": "Zu viele Anfragen. Versuchen Sie es in {seconds}s erneut.",
+    "rateLimit": "Tägliches KI-Limit erreicht. Morgen erneut versuchen.",
+    "ttsProvider": "TTS-Anbieter nicht konfiguriert",
+    "llmApiKey": "LLM-API-Schlüssel nicht konfiguriert",
+    "vapidKeys": "VAPID-Schlüssel nicht konfiguriert",
+    "businessLinkNotFound": "Kein Unternehmen mit diesem Link gefunden.",
+    "businessIdentifierNotFound": "Kein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfen Sie, ob der Link korrekt ist.",
+    "rateLimitWhatsapp": "Sie senden Nachrichten zu schnell. Bitte warten Sie eine Minute, bevor Sie fortfahren."
+  },
+  "formValidation": {
+    "nameRequired": "Der Name ist erforderlich",
+    "amountGreaterThanZero": "Der Betrag muss größer als Null sein.",
+    "amountValid": "Geben Sie einen gültigen Betrag größer als 0 ein",
+    "clientRequired": "Wählen Sie einen Kunden aus",
+    "serviceRequired": "Service ist erforderlich",
+    "selectAction": "Wählen Sie eine Aktion aus",
+    "imageFormatInvalid": "Ungültiges Bildformat",
+    "imageTooLarge": "Das Bild muss weniger als 2 MB groß sein",
+    "errorSavingForm": "Fehler beim Speichern von Informationen. Versuchen Sie es erneut.",
+    "errorLoadingForm": "Fehler beim Laden der Formulardaten.",
+    "errorDeleteRecord": "Fehler beim Löschen: {error}",
+    "errorSavingRecord": "Fehler beim Speichern: {error}",
+    "errorChangingState": "Fehler beim Ändern des Status: {error}",
+    "errorRegisteringClient": "Konnte Kunden nicht registrieren.",
+    "errorCreatingBusiness": "Fehler beim Erstellen des Unternehmens: {error}",
+    "errorUnknown": "Unbekannter Fehler",
+    "errorVerifyingRole": "Konnte Benutzerrolle nicht überprüfen.",
+    "errorCreatingEmployee": "Konnte Mitarbeiter nicht erstellen.",
+    "errorRegisteringUser": "Konnte Benutzer nicht erstellen.",
+    "errorUnableChangeEmail": "Fehler beim Ändern der E-Mail: {error}",
+    "errorUnableChangePassword": "Fehler beim Ändern des Passworts: {error}",
+    "errorLinkingAccount": "Fehler beim Verknüpfen Ihres Kontos mit dem Unternehmen. Versuchen Sie, sich erneut anzumelden."
+  },
+  "appointments": {
+    "errors": {
+      "couldNotCancel": "Konnte Termin nicht stornieren: {error}",
+      "couldNotVerifyAvailability": "Konnte Zeitverfügbarkeit nicht überprüfen.",
+      "couldNotVerifyNewAvailability": "Konnte neue Zeitverfügbarkeit nicht überprüfen.",
+      "couldNotReschedule": "Konnte Termin nicht neu planen: {error}",
+      "createFailed": "Fehler beim Erstellen des Termins. Versuchen Sie es erneut.",
+      "updateFailed": "Fehler beim Aktualisieren: {error}"
+    }
+  },
+  "clients": {
+    "errors": {
+      "couldNotCreate": "Konnte Kunden nicht registrieren.",
+      "createFailed": "Fehler beim Erstellen des Kunden: {error}",
+      "updateFailed": "Fehler beim Speichern von Änderungen."
+    },
+    "validations": {
+      "namePlaceholder": "Z. B. Max Mustermann",
+      "emailPlaceholder": "email@beispiel.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Häufig",
+        "new": "Neu"
+      }
+    }
+  },
+  "finances": {
+    "errors": {
+      "savingExpense": "Fehler beim Speichern der Ausgabe",
+      "savingPayment": "Fehler beim Speichern der Zahlung",
+      "paymentError": "Fehler beim Registrieren der Zahlung. Versuchen Sie es erneut."
+    }
+  },
+  "monthNames": {
+    "january": "Januar",
+    "february": "Februar",
+    "march": "März",
+    "april": "April",
+    "may": "Mai",
+    "june": "Juni",
+    "july": "Juli",
+    "august": "August",
+    "september": "September",
+    "october": "Oktober",
+    "november": "November",
+    "december": "Dezember"
+  },
+  "monthNamesShort": {
+    "jan": "Jan",
+    "feb": "Feb",
+    "mar": "Mär",
+    "apr": "Apr",
+    "may": "Mai",
+    "jun": "Jun",
+    "jul": "Jul",
+    "aug": "Aug",
+    "sep": "Sep",
+    "oct": "Okt",
+    "nov": "Nov",
+    "dec": "Dez"
+  },
+  "whatsappMessages": {
+    "businessNotFound": "❌ *Verknüpfungsfehler*\n\nKein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfen Sie, ob der Link korrekt ist.",
+    "rateLimitWarning": "⚠️ Sie senden Nachrichten zu schnell. Bitte warten Sie eine Minute, bevor Sie fortfahren.",
+    "unknownBusiness": "❌ Kein Unternehmen mit diesem Link gefunden.",
+    "voiceMaintenance": "🤖 Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könnten Sie mir bitte schreiben?",
+    "voiceProcessingError": "Ich konnte Ihre Sprachnachricht nicht richtig verarbeiten. Könnten Sie sie schreiben oder es erneut versuchen?",
+    "dailyLimitReached": "🤖 Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuchen Sie es morgen erneut oder kontaktieren Sie den Administrator.",
+    "aiMaintenance": "🤖 Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuchen Sie es in einer Minute erneut.",
+    "technicalError": "⚠️ Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung Ihrer Nachricht. Bitte versuchen Sie es in einem Moment erneut.",
+    "reminderTitle": "Termin-Erinnerung",
+    "reminderFailed": "Konnte Erinnerung für {name} • {service} um {time} nicht senden"
+  },
+  "adminPanel": {
+    "deadLetterQueue": {
+      "noFailures": "Keine Fehler in der Warteschlange",
+      "noFailuresMsg": "Großartig. Es gibt keine Nachrichten in der Dead Letter Queue. Die Luis KI Engine verarbeitet alles korrekt.",
+      "unknownPhone": "Unbekannt",
+      "noText": "Kein Text"
+    },
+    "systemStatus": {
+      "noFailures": "Keine Fehler aufgezeichnet"
+    }
+  },
+  "formPlaceholders": {
+    "amount": "0.00",
+    "searchClient": "Kunden suchen...",
+    "noClients": "Keine Kunden gefunden"
+  },
+  "privacyTerms": {
+    "privacyLastUpdate": "Letzte Aktualisierung: 25. März 2026",
+    "termsLastUpdate": "Letzte Aktualisierung: 25. März 2026"
+  },
+  "appStatus": {
+    "newClient": "Neuer Kunde",
+    "newAppointment": "Neuer Termin",
+    "newClientsLabel": "Neuer Kunde"
+  },
+  "passkey": {
+    "verifyError": "Konnte Biometrie nicht überprüfen. Verwenden Sie Ihr Passwort."
   }
 }

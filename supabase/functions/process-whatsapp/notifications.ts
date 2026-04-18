@@ -179,18 +179,29 @@ async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
       return
     }
 
-    // Resolve owner phone from public.users
-    const { data: ownerRow, error } = await supabase
+    // Resolve owner phone from public.users or fallback to businesses.phone
+    const { data: ownerRow } = await supabase
       .from('users')
       .select('phone')
       .eq('business_id', event.businessId)
       .eq('role', 'owner')
       .maybeSingle()
 
-    if (error || !ownerRow) return
+    let phone = (ownerRow as { phone?: string | null })?.phone
 
-    const phone = (ownerRow as { phone?: string | null }).phone
-    if (!phone) return
+    if (!phone) {
+      const { data: bData } = await supabase
+        .from('businesses')
+        .select('phone')
+        .eq('id', event.businessId)
+        .maybeSingle()
+      phone = (bData as { phone?: string | null })?.phone
+    }
+
+    if (!phone) {
+      console.warn('[NOTIFICATION-WA] No phone found for owner or business, skipping WA notification')
+      return
+    }
 
     const message = buildOwnerWhatsAppMessage(event)
 

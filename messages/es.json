@@ -1098,6 +1098,180 @@
     "keepSession": "Mantener sesión"
   },
   "voiceAssistant": {
-    "fabTitle": "Asistente Ejecutivo IA — Mantén presionado o clic para hablar"
+    "fabTitle": "Asistente Ejecutivo IA — Mantén presionado o clic para hablar",
+    "noAccess": "Sin acceso al asistente",
+    "contactError": "Error al contactar a Luis",
+    "networkError": "Error de red — reintenta",
+    "permissionDenied": "Permite el micrófono en el 🔒 de la barra de dirección y recarga la página",
+    "noMicrophone": "No se detectó ningún micrófono conectado al equipo",
+    "micInUse": "El micrófono está siendo usado por otra aplicación. Ciérrala e intenta de nuevo.",
+    "micAccessError": "No se pudo acceder al micrófono",
+    "notHeard": "No te escuché. Vuelve a intentarlo.",
+    "processingError": "No pude procesar el comando de voz. Intenta de nuevo.",
+    "processingSttError": "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?",
+    "processingNoUnderstand": "No pude entender tu mensaje de voz. ¿Podrías hablar más claro, acercarte al micrófono, o escribirme tu consulta?",
+    "maintenanceMode": "Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?",
+    "aiMaintenance": "Lo siento, mi cerebro de IA está en mantenimiento breve. Por favor, intenta de nuevo en un minuto.",
+    "dailyLimitReached": "Lo siento, este negocio ha alcanzado su límite de procesamiento diario. Por favor intenta de nuevo mañana o contacta al administrador.",
+    "technicalError": "Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento."
+  },
+  "errors": {
+    "notFound": "Página no encontrada",
+    "notFoundDesc": "La página que buscas no existe o fue movida. Es posible que el enlace esté roto o que el recurso haya sido eliminado.",
+    "goToDashboard": "Ir al Dashboard",
+    "goBack": "Volver atrás",
+    "errorOccurred": "Algo salió mal",
+    "unexpectedError": "Error inesperado. Por favor intenta de nuevo.",
+    "retry": "Reintentar",
+    "sessionError": "No se pudo obtener la sesión. Recarga la página.",
+    "businessNotFound": "No se pudo identificar el negocio. Recarga la página.",
+    "unauthorized": "No autenticado",
+    "forbiddenError": "No autorizado para este negocio",
+    "invalidData": "Datos inválidos",
+    "invalidPayload": "Payload structure is invalid and was blocked by the security shield.",
+    "connectionError": "Error de conexión",
+    "duplicatePhone": "Este número ya está registrado para el cliente \"{name}\". Cada teléfono debe ser único por negocio.",
+    "invalidPhone": "Número de teléfono inválido.",
+    "invalidEmail": "Email inválido",
+    "passwordError": "Error en la contraseña",
+    "passwordMismatch": "La nueva contraseña debe ser diferente a la actual.",
+    "linkGenerationError": "No se pudo generar el enlace.",
+    "googleLinkError": "No se pudo generar el enlace de Google.",
+    "csrfToken": "Token de seguridad inválido (CSRF). Recargue la página e intente de nuevo.",
+    "noInput": "Se requiere entrada",
+    "noBusinessAttached": "No business attached",
+    "dupRequest": "Demasiadas solicitudes. Reintenta en {seconds}s.",
+    "rateLimit": "Límite diario de IA alcanzado. Se reanudará mañana.",
+    "ttsProvider": "TTS provider not configured",
+    "llmApiKey": "LLM API key not configured",
+    "vapidKeys": "VAPID keys not configured",
+    "businessLinkNotFound": "No se encontró ningún negocio con ese enlace.",
+    "businessIdentifierNotFound": "No se encontró ningún negocio con el identificador \"{slug}\". Verifica que el enlace sea correcto.",
+    "rateLimitWhatsapp": "Estás enviando mensajes demasiado rápido. Por favor, espera un minuto antes de continuar."
+  },
+  "formValidation": {
+    "nameRequired": "El nombre es obligatorio",
+    "amountGreaterThanZero": "El monto debe ser mayor a cero.",
+    "amountValid": "Ingresa un monto válido mayor a 0",
+    "clientRequired": "Selecciona un cliente",
+    "serviceRequired": "Se requiere un servicio",
+    "selectAction": "Selecciona una acción",
+    "imageFormatInvalid": "Formato de imagen no válido",
+    "imageTooLarge": "La imagen debe ser menor a 2MB",
+    "errorSavingForm": "Error al guardar la información. Intenta de nuevo.",
+    "errorLoadingForm": "Error al cargar los datos del formulario.",
+    "errorDeleteRecord": "Error al eliminar: {error}",
+    "errorSavingRecord": "Error al guardar: {error}",
+    "errorChangingState": "Error al cambiar estado: {error}",
+    "errorRegisteringClient": "No se pudo registrar al cliente.",
+    "errorCreatingBusiness": "Error al crear el negocio: {error}",
+    "errorUnknown": "Error desconocido",
+    "errorVerifyingRole": "No se pudo verificar el rol del usuario.",
+    "errorCreatingEmployee": "No se pudo crear el empleado.",
+    "errorRegisteringUser": "No se pudo crear el usuario.",
+    "errorUnableChangeEmail": "Error al cambiar email: {error}",
+    "errorUnableChangePassword": "Error al cambiar contraseña: {error}",
+    "errorLinkingAccount": "Error al vincular tu cuenta con el negocio. Intenta iniciar sesión."
+  },
+  "appointments": {
+    "errors": {
+      "couldNotCancel": "No se pudo cancelar la cita: {error}",
+      "couldNotVerifyAvailability": "No se pudo verificar la disponibilidad del horario.",
+      "couldNotVerifyNewAvailability": "No se pudo verificar la disponibilidad del nuevo horario.",
+      "couldNotReschedule": "No se pudo reagendar la cita: {error}",
+      "createFailed": "Error al crear la cita. Intenta de nuevo.",
+      "updateFailed": "Error al actualizar: {error}"
+    }
+  },
+  "clients": {
+    "errors": {
+      "couldNotCreate": "No se pudo registrar al cliente.",
+      "createFailed": "Error al crear el cliente: {error}",
+      "updateFailed": "Error al guardar los cambios."
+    },
+    "validations": {
+      "namePlaceholder": "Ej. Juan Pérez",
+      "emailPlaceholder": "correo@ejemplo.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frecuente",
+        "new": "Nuevo"
+      }
+    }
+  },
+  "finances": {
+    "errors": {
+      "savingExpense": "Error al guardar el gasto",
+      "savingPayment": "Error al guardar el cobro",
+      "paymentError": "Error al registrar el pago. Intenta de nuevo."
+    }
+  },
+  "monthNames": {
+    "january": "Enero",
+    "february": "Febrero",
+    "march": "Marzo",
+    "april": "Abril",
+    "may": "Mayo",
+    "june": "Junio",
+    "july": "Julio",
+    "august": "Agosto",
+    "september": "Septiembre",
+    "october": "Octubre",
+    "november": "Noviembre",
+    "december": "Diciembre"
+  },
+  "monthNamesShort": {
+    "jan": "Ene",
+    "feb": "Feb",
+    "mar": "Mar",
+    "apr": "Abr",
+    "may": "May",
+    "jun": "Jun",
+    "jul": "Jul",
+    "aug": "Ago",
+    "sep": "Sep",
+    "oct": "Oct",
+    "nov": "Nov",
+    "dec": "Dic"
+  },
+  "whatsappMessages": {
+    "businessNotFound": "❌ *Error de vinculación*\n\nNo se encontró ningún negocio con el identificador \"{slug}\". Verifica que el enlace sea correcto.",
+    "rateLimitWarning": "⚠️ Estás enviando mensajes demasiado rápido. Por favor, espera un minuto antes de continuar.",
+    "unknownBusiness": "❌ No se encontró ningún negocio con ese enlace.",
+    "voiceMaintenance": "🤖 Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?",
+    "voiceProcessingError": "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?",
+    "dailyLimitReached": "🤖 Lo siento, este negocio ha alcanzado su límite de procesamiento diario. Por favor intenta de nuevo mañana o contacta al administrador.",
+    "aiMaintenance": "🤖 Lo siento, mi cerebro de IA está en mantenimiento breve. Por favor, intenta de nuevo en un minuto.",
+    "technicalError": "⚠️ Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento.",
+    "reminderTitle": "Recordatorio de cita",
+    "reminderFailed": "No se pudo enviar recordatorio a {name} • {service} a las {time}"
+  },
+  "adminPanel": {
+    "deadLetterQueue": {
+      "noFailures": "Sin fallos en cola",
+      "noFailuresMsg": "Excelente. No hay mensajes en el Dead Letter Queue. El motor de Luis IA está procesando todo correctamente.",
+      "unknownPhone": "Desconocido",
+      "noText": "Sin texto"
+    },
+    "systemStatus": {
+      "noFailures": "Sin fallos registrados"
+    }
+  },
+  "formPlaceholders": {
+    "amount": "0.00",
+    "searchClient": "Buscar cliente...",
+    "noClients": "No se encontraron clientes"
+  },
+  "privacyTerms": {
+    "privacyLastUpdate": "Última actualización: 25 de marzo de 2026",
+    "termsLastUpdate": "Última actualización: 25 de marzo de 2026"
+  },
+  "appStatus": {
+    "newClient": "Nuevo Cliente",
+    "newAppointment": "Nueva cita",
+    "newClientsLabel": "Nuevo cliente"
+  },
+  "passkey": {
+    "verifyError": "No se pudo verificar la biometría. Usa tu contraseña."
   }
 }

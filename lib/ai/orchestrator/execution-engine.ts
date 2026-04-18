@@ -575,12 +575,15 @@ export class ExecutionEngine implements IExecutionEngine {
       // tool_call so the standard execution path handles it transparently.
       // If args are not parseable, force a safe fallback and exit the loop.
       if (lastLlmResponse.content && !lastLlmResponse.tool_calls?.length) {
-        const embeddedMatch = lastLlmResponse.content.match(
-          /<function=([a-z_]+)>([\s\S]*?)<\/function>/i
-        )
-        if (embeddedMatch) {
-          const fnName  = embeddedMatch[1] ?? ''
-          const argsRaw = embeddedMatch[2] ?? ''
+        const match1 = lastLlmResponse.content.match(/<function=([a-z_]+)>([\s\S]*?)<\/function>/i)
+        const match2 = lastLlmResponse.content.match(/<function>\s*([a-z_]+)\s*<\/function>\s*(\{[\s\S]*\})/i)
+        let fnName = ''
+        let argsRaw = ''
+        
+        if (match1) { fnName = match1[1] ?? ''; argsRaw = match1[2] ?? '' }
+        else if (match2) { fnName = match2[1] ?? ''; argsRaw = match2[2] ?? '' }
+
+        if (fnName) {
           logger.warn('EXECUTION-ENGINE', 'LLM emitted embedded <function=> syntax — attempting recovery', {
             reason:  'internal_syntax_leak',
             tool:    fnName,
@@ -595,7 +598,7 @@ export class ExecutionEngine implements IExecutionEngine {
               ...lastLlmResponse,
               content:    null,
               tool_calls: [{
-                id:       `recovered-${Date.now()}`,
+                id:       `call_${Date.now()}`,
                 type:     'function' as const,
                 function: { name: fnName, arguments: argsRaw },
               }],
