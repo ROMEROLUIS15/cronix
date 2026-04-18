@@ -167,8 +167,24 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   if (audioFile) {
     const sttProvider = new GroqProvider(GROQ_API_KEY)
     const sttStart    = Date.now()
-    const sttRes      = await sttProvider.transcribe(audioFile, { language: 'es' })
-    sttLatencyMs      = Date.now() - sttStart
+
+    let sttRes: Awaited<ReturnType<typeof sttProvider.transcribe>>
+    try {
+      sttRes = await sttProvider.transcribe(audioFile, { language: 'es' })
+    } catch (sttErr) {
+      logger.error('AI-ASSISTANT-STT', 'Transcription provider threw an error', {
+        userId: user.id,
+        err:    sttErr instanceof Error ? sttErr.message : String(sttErr),
+      })
+      return NextResponse.json({
+        text:              'Tu audio no se pudo procesar. Por favor intenta de nuevo.',
+        audioUrl:          null,
+        useNativeFallback: true,
+        actionPerformed:   false,
+      })
+    }
+
+    sttLatencyMs = Date.now() - sttStart
 
     if (!sttRes.text?.trim()) {
       logger.warn('AI-ASSISTANT', 'Empty transcription received', { userId: user.id })

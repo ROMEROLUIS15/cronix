@@ -324,9 +324,14 @@ export class RealToolExecutor implements IToolExecutor {
     }
 
     // Extract working hours for the requested day of week.
-    // Distinguish "not configured" (workingHours undefined) from "explicitly closed"
-    // (workingHours defined but day absent/null) — the use case handles them differently.
-    const dayOfWeek = new Date(`${parsed.data.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+    // IMPORTANT: use `p.timezone` (business timezone) via Intl.DateTimeFormat, NOT
+    // toLocaleDateString() which relies on the server's local timezone and would
+    // silently give the wrong weekday when the server runs in UTC.
+    // `T12:00:00Z` anchors to UTC noon — safe in all timezones (no midnight crossing).
+    const dayOfWeek = new Intl.DateTimeFormat('en-US', {
+      weekday:  'long',
+      timeZone: p.timezone,
+    }).format(new Date(`${parsed.data.date}T12:00:00Z`)).toLowerCase()
     const isConfigured = p.workingHours !== undefined
     const dayHours     = p.workingHours?.[dayOfWeek] ?? null
 

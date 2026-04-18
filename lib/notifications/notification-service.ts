@@ -47,13 +47,34 @@ function buildContent(event: AppointmentEvent): string {
   }
 }
 
+/**
+ * Formats an ISO date string (YYYY-MM-DD) to a human-readable Spanish date.
+ * Uses T12:00:00Z (UTC noon) as anchor to avoid timezone day-boundary drift.
+ * Falls back to the original string if parsing fails.
+ *
+ * Example: "2026-04-24" → "viernes, 24 de abril de 2026"
+ */
+function formatDateReadable(isoDate: string): string {
+  try {
+    return new Intl.DateTimeFormat('es-ES', {
+      weekday: 'long',
+      day:     'numeric',
+      month:   'long',
+      year:    'numeric',
+    }).format(new Date(`${isoDate}T12:00:00Z`))
+  } catch {
+    return isoDate
+  }
+}
+
 function buildWhatsAppMessage(event: AppointmentEvent): string {
+  const dateStr = formatDateReadable(event.date)
   switch (event.type) {
     case 'appointment.created':
     case 'appointment.rescheduled':
-      return `Tu cita fue confirmada para ${event.date} a las ${event.time} - ${event.serviceName}`
+      return `Tu cita fue confirmada para el ${dateStr} a las ${event.time} — ${event.serviceName}`
     case 'appointment.cancelled':
-      return `Tu cita de ${event.serviceName} el ${event.date} a las ${event.time} fue cancelada`
+      return `Tu cita de ${event.serviceName} del ${dateStr} a las ${event.time} fue cancelada`
   }
 }
 
