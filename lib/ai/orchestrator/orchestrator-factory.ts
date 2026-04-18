@@ -19,6 +19,7 @@ import { LlmBridge }        from './LlmBridge'
 import { RealToolExecutor } from './tool-adapter/RealToolExecutor'
 import { GroqProvider }     from '@/lib/ai/providers/groq-provider'
 import { getRepos }         from '@/lib/repositories'
+import { NotificationService } from '@/lib/notifications/notification-service'
 
 export function createProductionOrchestrator(
   supabase: SupabaseClient<Database>,
@@ -37,6 +38,7 @@ export function createProductionOrchestrator(
         repos.services,
       ),
       new LlmBridge(new GroqProvider(groqApiKey)),
+      new NotificationService(supabase),
     ),
   )
 }

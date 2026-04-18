@@ -1,79 +1,106 @@
-# Arquitectura del Sistema de IA para WhatsApp (Backend)
+# WhatsApp AI System Architecture (Backend)
 
-Este documento detalla exhaustivamente el funcionamiento "de principio a fin" de la Inteligencia Artificial desplegada en las Edge Functions de Supabase para atender mensajes de WhatsApp. 
+> Last updated: 2026-04-18. Reflects unified notification pipeline and AI hardening guardrails.
 
-Esta arquitectura está completamente desacoplada del frontend (Next.js) y opera de forma asíncrona, robusta y escalable.
-
----
-
-## 1. El Flujo de Llamadas (De Principio a Fin)
-
-Cuando un cliente envía un mensaje por WhatsApp, el flujo atraviesa múltiples capas de defensa y procesamiento:
-
-### Fase 1: Recepción y Encolado (El Webhook)
-**Archivo:** `supabase/functions/whatsapp-webhook/index.ts`
-1. Meta (WhatsApp) dispara un evento HTTP POST a este webhook.
-2. **Seguridad (Capa 1):** Valida la firma `HMAC-SHA256` enviada por Meta asegurando que el mensaje es genuino y no un ataque.
-3. **Desacoplamiento:** En lugar de procesar la IA aquí mismo (lo que causaría que Meta corte la conexión por timeout de red de la nube), la función simplemente atrapa el cuerpo del mensaje y se lo inyecta a una cola en la nube externa administrada por **QStash (Upstash)**.
-4. Responde inmediatamente con un `200 OK` (Accepted) a Meta, finalizando la primera fase en pocos milisegundos.
-
-### Fase 2: Procesamiento y Orquestación
-**Archivos principales:** `process-whatsapp/index.ts` y `message-handler.ts`
-1. QStash extrae el mensaje de su cola y hace la llamada autónoma al orquestador real: `process-whatsapp`.
-2. **Seguridad (Capa 2):** Se verifica la firma criptográfica en el header de QStash (`security.ts`) para evitar inyecciones e independientemente de un inicio de sesión (`verify_jwt: false` en Supabase).
-3. **Manejo de Errores (Dead Letter Queue):** Toda ejecución aquí dentro está envuelta en un control de errores (try/catch). Si el servidor falla gravemente, el paquete original mandado por Meta se almacena integro en la tabla `wa_dead_letter_queue` para reintentos posteriores o depuración en frío.
-4. **Voz a Texto:** Si se recibió un audio (Voice Note), el `message-handler` utiliza una función auxiliar `downloadMediaBuffer` extrayendo el binario de Meta y llamando a la función especializada `transcribeAudio()`. Esta utiliza la API súper veloz de **Groq Whisper** para convertir el audio en texto limpio antes de que la IA lo sepa.
-
-### Fase 3: Enrutamiento y Memoria (El Contexto RAG)
-Para que la IA no invente datos ("alucinaciones"), se inyecta en todo su prompt información rigurosa del cliente.
-1. **Business Router (`business-router.ts`):** 
-   - Analiza si el mensaje viene de un enlace de landing (ej: `#estetica-bella`). De ser así, ata directamente la sesión del número celular a ese Tenant (`business_id`).
-   - Si no hay un `hash/slug`, consulta qué sesión está anclada (`wa_sessions`) a ese teléfono en particular.
-2. **Control de Cuotas y Límites (`guards.ts`):** 
-   - Para frenar bots, se invocan Controles de Límites (Rate Limits y Token Quotas). El negocio tiene límites de tokens facturables que impiden quiebras sorpresas si hay ataques masivos.
-   - Aplica el patrón "Circuit Breaker". Si existe un bajón de red del proveedor de Inteligencia Artificial (ej., Groq/OpenAI reportando error 500 por doquier), se activa el circuito y devuelve automáticos al cliente avisando de un "mantenimiento rápido", salvando llamadas inválidas.
-3. **Context Fetcher (`context-fetcher.ts`):** Extrae al instante de la base de datos de PostgreSQL toda la memoria conversacional y fáctica:
-   - Extrae el perfil base (nombre del cliente, negocio aplicable).
-   - Extrae **`getActiveAppointments` y `getBookedSlots`**: Información temporal para nutrir la IA con los "HUECOS Y SALIDAS" en tiempo real que tiene cada calendario para sugerir.
-   - **Módulo de Memoria Corta (`getConversationHistory`)**: Filtra `wa_audit_logs` trayendo solo "los últimos 4 mensajes del usuario vs Agente", lo suficiente para guardar la coherencia del chat de hoy sin ahogar los limites de tokens totales del LLM.
-
-Toda esta compilación crea el objeto **`BusinessRagContext`**, es el conocimiento divino temporal inyectado a los asistentes virtuales.
-
-### Fase 4: Bucle ReAct y Resolución Final
-**Archivos principales:** `ai-agent.ts` y `tool-executor.ts`
-Con toda el RAG asimilado, despierta el agente impulsado por el patrón de Inteligencia Artificial "Reasoning + Acting" (Razonar y Actuar).
-
-1. **El Cerebro Interno Lógico (Llama-3.1-8b):**
-   - Una IA optimizada, pequeña y muy barata se enciende. Revisa el mensaje y dice *"El cliente dice 'Ok confirmado'. En el turno pasado yo le propuse las 3PM. Esto significa: REAGENDAR PARA LAS 3PM"*.
-   - Inicia el "Bucle de herramientas", llama la firma de control `confirm_booking` definida en el `tool-executor.ts`.
-2. **Ejecución de Backend Mutacional (`tool-executor.ts`):**
-   - Funciona sin que la IA toque Bases de Datos directamente con SQL. El executor recibe el formato en JSON, sanitiza parámetros (UUID puro, Tiempo ISO), chequea cuotas, dueñazgos y muta el backend real de citas (insertando o actualizando una). Retorna al LLM con un simple `{success: true}` (O en contra: `{success: false, error: "SLOT_CONFLICT"}` forzando al LLM pequeño a sugerirle otra hora a su humano).
-3. **Cerebro Externo y Envío Final (Llama-3.3-70b):**
-   - Habiendo validado de forma robótica cada herramienta técnica, la cadena pasa al modelo gigante "Vibes", una bestia con 70 Billones de parámetros y capacidad increíble de redacción que toma el dictamen del paso anterior y modela una respuesta en español, encantadora, humana y sin detalles UUID para mandarse por la API asincrona externa `sendWhatsAppMessage` de vuelta directamente al cliente.
-
+This document details the end-to-end operation of the AI agent deployed on Supabase Edge Functions to process WhatsApp messages. This architecture is completely decoupled from the Next.js frontend and operates asynchronously.
 
 ---
 
-## 2. Aciertos y Ventajas Inmensas (PROS)
+## 1. Call Flow (End-to-End)
 
-* **Segregación Completa Frontend/Backend**
-  Al funcionar totalmente con *Edge Computing*, no importa que tan duro se le exija a la aplicación web (Next.js), todo el flujo gigante de WhatsApp es balanceado independientemente, asincrónicamente por la nube. Es decir, tus paneles del SAAS no van a sufrir lentitud si un negocio está procesando 3.000 citas al mismo tiempo en fin de mes.
-* **Modelo RAG Conservador (Manejo Maestro de los Tokens LLM)**
-  Usar `getConversationHistory` en los límites justos y usar un modelo 8B para el motor lógico interno versus un 70B para la estética evita "sangrados" de facturas. Una petición normal que pudo costar 10 mil tokens por analizar un libro, gasta únicamente dos o tres centavos por request al enfocarse de manera conservadora solo en los objetos críticos RAG.
-* **Control Absoluto Anti-Alucinatorio (Tool Orchestration)**
-  Los LLMs son conocidos por inventar. Pero en tu plataforma (como en toda industria crítica), no pueden. Tu capa *tool-executor.ts* ejerce una arquitectura de Desconfianza (Zero-Trust) con la IA. Cada vez que la IA pide mover una cita, en vez de moverla en una base de datos sin control, la función TS lo maneja y si el LLM se equivoca lo frena a la mitad del camino mediante un "Circuito abierto / Fallback" sin que el cliente se dé cuenta.
-* **Tolerancia de Fallo 100% de QStash (DLQ)**
-  Gracias a la Cola QStash y a cómo manejan el JSON, en caso de caídas de AWS/Facebook o la misma Supabase, el mensaje del usuario no se destruye ni desaparece sin dejar rastro de lectura; se queda suspendido en memoria listos para reactivar la cadena cuando el sistema vuelva. 
+### Phase 1: Reception and Enqueuing (The Webhook)
+
+**File:** `supabase/functions/whatsapp-webhook/index.ts`
+
+1. Meta (WhatsApp) sends an HTTP POST to this webhook.
+2. **Security (Layer 1):** Validates the `HMAC-SHA256` signature from Meta.
+3. **Decoupling:** Injects the raw payload into **QStash (Upstash)** queue. Responds `200 OK` to Meta in < 50ms.
+
+### Phase 2: Processing and Orchestration
+
+**Files:** `process-whatsapp/index.ts` → `message-handler.ts`
+
+1. QStash dequeues and calls `process-whatsapp` with automatic retry (Exponential Backoff).
+2. **Security (Layer 2):** Verifies QStash signature (`security.ts`) — no JWT required.
+3. **Error Boundary:** On crash, original payload is stored in `wa_dead_letter_queue` for cold debugging.
+4. **Voice:** If audio received, `downloadMediaBuffer` + Groq Whisper → clean transcript.
+
+### Phase 3: Context Loading (RAG)
+
+1. **`business-router.ts`:** Resolves tenant via session hash (`#slug`) or anchored `wa_sessions` record.
+2. **`guards.ts`:** Rate limits, token quotas, Circuit Breaker pattern.
+3. **`context-fetcher.ts`:** Loads from PostgreSQL:
+   - Business profile, services, working hours, AI rules
+   - Active appointments (next 14 days)
+   - Conversation history (last 4 turns from `wa_audit_logs`)
+   - → Produces `BusinessRagContext`
+
+### Phase 4: ReAct Loop and Resolution
+
+**Files:** `ai-agent.ts` → `tool-executor.ts`
+
+1. **Reasoning model (Llama-3.1-8b):** Analyzes intent, decides tool call or text response.
+2. **`tool-executor.ts`:** Validates args, executes DB mutation, returns `{ success, result, data }` — structured payload, no string parsing.
+3. **Response model (Llama-3.3-70b):** Converts the tool result into a warm, human-readable WhatsApp message.
+
+### Phase 5: Notification Dispatch (Unified Pipeline)
+
+After any write tool succeeds, the **unified event pipeline** is triggered (no direct DB inserts or WhatsApp calls outside this pipeline):
+
+```
+tool-executor.ts (write success)
+  └─ emitBookingEvent({ type, appointmentId, clientName, serviceName, date, time, businessId })
+        │
+        ▼
+  notifications.ts → NotificationService.handle(AppointmentEvent)
+        ├─ event_id = crypto.randomUUID()
+        ├─ INSERT notifications (UNIQUE event_id) → idempotent, retries are safe
+        ├─ Supabase Realtime → dashboard UI
+        └─ WhatsApp owner alert (time formatted as HH:mm, userId = 'whatsapp-agent')
+```
+
+**Eliminated:** The legacy `createInternalNotification` and direct `sendWhatsAppMessage` calls that bypassed idempotency. All notifications now go through the single pipeline.
 
 ---
 
-## 3. Puntos de Atención Potenciales (CONTRAS)
+## 2. Hardening Guardrails
 
-Toda herramienta y arquitectura hiper avanzada paga pequeños peajes que son necesarios contemplar:
+The WhatsApp agent (as of 2026-04-18) does **not** implement the same confirmation interception or availability-claim guards as the web orchestrator, because:
 
-* **Sincronización en "La Cola Fantasma" y "Race Conditions":** 
-  Dado que la mensajería es distribuída por QStash, en un evento altamente masivo donde dos teléfonos envían una reserva para exactamente el mismo bloque de tiempo en exactamente el mismo de milisegundo de margen, ambas invocarán la herramienta en paralelo. Aunque se confía en los locks (transacciones) de PostgreSQL de Supabase en tu capa `lib/`, al ser llamadas de funciones que corren por separado existe un micro-riesgo del típico Deadlock.
-* **Largas dependencias con Proveedores / Vendor Lock-in Sensibles:**
-  Al usar APIs tan potentes (Upstash, Groq, Whisper, Meta WhatsApp Business API Cloud Native, Deno Edge de Supabase) si alguna de estas cinco compañías emite en algún futuro lejano y distópico un deprecio de API que eliminen, por ejemplo los UUID por otra tecnología obligatoria, causaría horas valiosas de adaptabilidades estrictas, ya que todo tu árbol pende del parseo de Meta v19.x y Headers que pueden ser removibles.
-* **Testing Automatizado End-to-End Complicadísimo:** 
-  Las pruebas con software Playwright es genial para testing del Frontend SAAS (Next.js UI). Pero probar (testear) el flujo completo "en vivo" de la IA requiere un "teléfono celular Falso simulando escribir WhatsApp". Esto es extremadamente díficil de lograr para Unit-Testing automatizados porque envuelve LLMs aleatorios.  
+- The WhatsApp flow uses a single-model ReAct loop (no `DecisionEngine`/`ExecutionEngine` split).
+- Confirmation is handled conversationally — the LLM asks "¿Confirmas?" before calling write tools.
+- The structured `data` return from `tool-executor.ts` eliminates all string parsing for notification dispatch.
+
+Future versions may adopt shared guardrail primitives.
+
+---
+
+## 3. Notification Idempotency
+
+| Property | Value |
+|----------|-------|
+| `event_id` | `crypto.randomUUID()` — generated per operation |
+| DB constraint | `UNIQUE(event_id)` on `notifications` table |
+| Retry safety | Duplicate inserts silently ignored by constraint |
+| `userId` for WA events | `'whatsapp-agent'` sentinel (never a real user UUID) |
+| Time format | `HH:mm` (24h) — consistent between web and WA paths |
+
+---
+
+## 4. Advantages
+
+- **Zero message loss:** QStash retry + `wa_dead_letter_queue` for unrecoverable failures.
+- **Idempotent notifications:** UNIQUE constraint prevents duplicate alerts on QStash retries.
+- **Dual-model efficiency:** Small model (8B) for logic, large model (70B) for copywriting.
+- **Anti-hallucination:** `tool-executor.ts` uses Zero-Trust architecture — LLM cannot mutate DB directly.
+- **Dashboard isolation:** Async Edge Functions do not affect Next.js performance.
+- **Structured event data:** Write tools return typed `BookingEventData` — no regex on result strings.
+
+---
+
+## 5. Known Limitations
+
+- **Race conditions on concurrent bookings:** If two phones attempt the same slot simultaneously, PostgreSQL row-level locks are the last defense. QStash does not guarantee strict ordering.
+- **Vendor dependencies:** Upstash, Groq, Meta WhatsApp Cloud API — each is a potential failure point. Circuit Breaker mitigates LLM-side failures.
+- **No automated E2E tests for WhatsApp flow:** Requires real phone simulation. Current coverage: unit tests for `tool-executor.ts` and `notifications.ts`; no full conversation replay.
+- **`cron-reminders` ongoing 500 errors:** Unrelated to notification hardening. Requires separate investigation (possible secret rotation or clock configuration issue).

@@ -104,7 +104,7 @@ export async function safeLLM(
         model,
         messages,
         max_tokens: maxTokens,
-        temperature: 0.4,
+        temperature: 0.1,
         tools: tools.length ? tools : undefined,
         tool_choice: tools.length ? 'auto' : undefined
       }),

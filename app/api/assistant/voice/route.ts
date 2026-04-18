@@ -184,6 +184,18 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     logger.info('AI-ASSISTANT-STT', `Escuchado: "${finalText}"`, { userId: user.id, latencyMs: sttLatencyMs })
   }
 
+  // TASK 6 — Voice/text input validation.
+  // Reject inputs that are too short, pure noise, or symbol-only strings.
+  // This prevents the LLM from receiving garbage input and producing incorrect responses.
+  const MEANINGFUL_TEXT = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
+  if (finalText.length < 3 || !MEANINGFUL_TEXT.test(finalText)) {
+    return NextResponse.json({
+      text: 'No entendí bien, ¿puedes repetirlo?',
+      audioUrl: null,
+      useNativeFallback: true,
+      actionPerformed: false,
+    })
+  }
   // 6. Load business context for LLM
   // Services: LLM needs names + UUIDs to resolve user-spoken service names.
   // Today's appointments: LLM needs IDs to cancel/reschedule same-day bookings.

@@ -17,6 +17,7 @@ import type { IToolExecutor, ToolExecuteParams } from '../execution-engine'
 import type { IAppointmentQueryRepository, IAppointmentCommandRepository } from '@/lib/domain/repositories'
 import type { IClientRepository } from '@/lib/domain/repositories/IClientRepository'
 import type { IServiceRepository } from '@/lib/domain/repositories/IServiceRepository'
+import type { BookingEventData } from '../events'
 import { CreateAppointmentUseCase }     from '@/lib/domain/use-cases/CreateAppointmentUseCase'
 import { CancelAppointmentUseCase }     from '@/lib/domain/use-cases/CancelAppointmentUseCase'
 import { RescheduleAppointmentUseCase } from '@/lib/domain/use-cases/RescheduleAppointmentUseCase'
@@ -61,9 +62,13 @@ const GetAvailableSlotsSchema = z.object({
   duration_min: z.number().int().min(5).max(480),
 })
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+/**
+ * Tool execution result.
+ * Write-tools MUST populate `data` on success — it feeds AppointmentEvent
+ * without any string parsing on the caller side.
+ */
+type ExecResult = { success: boolean; result: string; error?: string; data?: BookingEventData }
 
-type ExecResult = { success: boolean; result: string; error?: string }
 
 // ── Implementation ─────────────────────────────────────────────────────────────
 
@@ -169,7 +174,15 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result: `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}.`,
+      result:  `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}.`,
+      data: {
+        appointmentId: result.data?.id ?? '',
+        clientName:    client.name,
+        serviceName:   service.name,
+        date,
+        time,
+        action:        'created',
+      },
     }
   }
 
@@ -179,13 +192,51 @@ export class RealToolExecutor implements IToolExecutor {
       return { success: false, result: 'Necesito el ID de la cita para cancelarla.' }
     }
 
+    // Fetch appointment details BEFORE cancelling to populate structured event data.
+    // getForEdit returns client_id, service_id, start_at — enough to resolve names.
+    const appt = await this.queryRepo.getForEdit(parsed.data.appointment_id, p.businessId)
+    if (appt.error || !appt.data) {
+      return { success: false, result: 'No encontré la cita a cancelar.' }
+    }
+
+    // Resolve client name (best-effort — cancel must not fail if client is missing)
+    let clientName = 'Cliente'
+    if (appt.data.client_id) {
+      const clientRes = await this.clientRepo.getById(appt.data.client_id, p.businessId)
+      if (!clientRes.error && clientRes.data) clientName = clientRes.data.name
+    }
+
+    // Resolve service name (best-effort)
+    let serviceName = 'Servicio'
+    const firstServiceId = appt.data.appointment_services[0]?.service_id ?? appt.data.service_id
+    if (firstServiceId) {
+      const svc = await this.resolveService(p.businessId, firstServiceId)
+      if (svc) serviceName = svc.name
+    }
+
+    // Extract date/time from start_at ISO string
+    const startDate = appt.data.start_at.slice(0, 10)           // YYYY-MM-DD
+    const startTime = appt.data.start_at.slice(11, 16)          // HH:mm
+
     const result = await new CancelAppointmentUseCase(this.commandRepo).execute({
       businessId:    p.businessId,
       appointmentId: parsed.data.appointment_id,
     })
 
     if (result.error) return { success: false, result: result.error }
-    return { success: true, result: 'Listo. La cita ha sido cancelada.' }
+
+    return {
+      success: true,
+      result:  `Listo. La cita de ${clientName} (${serviceName}) ha sido cancelada.`,
+      data: {
+        appointmentId: parsed.data.appointment_id,
+        clientName,
+        serviceName,
+        date:   startDate,
+        time:   startTime,
+        action: 'cancelled',
+      },
+    }
   }
 
   private async rescheduleBooking(p: ToolExecuteParams): Promise<ExecResult> {
@@ -199,10 +250,23 @@ export class RealToolExecutor implements IToolExecutor {
       return { success: false, result: 'No encontré la cita.' }
     }
 
+    // Resolve service for duration and name
     let durationMin = 60
-    if (appt.data.service_id) {
-      const svc = await this.resolveService(p.businessId, appt.data.service_id)
-      if (svc) durationMin = svc.duration_min
+    let serviceName = 'Servicio'
+    const firstServiceId = appt.data.appointment_services[0]?.service_id ?? appt.data.service_id
+    if (firstServiceId) {
+      const svc = await this.resolveService(p.businessId, firstServiceId)
+      if (svc) {
+        durationMin = svc.duration_min
+        serviceName = svc.name
+      }
+    }
+
+    // Resolve client name (best-effort)
+    let clientName = 'Cliente'
+    if (appt.data.client_id) {
+      const clientRes = await this.clientRepo.getById(appt.data.client_id, p.businessId)
+      if (!clientRes.error && clientRes.data) clientName = clientRes.data.name
     }
 
     const newStartISO = `${parsed.data.new_date}T${parsed.data.new_time}:00`
@@ -219,7 +283,15 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result: `Listo. La cita fue reagendada para el ${parsed.data.new_date} a las ${parsed.data.new_time}.`,
+      result:  `Listo. La cita de ${clientName} fue reagendada para el ${parsed.data.new_date} a las ${parsed.data.new_time}.`,
+      data: {
+        appointmentId: parsed.data.appointment_id,
+        clientName,
+        serviceName,
+        date:   parsed.data.new_date,
+        time:   parsed.data.new_time,
+        action: 'rescheduled',
+      },
     }
   }
 
@@ -258,7 +330,16 @@ export class RealToolExecutor implements IToolExecutor {
     const isConfigured = p.workingHours !== undefined
     const dayHours     = p.workingHours?.[dayOfWeek] ?? null
 
-    if (isConfigured && !dayHours) {
+    // Solo considerar "cerrado" si el día está EXPLÍCITAMENTE en el objeto con valor falsy.
+    // Si la key no existe (día no configurado), NO bloquear — continuar flujo normal.
+    // "Sin dato" ≠ "Cerrado": un horario parcial (ej: solo lunes-viernes) no debe
+    // reportar sábado como cerrado si el dueño simplemente no lo configuró.
+    const dayExplicitlyClosed =
+      isConfigured &&
+      Object.prototype.hasOwnProperty.call(p.workingHours, dayOfWeek) &&
+      !dayHours
+
+    if (dayExplicitlyClosed) {
       return { success: true, result: `El negocio está cerrado el ${parsed.data.date}. No hay horarios disponibles.` }
     }
 

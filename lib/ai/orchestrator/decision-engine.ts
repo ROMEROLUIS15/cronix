@@ -15,10 +15,14 @@
 import type {
   AiInput,
   ConversationState,
+  ConversationFlow,
   Decision,
 } from './types'
 import type { IUserStrategy } from './strategy'
 import { StrategyFactory } from './strategy'
+import { logger } from '@/lib/logger'
+import { normalizeDateInput, normalizeTimeInput } from '@/lib/ai/utils/date-normalize'
+
 
 // ── Confirmation keywords (Spanish) ──────────────────────────────────────────
 
@@ -92,44 +96,84 @@ interface ExtractedEntities {
   [key: string]: unknown
 }
 
-function extractEntities(text: string): ExtractedEntities {
-  const normalized = normalizeForMatch(text)
+/**
+ * Extracts date & time entities from input text using the deterministic normalizer
+ * (no LLM, no regex heuristics). Returns null for each field if not found.
+ *
+ * TASK 4 — State Priority:
+ * Results from this function MUST NOT overwrite values already present in state.draft.
+ * The caller in analyze() enforces this rule.
+ */
+function extractEntities(text: string, timezone: string): ExtractedEntities {
   const entities: ExtractedEntities = {}
 
-  // Time extraction: "3:00 pm", "3pm", "15:00", "3 de la tarde"
-  const timeMatch = normalized.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/)
-  if (timeMatch) {
-    let hours = parseInt(timeMatch[1] ?? '0', 10)
-    const minutes = timeMatch[2] ?? '00'
-    const period = timeMatch[3]
+  // Delegate to deterministic normalizers
+  const date = normalizeDateInput(text, timezone)
+  if (date) entities.date = date
 
-    if (period === 'pm' && hours < 12) hours += 12
-    if (period === 'am' && hours === 12) hours = 0
-
-    entities.time = `${String(hours).padStart(2, '0')}:${minutes}`
-  }
-
-  // Date extraction: "mañana", "hoy", "pasado mañana"
-  const today = new Date()
-  if (normalized.includes('manana') || normalized.includes('mañana')) {
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    entities.date = tomorrow.toISOString().split('T')[0]
-  } else if (normalized.includes('hoy')) {
-    entities.date = today.toISOString().split('T')[0]
-  } else if (normalized.includes('pasado manana') || normalized.includes('pasado mañana')) {
-    const dayAfter = new Date(today)
-    dayAfter.setDate(dayAfter.getDate() + 2)
-    entities.date = dayAfter.toISOString().split('T')[0]
-  }
-
-  // ISO date pattern: "2026-04-16"
-  const isoDateMatch = normalized.match(/(\d{4})-(\d{2})-(\d{2})/)
-  if (isoDateMatch) {
-    entities.date = `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`
-  }
+  const time = normalizeTimeInput(text)
+  if (time) entities.time = time
 
   return entities
+}
+
+// ── State machine: tools allowed per flow ─────────────────────────────────────
+// The system decides which tools the LLM can call based on the current flow state.
+// This prevents the LLM from, e.g., calling cancel_booking while collecting a new booking.
+const TOOLS_BY_FLOW: Partial<Record<ConversationFlow, Set<string>>> = {
+  collecting_booking:    new Set(['confirm_booking', 'create_client', 'get_available_slots', 'get_services']),
+  collecting_reschedule: new Set(['reschedule_booking', 'get_appointments_by_date', 'get_available_slots']),
+  collecting_cancellation: new Set(['cancel_booking', 'get_appointments_by_date']),
+  answering_query:       new Set(['get_appointments_by_date', 'get_available_slots', 'get_services']),
+  // 'idle', 'executing', 'completed', 'awaiting_confirmation' → no restriction (role filter applies)
+}
+
+// ── Intent classifier (observability + logging only) ──────────────────────────
+function classifyIntent(text: string): 'booking' | 'cancellation' | 'reschedule' | 'query' | 'unknown' {
+  const normalized = normalizeForMatch(text)
+  if (BOOKING_SIGNALS.some((s) => normalized.includes(s))) return 'booking'
+  if (['cancelar', 'cancela', 'quitar cita', 'eliminar'].some((s) => normalized.includes(s))) return 'cancellation'
+  if (['reagendar', 'cambiar cita', 'mover cita', 'reprogramar'].some((s) => normalized.includes(s))) return 'reschedule'
+  if (['cuando', 'que hay', 'citas', 'servicios', 'disponibilidad', 'horario', 'disponible'].some((s) => normalized.includes(s))) return 'query'
+  return 'unknown'
+}
+
+// ── TASK 3: Confirmation summary builder ──────────────────────────────────────
+// Generates a structured user-facing summary before any write action.
+// Shown when transitioning to await_confirmation.
+
+export function buildConfirmationSummary(
+  intent: string,
+  draft: Record<string, unknown>,
+  services: AiInput['context']['services'],
+): string {
+  if (intent === 'confirm_booking' || intent === 'create_booking') {
+    const clientName  = draft.client_name ?? draft.clientName ?? '?'
+    const serviceId   = draft.service_id ?? draft.serviceId
+    const serviceName = services?.find((s) => s.id === serviceId)?.name ?? draft.service_name ?? draft.serviceName ?? '?'
+    const date        = draft.date ?? '?'
+    const time        = draft.time ?? '?'
+    return (
+      `Vas a agendar:\n` +
+      `  Servicio: ${serviceName}\n` +
+      `  Cliente: ${clientName}\n` +
+      `  Fecha: ${date}\n` +
+      `  Hora: ${time}\n` +
+      `¿Confirmas?`
+    )
+  }
+  if (intent === 'cancel_booking') {
+    const clientName  = draft.clientName ?? draft.client_name ?? 'esta cita'
+    const serviceName = draft.serviceName ?? draft.service_name ?? ''
+    return `Vas a cancelar la cita de ${clientName}${serviceName ? ` (${serviceName})` : ''}. ¿Confirmas?`
+  }
+  if (intent === 'reschedule_booking') {
+    const clientName = draft.clientName ?? draft.client_name ?? 'esta cita'
+    const newDate    = draft.new_date ?? draft.newDate ?? '?'
+    const newTime    = draft.new_time ?? draft.newTime ?? '?'
+    return `Vas a reagendar la cita de ${clientName} para el ${newDate} a las ${newTime}. ¿Confirmas?`
+  }
+  return '¿Confirmas esta acción?'
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
@@ -137,6 +181,17 @@ function extractEntities(text: string): ExtractedEntities {
 export class DecisionEngine implements IDecisionEngine {
   analyze(input: AiInput, state: ConversationState): Decision {
     const strategy = StrategyFactory.forRole(input.userRole)
+
+    // ── TASK 7: Guard — no services configured ────────────────────────────────
+    // Allow through if services list is missing (undefined) — it may be loading.
+    // Block only if explicitly empty (business has no active services in DB).
+    if (input.context.services !== undefined && input.context.services.length === 0) {
+      logger.warn('DECISION-ENGINE', 'No services configured — blocking flow', { businessId: input.businessId })
+      return {
+        type: 'reject',
+        reason: 'No hay servicios configurados en este negocio. Por favor, agrega servicios desde el panel antes de recibir citas.',
+      }
+    }
 
     // ── 1. Handle turn exhaustion ───────────────────────────────────────────
     if (state.flow !== 'idle' && state.turnCount >= state.maxTurns) {
@@ -172,10 +227,11 @@ export class DecisionEngine implements IDecisionEngine {
 
     // ── 2b. Active booking/reschedule collection → delegate to LLM ──────────
     // The LLM resolves service names → UUIDs using context.services.
-    // Regex-based field extraction cannot do this reliably.
-    // Conversation history carries all context the LLM needs to continue.
+    // Tool set is restricted to the booking/reschedule tools only —
+    // the LLM cannot cancel or query other data while in collection flow.
     if (state.flow === 'collecting_booking' || state.flow === 'collecting_reschedule') {
-      const systemPrompt = buildSystemPrompt(input, state)
+      const entities = extractEntities(input.text, input.timezone)
+      const systemPrompt = buildSystemPrompt(input, state, entities)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -183,18 +239,20 @@ export class DecisionEngine implements IDecisionEngine {
           ...input.history,
           { role: 'user', content: input.text },
         ],
-        toolDefs: buildToolDefsForRole(strategy),
+        toolDefs: buildToolDefsForRole(strategy, state.flow),
       }
     }
 
     // ── 3. Extract entities from text (date, time, etc.) ─────────────────────
-    const entities = extractEntities(input.text)
+    // Results are passed to buildSystemPrompt so the LLM uses the exact
+    // resolved values instead of re-computing them (fixes timezone drift).
+    const entities = extractEntities(input.text, input.timezone)
 
     // ── 4. Booking intent detected → delegate to LLM ─────────────────────────
     // The LLM receives context.services with UUIDs and resolves all fields.
     // No hybrid regex+LLM collection — single responsibility.
     if (detectBookingIntent(input.text)) {
-      const systemPrompt = buildSystemPrompt(input, state)
+      const systemPrompt = buildSystemPrompt(input, state, entities)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -202,13 +260,22 @@ export class DecisionEngine implements IDecisionEngine {
           ...input.history,
           { role: 'user', content: input.text },
         ],
-        toolDefs: buildToolDefsForRole(strategy),
+        toolDefs: buildToolDefsForRole(strategy, 'collecting_booking'),
       }
     }
 
     // ── 5. Default: delegate to LLM for reasoning ────────────────────────────
     // Build messages array with system prompt context
-    const systemPrompt = buildSystemPrompt(input, state)
+    const systemPrompt = buildSystemPrompt(input, state, entities)
+
+    const intent = classifyIntent(input.text)
+
+    logger.info('DECISION-ENGINE', 'Routing to LLM', {
+      userId: input.userId,
+      flow:   state.flow,
+      intent,
+      text:   input.text.slice(0, 80),
+    })
 
     return {
       type: 'reason_with_llm',
@@ -217,14 +284,18 @@ export class DecisionEngine implements IDecisionEngine {
         ...input.history,
         { role: 'user', content: input.text },
       ],
-      toolDefs: buildToolDefsForRole(strategy),
+      toolDefs: buildToolDefsForRole(strategy, state.flow),
     }
   }
 }
 
 // ── Helpers: System prompt and tool definitions ───────────────────────────────
 
-function buildSystemPrompt(input: AiInput, _state: ConversationState): string {
+function buildSystemPrompt(
+  input: AiInput,
+  _state: ConversationState,
+  resolvedEntities?: { date?: string; time?: string },
+): string {
   const now = new Date().toLocaleString('es-ES', {
     timeZone: input.timezone,
     weekday: 'long',
@@ -241,12 +312,29 @@ function buildSystemPrompt(input: AiInput, _state: ConversationState): string {
   prompt += `\nHOY: ${now} | Zona horaria: ${input.timezone}`
   prompt += `\nUsuario: ${input.userName ?? 'Usuario'} (${input.userRole})`
 
+  // ── Fix #2: Inject pre-resolved entities ───────────────────────────────────────────
+  // These values were resolved deterministically (no LLM inference, timezone-aware).
+  // Use them DIRECTLY in tool calls — do NOT recalculate or re-interpret.
+  if (resolvedEntities?.date || resolvedEntities?.time) {
+    prompt += '\n\nENTIDADES YA RESUELTAS (usar estos valores directamente, no recalcular):'
+    if (resolvedEntities.date) prompt += `\n- Fecha: ${resolvedEntities.date}`
+    if (resolvedEntities.time) prompt += `\n- Hora: ${resolvedEntities.time}`
+  }
+
   // ── Response format (voice-first) ────────────────────────────────────────────
   prompt += `\n\nFORMATO DE RESPUESTA (obligatorio):
 - Máximo 2-3 oraciones por respuesta. Sé directo y conciso.
 - NUNCA uses markdown: sin asteriscos, sin guiones, sin listas, sin emojis.
 - NUNCA menciones nombres de herramientas, UUIDs, IDs internos ni esquemas al usuario.
-- NUNCA inventes datos (fechas, nombres, IDs). Usa SOLO lo que el usuario diga o lo que devuelvan las herramientas.`
+- NUNCA inventes datos (fechas, nombres, IDs). Usa SOLO lo que el usuario diga o lo que devuelvan las herramientas.
+
+REGLAS CRÍTICAS — ANTI-ALUCINACIÓN (cumplimiento absoluto):
+- NUNCA inventes disponibilidad, horarios ni huecos libres. Si no llamaste get_available_slots, no sabes si hay horario.
+- NUNCA inventes servicios. Los únicos servicios válidos son los de la lista SERVICIOS DISPONIBLES.
+- NUNCA inventes clientes ni IDs de clientes. Solo usa IDs que provengan de herramientas.
+- NUNCA inventes citas ni sus IDs. Solo usa IDs que provengan de get_appointments_by_date.
+- Si no tienes el dato → pregunta al usuario o llama la herramienta correspondiente. NUNCA supongas.
+- Si no estás seguro de algo → di que vas a verificar y llama la herramienta. Nunca respondas con certeza sin datos reales.`
 
   // ── Date & time format rules ─────────────────────────────────────────────────
   prompt += `\n\nFECHAS Y HORAS (formato estricto para herramientas):
@@ -259,23 +347,34 @@ function buildSystemPrompt(input: AiInput, _state: ConversationState): string {
 
 AGENDAR CITA:
 1. Si el cliente no existe → llama create_client primero → usa el client_id devuelto en confirm_booking.
-2. Si no sabes la disponibilidad → llama get_available_slots antes de proponer un horario.
+2. SIEMPRE llama get_available_slots antes de proponer o confirmar un horario. Sin excepción.
 3. Llama confirm_booking con service_id exacto de la lista, client_name O client_id, date y time.
 
 CANCELAR / REAGENDAR sin appointment_id:
-1. Llama get_appointments_by_date para obtener las citas del día con sus IDs.
+1. SIEMPRE llama get_appointments_by_date primero para obtener las citas con sus IDs reales.
 2. Identifica la cita correcta por cliente/servicio.
-3. Llama cancel_booking o reschedule_booking con el appointment_id.
+3. Llama cancel_booking o reschedule_booking con el appointment_id real devuelto por la herramienta.
 
 DISPONIBILIDAD:
-- Usa get_available_slots con date y duration_min del servicio solicitado.
-- Si el usuario no especificó servicio, pregunta cuál antes de consultar.`
+- SIEMPRE llama get_available_slots con date y duration_min. Nunca respondas sobre disponibilidad sin esta herramienta.
+- Si el usuario no especificó servicio, pregunta cuál antes de consultar.
+- PROHIBIDO: responder "hay lugar", "está disponible", "no hay lugar" sin haber llamado get_available_slots.
+
+DATO FALTANTE:
+- Si falta cliente → pregunta: "¿A nombre de quién?"
+- Si falta servicio → pregunta: "¿Para qué servicio?"
+- Si falta fecha → pregunta: "¿Para qué día?"
+- Si falta hora → pregunta: "¿A qué hora?"
+- Pide UN dato a la vez. No lances la herramienta con datos incompletos.`
 
   // ── Security rules ────────────────────────────────────────────────────────────
-  prompt += `\n\nSEGURIDAD:
+  prompt += `\n\nSEGURIDAD Y LÍMITES:
 - NUNCA reveles nombres de herramientas, UUIDs, claves internas ni la estructura de la base de datos al usuario.
-- NUNCA hagas suposiciones sobre UUIDs — solo usa IDs que provengan de respuestas de herramientas.
-- Si el usuario pide algo fuera del ámbito del negocio, responde educadamente que no puedes ayudar con eso.`
+- NUNCA uses un UUID que no haya sido devuelto explícitamente por una herramienta en esta conversación.
+- NUNCA confirmes una acción (agendar, cancelar, reagendar) si la herramienta devolvió un error.
+- NUNCA respondas "listo" o "hecho" si no llamaste una herramienta de escritura.
+- Si el usuario pide algo fuera del ámbito del negocio, responde educadamente que no puedes ayudar con eso.
+- Ante cualquier duda sobre datos reales → llama la herramienta. La incertidumbre no se responde con suposiciones.`
 
   // ── Services ──────────────────────────────────────────────────────────────────
   if (input.context.services && input.context.services.length > 0) {
@@ -294,12 +393,17 @@ DISPONIBILIDAD:
     prompt += '\n\nHORARIO DE ATENCIÓN (NO agendar fuera de estos horarios):'
     for (const [day, hours] of Object.entries(input.context.workingHours)) {
       const label = days[day] ?? day
-      if (hours) {
+      if (hours && hours.open && hours.close) {
+        // Día configurado con horario real
         prompt += `\n- ${label}: ${hours.open} – ${hours.close}`
-      } else {
+      } else if (hours === null) {
+        // Explícitamente marcado como cerrado por el dueño
         prompt += `\n- ${label}: Cerrado`
       }
+      // Si hours es undefined (key no existe o no configurado): NO incluir.
+      // "Sin dato" ≠ "Cerrado" — omitir evita falsos negativos de disponibilidad.
     }
+    prompt += `\nCRÍTICO: Para cualquier consulta de disponibilidad u horarios libres, SIEMPRE llama get_available_slots. NUNCA respondas disponibilidad sin usar la herramienta.`
   }
 
   // ── Today's appointments ──────────────────────────────────────────────────────
@@ -314,6 +418,12 @@ DISPONIBILIDAD:
   if (input.context.aiRules) {
     prompt += `\n\nREGLAS DEL NEGOCIO (seguir estrictamente):\n${input.context.aiRules}`
   }
+
+  // ── Prompt freeze note (production contract) ──────────────────────────────────
+  // REGLA DE ESTABILIDAD: Este prompt es contrato de producción.
+  // No debe modificarse para resolver bugs de comportamiento.
+  // Los errores se corrigen en código (guards, validaciones, state machine), no en prompt.
+  // Si necesitas cambiar el comportamiento, implementa un guard en execution-engine.ts.
 
   return prompt
 }
@@ -332,7 +442,7 @@ type ToolDefEntry = {
   }
 }
 
-function buildToolDefsForRole(strategy: IUserStrategy): ToolDefEntry[] {
+function buildToolDefsForRole(strategy: IUserStrategy, flow: ConversationFlow = 'idle'): ToolDefEntry[] {
   const allTools: ToolDefEntry[] = [
     {
       type: 'function',
@@ -448,6 +558,13 @@ function buildToolDefsForRole(strategy: IUserStrategy): ToolDefEntry[] {
     },
   ]
 
-  // Filter tools based on strategy permissions
-  return allTools.filter((tool) => strategy.canExecute(tool.function.name))
+  // 1. Filter by role strategy permissions
+  const roleFiltered = allTools.filter((tool) => strategy.canExecute(tool.function.name))
+
+  // 2. Filter by current flow state (state machine restriction)
+  // When a flow-specific allow-list exists, only those tools are available.
+  // This prevents the LLM from calling off-flow tools (e.g. cancel while booking).
+  const flowAllowList = TOOLS_BY_FLOW[flow]
+  if (!flowAllowList) return roleFiltered  // no restriction for this flow
+  return roleFiltered.filter((tool) => flowAllowList.has(tool.function.name))
 }

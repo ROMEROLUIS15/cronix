@@ -1,162 +1,330 @@
 /**
- * Owner Notifications — WhatsApp AI Agent
+ * notifications.ts — Emisión de eventos de cita para el pipeline WhatsApp.
  *
- * Handles all post-action owner alerting for booking events:
- *  - In-app bell notification (always fires)
- *  - PWA web push (confirm only)
- *  - WhatsApp message to business owner (if phone configured)
+ * ── Principio rector ──────────────────────────────────────────────────────────
+ * Este módulo NO escribe directamente en la tabla notifications.
+ * NO llama a la Meta API directamente para notificaciones de owner.
+ * Todo pasa por emitBookingEvent(), que replica el contrato de NotificationService
+ * dentro del runtime Deno (no puede importar módulos Next.js).
  *
- * Exposes:
- *  - sendWhatsAppWithRetry  → fire-and-forget WhatsApp with one 2s retry
- *  - fireOwnerNotifications → all 3 channels for a new booking confirmation
+ * ── Garantías (mismo contrato que NotificationService) ──────────────────────
+ * - Idempotencia: eventId único → exactamente UNA notificación en DB
+ * - Orden: DB → Realtime → WhatsApp owner (WA solo si DB fue exitosa)
+ * - Fail-safe: cada canal falla silenciosamente con log de error
+ * - El booking NO se interrumpe por fallos en notificaciones
+ *
+ * ── Flujo unificado ───────────────────────────────────────────────────────────
+ * tool-executor.ts → emitBookingEvent() → [idempotency check] → DB
+ *                                        → Realtime broadcast
+ *                                        → whatsapp-service edge function (owner)
  */
 
+import { supabase }     from "./db-client.ts"
+import { captureException } from "../_shared/sentry.ts"
 import type { BusinessRagContext } from "./types.ts"
-import { captureException }        from "../_shared/sentry.ts"
-import { sendWhatsAppMessage }     from "./whatsapp.ts"
-import { createInternalNotification } from "./audit.ts"
-import { formatLocalTime }         from "./prompt-builder.ts"
 
-// ── WhatsApp with Retry ───────────────────────────────────────────────────────
+// ── AppointmentEvent contract (mirrors lib/ai/orchestrator/events.ts) ─────────
+
+type AppointmentEventType =
+  | 'appointment.created'
+  | 'appointment.rescheduled'
+  | 'appointment.cancelled'
+
+interface AppointmentEvent {
+  eventId:     string
+  type:        AppointmentEventType
+  businessId:  string
+  clientName:  string
+  serviceName: string
+  date:        string
+  time:        string
+  userId:      string
+  channel:     'whatsapp'
+}
+
+// ── Title / Content builders (mirrors NotificationService helpers) ─────────────
+
+function buildTitle(type: AppointmentEventType): string {
+  switch (type) {
+    case 'appointment.created':    return 'Nueva cita agendada'
+    case 'appointment.rescheduled': return 'Cita reagendada'
+    case 'appointment.cancelled':  return 'Cita cancelada'
+  }
+}
+
+function buildContent(event: AppointmentEvent): string {
+  const base = `${event.clientName} — ${event.serviceName} el ${event.date} a las ${event.time}`
+  switch (event.type) {
+    case 'appointment.created':    return `Nueva cita: ${base}`
+    case 'appointment.rescheduled': return `Reagendada: ${base}`
+    case 'appointment.cancelled':  return `Cancelada: ${base}`
+  }
+}
+
+function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
+  switch (event.type) {
+    case 'appointment.created':
+      return (
+        `¡Hola! 👋🤖\n\n` +
+        `Ha sido agendada una cita para *${event.clientName}* el día *${event.date}* a las *${event.time}*\n` +
+        `Servicio: *${event.serviceName}*\n\n` +
+        `¡Reserva confirmada vía WhatsApp! 💪🚀`
+      )
+    case 'appointment.rescheduled':
+      return (
+        `¡Reagenda! 🔄🤖\n\n` +
+        `*${event.clientName}* movió su cita de *${event.serviceName}*.\n` +
+        `Nueva fecha: *${event.date}* a las *${event.time}*\n\n` +
+        `¡Tu agenda ha sido actualizada! 💪🚀`
+      )
+    case 'appointment.cancelled':
+      return (
+        `¡Cita cancelada! ❌🤖\n\n` +
+        `*${event.clientName}* canceló su cita de *${event.serviceName}*` +
+        (event.date ? ` del *${event.date}* a las *${event.time}*` : '') +
+        `.\n\n¡Tienes un nuevo espacio libre! 💪🚀`
+      )
+  }
+}
+
+// ── Core: idempotency check ───────────────────────────────────────────────────
+
+async function checkEventExists(eventId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('event_id', eventId)
+      .maybeSingle()
+
+    if (error) return false  // falla segura: tratar como no procesado
+    return data !== null
+  } catch {
+    return false
+  }
+}
+
+// ── Core: persist to DB ───────────────────────────────────────────────────────
+
+async function saveNotificationToDB(event: AppointmentEvent): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .insert({
+        business_id: event.businessId,
+        title:       buildTitle(event.type),
+        content:     buildContent(event),
+        type:        event.type === 'appointment.cancelled' ? 'warning' : 'success',
+        is_read:     false,
+        event_id:    event.eventId,
+        metadata: {
+          eventType:   event.type,
+          clientName:  event.clientName,
+          serviceName: event.serviceName,
+          date:        event.date,
+          time:        event.time,
+          channel:     event.channel,
+          userId:      event.userId,
+        },
+      })
+
+    if (error) {
+      console.error('[NOTIFICATION-WA] saveNotificationToDB failed:', error.message)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('[NOTIFICATION-WA] saveNotificationToDB threw:', err)
+    return false
+  }
+}
+
+// ── Core: Realtime broadcast ──────────────────────────────────────────────────
+
+async function pushToRealtime(event: AppointmentEvent): Promise<void> {
+  try {
+    const channel = supabase.channel(`notifications:${event.businessId}`)
+    await channel.send({
+      type:    'broadcast',
+      event:   event.type,
+      payload: {
+        eventId:     event.eventId,
+        title:       buildTitle(event.type),
+        content:     buildContent(event),
+        clientName:  event.clientName,
+        serviceName: event.serviceName,
+        date:        event.date,
+        time:        event.time,
+      },
+    })
+    await supabase.removeChannel(channel)
+  } catch (err) {
+    // Non-critical: DB already has the record
+    console.warn('[NOTIFICATION-WA] pushToRealtime failed (non-critical):', err)
+  }
+}
+
+// ── Core: WhatsApp owner notification via whatsapp-service edge function ───────
+// Uses the same edge function as NotificationService — single WA send point.
+
+async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
+  try {
+    // @ts-ignore — Deno runtime globals
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')     ?? ''
+    // @ts-ignore
+    const cronSecret  = Deno.env.get('CRON_SECRET')      ?? ''
+
+    if (!cronSecret) {
+      console.warn('[NOTIFICATION-WA] CRON_SECRET not set — owner WA skipped')
+      return
+    }
+
+    // Resolve owner phone from public.users
+    const { data: ownerRow, error } = await supabase
+      .from('users')
+      .select('phone')
+      .eq('business_id', event.businessId)
+      .eq('role', 'owner')
+      .maybeSingle()
+
+    if (error || !ownerRow) return
+
+    const phone = (ownerRow as { phone?: string | null }).phone
+    if (!phone) return
+
+    const message = buildOwnerWhatsAppMessage(event)
+
+    await fetch(`${supabaseUrl}/functions/v1/whatsapp-service`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-internal-secret': cronSecret,
+      },
+      body: JSON.stringify({
+        to:           phone,
+        clientName:   event.clientName,
+        businessName: 'tu negocio',
+        date:         event.date,
+        time:         event.time,
+        message,
+        template:     'appointment_reminder',
+      }),
+    })
+  } catch (err) {
+    // Non-critical
+    console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
+  }
+}
+
+// ── Public API ── the only function exported from this module ─────────────────
 
 /**
- * Wraps sendWhatsAppMessage with a single retry after 2 s.
- * Owner notifications are fire-and-forget but deserve one retry before giving up,
- * since a transient Meta API hiccup would otherwise leave the owner uninformed.
+ * Emite un AppointmentEvent al pipeline de notificaciones.
+ *
+ * Identical contract to NotificationService.handle() but native to Deno runtime:
+ *   1. Idempotency check (event_id in DB)
+ *   2. Persist to notifications table
+ *   3. Realtime broadcast
+ *   4. WhatsApp to owner via whatsapp-service edge function
+ *
+ * Fire-and-forget safe: nunca lanza excepciones al caller.
+ * El booking ya fue completado cuando esto se llama.
  */
-export async function sendWhatsAppWithRetry(to: string, text: string): Promise<void> {
+export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
   try {
-    await sendWhatsAppMessage(to, text)
-  } catch {
-    await new Promise(r => setTimeout(r, 2000))
-    await sendWhatsAppMessage(to, text) // throws on second failure — caught by caller
+    // 1. Idempotency
+    const alreadyProcessed = await checkEventExists(event.eventId)
+    if (alreadyProcessed) {
+      console.info('[NOTIFICATION-WA] Event already processed — skipping', event.eventId)
+      return
+    }
+
+    // 2. DB (source of truth — must succeed before continuing)
+    const saved = await saveNotificationToDB(event)
+    if (!saved) return
+
+    // 3. Realtime UI (independent, fail-safe)
+    await pushToRealtime(event)
+
+    // 4. WhatsApp owner (only if DB succeeded)
+    await sendOwnerWhatsApp(event)
+
+  } catch (err) {
+    captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })
   }
 }
 
-// ── Reschedule Notifications ──────────────────────────────────────────────────
+// ── Convenience builders (called from tool-executor.ts) ───────────────────────
+// Replace the old fireOwnerNotifications / fireCancelNotifications / fireRescheduleNotifications.
+// Each constructs a typed AppointmentEvent and calls emitBookingEvent (fire-and-forget).
 
-export async function fireRescheduleNotifications(
+export function emitCreatedEvent(
   business:      BusinessRagContext['business'],
   clientName:    string,
-  svcName:       string,
+  serviceName:   string,
+  date:          string,
+  time:          string,
   appointmentId: string,
-  oldStartAt:    string,
+): void {
+  void emitBookingEvent({
+    // @ts-ignore — crypto is available in Deno
+    eventId:     crypto.randomUUID(),
+    type:        'appointment.created',
+    businessId:  business.id,
+    clientName,
+    serviceName,
+    date,
+    time,
+    // In the WhatsApp channel the client is unauthenticated (no Supabase userId).
+    // 'whatsapp-agent' is a stable sentinel that identifies this origin in audit logs.
+    userId:      'whatsapp-agent',
+    channel:     'whatsapp',
+  })
+}
+
+export function emitRescheduledEvent(
+  business:      BusinessRagContext['business'],
+  clientName:    string,
+  serviceName:   string,
+  appointmentId: string,
   newDate:       string,
   newTime:       string,
-): Promise<void> {
-  const oldDateObj       = new Date(oldStartAt)
-  const oldDateStr       = new Intl.DateTimeFormat('es-ES', { timeZone: business.timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
-  const oldTimeStr       = new Intl.DateTimeFormat('en-US', { timeZone: business.timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
-  const newTimeFormatted = formatLocalTime(newTime)
-
-  // Channel 0: In-app bell — always fires regardless of phone config
-  createInternalNotification(
-    business.id,
-    'Cita Reagendada 🔄',
-    `${clientName} movió su cita de ${svcName} al ${newDate} a las ${newTimeFormatted}`,
-    'info',
-    { appointment_id: appointmentId },
-  ).catch(err => captureException(err, { stage: 'inapp_notification_reschedule', business_id: business.id }))
-
-  // Channel 1: WhatsApp to owner — only if phone is configured
-  if (business.phone) {
-    const ownerPhone = business.phone.replace(/\D/g, '')
-    const waNotif =
-      `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-      `El cliente *${clientName}* ha *reagendado* su cita de *${svcName}*.\n\n` +
-      `❌ Espacio liberado: *${oldDateStr}* a las *${oldTimeStr}*\n` +
-      `✅ Nuevo espacio reservado: *${newDate}* a las *${newTimeFormatted}*\n\n` +
-      `¡Tu agenda ha sido actualizada correctamente! 💪🚀`
-
-    sendWhatsAppWithRetry(ownerPhone, waNotif)
-      .catch(err => captureException(err, { stage: 'wa_notify_owner_reschedule', business_id: business.id }))
-  }
+): void {
+  void emitBookingEvent({
+    // @ts-ignore
+    eventId:     crypto.randomUUID(),
+    type:        'appointment.rescheduled',
+    businessId:  business.id,
+    clientName,
+    serviceName,
+    date:        newDate,
+    time:        newTime,
+    userId:      'whatsapp-agent',
+    channel:     'whatsapp',
+  })
 }
 
-// ── Cancel Notifications ──────────────────────────────────────────────────────
-
-export async function fireCancelNotifications(
+export function emitCancelledEvent(
   business:      BusinessRagContext['business'],
   clientName:    string,
-  svcName:       string,
+  serviceName:   string,
   appointmentId: string,
   oldStartAt:    string,
-): Promise<void> {
-  const oldDateObj = new Date(oldStartAt)
-  const oldDateStr = new Intl.DateTimeFormat('es-ES', { timeZone: business.timezone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(oldDateObj)
-  const oldTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: business.timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(oldDateObj).toLowerCase()
+): void {
+  // Extract date/time from the ISO start_at string
+  const date = oldStartAt.slice(0, 10)   // YYYY-MM-DD
+  const time = oldStartAt.slice(11, 16)  // HH:mm
 
-  // Channel 0: In-app bell — always fires regardless of phone config
-  createInternalNotification(
-    business.id,
-    'Cita Cancelada ❌',
-    `${clientName} canceló su cita de ${svcName} del ${oldDateStr} a las ${oldTimeStr}`,
-    'warning',
-    { appointment_id: appointmentId },
-  ).catch(err => captureException(err, { stage: 'inapp_notification_cancel', business_id: business.id }))
-
-  // Channel 1: WhatsApp to owner — only if phone is configured
-  if (business.phone) {
-    const ownerPhone = business.phone.replace(/\D/g, '')
-    const waNotif =
-      `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-      `El cliente *${clientName}* ha *cancelado* su cita, por lo que tienes un nuevo espacio libre el día *${oldDateStr}* a las *${oldTimeStr}* para el servicio: *${svcName}*.\n\n` +
-      `¡Sigo activo para atender y asignarle este nuevo espacio libre a otro cliente! 💪🚀`
-
-    sendWhatsAppWithRetry(ownerPhone, waNotif)
-      .catch(err => captureException(err, { stage: 'wa_notify_owner_cancel', business_id: business.id }))
-  }
-}
-
-// ── Confirm Notifications ─────────────────────────────────────────────────────
-
-export async function fireOwnerNotifications(
-  business:      BusinessRagContext['business'],
-  clientName:    string,
-  svcName:       string,
-  date:          string,
-  formattedTime: string,
-  appointmentId: string,
-): Promise<void> {
-  // @ts-ignore — Deno runtime global
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  // @ts-ignore — Deno runtime global
-  const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
-
-  // Channel 0: In-App Notification (Dashboard Bell)
-  createInternalNotification(
-    business.id,
-    'Nueva Cita Agendada 📅',
-    `${clientName} reservó ${svcName} para el ${date} a las ${formattedTime}`,
-    'success',
-    { appointment_id: appointmentId },
-  ).catch(err => captureException(err, { stage: 'inapp_notification_confirm', business_id: business.id }))
-
-  // Channel 1: Web Push notification (PWA)
-  fetch(`${supabaseUrl}/functions/v1/push-notify`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-internal-secret': cronSecret,
-    },
-    body: JSON.stringify({
-      business_id: business.id,
-      title:       '¡Nueva Reserva! 📅',
-      body:        `${clientName} · ${svcName} — ${date} ${formattedTime} ✅`,
-      url:         '/dashboard',
-    }),
-  }).catch(err => captureException(err, { stage: 'push_new_booking', business_id: business.id }))
-
-  // Channel 2: WhatsApp message to business owner
-  if (business.phone) {
-    const ownerPhone = business.phone.replace(/\D/g, '')
-    const waNotif =
-      `¡Hola equipo de *${business.name}*! 👋🤖\n\n` +
-      `Ha sido agendada una cita para *${clientName}* el día *${date}* a las *${formattedTime}*\n` +
-      `Servicio: *${svcName}*\n\n` +
-      `¡Sigo trabajando a toda máquina para mantener tu agenda llena! 💪🚀`
-
-    sendWhatsAppWithRetry(ownerPhone, waNotif)
-      .catch(err => captureException(err, { stage: 'wa_notify_owner_confirm', business_id: business.id }))
-  }
+  void emitBookingEvent({
+    // @ts-ignore
+    eventId:     crypto.randomUUID(),
+    type:        'appointment.cancelled',
+    businessId:  business.id,
+    clientName,
+    serviceName,
+    date,
+    time,
+    userId:      'whatsapp-agent',
+    channel:     'whatsapp',
+  })
 }

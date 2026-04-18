@@ -27,7 +27,12 @@ import type {
 } from './types'
 import type { LlmMessage } from '@/lib/ai/providers/types'
 import type { IUserStrategy } from './strategy'
+import type { INotificationService } from '@/lib/notifications/notification-service'
+import type { AppointmentEvent, AppointmentEventType, BookingEventData } from './events'
 import { StrategyFactory } from './strategy'
+import { emitEvent } from './event-dispatcher'
+import { buildConfirmationSummary } from './decision-engine'
+import { logger } from '@/lib/logger'
 
 // ── Tool Executor Interface ──────────────────────────────────────────────────
 // Phase 1: Mock implementation. Phase 2: replaced with ToolAdapterRegistry.
@@ -45,50 +50,79 @@ export interface ToolExecuteParams {
 export interface IToolExecutor {
   /**
    * Execute a named tool with the given arguments.
-   * Returns a result string that may be a success message or error.
+   *
+   * Write-tools (confirm/cancel/reschedule) MUST populate `data` on success.
+   * This structured payload replaces string parsing for notification dispatch.
+   * Read-only tools (get_appointments, get_services, etc.) leave `data` undefined.
    */
   execute(params: ToolExecuteParams): Promise<{
     success: boolean
     result: string
     error?: string
+    /** Structured booking data — present only for write-tool successes. */
+    data?: BookingEventData
   }>
 }
 
 /**
- * Mock tool executor for Phase 1.
- * Returns deterministic simulated results so the orchestrator is testable
- * without real DB or API dependencies.
+ * Mock tool executor for tests and Phase 1.
+ * Returns deterministic simulated results with structured `data` for write-tools,
+ * matching the same contract that RealToolExecutor provides.
  */
 export class MockToolExecutor implements IToolExecutor {
   async execute(params: ToolExecuteParams): Promise<{
     success: boolean
     result: string
     error?: string
+    data?: BookingEventData
   }> {
-    // Simulate tool behavior based on tool name
     switch (params.toolName) {
       case 'confirm_booking': {
         const service = (params.args.serviceName as string) ?? 'Servicio'
-        const date = (params.args.date as string) ?? ''
-        const time = (params.args.time as string) ?? ''
-        const client = (params.args.clientName as string) ?? 'Cliente'
+        const date    = (params.args.date as string) ?? ''
+        const time    = (params.args.time as string) ?? ''
+        const client  = (params.args.clientName as string) ?? 'Cliente'
         return {
           success: true,
           result: `Listo. Agendé a ${client} para ${service} el ${date} a las ${time}.`,
+          data: {
+            appointmentId: 'mock-appt-id',
+            clientName:    client,
+            serviceName:   service,
+            date,
+            time,
+            action:        'created',
+          },
         }
       }
       case 'cancel_booking': {
         return {
           success: true,
-          result: 'Listo. La cita ha sido cancelada correctamente.',
+          result: 'Listo. La cita ha sido cancelada.',
+          data: {
+            appointmentId: (params.args.appointment_id as string) ?? 'mock-appt-id',
+            clientName:    'Cliente',
+            serviceName:   'Servicio',
+            date:          '',
+            time:          '',
+            action:        'cancelled',
+          },
         }
       }
       case 'reschedule_booking': {
-        const newDate = (params.args.newDate as string) ?? ''
-        const newTime = (params.args.newTime as string) ?? ''
+        const newDate = (params.args.new_date as string) ?? ''
+        const newTime = (params.args.new_time as string) ?? ''
         return {
           success: true,
           result: `Listo. La cita fue reagendada para ${newDate} a las ${newTime}.`,
+          data: {
+            appointmentId: (params.args.appointment_id as string) ?? 'mock-appt-id',
+            clientName:    'Cliente',
+            serviceName:   'Servicio',
+            date:          newDate,
+            time:          newTime,
+            action:        'rescheduled',
+          },
         }
       }
       case 'get_appointments_by_date': {
@@ -166,10 +200,58 @@ export interface IExecutionEngine {
   ): Promise<ExecutionResult>
 }
 
+// ── Tool-to-event mapping ─────────────────────────────────────────────────────
+
+const TOOL_TO_EVENT: Record<string, AppointmentEventType> = {
+  confirm_booking:    'appointment.created',
+  cancel_booking:     'appointment.cancelled',
+  reschedule_booking: 'appointment.rescheduled',
+}
+
+/**
+ * Builds an AppointmentEvent directly from structured BookingEventData.
+ *
+ * No regex, no string parsing. All fields come from the write-tool contract.
+ * Called only when `result.data` is guaranteed to be present (write-tool success).
+ */
+function buildEventFromData(
+  toolName: string,
+  data: BookingEventData,
+  input: AiInput,
+): AppointmentEvent {
+  const eventType = TOOL_TO_EVENT[toolName] ?? 'appointment.created'
+  return {
+    eventId:     crypto.randomUUID(),
+    type:        eventType,
+    businessId:  input.businessId,
+    clientName:  data.clientName,
+    serviceName: data.serviceName,
+    date:        data.date,
+    time:        data.time,
+    userId:      input.userId,
+    channel:     input.channel,
+  }
+}
+
 export class ExecutionEngine implements IExecutionEngine {
+  /**
+   * Set de eventIds emitidos en este request.
+   * Previene emitir el mismo evento dos veces si un tool se llama
+   * más de una vez en el mismo loop de razonamiento.
+   * Se crea nuevo por instancia de ExecutionEngine (una por request).
+   */
+  private readonly processedEvents = new Set<string>()
+
   constructor(
     private toolExecutor: IToolExecutor = new MockToolExecutor(),
     private llmProvider: IMockLlmProvider = new DefaultMockLlmProvider(),
+    /**
+     * Notification service (opcional).
+     * Si no se inyecta (tests, MockToolExecutor), las notificaciones se omiten.
+     * Nunca afecta el resultado de la ejecución —
+     * el booking se completa independientemente.
+     */
+    private notificationService?: INotificationService,
   ) {}
 
   async execute(
@@ -264,6 +346,25 @@ export class ExecutionEngine implements IExecutionEngine {
       newState.draft = null
       newState.missingFields = []
       newState.lastIntent = null
+
+      // ── Event dispatch (fire-and-forget) ──────────────────────────────────
+      // Solo emitir si hay servicio de notificaciones, el tool es de escritura,
+      // y el tool retornó `data` estructurada (contrato obligatorio).
+      if (this.notificationService && TOOL_TO_EVENT[decision.intent] && result.data) {
+        const event = buildEventFromData(decision.intent, result.data, input)
+        if (!this.processedEvents.has(event.eventId)) {
+          this.processedEvents.add(event.eventId)
+          emitEvent(event, this.notificationService)
+          logger.info('EXECUTION-ENGINE', 'Event emitted (immediate path)', {
+            eventId:   event.eventId,
+            eventType: event.type,
+          })
+        }
+      } else if (TOOL_TO_EVENT[decision.intent] && !result.data) {
+        logger.warn('EXECUTION-ENGINE', 'Write tool succeeded but returned no structured data — notification skipped', {
+          tool: decision.intent,
+        })
+      }
     }
 
     return {
@@ -399,6 +500,10 @@ export class ExecutionEngine implements IExecutionEngine {
     let responseText = ''
     let actionPerformed = false
     let lastLlmResponse: MockLlmResponse | null = null
+    // Post-tool validation flag: if a write tool fails, exit the loop immediately.
+    // Do NOT give the LLM another iteration — it may generate an optimistic response.
+    let writeToolFailed = false
+    const WRITE_TOOLS = new Set(['confirm_booking', 'cancel_booking', 'reschedule_booking'])
 
     while (step < MAX_STEPS) {
       step++
@@ -422,11 +527,51 @@ export class ExecutionEngine implements IExecutionEngine {
         })),
       })
 
-      // No tool calls → LLM produced a text response
+      // No tool calls → LLM produced a text response.
+      // Hard guard: if the LLM claims to have booked/cancelled/rescheduled but NO write
+      // tool was actually executed in this turn, block the false confirmation.
+      // This prevents the LLM from hallucinating "listo, agendé la cita" without calling confirm_booking.
       if (!lastLlmResponse.tool_calls?.length) {
-        responseText = lastLlmResponse.content ?? ''
+        const candidateText = lastLlmResponse.content ?? ''
+        const WRITE_ACTION_PATTERNS = [
+          /agend[eé]\s/i, /he\s+agendado/i, /cita\s+ha\s+sido\s+agendada/i,
+          /cancel[eé]\s/i, /he\s+cancelado/i, /cita\s+ha\s+sido\s+cancelada/i,
+          /reagend[eé]\s/i, /he\s+reagendado/i, /cita\s+ha\s+sido\s+reagendada/i,
+        ]
+        const noWriteToolCalled = !traces.some(
+          (t) => t.tool === 'confirm_booking' || t.tool === 'cancel_booking' || t.tool === 'reschedule_booking'
+        )
+        const claimsWriteAction = WRITE_ACTION_PATTERNS.some((p) => p.test(candidateText))
+
+        // TASK 1 — Hard guard: READ tool enforcement.
+        // If the LLM claims to know available slots / appointment data WITHOUT calling
+        // the verification tools, block the response to prevent hallucinated availability.
+        const AVAILABILITY_CLAIM_PATTERNS = [
+          /tienes?\s+(disponible|libre|hueco)/i,
+          /hay\s+(disponibilidad|espacio|lugar|hueco)/i,
+          /est[aá]\s+(disponible|libre|ocupado)/i,
+          /no\s+hay\s+(disponibilidad|espacio|lugar|hueco|citas)/i,
+          /s[íi]\s+(hay|tiene|tienes)\s+disponibilidad/i,
+          /puedo\s+ofrecerte\s+el\s+horario/i,
+          /hay\s+(citas?\s+(para|el|del)|agenda)/i,
+        ]
+        const noReadToolCalled = !traces.some(
+          (t) => t.tool === 'get_available_slots' || t.tool === 'get_appointments_by_date'
+        )
+        const claimsAvailability = AVAILABILITY_CLAIM_PATTERNS.some((p) => p.test(candidateText))
+
+        if (noWriteToolCalled && claimsWriteAction) {
+          // LLM is claiming to have performed an action it never executed — block it.
+          responseText = 'Necesito verificar la información antes de confirmar esta acción.'
+        } else if (noReadToolCalled && claimsAvailability) {
+          // TASK 1: LLM claims availability without verifying — block it.
+          responseText = 'Necesito verificar la disponibilidad antes de confirmarte horarios.'
+        } else {
+          responseText = candidateText
+        }
         break
       }
+
 
       // Execute each tool call
       for (const toolCall of lastLlmResponse.tool_calls) {
@@ -437,6 +582,67 @@ export class ExecutionEngine implements IExecutionEngine {
           args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>
         } catch {
           args = {}
+        }
+
+        // FIX #1 (Task 3) — Confirmation interception.
+        // If the LLM wants to call a write tool but the user has NOT yet confirmed
+        // (state.flow !== 'awaiting_confirmation'), intercept and present a structured
+        // confirmation summary. The tool is NOT executed yet.
+        //
+        // Respects the strategy contract:
+        //   owner / platform_admin → requiresConfirmation() = false → execute directly
+        //   employee / external    → requiresConfirmation() = true  → intercept
+        if (
+          WRITE_TOOLS.has(toolCall.function.name) &&
+          state.flow !== 'awaiting_confirmation' &&
+          strategy.requiresConfirmation(state)
+        ) {
+          const summary = buildConfirmationSummary(
+            toolCall.function.name,
+            args as Record<string, unknown>,
+            input.context.services,
+          )
+          // Build the new state: transition to awaiting_confirmation
+          // and store the tool args as draft so execute_immediately can use them.
+          const nextState: ConversationState = {
+            ...state,
+            flow:        'awaiting_confirmation',
+            lastIntent:  toolCall.function.name,
+            draft:       args as Record<string, string | undefined>,
+            lastToolCalls: null,
+            updatedAt:   new Date().toISOString(),
+          }
+
+          logger.info('EXECUTION-ENGINE', 'Write tool intercepted — awaiting confirmation', {
+            tool:    toolCall.function.name,
+            summary: summary.slice(0, 120),
+          })
+
+          // Return early — the tool is NOT executed.
+          // Clean history: exclude the unresolved tool_calls assistant turn
+          // so the confirmation prompt is the last thing the user sees.
+          const cleanHistory = messages.slice(decision.messages.length, -1) as LlmMessage[]
+          return {
+            text:            summary,
+            actionPerformed: false,
+            toolTrace:       traces,
+            tokens:          totalTokens,
+            nextState,
+            llmMessages:     cleanHistory,
+          }
+        }
+
+        // FIX (Task 4) — State Priority: lock confirmed UUID fields from draft.
+        // Prevents the LLM from silently substituting service_id, client_id, or
+        // appointment_id with a different value after the user already confirmed them.
+        if (state.draft && WRITE_TOOLS.has(toolCall.function.name)) {
+          const UUID_FIELDS = ['service_id', 'client_id', 'appointment_id'] as const
+          for (const field of UUID_FIELDS) {
+            const draftValue = (state.draft as Record<string, string | undefined>)[field]
+            if (typeof draftValue === 'string' && draftValue.length > 0) {
+              args[field] = draftValue
+            }
+          }
         }
 
         // Authorization check
@@ -485,13 +691,60 @@ export class ExecutionEngine implements IExecutionEngine {
 
         if (result.success) {
           actionPerformed = true
+
+          // ── Event dispatch per write-tool success (fire-and-forget) ──────────
+          // processedEvents evita duplicados si el mismo tool se llama dos veces.
+          // Requiere `result.data` — contrato obligatorio de write-tools.
+          if (this.notificationService && TOOL_TO_EVENT[toolCall.function.name]) {
+            if (result.data) {
+              const event = buildEventFromData(toolCall.function.name, result.data, input)
+              if (!this.processedEvents.has(event.eventId)) {
+                this.processedEvents.add(event.eventId)
+                emitEvent(event, this.notificationService)
+                logger.info('EXECUTION-ENGINE', 'Event emitted (reasoning loop)', {
+                  eventId:   event.eventId,
+                  eventType: event.type,
+                  tool:      toolCall.function.name,
+                })
+              }
+            } else {
+              logger.warn('EXECUTION-ENGINE', 'Write tool succeeded but returned no structured data — notification skipped', {
+                tool: toolCall.function.name,
+              })
+            }
+          }
+        } else if (WRITE_TOOLS.has(toolCall.function.name)) {
+          // CRÍTICO: write tool failed — bail out immediately.
+          // If we continue to another LLM iteration, the model may hallucinate success.
+          // Provide a safe, controlled error message instead.
+          const errorDetail = typeof result.result === 'string' && result.result.length > 0
+            ? ` (${result.result})`
+            : ''
+          responseText = `No pude completar la acción${errorDetail}. Por favor, verifica los datos e inténtalo nuevamente.`
+          writeToolFailed = true
         }
       }
-    }
+
+      // Bail out of the outer while loop if a write tool failed
+      if (writeToolFailed) break
+    } // end while
 
     // If loop exhausted without a response
     if (!responseText) {
       responseText = 'Intenté procesar tu solicitud pero no pude completarla. Por favor, inténtalo de nuevo.'
+    }
+
+    // Sanitize: strip false-certainty phrases that appear when no tool was called.
+    // "El negocio está cerrado" and "no hay disponibilidad" are only valid if
+    // get_available_slots was actually invoked. Without it, they are hallucinations.
+    if (traces.length === 0) {
+      responseText = responseText
+        .replace(/el\s+negocio\s+est[aá]\s+cerrado[^.!?]*/gi, '')
+        .replace(/no\s+hay\s+disponibilidad[^.!?]*/gi, '')
+        .trim()
+      if (!responseText) {
+        responseText = 'Necesito verificar esa información. ¿Podías decirme qué necesitas exactamente?'
+      }
     }
 
     // Use real tokens if available, fall back to rough estimate when provider returns 0

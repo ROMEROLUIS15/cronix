@@ -88,7 +88,7 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
           model,
           messages,
           max_tokens:  100,
-          temperature: 0.4,
+          temperature: 0.1,
           stream:      true,
         }),
       })

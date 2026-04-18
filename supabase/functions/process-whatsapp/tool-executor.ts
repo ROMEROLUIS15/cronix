@@ -22,9 +22,9 @@ import {
 import type { ToolCall } from "./groq-client.ts"
 import { formatLocalTime } from "./prompt-builder.ts"
 import {
-  fireOwnerNotifications,
-  fireRescheduleNotifications,
-  fireCancelNotifications,
+  emitCreatedEvent,
+  emitRescheduledEvent,
+  emitCancelledEvent,
 } from "./notifications.ts"
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
@@ -138,11 +138,13 @@ export async function executeToolCall(
       return JSON.stringify({ success: false, error: result.error ?? 'SLOT_CONFLICT' })
     }
 
-    // Fire-and-forget: notificaciones al owner
+    // Fire-and-forget: notificaciones al owner (pipeline unificado con event_id)
     const svcName = services.find(s => s.id === service_id)?.name ?? 'Servicio'
+    // `time` es HH:mm (24h) — consistente con el path web (RealToolExecutor).
+    // `formattedTime` solo es para el texto de respuesta al cliente, NO para el evento.
     const formattedTime = formatLocalTime(time)
-    fireOwnerNotifications(business, client?.name ?? customerName, svcName, date, formattedTime, result.appointment_id ?? '')
-      .catch(err => captureException(err, { stage: 'owner_notifications_confirm', business_id: business.id }))
+    emitCreatedEvent(business, client?.name ?? customerName, svcName, date, time, result.appointment_id ?? '')
+
 
     addBreadcrumb('Appointment created', 'agent', 'info', { appointment_id: result.appointment_id })
     return JSON.stringify({ success: true, appointment_id: result.appointment_id, date, time, service_name: svcName })
@@ -173,8 +175,7 @@ export async function executeToolCall(
     const svcName    = aptDetails.services?.name ?? 'Servicio'
     const clientName = aptDetails.clients?.name ?? customerName
 
-    fireRescheduleNotifications(business, clientName, svcName, appointment_id, aptDetails.start_at, new_date, new_time)
-      .catch(err => captureException(err, { stage: 'owner_notifications_reschedule', business_id: business.id }))
+    emitRescheduledEvent(business, clientName, svcName, appointment_id, new_date, new_time)
 
     addBreadcrumb('Appointment rescheduled', 'agent', 'info', { appointment_id })
     return JSON.stringify({ success: true, new_date, new_time, service_name: svcName })
@@ -202,8 +203,7 @@ export async function executeToolCall(
     const svcName    = aptDetails.services?.name ?? 'Servicio'
     const clientName = aptDetails.clients?.name ?? customerName
 
-    fireCancelNotifications(business, clientName, svcName, appointment_id, aptDetails.start_at)
-      .catch(err => captureException(err, { stage: 'owner_notifications_cancel', business_id: business.id }))
+    emitCancelledEvent(business, clientName, svcName, appointment_id, aptDetails.start_at)
 
     addBreadcrumb('Appointment cancelled', 'agent', 'info', { appointment_id })
     return JSON.stringify({ success: true, service_name: svcName })

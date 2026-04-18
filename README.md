@@ -15,8 +15,13 @@
 - **Snake_case field contracts** — Zod schemas match LLM tool definitions exactly, zero silent mismatches
 - **Tool call history propagation** — full message chain preserved across turns, enabling multi-step reasoning
 - **Redis-persisted conversation state** — survives serverless cold starts, TTL-scoped per session
-- **RBAC strategy pattern** — owner/staff get all tools, external callers get a safe subset
-- **Voice-optimized system prompt** — behavioral instructions, tool chaining flow, security rules, date format enforcement
+- **RBAC strategy pattern** — owner/platform_admin execute directly; external/employee roles require confirmation
+- **Deterministic date/time normalization** — `lib/ai/utils/date-normalize.ts` resolves "mañana", "el lunes", "3pm" without LLM parsing
+- **Confirmation interception** — write tools intercepted for external/employee; structured summary presented before execution
+- **UUID state priority** — confirmed `service_id`/`client_id`/`appointment_id` from draft locks out LLM re-inference
+- **Availability & write-action claim guards** — LLM cannot assert bookings or availability without tool evidence
+- **Structured tool output** — write tools return `BookingEventData` typed object; zero string parsing for notifications
+- **Voice input validation** — empty or noise-only transcripts rejected before reaching the orchestrator
 - **Real token accounting** — Groq `usage.total_tokens` accumulated per turn, not estimated
 
 ### Intelligent Scheduling
@@ -40,9 +45,11 @@
 - Revenue aggregation pushed to DB — `SUM(net_amount)` in SQL, not in JS
 
 ### Notifications
-- **WhatsApp** — inbound webhook + outbound messages via Twilio/Meta API
+- **Unified event pipeline** — all booking events (web + WhatsApp) route through `NotificationService` via `emitBookingEvent()`
+- **Idempotent delivery** — `UNIQUE(event_id)` on `notifications` table; QStash retries cannot produce duplicates
+- **WhatsApp** — owner alerts via unified pipeline; direct `sendWhatsAppMessage` bypasses eliminated
 - **Web Push** — PWA-native, VAPID-signed, subscription management
-- **In-app** — real-time notification panel with action history
+- **In-app** — real-time notification panel via Supabase Realtime broadcast
 - **Cron reminders** — Supabase `pg_cron` → Edge Function pipeline, tenant-aware scheduling
 
 ---
@@ -105,20 +112,32 @@ POST /api/assistant/voice
     │       │     └─ ConversationState { flow, turnCount, draft, history }
     │       │
     │       ├─ DecisionEngine.analyze(input, state)
+    │       │     ├─ [Guard] Services guard → reject if services=[]
+    │       │     ├─ [Normalize] extractEntities(text, tz) → date/time injected into prompt
     │       │     ├─ Fast path: execute_immediately (confirmed action)
     │       │     ├─ Fast path: reject (turn limit / rejection keyword)
     │       │     └─ LLM path: reason_with_llm { messages, toolDefs }
-    │       │           ├─ buildSystemPrompt() — injects services, hours, appointments,
-    │       │           │    voice format rules, tool chaining flow, security rules
+    │       │           ├─ buildSystemPrompt() — services (id+name), hours, today's appts,
+    │       │           │    resolved entities, voice format, tool chaining, security rules
     │       │           └─ buildToolDefsForRole(strategy) — RBAC-filtered tool list
     │       │
-    │       ├─ ExecutionEngine.execute(decision)
-    │       │     loop (max 5 steps):
-    │       │       ├─ LlmBridge → GroqProvider.chat(messages, toolDefs)
-    │       │       │     └─ returns: text | tool_call + real token count
-    │       │       └─ [tool_call] RealToolExecutor.execute(toolName, args)
+    │       ├─ ExecutionEngine.execute(decision) — ReAct loop (max 5 steps)
+    │       │     ├─ [Guard] Confirmation interception: write tool → awaiting_confirmation
+    │       │     │    (external/employee only; owner/platform_admin bypass)
+    │       │     ├─ [Guard] UUID state priority: draft.service_id overrides LLM arg
+    │       │     ├─ LlmBridge → GroqProvider.chat(messages, toolDefs)
+    │       │     │     └─ returns: text | tool_call + real token count
+    │       │     ├─ [Guard] Availability claim guard: blocks "hay disponibilidad" without read tool
+    │       │     ├─ [Guard] Write-action claim guard: blocks "agendé" without write tool
+    │       │     └─ [tool_call] RealToolExecutor.execute(params)
     │       │               ├─ Zod schema validation (snake_case, exact match)
-    │       │               └─ UseCase → IRepository → Supabase
+    │       │               ├─ UseCase → IRepository → Supabase
+    │       │               └─ returns { data: BookingEventData } — structured, no string parsing
+    │       │
+    │       ├─ emitBookingEvent(data) → NotificationService
+    │       │     ├─ DB insert (UNIQUE event_id → idempotent)
+    │       │     ├─ Supabase Realtime → UI
+    │       │     └─ WhatsApp owner alert
     │       │
     │       ├─ RedisStateManager.save(nextState)
     │       │     └─ { flow, turnCount reset on action, history.slice(-20) }
@@ -207,8 +226,8 @@ cronix/
 │   ├── ai/
 │   │   ├── orchestrator/                   # ★ Production AI orchestration
 │   │   │   ├── ai-orchestrator.ts          # Public facade (AiOrchestrator)
-│   │   │   ├── decision-engine.ts          # Analyze input → Decision + system prompt
-│   │   │   ├── execution-engine.ts         # ReAct loop (max 5 steps)
+│   │   │   ├── decision-engine.ts          # analyze() → Decision + guards + entity normalization
+│   │   │   ├── execution-engine.ts         # ReAct loop + 4 runtime guardrails
 │   │   │   ├── LlmBridge.ts               # ExecutionEngine ↔ GroqProvider adapter
 │   │   │   ├── state-manager.ts            # IStateManager interface
 │   │   │   ├── RedisStateManager.ts        # Upstash Redis implementation
@@ -218,8 +237,11 @@ cronix/
 │   │   │   ├── index.ts                    # Barrel exports
 │   │   │   ├── example.ts                  # Dev/docs usage example
 │   │   │   └── tool-adapter/
-│   │   │       ├── RealToolExecutor.ts     # ★ Maps tool names → UseCases (7 tools)
+│   │   │       ├── RealToolExecutor.ts     # ★ Maps tool names → UseCases (7 tools, structured output)
 │   │   │       └── tool-adapter.ts         # IToolExecutor interface
+│   │   │
+│   │   ├── utils/                          # ★ AI utility functions (pure, no LLM)
+│   │   │   └── date-normalize.ts           # Deterministic date/time normalization (26 tests)
 │   │   │
 │   │   ├── providers/
 │   │   │   ├── groq-provider.ts            # LLM + Whisper STT (function calling)
@@ -375,17 +397,17 @@ cronix/
 │       │   └── sentry.ts                   # Error reporting
 │       ├── process-whatsapp/               # WhatsApp AI agent (Deno)
 │       │   ├── index.ts                    # Entry point + routing
-│       │   ├── ai-agent.ts                 # Groq LLM orchestration
+│       │   ├── ai-agent.ts                 # Groq LLM orchestration (ReAct)
 │       │   ├── prompt-builder.ts           # System prompt for WA context
-│       │   ├── tool-executor.ts            # WA-specific tool implementations
-│       │   ├── context-fetcher.ts          # Load business/client context
+│       │   ├── tool-executor.ts            # WA tools → structured { data: BookingEventData }
+│       │   ├── notifications.ts            # ★ Unified event pipeline (emitBookingEvent)
+│       │   ├── context-fetcher.ts          # Load business/client/history context
 │       │   ├── business-router.ts          # Multi-tenant message routing
 │       │   ├── message-handler.ts          # Inbound message processor
 │       │   ├── appointment-repo.ts         # Appointment DB queries
-│       │   ├── notifications.ts
-│       │   ├── security.ts                 # Signature verification
-│       │   ├── guards.ts
-│       │   ├── audit.ts
+│       │   ├── security.ts                 # QStash signature verification
+│       │   ├── guards.ts                   # Rate limits + circuit breaker
+│       │   ├── audit.ts                    # Conversation history logging
 │       │   └── types.ts
 │       ├── whatsapp-webhook/               # Webhook receiver + queue dispatch
 │       │   ├── index.ts
@@ -418,7 +440,16 @@ cronix/
 │   └── index.ts
 │
 ├── __tests__/                              # Unit + integration tests (Vitest)
-│   ├── ai/                                 # AI module tests
+│   ├── ai/
+│   │   ├── utils/
+│   │   │   └── date-normalize.test.ts      # ★ 26 tests — deterministic date/time normalization
+│   │   └── orchestrator/
+│   │       ├── ai-orchestrator.test.ts     # Facade integration tests
+│   │       ├── decision-engine.test.ts     # 35 tests — analysis, prompt, tool defs
+│   │       ├── decision-engine-hardening.test.ts  # ★ 16 tests — services guard, entity injection, confirmation summary
+│   │       ├── execution-engine.test.ts    # 14 tests — reject/immediate/ReAct paths
+│   │       ├── execution-engine-hardening.test.ts # ★ 13 tests — 4 runtime guardrails
+│   │       └── real-tool-executor.test.ts  # 38 tests — all 7 tools, Zod validation
 │   ├── domain/                             # Domain layer tests
 │   ├── use-cases/                          # UseCase tests
 │   ├── contracts/                          # Repository contract tests
@@ -578,10 +609,12 @@ Merge to main → Vercel production deploy (2-3 min global rollout)
 
 | Document | Description |
 |----------|-------------|
-| [AI_MASTER_GUIDE.md](docs/architecture/AI_MASTER_GUIDE.md) | Full AI orchestrator architecture, state machine, component reference |
+| [AI_MASTER_GUIDE.md](docs/architecture/AI_MASTER_GUIDE.md) | ★ Full AI orchestrator architecture, hardening guardrails, state machine, notification pipeline, test coverage |
+| [WHATSAPP_AI_ARCHITECTURE.md](docs/WHATSAPP_AI_ARCHITECTURE.md) | ★ WhatsApp agent architecture, unified notification pipeline, idempotency |
 | [ASSISTANT_TOOLS.md](docs/api/ASSISTANT_TOOLS.md) | All 7 tools: parameters, behavior, chaining patterns |
 | [LUIS_IA_PROMPT_ENGINEERING.md](docs/architecture/LUIS_IA_PROMPT_ENGINEERING.md) | System prompt design, section-by-section breakdown |
 | [DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md](docs/architecture/DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md) | Dashboard AI overview, RBAC, voice pipeline |
 | [SECURITY_AND_RATE_LIMITS.md](docs/security/SECURITY_AND_RATE_LIMITS.md) | Threat model, RLS, rate limiting |
 | [RELIABILITY.md](docs/architecture/RELIABILITY.md) | Circuit breaker, retry, resilience patterns |
-| [WhatsApp-AI-Architecture-Details.md](docs/architecture/WhatsApp-AI-Architecture-Details.md) | WhatsApp agent architecture |
+| [WhatsApp-AI-Architecture-Details.md](docs/architecture/WhatsApp-AI-Architecture-Details.md) | WhatsApp agent legacy architecture details |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | High-level system architecture, AI pipeline, notification pipeline |
