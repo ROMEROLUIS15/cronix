@@ -413,7 +413,7 @@ describe('RealToolExecutor', () => {
         date:         '2026-05-03', // Sunday
         duration_min: 30,
       }, {
-        workingHours: { sunday: null, monday: { open: '09:00', close: '18:00' } }, // sunday explicitly closed
+        workingHours: { sunday: null as any, monday: { open: '09:00', close: '18:00' } }, // sunday explicitly closed
       }))
 
       expect(result.success).toBe(true)
