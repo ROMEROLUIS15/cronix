@@ -200,7 +200,14 @@ describe('RealToolExecutor', () => {
 
   describe('cancel_booking', () => {
     it('cancels appointment successfully', async () => {
-      const executor = buildExecutor()
+      const executor = buildExecutor({
+        queryRepo: {
+          getForEdit: vi.fn().mockResolvedValue({ 
+            data: { id: APT_UUID, service_id: SVC_UUID, client_id: CLI_UUID, start_at: '2026-05-01T10:00:00', appointment_services: [] }, 
+            error: null 
+          }),
+        },
+      })
       const result   = await executor.execute(makeParams('cancel_booking', {
         appointment_id: APT_UUID,
       }))
@@ -401,12 +408,12 @@ describe('RealToolExecutor', () => {
 
     it('returns "cerrado" message for a closed day when workingHours is configured', async () => {
       const executor = buildExecutor()
-      // sunday has no entry → closed
+      // sunday explicitly set to null -> closed
       const result = await executor.execute(makeParams('get_available_slots', {
         date:         '2026-05-03', // Sunday
         duration_min: 30,
       }, {
-        workingHours: { monday: { open: '09:00', close: '18:00' } }, // sunday not listed
+        workingHours: { sunday: null, monday: { open: '09:00', close: '18:00' } }, // sunday explicitly closed
       }))
 
       expect(result.success).toBe(true)
