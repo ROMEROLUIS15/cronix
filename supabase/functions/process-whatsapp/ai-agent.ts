@@ -360,19 +360,33 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
     throw new CircuitBreakerError(serviceName)
   }
 
+  const whisperHeaders = {
+    'Authorization': `Bearer ${apiKey}`,
+    ...heliconeHeaders({ type: 'audio-transcription' }),
+  }
+
   let res: Response
   try {
-    res = await fetch(WHISPER_API_URL, {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        ...heliconeHeaders({ type: 'audio-transcription' }),
-      },
-      body: form,
-    })
+    res = await fetch(WHISPER_API_URL, { method: 'POST', headers: whisperHeaders, body: form })
   } catch (err) {
     await reportServiceFailure(serviceName)
     throw err
+  }
+
+  // Single retry for transient 5xx server errors. Rate-limit (429) and client errors (4xx) are not retried.
+  if (!res.ok && res.status >= 500) {
+    addBreadcrumb(`Whisper API ${res.status} on first attempt — retrying once`, 'llm', 'warning')
+    const retryForm = new FormData()
+    retryForm.append('file', new Blob([buffer], { type: cleanMimeType }), filename)
+    retryForm.append('model', WHISPER_MODEL)
+    retryForm.append('language', 'es')
+    retryForm.append('response_format', 'text')
+    try {
+      res = await fetch(WHISPER_API_URL, { method: 'POST', headers: whisperHeaders, body: retryForm })
+    } catch (retryErr) {
+      await reportServiceFailure(serviceName)
+      throw retryErr
+    }
   }
 
   if (res.status === 429) {

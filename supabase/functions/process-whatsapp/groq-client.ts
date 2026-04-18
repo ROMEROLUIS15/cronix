@@ -19,7 +19,7 @@ import {
 export const SMALL_MODEL   = 'llama-3.1-8b-instant'    // decision loop + tool calling
 export const LARGE_MODEL   = 'llama-3.3-70b-versatile'  // final empathetic response
 export const WHISPER_MODEL = 'whisper-large-v3-turbo'
-export const MAX_STEPS     = 3
+export const MAX_STEPS     = 2
 
 // Helicone gateway: proxies Groq calls for latency, cost, and threat monitoring.
 // @ts-ignore — Deno runtime global

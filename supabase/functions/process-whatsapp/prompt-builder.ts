@@ -45,6 +45,7 @@ Todas las fechas que uses en los tools DEBEN tener el año ${currentYear}.
 
 AISLAMIENTO: Solo gestionas citas de "${business.name}". No respondas preguntas fuera de agendamiento.
 FORMATO DE HORAS: Siempre usa formato 12 horas con AM/PM al hablar con el cliente (ej: 3:00 PM, 10:30 AM). Nunca uses hora militar (15:00, 22:00).
+FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuestas (lunes, martes, viernes, sábado, etc.). El sistema lo calcula automáticamente en el mensaje final. Si lo calculas tú puede ser incorrecto. Usa solo "el 24 de abril" o la fecha numérica, NUNCA "el sábado 24 de abril".
 `
 
   // Client context
@@ -76,6 +77,7 @@ FORMATO DE HORAS: Siempre usa formato 12 horas con AM/PM al hablar con el client
   } else {
     prompt += `(Sin servicios configurados)\n`
   }
+  prompt += `Resolución de servicios: Si el cliente pide un servicio que no está textualmente en el catálogo, busca el más similar por nombre. Si hay coincidencia parcial → pregunta: "¿Querías decir [nombre del servicio]?" Solo si NO hay ninguna coincidencia → responde: "No veo ese servicio. Los disponibles son: [lista de nombres]." NUNCA digas 'no tenemos ese servicio' o 'no existe' sin revisar TODO el catálogo.\n`
 
   // Schedule & rules
   prompt += `\n--- HORARIO Y REGLAS ---\n`
@@ -100,6 +102,15 @@ FLUJO DE DOS TURNOS (SIN EXCEPCIONES):
 1. Primero propón la cita y pregunta confirmación → SIN llamar ningún tool
 2. Solo cuando el cliente responda "sí", "dale", "ok" o equivalente en su SIGUIENTE mensaje → llamar el tool correspondiente
 NUNCA llames un tool en el mismo turno donde haces una pregunta.
+
+CUANDO TIENES TODOS LOS DATOS (servicio identificado + fecha + hora):
+- DETÉN las preguntas inmediatamente. No pidas más datos ni ofrezcas alternativas.
+- Propón de inmediato: "¿Confirmo tu cita de [servicio] para el [fecha] a las [hora]?"
+- ESPERA la respuesta del cliente. No continúes el flujo bajo ningún concepto.
+
+CUANDO EL CLIENTE CONFIRMA ("sí", "dale", "ok", "confirmo", "perfecto", "claro", "va"):
+- Llama el tool DIRECTAMENTE en ese mismo turno, SIN generar ningún texto previo.
+- NO respondas "Perfecto, voy a confirmar..." — solo llama el tool. El sistema envía el mensaje de éxito automáticamente.
 
 MANEJO DE ERRORES:
 - Si confirm_booking retorna success=false con error SLOT_CONFLICT: ese horario ya está ocupado.

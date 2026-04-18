@@ -571,6 +571,7 @@
       "Tratamiento": "Trattamento",
       "Estética": "Estetica",
       "Salud": "Salute",
+      "Consulta": "Consulta",
       "Consulenza": "Consulenza",
       "Entrenamiento": "Allenamento",
       "Otro": "Altro"
@@ -937,6 +938,7 @@
     "restrictedTitle": "Accesso Negato",
     "restrictedSub": "Solo il proprietario può operare.",
     "subtitleOnlyYou": "Gestiscili.",
+    "subtitleOnlyOwner": "Sei attualmente l'unico membro del team.",
     "subtitleMembers": "{count, plural, =0 {Nessun membro} one {# membro attivo} other {# membri attivi}}",
     "addBtn": "Invita",
     "addBtnShort": "Avanti",

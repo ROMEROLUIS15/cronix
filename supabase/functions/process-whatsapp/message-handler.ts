@@ -107,7 +107,7 @@ export async function handleMessage(req: Request): Promise<Response> {
           return json({ success: true })
         }
         captureException(err, { stage: 'voice_transcription', sender })
-        await sendWhatsAppMessage(sender, "No pude procesar tu mensaje de voz correctamente. ¿Podrías escribirlo o intentar de nuevo?")
+        await sendWhatsAppMessage(sender, "No pude procesar tu audio. Por favor intenta de nuevo o escríbeme tu consulta.")
         await flushSentry()
         return json({ success: true, message: 'Voice transcription failed — user notified' })
       }

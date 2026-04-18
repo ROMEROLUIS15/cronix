@@ -188,6 +188,107 @@ export function buildConfirmationSummary(
   return '¿Confirmas esta acción?'
 }
 
+// ── Owner fast-path: direct booking entity extraction ────────────────────────
+// Used by fast-path D to bypass the LLM when the owner sends a complete booking
+// command from idle state (e.g. "Agéndame a Alan mañana corte a las 9").
+// All functions are deterministic and timezone-aware — no LLM involved.
+
+const OWNER_BOOKING_SIGNALS = [
+  'agendar', 'agenda', 'agendame', 'reservar', 'reserva', 'programar', 'programa',
+]
+
+function detectOwnerBookingIntent(text: string): boolean {
+  const n = normalizeForMatch(text)
+  return OWNER_BOOKING_SIGNALS.some((s) => n === s || n.startsWith(s + ' '))
+}
+
+/**
+ * Fuzzy-matches a service name from free text against the business catalog.
+ * Tries exact service name match first, then significant-word match (>3 chars).
+ */
+function fuzzyMatchService(
+  text: string,
+  services: AiInput['context']['services'],
+): { id: string; name: string } | null {
+  if (!services || services.length === 0) return null
+  const n = normalizeForMatch(text)
+  for (const svc of services) {
+    const svcN = normalizeForMatch(svc.name)
+    if (n.includes(svcN)) return { id: svc.id, name: svc.name }
+    const words = svcN.split(/\s+/).filter((w) => w.length > 3)
+    if (words.length > 0 && words.some((w) => n.includes(w))) return { id: svc.id, name: svc.name }
+  }
+  return null
+}
+
+/**
+ * Extracts client name from owner booking text.
+ * Handles: "agéndame a [Name]", "a nombre de [Name]", "cita de/para [Name]"
+ */
+function extractClientNameFromOwnerText(text: string): string | null {
+  const n = normalizeForMatch(text)
+  const STOPWORDS = new Set(['las', 'los', 'una', 'para', 'el', 'la', 'les', 'les'])
+  const toTitle = (s: string) =>
+    s.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+
+  // "a [Name]" followed by a date/service/time signal
+  const afterA = n.match(
+    /\ba\s+([a-z]+(?:\s+[a-z]+)?)\s+(?:hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|el\s+\d|para|\d)/,
+  )
+  if (afterA?.[1]) {
+    const candidate = afterA[1].trim()
+    if (!STOPWORDS.has(candidate.split(' ')[0] ?? '')) return toTitle(candidate)
+  }
+
+  // "a nombre de [Name]"
+  const nombreDe = n.match(/\ba\s+nombre\s+de\s+([a-z]+(?:\s+[a-z]+)?)/)
+  if (nombreDe?.[1]) return toTitle(nombreDe[1].trim())
+
+  // "cita de/para [Name]"
+  const citaDe = n.match(/\bcita\s+(?:de|para)\s+([a-z]+(?:\s+[a-z]+)?)/)
+  if (citaDe?.[1]) return toTitle(citaDe[1].trim())
+
+  return null
+}
+
+/**
+ * Extends normalizeTimeInput with a fallback for bare "las X" patterns.
+ * Business heuristic for bare hours: 1–6 → PM, 7–12 → AM.
+ */
+function extractOwnerTime(text: string): string | null {
+  const t = normalizeTimeInput(text)
+  if (t) return t
+
+  const n = normalizeForMatch(text)
+  const match = n.match(/\blas?\s+(\d{1,2})\b/)
+  if (match?.[1]) {
+    const h = parseInt(match[1], 10)
+    if (h >= 1 && h <= 23) {
+      const finalH = h >= 1 && h <= 6 ? h + 12 : h
+      return `${String(finalH).padStart(2, '0')}:00`
+    }
+  }
+  return null
+}
+
+/**
+ * Orchestrates deterministic extraction of all booking fields from owner input.
+ */
+function extractOwnerBookingData(
+  text: string,
+  timezone: string,
+  services: AiInput['context']['services'],
+): { date: string | null; time: string | null; serviceId: string | null; serviceName: string | null; clientName: string | null } {
+  const svc = fuzzyMatchService(text, services)
+  return {
+    date:        normalizeDateInput(text, timezone),
+    time:        extractOwnerTime(text),
+    serviceId:   svc?.id   ?? null,
+    serviceName: svc?.name ?? null,
+    clientName:  extractClientNameFromOwnerText(text),
+  }
+}
+
 // ── Helper: Draft completeness check ──────────────────────────────────────────
 // Used as a fast-path guard in analyze() to skip the LLM loop entirely when all
 // required booking fields are already present in the conversation draft.
@@ -264,6 +365,63 @@ export class DecisionEngine implements IDecisionEngine {
           intent: 'cancel_booking',
           args:   { appointment_id: state.lastAction.appointmentId },
         }
+      }
+
+      // Fast path D — direct booking from owner input (e.g. "Agéndame a Alan mañana corte a las 9").
+      // Only triggers from idle state — avoids interfering with ongoing collection flows.
+      // When all fields are extracted deterministically: zero LLM calls, immediate execution.
+      if (state.flow === 'idle' && detectOwnerBookingIntent(input.text)) {
+        const parsed = extractOwnerBookingData(input.text, input.timezone, input.context.services)
+        logger.info('DECISION-ENGINE', 'Owner fast-path D: parsed booking entities', {
+          userId:    input.userId,
+          date:      parsed.date,
+          time:      parsed.time,
+          serviceId: parsed.serviceId,
+          hasClient: Boolean(parsed.clientName),
+        })
+
+        if (parsed.date && parsed.time && parsed.serviceId) {
+          // All required fields present → execute immediately, zero LLM calls
+          return {
+            type:   'execute_immediately',
+            intent: 'confirm_booking',
+            args: {
+              service_id: parsed.serviceId,
+              date:       parsed.date,
+              time:       parsed.time,
+              ...(parsed.clientName ? { client_name: parsed.clientName } : {}),
+            },
+          }
+        }
+
+        // Partial data → ask only the one missing field, carry extracted fields in draft
+        const partialDraft: Record<string, string | undefined> = {}
+        if (parsed.serviceId)  partialDraft['service_id']  = parsed.serviceId
+        if (parsed.date)       partialDraft['date']         = parsed.date
+        if (parsed.time)       partialDraft['time']         = parsed.time
+        if (parsed.clientName) partialDraft['client_name'] = parsed.clientName
+
+        if (Object.keys(partialDraft).length > 0) {
+          const missingField = !parsed.serviceId ? 'service_id'
+            : !parsed.date                       ? 'date'
+            : !parsed.time                       ? 'time'
+            : null
+
+          if (missingField) {
+            const prompt = missingField === 'service_id' ? '¿Para qué servicio?'
+              : missingField === 'date'                  ? '¿Para qué día?'
+              : '¿A qué hora?'
+            return {
+              type:          'continue_collection',
+              intent:        'confirm_booking',
+              missingFields: [missingField],
+              prompt,
+              extractedData: partialDraft,
+              updatedDraft:  partialDraft,
+            }
+          }
+        }
+        // Nothing extracted deterministically → fall through to LLM
       }
     }
 

@@ -940,6 +940,7 @@
     "restrictedTitle": "Accès Refusé",
     "restrictedSub": "Seul le propriétaire a accès.",
     "subtitleOnlyYou": "Gérer le personnel.",
+    "subtitleOnlyOwner": "Vous êtes actuellement le seul membre de l'équipe.",
     "subtitleMembers": "{count, plural, =0 {Aucun membre} one {# membre actif} other {# membres actifs}}",
     "addBtn": "Inviter Membre",
     "addBtnShort": "Ajouter",

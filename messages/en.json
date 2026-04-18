@@ -937,6 +937,7 @@
     "restrictedTitle": "Restricted Access",
     "restrictedSub": "Only owners can manage the team.",
     "subtitleOnlyYou": "Manage team members.",
+    "subtitleOnlyOwner": "You are currently the only team member.",
     "addBtn": "Invite Team Member",
     "addBtnShort": "Add",
     "editTitle": "Edit Member",

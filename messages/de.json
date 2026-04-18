@@ -937,6 +937,7 @@
     "restrictedTitle": "Zugriff verweigert",
     "restrictedSub": "Nur Eigentümer dürfen das Team verwalten.",
     "subtitleOnlyYou": "Teammitglieder verwalten.",
+    "subtitleOnlyOwner": "Du bist derzeit das einzige Teammitglied.",
     "addBtn": "Einladen",
     "addBtnShort": "Zurück",
     "editTitle": "Bearbeiten",

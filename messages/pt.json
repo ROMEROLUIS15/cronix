@@ -918,6 +918,7 @@
     "restrictedTitle": "Acesso Negado",
     "restrictedSub": "Apenas proprietários podem gerir.",
     "subtitleOnlyYou": "Gira seus membros.",
+    "subtitleOnlyOwner": "Atualmente você é o único membro da equipe.",
     "subtitleMembers": "{count, plural, =0 {Sem membros} one {# membro ativo} other {# membros ativos}}",
     "addBtn": "Convidar Equipe",
     "addBtnShort": "Add",

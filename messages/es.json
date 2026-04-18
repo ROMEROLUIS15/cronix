@@ -931,6 +931,7 @@
     "restrictedTitle": "Acceso Restringido",
     "restrictedSub": "Solo los propietarios pueden manejar equipos.",
     "subtitleOnlyYou": "Actualiza los miembros del equipo.",
+    "subtitleOnlyOwner": "Actualmente eres el único miembro del equipo.",
     "subtitleMembers": "{count, plural, =0 {Sin miembros} one {# miembro activo} other {# miembros activos}}",
     "addBtn": "Invitar al equipo",
     "addBtnShort": "Agregar",
