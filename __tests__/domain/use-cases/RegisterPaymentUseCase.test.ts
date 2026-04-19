@@ -74,7 +74,7 @@ describe('RegisterPaymentUseCase', () => {
     const uc   = new RegisterPaymentUseCase(repo)
     await uc.execute({ businessId: 'biz-1', appointmentId: 'appt-1', amount: 120000, method: 'cash' })
 
-    const call = (repo.createTransaction as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const call = (repo.createTransaction as ReturnType<typeof vi.fn>).mock.calls[0]![0]!
     expect(call.amount).toBe(call.net_amount)
   })
 

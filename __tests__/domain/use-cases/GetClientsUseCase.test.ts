@@ -33,7 +33,7 @@ describe('GetClientsUseCase', () => {
     const result = await uc.execute({ businessId: 'biz-1', query: 'pedro' })
 
     expect(result.data).toHaveLength(1)
-    expect(result.data?.[0].name).toBe('Pedro Ruiz')
+    expect(result.data![0]!.name).toBe('Pedro Ruiz')
   })
 
   it('returns empty array when no client matches query', async () => {
@@ -62,7 +62,7 @@ describe('GetClientsUseCase', () => {
     const uc     = new GetClientsUseCase(makeClientRepo())
     const result = await uc.execute({ businessId: 'biz-1', query: 'Pedro' })
 
-    expect(result.data?.[0].phone).toBeNull()
+    expect(result.data![0]!.phone).toBeNull()
   })
 
   it('propagates repo error', async () => {

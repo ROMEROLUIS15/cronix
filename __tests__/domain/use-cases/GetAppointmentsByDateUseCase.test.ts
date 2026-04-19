@@ -36,8 +36,8 @@ describe('GetAppointmentsByDateUseCase', () => {
 
     expect(result.error).toBeNull()
     expect(result.data).toHaveLength(1)
-    expect(result.data?.[0].clientName).toBe('Ana Torres')
-    expect(result.data?.[0].serviceName).toBe('Corte')
+    expect(result.data![0]!.clientName).toBe('Ana Torres')
+    expect(result.data![0]!.serviceName).toBe('Corte')
   })
 
   it('filters out cancelled appointments', async () => {
@@ -51,7 +51,7 @@ describe('GetAppointmentsByDateUseCase', () => {
     const result = await uc.execute({ businessId: 'biz-1', date: '2026-04-18', timezone: 'America/Bogota' })
 
     expect(result.data).toHaveLength(1)
-    expect(result.data?.[0].id).toBe('appt-2')
+    expect(result.data![0]!.id).toBe('appt-2')
   })
 
   it('filters out no_show appointments', async () => {
@@ -88,7 +88,7 @@ describe('GetAppointmentsByDateUseCase', () => {
     const uc     = new GetAppointmentsByDateUseCase(repo)
     const result = await uc.execute({ businessId: 'biz-1', date: '2026-04-18', timezone: 'America/Bogota' })
 
-    expect(result.data?.[0].clientName).toBe('Cliente')
+    expect(result.data![0]!.clientName).toBe('Cliente')
   })
 
   it('falls back to appointment_services[0] when service is null', async () => {
@@ -104,7 +104,7 @@ describe('GetAppointmentsByDateUseCase', () => {
     const uc     = new GetAppointmentsByDateUseCase(repo)
     const result = await uc.execute({ businessId: 'biz-1', date: '2026-04-18', timezone: 'America/Bogota' })
 
-    expect(result.data?.[0].serviceName).toBe('Manicura')
+    expect(result.data![0]!.serviceName).toBe('Manicura')
   })
 
   it('propagates repo error', async () => {
@@ -131,7 +131,7 @@ describe('GetAppointmentsByDateUseCase', () => {
     const uc     = new GetAppointmentsByDateUseCase(repo)
     const result = await uc.execute({ businessId: 'biz-1', date: '2026-04-18', timezone: 'America/Bogota' })
 
-    expect(result.data?.[0].id).toBe('early')
-    expect(result.data?.[1].id).toBe('late')
+    expect(result.data![0]!.id).toBe('early')
+    expect(result.data![1]!.id).toBe('late')
   })
 })
