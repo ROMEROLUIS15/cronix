@@ -44,9 +44,6 @@ describe('SupabaseAppointmentRepository', () => {
 
       const result = await repository.updateStatus('apt_1', 'confirmed', 'biz_1')
 
-      if (isFail(result)) {
-        console.error('Test failed with error:', result.error)
-      }
       expect(isOk(result)).toBe(true)
       const from = mockSupabase.from('appointments')
       expect(from.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }))
@@ -75,9 +72,6 @@ describe('SupabaseAppointmentRepository', () => {
 
       const result = await repository.create(payload)
 
-      if (isFail(result)) {
-        console.error('Create test failed:', result.error)
-      }
       expect(isOk(result)).toBe(true)
       if (isOk(result)) {
         expect(result.data).toEqual(mockApt)

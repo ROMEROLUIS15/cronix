@@ -30,9 +30,15 @@ export async function safeSTT(
     return { data: null, error: 'STT Circuit Open (Fail Fast)', latency: 0, retries: 0, circuitTripped: true }
   }
 
+  const keys = apiKey.split(',').map(k => k.trim()).filter(Boolean)
   let retryCount = 0
+  let currentKeyIndex = 0
+
   while (retryCount <= MAX_RETRIES) {
     try {
+      const currentKey = keys[currentKeyIndex % keys.length]
+      if (!currentKey) throw new Error('No API keys available')
+
       const formData = new FormData()
       const ext = audioBlob.type.includes('mp4') || audioBlob.type.includes('m4a') ? 'm4a' : 'webm'
       formData.append('file', audioBlob, `voice.${ext}`)
@@ -41,7 +47,7 @@ export async function safeSTT(
 
       const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { Authorization: `Bearer ${currentKey}` },
         body: formData,
       })
 
@@ -54,7 +60,14 @@ export async function safeSTT(
       const errText = await res.text()
       aiCircuit.reportFailure('STT', errText)
       
-      if (res.status >= 500 || res.status === 429) {
+      if (res.status === 429 && keys.length > 1) {
+        logger.warn('AI-STT', `Rate limit hit, rotating key immediately. Attempt ${retryCount + 1}`)
+        currentKeyIndex++
+        retryCount++
+        continue
+      }
+      
+      if (res.status >= 500) {
         throw new Error(`STT API Error (${res.status}): ${errText}`)
       }
       
@@ -89,7 +102,9 @@ export async function safeLLM(
     return { data: null, error: 'LLM Circuit Open', latency: 0, retries: 0, circuitTripped: true }
   }
 
-  const execute = async (model: string) => {
+  const keys = apiKey.split(',').map(k => k.trim()).filter(Boolean)
+
+  const execute = async (model: string, key: string) => {
     // max_tokens split by use case:
     // - With tools (planner/ReAct): 300 tokens — tool_call JSON can be 100-200 tokens alone;
     //   100 was causing truncation and silent fallback to plain text.
@@ -99,7 +114,7 @@ export async function safeLLM(
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
         messages,
@@ -113,21 +128,40 @@ export async function safeLLM(
     return await res.json()
   }
 
-  try {
-    const data = await execute(primaryModel)
-    aiCircuit.reportSuccess('LLM')
-    return { data, latency: Date.now() - start, retries: 0, modelUsed: primaryModel }
-  } catch (err: any) {
-    aiCircuit.reportFailure('LLM', err.text)
-    logger.warn('AI-LLM', `Primary model failed, attempting fallback`, err.text)
-    
+  let attemptError: any
+
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const currentKey = keys[attempt]
+    if (!currentKey) continue
+
     try {
-      const data = await execute(fallbackModel)
-      return { data, latency: Date.now() - start, retries: 1, modelUsed: fallbackModel }
-    } catch (fallbackErr: any) {
-      return { data: null, error: fallbackErr.text, latency: Date.now() - start, retries: 1 }
+      const data = await execute(primaryModel, currentKey)
+      aiCircuit.reportSuccess('LLM')
+      return { data, latency: Date.now() - start, retries: attempt, modelUsed: primaryModel }
+    } catch (err: any) {
+      attemptError = err
+      aiCircuit.reportFailure('LLM', err.text)
+      logger.warn('AI-LLM', `Primary model failed on key ${attempt + 1}/${keys.length}`, err.text)
+      
+      if (err.status === 429 && attempt < keys.length - 1) {
+        logger.info('AI-LLM', `Rate limit hit, fast rotating to next API Key...`)
+        continue // Rotar key inmediatamente
+      }
+      
+      try {
+        const data = await execute(fallbackModel, currentKey)
+        return { data, latency: Date.now() - start, retries: attempt + 1, modelUsed: fallbackModel }
+      } catch (fallbackErr: any) {
+        if (fallbackErr.status === 429 && attempt < keys.length - 1) {
+          logger.info('AI-LLM', `Fallback model rate limit hit, rotating to next API Key...`)
+          continue // Fallback erró por 429, probamos la siguiente llave desde cero
+        }
+        return { data: null, error: fallbackErr.text, latency: Date.now() - start, retries: attempt + 1 }
+      }
     }
   }
+
+  return { data: null, error: attemptError?.text || 'All keys exhausted', latency: Date.now() - start, retries: keys.length }
 }
 
 /**

@@ -45,14 +45,18 @@ app/api/assistant/voice/route.ts
 ```
 
 ### State Management
-- `ConversationState` is persisted in **Upstash Redis** (TTL: 2 hours) via `RedisStateManager`.
-- State includes: `flow`, `turnCount`, `maxTurns`, `draft`, `lastIntent`, `lastToolResult`.
+- `ConversationState` is persisted in **Upstash Redis** (TTL: 30 mins) via `RedisStateManager`.
+- State includes: `flow`, `turnCount`, `maxTurns`, `draft`, `lastIntent`, `lastToolResult`, and crucially `lastAction` (used for short-term entity memory).
 - History: up to 20 messages (tool call chains included, not condensed).
 
 ### Conversation Flows
 - `idle` → `collecting_booking` → `idle` (after successful booking)
 - `idle` → `awaiting_confirmation` → `idle` (after confirm/reject)
 - `turnCount` resets to 0 after each successful action.
+
+### Memory & Fast Paths (Zero-Latency)
+- **lastAction Caching**: The state manager implicitly caches the `lastAction` executed in the session. This is injected into the system prompt for all internal staff, allowing fluid entity chaining (e.g. "elimina la cita que acabo de agendar", "reagéndala para mañana") without reprompting.
+- **Fast Paths**: Staff users (`owner`, `employee`) skip the LLM entirely (0 cognitive latency) applying Regex models if their query matches known deterministic patterns (day queries, explicitly complete booking phrases, or simple cancellations referencing `lastAction`).
 
 ---
 
@@ -69,8 +73,8 @@ Resolution priority:
 
 ## Voice Pipeline
 
-- **STT**: Groq Whisper (`whisper-large-v3-turbo`) — server-side, <1s for 5s audio.
-- **LLM**: Groq (`llama-3.3-70b-versatile` or fast equivalent) — function calling enabled.
+- **STT**: Groq Whisper (`whisper-large-v3-turbo`) — server-side, <1s for 5s audio. Features automatic failover (API Key Pooling) on 429 Rate Limits.
+- **LLM**: Groq (`llama-3.3-70b-versatile` primary) — features API Key Pooling to gracefully rotate across multiple credentials if quota limits are reached. Heavily instructed for hyper-flexible semantic service matching ("tarjeta" -> "Tarjetas").
 - **TTS**: Deepgram Aura 2 (`aura-2-nestor-es`) — low-latency natural Spanish voice.
 - **Fallback TTS**: Browser `SpeechSynthesis` API (client-side, zero cost).
 
@@ -91,8 +95,14 @@ Resolution priority:
 
 Each AI request loads from the database and injects into the system prompt:
 - Business name (`businesses.name`)
-- Active services list with UUIDs and prices
+- Active services list with UUIDs and prices (processed semantically, not strictly)
 - Working hours (`businesses.settings.workingHours`)
 - Custom AI rules (`businesses.settings.aiRules`)
 - Today's active appointments (up to 5, with IDs)
 - Current date/time in business timezone
+
+---
+
+## Observability & Dispatch Rules
+
+- **Notification Suppression**: Appointments created natively via the Dashboard Assistant (`channel: 'web'`) trigger Realtime DB UI updates but are strictly configured to suppress redundant WhatsApp confirmation blasts to the business owner, assuming they are actively operating the dashboard.

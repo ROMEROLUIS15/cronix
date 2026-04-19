@@ -94,8 +94,8 @@ function detectBookingIntent(text: string): boolean {
 const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\s+d[e]?\s+hoy|mis\s+citas/i
 /** "qué tengo mañana", "citas de mañana", "agenda de mañana" */
 const TOMORROW_QUERY_PATTERN = /qu[eé]\s+tengo\s+ma[nñ]ana|citas?\s+de\s+ma[nñ]ana|agenda\s+d[e]?\s+ma[nñ]ana/i
-/** "cancela la última", "cancela lo último", "cancela eso" */
-const CANCEL_LAST_PATTERN    = /cancel[ae][rs]?\s+(l[ao]\s+)?[úu]ltim[ao]|cancela\s+eso/i
+/** "cancela la última", "cancela lo último", "cancela eso", "elimina la cita" */
+const CANCEL_LAST_PATTERN    = /cancel[ae][rs]?\s+(l[ao]\s+)?[úu]ltim[ao]|cancela\s+eso|elimin[ae].*cita/i
 
 
 // ── Helper: Extract known entities from text ──────────────────────────────────
@@ -331,10 +331,10 @@ export class DecisionEngine implements IDecisionEngine {
     }
 
     // ── Owner fast-paths: zero-LLM execution for common operations ────────────────
-    // Bypass the LLM entirely for latency-sensitive owner/admin actions.
+    // Bypass the LLM entirely for latency-sensitive admin/staff actions.
     // These run before the awaiting_confirmation check so they always fire,
-    // even if the owner was mid-flow (signals intent to start a new operation).
-    if (input.userRole === 'owner' || input.userRole === 'platform_admin') {
+    // even if the owner/staff was mid-flow (signals intent to start a new operation).
+    if (input.userRole !== 'external') {
 
       // Fast path A — "¿qué tengo hoy?" → direct date query, no LLM
       if (TODAY_QUERY_PATTERN.test(input.text)) {
@@ -617,11 +617,12 @@ CUANDO YA TIENES TODOS LOS DATOS (servicio + fecha + hora + cliente identificado
 - RESPONDE SOLO con el resumen: "Perfecto. ¿Confirmo tu cita para [servicio] el [fecha] a las [hora] a nombre de [cliente]?"
 - ESPERA la respuesta del usuario (sí/no). No continúes el flujo bajo ningún concepto.
 
-SERVICIOS — RESOLUCIÓN PRECISA:
+SERVICIOS — RESOLUCIÓN SEMÁNTICA (HIPER FLEXIBLE):
+- Mapea plurales, singulares o variantes de voz (ej. 'tarjeta' a 'Tarjetas', 'corte' a 'Cortes') al ID correcto en silencio. SÉ MUY FLEXIBLE.
 - Para verificar si un servicio existe, consulta EXCLUSIVELY la lista SERVICIOS DISPONIBLES de este prompt.
-- Si el usuario pide un servicio que NO aparece en esa lista textualmente o por similitud → responde: "No veo ese servicio registrado. Los servicios disponibles son: [lista de nombres]."
-- NUNCA digas "no tengo" ni "ese servicio no existe" sin haber revisado la lista completa primero.
-- Si hay servicios parecidos al solicitado → sugiere el más cercano: "¿Querías decir [nombre del servicio]?"`
+- Si el usuario pide un servicio que NO aparece incluso considerando flexibilización (ej. pide manicura y solo ofreces barbería) → responde: "No veo ese servicio registrado. Los servicios disponibles son: [lista de nombres]."
+- NUNCA digas "no tengo" ni "ese servicio no existe" sin haber aplicado máxima tolerancia a la pronunciación/plurales primero.
+- Si hay servicios claramente ambiguos → sugiere el más cercano: "¿Querías decir [nombre del servicio]?"`
 
   // ── Security rules ────────────────────────────────────────────────────────────
   prompt += `\n\nSEGURIDAD Y LÍMITES:
@@ -647,8 +648,8 @@ SERVICIOS — RESOLUCIÓN PRECISA:
   // ── Services ──────────────────────────────────────────────────────────────────
   // ── Owner / Admin mode ────────────────────────────────────────────────────────
   // Must appear before Services so the LLM reads behavioral rules first.
-  if (input.userRole === 'owner' || input.userRole === 'platform_admin') {
-    prompt += `\n\nMODO OPERADOR (eres el dueño del negocio, comandos del panel):
+  if (input.userRole !== 'external') {
+    prompt += `\n\nMODO OPERADOR (eres parte del staff, comandos del panel):
 - RESPUESTAS ULTRA-CORTAS. Máximo 1 oración. Sin introducciones, sin despedidas, sin preguntas de seguimiento.
 - Si el cliente no existe en el sistema, llama create_client automáticamente SIN preguntar. Luego usa el client_id devuelto en confirm_booking.
 - Después de agendar: "Listo. [ClientName] — [ServiceName] el [date] a las [time]."

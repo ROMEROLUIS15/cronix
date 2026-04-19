@@ -248,6 +248,14 @@ export class NotificationService implements INotificationService {
    */
   private async sendWhatsAppNotification(event: AppointmentEvent): Promise<void> {
     try {
+      if (event.channel === 'web') {
+        logger.info('NOTIFICATION-SVC', 'Web channel detected — skipping WhatsApp', {
+          eventId: event.eventId,
+          businessId: event.businessId,
+        })
+        return
+      }
+
       // Obtener el teléfono del owner del negocio
       const ownerPhone = await this.getOwnerPhone(event.businessId)
       if (!ownerPhone) {
