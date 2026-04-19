@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "Não foi possível criar o agendamento",
       "updateFailed": "Não foi possível atualizar",
-      "loadFailed": "Não foi possível carregar as informações"
+      "loadFailed": "Não foi possível carregar as informações",
+      "couldNotCancel": "Não foi possível cancelar o compromisso: {error}",
+      "couldNotVerifyAvailability": "Não foi possível verificar a disponibilidade.",
+      "couldNotVerifyNewAvailability": "Não foi possível verificar a disponibilidade do novo horário.",
+      "couldNotReschedule": "Não foi possível reagendar o compromisso: {error}"
     },
     "subtitle": "Gerencie seus agendamentos",
     "newAppointment": "Novo agendamento",
@@ -411,7 +415,8 @@
     "empty": "Nenhum cliente cadastrado ainda.",
     "errors": {
       "createFailed": "Não foi possível criar o cliente",
-      "updateFailed": "Não foi possível atualizar o cliente"
+      "updateFailed": "Não foi possível atualizar o cliente",
+      "couldNotCreate": "Não foi possível registrar o cliente."
     },
     "newClient": "Novo cliente",
     "searchPlaceholder": "Buscar cliente...",
@@ -498,6 +503,15 @@
     },
     "select": {
       "searchPlaceholder": "Buscar por nome ou telefone..."
+    },
+    "validations": {
+      "namePlaceholder": "Ex. João Silva",
+      "emailPlaceholder": "email@exemplo.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frequente",
+        "new": "Novo"
+      }
     }
   },
   "services": {
@@ -600,7 +614,10 @@
     "cancel": "Cancelar",
     "empty": "Nenhuma transação para este período.",
     "errors": {
-      "loadFailed": "Não foi possível carregar as finanças"
+      "loadFailed": "Não foi possível carregar as finanças",
+      "savingExpense": "Erro ao salvar despesa",
+      "savingPayment": "Erro ao salvar pagamento",
+      "paymentError": "Erro ao registrar pagamento. Tente novamente."
     },
     "errorLoading": "Erro ao carregar finanças",
     "subtitle": "Controle financeiro",
@@ -899,7 +916,26 @@
     "confirmPassword": "Confirmar senha",
     "confirmPasswordLabel": "Repita a nova senha",
     "passwordSet": "Senha alterada",
-    "saveProfile": "Salvar perfil"
+    "saveProfile": "Salvar perfil",
+    "passkeys": {
+      "title": "Chaves de acesso",
+      "sub": "Entre sem senha usando seu dispositivo",
+      "notAvailTitle": "Chaves de acesso indisponíveis",
+      "notAvailSub": "Seu navegador não suporta chaves de acesso. Use Chrome, Edge ou Safari.",
+      "registerErrorOptions": "Não foi possível obter as opções de registro",
+      "registerErrorVerify": "Erro ao verificar a chave de acesso",
+      "registerSuccess": "Chave de acesso registrada com sucesso",
+      "registerCancel": "Registro cancelado",
+      "registerGeneric": "Erro ao registrar a chave de acesso. Tente novamente.",
+      "defaultDevice": "Meu dispositivo",
+      "deleteError": "Erro ao excluir a chave de acesso",
+      "emptyTitle": "Primeiro passo: adicione sua primeira chave de acesso",
+      "emptySub": "As chaves de acesso permitem entrar de forma segura sem senha. Use a biometria do seu dispositivo.",
+      "inputPlaceholder": "Nome do dispositivo (opcional)",
+      "btnWaiting": "Registrando...",
+      "btnAnother": "Adicionar outro dispositivo",
+      "btnRegister": "Registrar chave de acesso"
+    }
   },
   "team": {
     "title": "Equipe",
@@ -1049,66 +1085,6 @@
     "viewPayload": "Ver payload",
     "retryBtn": "Tentar novamente"
   },
-  "profile": {
-    "title": "Meu Perfil",
-    "name": "Nome",
-    "lastName": "Sobrenome",
-    "email": "Email",
-    "role": "Função",
-    "avatar": "Foto de perfil",
-    "save": "Salvar alterações",
-    "saving": "Salvando...",
-    "successMsg": "Perfil atualizado com sucesso.",
-    "errors": {
-      "saveFailed": "Não foi possível atualizar o perfil"
-    },
-    "subtitle": "Gerencie suas informações pessoais",
-    "errorImgFormat": "Formato de imagem inválido",
-    "errorImgSize": "Imagem muito grande",
-    "errorUpload": "Erro ao fazer upload",
-    "successUpload": "Foto atualizada",
-    "errorDelete": "Erro ao deletar foto",
-    "successDelete": "Foto removida",
-    "changePhoto": "Alterar foto",
-    "uploadPhoto": "Enviar foto",
-    "deletePhoto": "Remover foto",
-    "photoReqs": "JPG, PNG ou WebP. Máx. 5 MB.",
-    "personalInfo": "Dados pessoais",
-    "fullname": "Nome completo",
-    "fullnameLabel": "Nome e sobrenome",
-    "phone": "Telefone",
-    "emailLabel": "E-mail",
-    "emailWarning": "O e-mail não pode ser alterado aqui.",
-    "securityTitle": "Segurança",
-    "securitySubtitle": "Alterar sua senha",
-    "cancel": "Cancelar",
-    "changePasswordBtn": "Alterar senha",
-    "newPassword": "Nova senha",
-    "newPasswordLabel": "Digite sua nova senha",
-    "confirmPassword": "Confirmar senha",
-    "confirmPasswordLabel": "Repita a nova senha",
-    "passwordSet": "Senha alterada",
-    "saveProfile": "Salvar perfil",
-    "passkeys": {
-      "title": "Chaves de acesso",
-      "sub": "Entre sem senha usando seu dispositivo",
-      "notAvailTitle": "Chaves de acesso indisponíveis",
-      "notAvailSub": "Seu navegador não suporta chaves de acesso. Use Chrome, Edge ou Safari.",
-      "registerErrorOptions": "Não foi possível obter as opções de registro",
-      "registerErrorVerify": "Erro ao verificar a chave de acesso",
-      "registerSuccess": "Chave de acesso registrada com sucesso",
-      "registerCancel": "Registro cancelado",
-      "registerGeneric": "Erro ao registrar a chave de acesso. Tente novamente.",
-      "defaultDevice": "Meu dispositivo",
-      "deleteError": "Erro ao excluir a chave de acesso",
-      "emptyTitle": "Primeiro passo: adicione sua primeira chave de acesso",
-      "emptySub": "As chaves de acesso permitem entrar de forma segura sem senha. Use a biometria do seu dispositivo.",
-      "inputPlaceholder": "Nome do dispositivo (opcional)",
-      "btnWaiting": "Registrando...",
-      "btnAnother": "Adicionar outro dispositivo",
-      "btnRegister": "Registrar chave de acesso"
-    }
-  },
   "adminUsers": {
     "title": "Gestão de usuários",
     "subtitle": "Painel de controle de usuários da plataforma",
@@ -1213,39 +1189,6 @@
     "errorUnableChangePassword": "Erro ao alterar senha: {error}",
     "errorLinkingAccount": "Erro ao vincular sua conta com o negócio. Tente fazer login novamente."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "Não foi possível cancelar o compromisso: {error}",
-      "couldNotVerifyAvailability": "Não foi possível verificar a disponibilidade.",
-      "couldNotVerifyNewAvailability": "Não foi possível verificar a disponibilidade do novo horário.",
-      "couldNotReschedule": "Não foi possível reagendar o compromisso: {error}",
-      "createFailed": "Erro ao criar compromisso. Tente novamente.",
-      "updateFailed": "Erro ao atualizar: {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "Não foi possível registrar o cliente.",
-      "createFailed": "Erro ao criar cliente: {error}",
-      "updateFailed": "Erro ao salvar alterações."
-    },
-    "validations": {
-      "namePlaceholder": "Ex. João Silva",
-      "emailPlaceholder": "email@exemplo.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Frequente",
-        "new": "Novo"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Erro ao salvar despesa",
-      "savingPayment": "Erro ao salvar pagamento",
-      "paymentError": "Erro ao registrar pagamento. Tente novamente."
-    }
-  },
   "monthNames": {
     "january": "Janeiro",
     "february": "Fevereiro",
@@ -1313,5 +1256,23 @@
   },
   "passkey": {
     "verifyError": "Não foi possível verificar a biometria. Use sua senha."
+  },
+  "toasts": {
+    "clientAdded": "Cliente adicionado com sucesso",
+    "clientUpdated": "Cliente atualizado",
+    "clientDeleted": "Cliente removido",
+    "appointmentCreated": "Agendamento criado com sucesso",
+    "appointmentUpdated": "Agendamento atualizado",
+    "appointmentCancelled": "Agendamento cancelado",
+    "paymentRegistered": "Pagamento registrado com sucesso",
+    "expenseAdded": "Despesa registrada",
+    "serviceAdded": "Serviço adicionado com sucesso",
+    "serviceUpdated": "Serviço atualizado",
+    "serviceDeleted": "Serviço removido",
+    "settingsSaved": "Configurações salvas",
+    "profileUpdated": "Perfil atualizado",
+    "employeeAdded": "Funcionário adicionado",
+    "employeeDeleted": "Funcionário removido",
+    "passwordChanged": "Senha atualizada com sucesso"
   }
 }

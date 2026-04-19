@@ -321,5 +321,8 @@ entrypoint = "./functions/process-whatsapp/index.ts"
 [functions.cron-reminders]
 verify_jwt = false
 
+[functions.whatsapp-service]
+verify_jwt = false
+
 [functions.whatsapp-webhook]
 verify_jwt = false

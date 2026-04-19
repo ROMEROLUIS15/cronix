@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "Could not create appointment",
       "updateFailed": "Could not update appointment",
-      "loadFailed": "Could not load information"
+      "loadFailed": "Could not load information",
+      "couldNotCancel": "Could not cancel appointment: {error}",
+      "couldNotVerifyAvailability": "Could not verify time availability.",
+      "couldNotVerifyNewAvailability": "Could not verify new time availability.",
+      "couldNotReschedule": "Could not reschedule appointment: {error}"
     },
     "subtitle": "Manage all your appointments",
     "newAppointment": "New appointment",
@@ -411,7 +415,8 @@
     "empty": "No clients registered yet.",
     "errors": {
       "createFailed": "Could not create client",
-      "updateFailed": "Could not update client"
+      "updateFailed": "Could not update client",
+      "couldNotCreate": "Could not register client."
     },
     "newClient": "New client",
     "searchPlaceholder": "Search client...",
@@ -498,6 +503,15 @@
       "payment": "Paid:",
       "owes": "Owes:",
       "paid": "Paid"
+    },
+    "validations": {
+      "namePlaceholder": "E.g. John Smith",
+      "emailPlaceholder": "email@example.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frequent",
+        "new": "New"
+      }
     }
   },
   "services": {
@@ -600,7 +614,10 @@
     "cancel": "Cancel",
     "empty": "No transactions for this period.",
     "errors": {
-      "loadFailed": "Could not load finances"
+      "loadFailed": "Could not load finances",
+      "savingExpense": "Error saving expense",
+      "savingPayment": "Error saving payment",
+      "paymentError": "Error registering payment. Try again."
     },
     "errorLoading": "Error loading finances",
     "subtitle": "Business financial control",
@@ -1172,39 +1189,6 @@
     "errorUnableChangePassword": "Error changing password: {error}",
     "errorLinkingAccount": "Error linking your account with the business. Try signing in again."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "Could not cancel appointment: {error}",
-      "couldNotVerifyAvailability": "Could not verify time availability.",
-      "couldNotVerifyNewAvailability": "Could not verify new time availability.",
-      "couldNotReschedule": "Could not reschedule appointment: {error}",
-      "createFailed": "Error creating appointment. Try again.",
-      "updateFailed": "Error updating: {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "Could not register client.",
-      "createFailed": "Error creating client: {error}",
-      "updateFailed": "Error saving changes."
-    },
-    "validations": {
-      "namePlaceholder": "E.g. John Smith",
-      "emailPlaceholder": "email@example.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Frequent",
-        "new": "New"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Error saving expense",
-      "savingPayment": "Error saving payment",
-      "paymentError": "Error registering payment. Try again."
-    }
-  },
   "monthNames": {
     "january": "January",
     "february": "February",
@@ -1272,5 +1256,23 @@
   },
   "passkey": {
     "verifyError": "Could not verify biometrics. Use your password."
+  },
+  "toasts": {
+    "clientAdded": "Client added successfully",
+    "clientUpdated": "Client updated",
+    "clientDeleted": "Client deleted",
+    "appointmentCreated": "Appointment scheduled successfully",
+    "appointmentUpdated": "Appointment updated",
+    "appointmentCancelled": "Appointment cancelled",
+    "paymentRegistered": "Payment registered successfully",
+    "expenseAdded": "Expense recorded",
+    "serviceAdded": "Service added successfully",
+    "serviceUpdated": "Service updated",
+    "serviceDeleted": "Service deleted",
+    "settingsSaved": "Settings saved",
+    "profileUpdated": "Profile updated",
+    "employeeAdded": "Employee added",
+    "employeeDeleted": "Employee removed",
+    "passwordChanged": "Password updated successfully"
   }
 }

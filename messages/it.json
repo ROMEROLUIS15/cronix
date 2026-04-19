@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "Impossibile creare l'appuntamento",
       "updateFailed": "Impossibile aggiornare",
-      "loadFailed": "Impossibile caricare le informazioni"
+      "loadFailed": "Impossibile caricare le informazioni",
+      "couldNotCancel": "Impossibile annullare l'appuntamento: {error}",
+      "couldNotVerifyAvailability": "Impossibile verificare la disponibilità oraria.",
+      "couldNotVerifyNewAvailability": "Impossibile verificare la nuova disponibilità oraria.",
+      "couldNotReschedule": "Impossibile riprogrammare l'appuntamento: {error}"
     },
     "subtitle": "Gestisci tutti gli appuntamenti",
     "newAppointment": "Nuovo appuntamento",
@@ -411,7 +415,8 @@
     "empty": "Nessun cliente registrato ancora.",
     "errors": {
       "createFailed": "Impossibile creare il cliente",
-      "updateFailed": "Impossibile aggiornare il cliente"
+      "updateFailed": "Impossibile aggiornare il cliente",
+      "couldNotCreate": "Impossibile registrare il cliente."
     },
     "newClient": "Nuovo cliente",
     "searchPlaceholder": "Cerca cliente...",
@@ -498,6 +503,15 @@
     },
     "select": {
       "searchPlaceholder": "Cerca per nome o telefono..."
+    },
+    "validations": {
+      "namePlaceholder": "Es. Mario Rossi",
+      "emailPlaceholder": "email@esempio.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frequente",
+        "new": "Nuovo"
+      }
     }
   },
   "services": {
@@ -601,7 +615,10 @@
     "cancel": "Annulla",
     "empty": "Nessuna transazione per questo periodo.",
     "errors": {
-      "loadFailed": "Impossibile caricare le finanze"
+      "loadFailed": "Impossibile caricare le finanze",
+      "savingExpense": "Errore durante il salvataggio della spesa",
+      "savingPayment": "Errore durante il salvataggio del pagamento",
+      "paymentError": "Errore durante la registrazione del pagamento. Riprova."
     },
     "errorLoading": "Errore di caricamento",
     "subtitle": "Controllo finanziario",
@@ -1173,39 +1190,6 @@
     "errorUnableChangePassword": "Errore durante il cambio della password: {error}",
     "errorLinkingAccount": "Errore nel collegare il tuo account con l'attività. Prova a accedere di nuovo."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "Impossibile annullare l'appuntamento: {error}",
-      "couldNotVerifyAvailability": "Impossibile verificare la disponibilità oraria.",
-      "couldNotVerifyNewAvailability": "Impossibile verificare la nuova disponibilità oraria.",
-      "couldNotReschedule": "Impossibile riprogrammare l'appuntamento: {error}",
-      "createFailed": "Errore durante la creazione dell'appuntamento. Riprova.",
-      "updateFailed": "Errore durante l'aggiornamento: {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "Impossibile registrare il cliente.",
-      "createFailed": "Errore durante la creazione del cliente: {error}",
-      "updateFailed": "Errore durante il salvataggio delle modifiche."
-    },
-    "validations": {
-      "namePlaceholder": "Es. Mario Rossi",
-      "emailPlaceholder": "email@esempio.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Frequente",
-        "new": "Nuovo"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Errore durante il salvataggio della spesa",
-      "savingPayment": "Errore durante il salvataggio del pagamento",
-      "paymentError": "Errore durante la registrazione del pagamento. Riprova."
-    }
-  },
   "monthNames": {
     "january": "Gennaio",
     "february": "Febbraio",
@@ -1273,5 +1257,23 @@
   },
   "passkey": {
     "verifyError": "Impossibile verificare la biometria. Usa la tua password."
+  },
+  "toasts": {
+    "clientAdded": "Cliente aggiunto con successo",
+    "clientUpdated": "Cliente aggiornato",
+    "clientDeleted": "Cliente eliminato",
+    "appointmentCreated": "Appuntamento pianificato con successo",
+    "appointmentUpdated": "Appuntamento aggiornato",
+    "appointmentCancelled": "Appuntamento annullato",
+    "paymentRegistered": "Pagamento registrato con successo",
+    "expenseAdded": "Spesa registrata",
+    "serviceAdded": "Servizio aggiunto con successo",
+    "serviceUpdated": "Servizio aggiornato",
+    "serviceDeleted": "Servizio eliminato",
+    "settingsSaved": "Impostazioni salvate",
+    "profileUpdated": "Profilo aggiornato",
+    "employeeAdded": "Dipendente aggiunto",
+    "employeeDeleted": "Dipendente rimosso",
+    "passwordChanged": "Password aggiornata con successo"
   }
 }

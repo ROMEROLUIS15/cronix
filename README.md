@@ -45,9 +45,11 @@
 - Revenue aggregation pushed to DB — `SUM(net_amount)` in SQL, not in JS
 
 ### Notifications
-- **Unified event pipeline** — all booking events (web + WhatsApp) route through `NotificationService` via `emitBookingEvent()`
+- **Unified event pipeline** — all booking events (web + WhatsApp) route through `emitBookingEvent()` → single pipeline
 - **Idempotent delivery** — `UNIQUE(event_id)` on `notifications` table; QStash retries cannot produce duplicates
-- **WhatsApp** — owner alerts via unified pipeline; direct `sendWhatsAppMessage` bypasses eliminated
+- **WhatsApp owner alerts** — `notifications.ts` → `whatsapp-service` (`type: 'text'`) → Meta API → owner's personal number (set via `VINCULAR-slug`)
+- **Single WA transport** — `whatsapp-service` is the only Meta API call point: `type: 'text'` for owner alerts, `type: 'template'` for client reminders
+- **Transparent rate-limit retry** — Groq 429 → `503 + Retry-After` → QStash retries silently; client never sees an error message
 - **Web Push** — PWA-native, VAPID-signed, subscription management
 - **In-app** — real-time notification panel via Supabase Realtime broadcast
 - **Cron reminders** — Supabase `pg_cron` → Edge Function pipeline, tenant-aware scheduling
@@ -412,7 +414,7 @@ cronix/
 │       ├── whatsapp-webhook/               # Webhook receiver + queue dispatch
 │       │   ├── index.ts
 │       │   └── types.ts
-│       ├── whatsapp-service/               # Outbound message sender
+│       ├── whatsapp-service/               # ★ Single WA transport (text + template)
 │       │   └── index.ts
 │       ├── cron-reminders/                 # Appointment reminder pipeline
 │       │   ├── index.ts
@@ -559,6 +561,11 @@ npm install
 cp .env.example .env.local
 # Fill: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 #       GROQ_API_KEY, DEEPGRAM_API_KEY, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN
+#       CRON_SECRET (must match supabase/.env — used for process-whatsapp → whatsapp-service auth)
+
+cp supabase/.env.example supabase/.env
+# Fill: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET
+#       CRON_SECRET (same value as .env.local)
 
 npx supabase start
 npx supabase migration up

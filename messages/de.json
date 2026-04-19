@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "Termin konnte nicht erstellt werden",
       "updateFailed": "Termin konnte nicht aktualisiert werden",
-      "loadFailed": "Informationen konnten nicht geladen werden"
+      "loadFailed": "Informationen konnten nicht geladen werden",
+      "couldNotCancel": "Konnte Termin nicht stornieren: {error}",
+      "couldNotVerifyAvailability": "Konnte Zeitverfügbarkeit nicht überprüfen.",
+      "couldNotVerifyNewAvailability": "Konnte neue Zeitverfügbarkeit nicht überprüfen.",
+      "couldNotReschedule": "Konnte Termin nicht neu planen: {error}"
     },
     "subtitle": "Verwalten Sie all Ihre Termine",
     "newAppointment": "Neuer Termin",
@@ -411,7 +415,8 @@
     "empty": "Noch keine Kunden registriert.",
     "errors": {
       "createFailed": "Kunde konnte nicht erstellt werden",
-      "updateFailed": "Kunde konnte nicht aktualisiert werden"
+      "updateFailed": "Kunde konnte nicht aktualisiert werden",
+      "couldNotCreate": "Konnte Kunden nicht registrieren."
     },
     "newClient": "Neuer Kunde",
     "searchPlaceholder": "Kunden suchen...",
@@ -498,6 +503,15 @@
     },
     "select": {
       "searchPlaceholder": "Nach Name oder Telefon suchen..."
+    },
+    "validations": {
+      "namePlaceholder": "Z. B. Max Mustermann",
+      "emailPlaceholder": "email@beispiel.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Häufig",
+        "new": "Neu"
+      }
     }
   },
   "services": {
@@ -600,7 +614,10 @@
     "cancel": "Abbrechen",
     "empty": "Keine Transaktionen für diesen Zeitraum.",
     "errors": {
-      "loadFailed": "Finanzen konnten nicht geladen werden"
+      "loadFailed": "Finanzen konnten nicht geladen werden",
+      "savingExpense": "Fehler beim Speichern der Ausgabe",
+      "savingPayment": "Fehler beim Speichern der Zahlung",
+      "paymentError": "Fehler beim Registrieren der Zahlung. Versuchen Sie es erneut."
     },
     "errorLoading": "Fehler beim Laden",
     "subtitle": "Finanzkontrolle",
@@ -1172,39 +1189,6 @@
     "errorUnableChangePassword": "Fehler beim Ändern des Passworts: {error}",
     "errorLinkingAccount": "Fehler beim Verknüpfen Ihres Kontos mit dem Unternehmen. Versuchen Sie, sich erneut anzumelden."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "Konnte Termin nicht stornieren: {error}",
-      "couldNotVerifyAvailability": "Konnte Zeitverfügbarkeit nicht überprüfen.",
-      "couldNotVerifyNewAvailability": "Konnte neue Zeitverfügbarkeit nicht überprüfen.",
-      "couldNotReschedule": "Konnte Termin nicht neu planen: {error}",
-      "createFailed": "Fehler beim Erstellen des Termins. Versuchen Sie es erneut.",
-      "updateFailed": "Fehler beim Aktualisieren: {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "Konnte Kunden nicht registrieren.",
-      "createFailed": "Fehler beim Erstellen des Kunden: {error}",
-      "updateFailed": "Fehler beim Speichern von Änderungen."
-    },
-    "validations": {
-      "namePlaceholder": "Z. B. Max Mustermann",
-      "emailPlaceholder": "email@beispiel.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Häufig",
-        "new": "Neu"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Fehler beim Speichern der Ausgabe",
-      "savingPayment": "Fehler beim Speichern der Zahlung",
-      "paymentError": "Fehler beim Registrieren der Zahlung. Versuchen Sie es erneut."
-    }
-  },
   "monthNames": {
     "january": "Januar",
     "february": "Februar",
@@ -1272,5 +1256,23 @@
   },
   "passkey": {
     "verifyError": "Konnte Biometrie nicht überprüfen. Verwenden Sie Ihr Passwort."
+  },
+  "toasts": {
+    "clientAdded": "Kunde erfolgreich hinzugefügt",
+    "clientUpdated": "Kunde aktualisiert",
+    "clientDeleted": "Kunde entfernt",
+    "appointmentCreated": "Termin erfolgreich geplant",
+    "appointmentUpdated": "Termin aktualisiert",
+    "appointmentCancelled": "Termin abgesagt",
+    "paymentRegistered": "Zahlung erfolgreich registriert",
+    "expenseAdded": "Ausgabe erfasst",
+    "serviceAdded": "Dienstleistung erfolgreich hinzugefügt",
+    "serviceUpdated": "Dienstleistung aktualisiert",
+    "serviceDeleted": "Dienstleistung entfernt",
+    "settingsSaved": "Einstellungen gespeichert",
+    "profileUpdated": "Profil aktualisiert",
+    "employeeAdded": "Mitarbeiter hinzugefügt",
+    "employeeDeleted": "Mitarbeiter entfernt",
+    "passwordChanged": "Passwort erfolgreich aktualisiert"
   }
 }

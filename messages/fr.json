@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "Impossible de créer le rendez-vous",
       "updateFailed": "Impossible de mettre à jour",
-      "loadFailed": "Impossible de charger les informations"
+      "loadFailed": "Impossible de charger les informations",
+      "couldNotCancel": "Impossible d'annuler le rendez-vous : {error}",
+      "couldNotVerifyAvailability": "Impossible de vérifier la disponibilité horaire.",
+      "couldNotVerifyNewAvailability": "Impossible de vérifier la disponibilité du nouvel horaire.",
+      "couldNotReschedule": "Impossible de reprogrammer le rendez-vous : {error}"
     },
     "subtitle": "Gérez tous vos rendez-vous",
     "newAppointment": "Nouveau RDV",
@@ -411,7 +415,8 @@
     "empty": "Aucun client enregistré pour l'instant.",
     "errors": {
       "createFailed": "Impossible de créer le client",
-      "updateFailed": "Impossible de mettre à jour le client"
+      "updateFailed": "Impossible de mettre à jour le client",
+      "couldNotCreate": "Impossible d'enregistrer le client."
     },
     "newClient": "Nouveau client",
     "searchPlaceholder": "Rechercher client...",
@@ -498,6 +503,15 @@
     },
     "select": {
       "searchPlaceholder": "Rechercher par nom ou téléphone..."
+    },
+    "validations": {
+      "namePlaceholder": "Ex. Jean Dupont",
+      "emailPlaceholder": "email@exemple.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Fréquent",
+        "new": "Nouveau"
+      }
     }
   },
   "services": {
@@ -600,7 +614,10 @@
     "cancel": "Annuler",
     "empty": "Aucune transaction pour cette période.",
     "errors": {
-      "loadFailed": "Impossible de charger les finances"
+      "loadFailed": "Impossible de charger les finances",
+      "savingExpense": "Erreur lors de la sauvegarde de la dépense",
+      "savingPayment": "Erreur lors de la sauvegarde du paiement",
+      "paymentError": "Erreur lors de l'enregistrement du paiement. Réessayez."
     },
     "errorLoading": "Erreur de chargement",
     "subtitle": "Contrôle financier",
@@ -683,7 +700,11 @@
     "chartRevenueTitle": "Évolution du Revenu",
     "chartAptsTitle": "Historique RDV",
     "misc": {
-      "noService": "Aucun service assigné"
+      "noService": "Aucun service assigné",
+      "latestAppointments": "Derniers rendez-vous",
+      "noAppointments": "Aucun rendez-vous dans cette période",
+      "appointmentsCount": "{count, plural, =0 {Aucun rendez-vous} one {# rendez-vous} other {# rendez-vous}}",
+      "clientsCountLabel": "Total des clients enregistrés"
     },
     "export": "Exporter le rapport",
     "txtTitle": "Rapport Cronix",
@@ -734,13 +755,6 @@
       "finances": "Détail financier",
       "services": "Détail des services",
       "clients": "Détail des clients"
-    },
-    "misc": {
-      "noService": "Aucun service assigné",
-      "latestAppointments": "Derniers rendez-vous",
-      "noAppointments": "Aucun rendez-vous dans cette période",
-      "appointmentsCount": "{count, plural, =0 {Aucun rendez-vous} one {# rendez-vous} other {# rendez-vous}}",
-      "clientsCountLabel": "Total des clients enregistrés"
     },
     "status": {
       "completed": "Terminé",
@@ -1175,39 +1189,6 @@
     "errorUnableChangePassword": "Erreur lors du changement de mot de passe : {error}",
     "errorLinkingAccount": "Erreur lors de la liaison de votre compte à l'entreprise. Essayez de vous connecter à nouveau."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "Impossible d'annuler le rendez-vous : {error}",
-      "couldNotVerifyAvailability": "Impossible de vérifier la disponibilité horaire.",
-      "couldNotVerifyNewAvailability": "Impossible de vérifier la disponibilité du nouvel horaire.",
-      "couldNotReschedule": "Impossible de reprogrammer le rendez-vous : {error}",
-      "createFailed": "Erreur lors de la création du rendez-vous. Réessayez.",
-      "updateFailed": "Erreur lors de la mise à jour : {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "Impossible d'enregistrer le client.",
-      "createFailed": "Erreur lors de la création du client : {error}",
-      "updateFailed": "Erreur lors de la sauvegarde des modifications."
-    },
-    "validations": {
-      "namePlaceholder": "Ex. Jean Dupont",
-      "emailPlaceholder": "email@exemple.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Fréquent",
-        "new": "Nouveau"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Erreur lors de la sauvegarde de la dépense",
-      "savingPayment": "Erreur lors de la sauvegarde du paiement",
-      "paymentError": "Erreur lors de l'enregistrement du paiement. Réessayez."
-    }
-  },
   "monthNames": {
     "january": "Janvier",
     "february": "Février",
@@ -1275,5 +1256,23 @@
   },
   "passkey": {
     "verifyError": "Impossible de vérifier la biométrie. Utilisez votre mot de passe."
+  },
+  "toasts": {
+    "clientAdded": "Client ajouté avec succès",
+    "clientUpdated": "Client mis à jour",
+    "clientDeleted": "Client supprimé",
+    "appointmentCreated": "Rendez-vous planifié avec succès",
+    "appointmentUpdated": "Rendez-vous mis à jour",
+    "appointmentCancelled": "Rendez-vous annulé",
+    "paymentRegistered": "Paiement enregistré avec succès",
+    "expenseAdded": "Dépense enregistrée",
+    "serviceAdded": "Service ajouté avec succès",
+    "serviceUpdated": "Service mis à jour",
+    "serviceDeleted": "Service supprimé",
+    "settingsSaved": "Paramètres sauvegardés",
+    "profileUpdated": "Profil mis à jour",
+    "employeeAdded": "Employé ajouté",
+    "employeeDeleted": "Employé retiré",
+    "passwordChanged": "Mot de passe mis à jour avec succès"
   }
 }

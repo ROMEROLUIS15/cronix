@@ -1,6 +1,6 @@
 # Cronix — Arquitectura del Sistema
 
-> Última actualización: 2026-04-18.
+> Última actualización: 2026-04-18 (rev. notificaciones WA owner + QStash retry transparente).
 
 Este documento describe la arquitectura técnica de Cronix tras la refactorización a un modelo **Domain-Driven Repository** con **AI Orchestration Hardening**.
 
@@ -64,16 +64,30 @@ emitBookingEvent() → NotificationService
 
 ## 3. Pipeline de Notificaciones (Unificado)
 
-Desde 2026-04-18, existe un **único pipeline** para todas las notificaciones de booking:
+Existe un **único pipeline** para todas las notificaciones de booking:
 
 | Origen | Mecanismo |
 |--------|-----------|
 | Web (Dashboard AI) | `emitBookingEvent()` → `NotificationService` |
-| WhatsApp agent | `emitBookingEvent()` → `NotificationService` |
+| WhatsApp agent | `emitBookingEvent()` → `notifications.ts` → `whatsapp-service` |
 
-**Eliminado**: sistema paralelo legacy (`createInternalNotification` + `sendWhatsAppMessage` directo en `process-whatsapp/notifications.ts`).
+**Flujo completo del agente WhatsApp:**
+```
+tool-executor.ts → emitCreatedEvent / emitRescheduledEvent / emitCancelledEvent
+  └─ emitBookingEvent({ businessId, businessName, clientName, serviceName, date, time })
+        ├─ INSERT notifications (UNIQUE event_id — idempotente)
+        ├─ Supabase Realtime → dashboard UI
+        └─ POST whatsapp-service { type: 'text', to: businesses.phone, message }
+              └─ Meta API → WhatsApp personal del dueño
+```
 
-**Idempotencia garantizada**: `UNIQUE(event_id)` en tabla `notifications`. Reintentos de QStash o errores de red no generan duplicados.
+**Transporte único**: `whatsapp-service` es el único punto de salida de mensajes WhatsApp en todo el sistema:
+- `type: 'text'` → alertas al dueño (agendado, reagendado, cancelado)
+- `type: 'template'` → recordatorios a clientes (vía `cron-reminders`)
+
+**Idempotencia garantizada**: `UNIQUE(event_id)` en tabla `notifications`. Reintentos de QStash no generan duplicados.
+
+**Resiliencia ante rate limits**: Groq 429 → `process-whatsapp` responde `503 + Retry-After: N` → QStash reintenta transparentemente sin notificar al cliente.
 
 ---
 

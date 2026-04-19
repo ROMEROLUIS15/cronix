@@ -34,6 +34,19 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
+// Returns 503 + Retry-After so QStash retries automatically after the rate limit window.
+// The client never sees the error — they receive the response transparently once retried.
+function retryLater(retryAfterSecs: number): Response {
+  return new Response(JSON.stringify({ retry: true }), {
+    status: 503,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'application/json',
+      'Retry-After':  String(retryAfterSecs),
+    },
+  })
+}
+
 export async function handleMessage(req: Request): Promise<Response> {
   const { method } = req
 
@@ -94,11 +107,9 @@ export async function handleMessage(req: Request): Promise<Response> {
         whisperTokens = result.tokens
       } catch (err) {
         if (err instanceof LlmRateLimitError) {
-          const mins = Math.ceil(err.retryAfterSecs / 60)
-          captureException(err, { stage: 'whisper_rate_limit', sender })
-          await sendWhatsAppMessage(sender, `Estoy atendiendo muchas consultas de voz. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`)
+          addBreadcrumb('Whisper rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
           await flushSentry()
-          return json({ success: true })
+          return retryLater(err.retryAfterSecs)
         }
         if (err instanceof CircuitBreakerError) {
           addBreadcrumb('Whisper Circuit open hit', 'llm', 'error')
@@ -277,12 +288,9 @@ export async function handleMessage(req: Request): Promise<Response> {
       if (agentResult.tokens > 0) await trackTokenUsage(business.id, agentResult.tokens)
     } catch (err) {
       if (err instanceof LlmRateLimitError) {
-        addBreadcrumb('LLM Rate limit hit', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
-        captureException(err, { stage: 'ai_rate_limit', sender })
-        const mins = Math.ceil(err.retryAfterSecs / 60)
-        await sendWhatsAppMessage(sender, `Estoy atendiendo muchas consultas. Por favor intenta de nuevo en ${mins} minuto${mins > 1 ? 's' : ''}.`)
+        addBreadcrumb('LLM rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
         await flushSentry()
-        return json({ success: true })
+        return retryLater(err.retryAfterSecs)
       }
       if (err instanceof CircuitBreakerError) {
         addBreadcrumb('LLM Circuit open hit', 'llm', 'error')

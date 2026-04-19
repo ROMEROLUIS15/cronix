@@ -53,11 +53,29 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Parse payload ──────────────────────────────────────────────────────
-  let to: string, clientName: string, businessName: string, date: string, time: string, template = 'appointment_reminder'
+  let to: string,
+      type: string,
+      message: string | undefined,
+      clientName: string,
+      businessName: string,
+      date: string,
+      time: string,
+      template: string
+
   try {
-    const body = await req.json()
-    ;({ to, clientName, businessName, date, time, template = 'appointment_reminder' } = body)
-    if (!to || !clientName) throw new Error('Missing required fields')
+    const body = await req.json() as Record<string, unknown>
+    to           = body['to']           as string
+    type         = (body['type']        as string | undefined) ?? 'template'
+    message      = body['message']      as string | undefined
+    clientName   = (body['clientName']  as string | undefined) ?? ''
+    businessName = (body['businessName'] as string | undefined) ?? ''
+    date         = (body['date']        as string | undefined) ?? ''
+    time         = (body['time']        as string | undefined) ?? ''
+    template     = (body['template']    as string | undefined) ?? 'appointment_reminder'
+
+    if (!to) throw new Error('Missing required field: to')
+    if (type === 'text' && !message) throw new Error('Missing required field: message for type text')
+    if (type === 'template' && !clientName) throw new Error('Missing required field: clientName for type template')
   } catch (e) {
     captureException(e, { stage: 'parse_body' })
     await flushSentry()
@@ -70,8 +88,8 @@ Deno.serve(async (req: Request) => {
 
   if (!phoneNumberId || !accessToken) {
     captureException(new Error('WhatsApp credentials not configured'), {
-      stage:    'credentials_check',
-      missing:  !phoneNumberId ? 'WHATSAPP_PHONE_NUMBER_ID' : 'WHATSAPP_ACCESS_TOKEN',
+      stage:   'credentials_check',
+      missing: !phoneNumberId ? 'WHATSAPP_PHONE_NUMBER_ID' : 'WHATSAPP_ACCESS_TOKEN',
     })
     await flushSentry()
     return json({ success: false, error: 'WhatsApp credentials not configured' })
@@ -82,24 +100,44 @@ Deno.serve(async (req: Request) => {
 
   addBreadcrumb('Calling Meta WhatsApp API', 'whatsapp', 'info', {
     phone_number_id: phoneNumberId,
-    template,
+    type,
+    template: type === 'template' ? template : undefined,
   })
 
-  // ── Template Configuration ─────────────────────────────────────────────
-  const components = [
-    {
-      type: 'body',
-      parameters: [
-        { type: 'text', text: clientName   },
-        { type: 'text', text: businessName },
-      ],
-    },
-  ]
+  // ── Build Meta API payload ─────────────────────────────────────────────
+  let waPayload: Record<string, unknown>
 
-  // Add specific params based on template
-  if (template === 'appointment_reminder') {
-    components[0].parameters.push({ type: 'text', text: date })
-    components[0].parameters.push({ type: 'text', text: time })
+  if (type === 'text') {
+    waPayload = {
+      messaging_product: 'whatsapp',
+      to:                phone,
+      type:              'text',
+      text:              { body: message },
+    }
+  } else {
+    const components = [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: clientName   },
+          { type: 'text', text: businessName },
+        ],
+      },
+    ]
+    if (template === 'appointment_reminder') {
+      components[0].parameters.push({ type: 'text', text: date })
+      components[0].parameters.push({ type: 'text', text: time })
+    }
+    waPayload = {
+      messaging_product: 'whatsapp',
+      to:                phone,
+      type:              'template',
+      template: {
+        name:       template,
+        language:   { code: 'es' },
+        components,
+      },
+    }
   }
 
   // ── Call Meta API ──────────────────────────────────────────────────────
@@ -107,40 +145,31 @@ Deno.serve(async (req: Request) => {
     const res = await fetch(`${WA_API_BASE}/${phoneNumberId}/messages`, {
       method:  'POST',
       headers: {
-        'Authorization':  `Bearer ${accessToken}`,
-        'Content-Type':   'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type':  'application/json',
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to:                phone,
-        type:              'template',
-        template: {
-          name:     template,
-          language: { code: 'es' },
-          components,
-        },
-      }),
+      body: JSON.stringify(waPayload),
     })
 
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
       const msg     = (errBody as { error?: { message?: string } })?.error?.message
-      // Capture Meta API errors — critical for diagnosing token expiry or template issues
       captureException(new Error(`Meta API error: ${msg ?? `HTTP ${res.status}`}`), {
         stage:       'meta_api_call',
         http_status: res.status,
         meta_error:  msg,
         business:    businessName,
+        type,
       })
       await flushSentry()
       return json({ success: false, error: msg ?? `HTTP ${res.status}` })
     }
 
-    addBreadcrumb('WhatsApp message sent successfully', 'whatsapp', 'info')
+    addBreadcrumb('WhatsApp message sent successfully', 'whatsapp', 'info', { type })
     await flushSentry()
     return json({ success: true })
   } catch (e) {
-    captureException(e, { stage: 'meta_api_call', business: businessName })
+    captureException(e, { stage: 'meta_api_call', business: businessName, type })
     await flushSentry()
     return json({
       success: false,

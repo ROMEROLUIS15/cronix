@@ -14,6 +14,9 @@ The WhatsApp processing flow features **7 layers of protection** before consumin
 
 ### 2. Resilience Queue (QStash)
 *   **Purpose:** Message buffer to meet WhatsApp's 10s response time requirement and handle automatic retries.
+*   **Retry budget:** `Upstash-Retries: 5` per message.
+*   **Transparent rate-limit retry:** When Groq returns 429, `process-whatsapp` responds `503 + Retry-After: N` (where N comes from Groq's `retry-after` header). QStash waits exactly N seconds and retries automatically — the client never receives an error message.
+*   **Deduplication:** `Upstash-Deduplication-Id: msg.id` prevents processing the same Meta event twice even under retry storms.
 
 ### 3. Circuit Breaker (AI Resilience)
 *   **Limit:** 3 consecutive failures from Groq.

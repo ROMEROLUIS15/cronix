@@ -31,15 +31,16 @@ type AppointmentEventType =
   | 'appointment.cancelled'
 
 interface AppointmentEvent {
-  eventId:     string
-  type:        AppointmentEventType
-  businessId:  string
-  clientName:  string
-  serviceName: string
-  date:        string
-  time:        string
-  userId:      string
-  channel:     'whatsapp'
+  eventId:      string
+  type:         AppointmentEventType
+  businessId:   string
+  businessName: string
+  clientName:   string
+  serviceName:  string
+  date:         string
+  time:         string
+  userId:       string
+  channel:      'whatsapp'
 }
 
 // ── Title / Content builders (mirrors NotificationService helpers) ─────────────
@@ -165,41 +166,32 @@ async function pushToRealtime(event: AppointmentEvent): Promise<void> {
 }
 
 // ── Core: WhatsApp owner notification via whatsapp-service edge function ───────
-// Uses the same edge function as NotificationService — single WA send point.
+// whatsapp-service is the single WA transport point for the whole system.
+// We pass type:'text' + message so the service sends free-text instead of a template.
 
-async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
+async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string): Promise<void> {
   try {
     // @ts-ignore — Deno runtime globals
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')     ?? ''
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     // @ts-ignore
-    const cronSecret  = Deno.env.get('CRON_SECRET')      ?? ''
+    const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
 
     if (!cronSecret) {
       console.warn('[NOTIFICATION-WA] CRON_SECRET not set — owner WA skipped')
       return
     }
 
-    // Resolve owner phone from public.users or fallback to businesses.phone
-    const { data: ownerRow } = await supabase
-      .from('users')
+    // Owner's verified WhatsApp is stored in businesses.phone (set via VINCULAR-slug)
+    const { data: bData } = await supabase
+      .from('businesses')
       .select('phone')
-      .eq('business_id', event.businessId)
-      .eq('role', 'owner')
+      .eq('id', event.businessId)
       .maybeSingle()
 
-    let phone = (ownerRow as { phone?: string | null })?.phone
+    const phone = (bData as { phone?: string | null })?.phone
 
     if (!phone) {
-      const { data: bData } = await supabase
-        .from('businesses')
-        .select('phone')
-        .eq('id', event.businessId)
-        .maybeSingle()
-      phone = (bData as { phone?: string | null })?.phone
-    }
-
-    if (!phone) {
-      console.warn('[NOTIFICATION-WA] No phone found for owner or business, skipping WA notification')
+      console.warn('[NOTIFICATION-WA] No owner phone found for business, skipping WA notification', event.businessId)
       return
     }
 
@@ -212,17 +204,16 @@ async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
         'x-internal-secret': cronSecret,
       },
       body: JSON.stringify({
+        type:         'text',
         to:           phone,
-        clientName:   event.clientName,
-        businessName: 'tu negocio',
-        date:         event.date,
-        time:         event.time,
         message,
-        template:     'appointment_reminder',
+        // kept for traceability in whatsapp-service logs
+        clientName:   event.clientName,
+        businessName,
       }),
     })
   } catch (err) {
-    // Non-critical
+    // Non-critical — booking already committed, notification is best-effort
     console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
   }
 }
@@ -236,7 +227,7 @@ async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
  *   1. Idempotency check (event_id in DB)
  *   2. Persist to notifications table
  *   3. Realtime broadcast
- *   4. WhatsApp to owner via whatsapp-service edge function
+ *   4. WhatsApp to owner via whatsapp-service edge function (type:'text')
  *
  * Fire-and-forget safe: nunca lanza excepciones al caller.
  * El booking ya fue completado cuando esto se llama.
@@ -258,7 +249,7 @@ export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
     await pushToRealtime(event)
 
     // 4. WhatsApp owner (only if DB succeeded)
-    await sendOwnerWhatsApp(event)
+    await sendOwnerWhatsApp(event, event.businessName)
 
   } catch (err) {
     captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })
@@ -279,17 +270,18 @@ export function emitCreatedEvent(
 ): void {
   void emitBookingEvent({
     // @ts-ignore — crypto is available in Deno
-    eventId:     crypto.randomUUID(),
-    type:        'appointment.created',
-    businessId:  business.id,
+    eventId:      crypto.randomUUID(),
+    type:         'appointment.created',
+    businessId:   business.id,
+    businessName: business.name,
     clientName,
     serviceName,
     date,
     time,
     // In the WhatsApp channel the client is unauthenticated (no Supabase userId).
     // 'whatsapp-agent' is a stable sentinel that identifies this origin in audit logs.
-    userId:      'whatsapp-agent',
-    channel:     'whatsapp',
+    userId:       'whatsapp-agent',
+    channel:      'whatsapp',
   })
 }
 
@@ -303,15 +295,16 @@ export function emitRescheduledEvent(
 ): void {
   void emitBookingEvent({
     // @ts-ignore
-    eventId:     crypto.randomUUID(),
-    type:        'appointment.rescheduled',
-    businessId:  business.id,
+    eventId:      crypto.randomUUID(),
+    type:         'appointment.rescheduled',
+    businessId:   business.id,
+    businessName: business.name,
     clientName,
     serviceName,
-    date:        newDate,
-    time:        newTime,
-    userId:      'whatsapp-agent',
-    channel:     'whatsapp',
+    date:         newDate,
+    time:         newTime,
+    userId:       'whatsapp-agent',
+    channel:      'whatsapp',
   })
 }
 
@@ -328,14 +321,15 @@ export function emitCancelledEvent(
 
   void emitBookingEvent({
     // @ts-ignore
-    eventId:     crypto.randomUUID(),
-    type:        'appointment.cancelled',
-    businessId:  business.id,
+    eventId:      crypto.randomUUID(),
+    type:         'appointment.cancelled',
+    businessId:   business.id,
+    businessName: business.name,
     clientName,
     serviceName,
     date,
     time,
-    userId:      'whatsapp-agent',
-    channel:     'whatsapp',
+    userId:       'whatsapp-agent',
+    channel:      'whatsapp',
   })
 }

@@ -146,8 +146,9 @@ serve(async (req: Request) => {
       const qstashResponse = await fetch(publishUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${qstashToken}`,
-          "Content-Type": "application/json",
+          "Authorization":           `Bearer ${qstashToken}`,
+          "Content-Type":            "application/json",
+          "Upstash-Retries":         "5",
           ...(messages[0].id ? { "Upstash-Deduplication-Id": messages[0].id } : {})
         },
         body: rawBody

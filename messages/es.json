@@ -338,7 +338,11 @@
     "errors": {
       "createFailed": "No se pudo crear la cita",
       "updateFailed": "No se pudo actualizar la cita",
-      "loadFailed": "No se pudo cargar la información"
+      "loadFailed": "No se pudo cargar la información",
+      "couldNotCancel": "No se pudo cancelar la cita: {error}",
+      "couldNotVerifyAvailability": "No se pudo verificar la disponibilidad del horario.",
+      "couldNotVerifyNewAvailability": "No se pudo verificar la disponibilidad del nuevo horario.",
+      "couldNotReschedule": "No se pudo reagendar la cita: {error}"
     },
     "subtitle": "Gestiona todas tus citas",
     "newAppointment": "Nueva cita",
@@ -411,7 +415,8 @@
     "empty": "No hay clientes registrados aún.",
     "errors": {
       "createFailed": "No se pudo crear el cliente",
-      "updateFailed": "No se pudo actualizar el cliente"
+      "updateFailed": "No se pudo actualizar el cliente",
+      "couldNotCreate": "No se pudo registrar al cliente."
     },
     "newClient": "Nuevo cliente",
     "searchPlaceholder": "Buscar cliente...",
@@ -498,6 +503,15 @@
     },
     "select": {
       "searchPlaceholder": "Buscar por nombre o teléfono..."
+    },
+    "validations": {
+      "namePlaceholder": "Ej. Juan Pérez",
+      "emailPlaceholder": "correo@ejemplo.com",
+      "tags": {
+        "vip": "VIP",
+        "frequent": "Frecuente",
+        "new": "Nuevo"
+      }
     }
   },
   "services": {
@@ -600,7 +614,10 @@
     "cancel": "Cancelar",
     "empty": "No hay transacciones para este período.",
     "errors": {
-      "loadFailed": "No se pudieron cargar las finanzas"
+      "loadFailed": "No se pudieron cargar las finanzas",
+      "savingExpense": "Error al guardar el gasto",
+      "savingPayment": "Error al guardar el cobro",
+      "paymentError": "Error al registrar el pago. Intenta de nuevo."
     },
     "errorLoading": "Error al cargar las finanzas",
     "subtitle": "Control financiero del negocio",
@@ -658,6 +675,12 @@
       "notesPlaceholder": "Opcional",
       "cancel": "Cancelar",
       "save": "Guardar cobro"
+    },
+    "expensesPage": {
+      "searchPlaceholder": "Buscar gasto..."
+    },
+    "transactionsPage": {
+      "searchPlaceholder": "Buscar transacción..."
     }
   },
   "reports": {
@@ -1062,14 +1085,6 @@
     "viewPayload": "Ver payload",
     "retryBtn": "Reintentar"
   },
-  "finances": {
-    "expensesPage": {
-      "searchPlaceholder": "Buscar gasto..."
-    },
-    "transactionsPage": {
-      "searchPlaceholder": "Buscar transacción..."
-    }
-  },
   "adminUsers": {
     "title": "Gestión de usuarios",
     "subtitle": "Panel de control de usuarios de la plataforma",
@@ -1174,39 +1189,6 @@
     "errorUnableChangePassword": "Error al cambiar contraseña: {error}",
     "errorLinkingAccount": "Error al vincular tu cuenta con el negocio. Intenta iniciar sesión."
   },
-  "appointments": {
-    "errors": {
-      "couldNotCancel": "No se pudo cancelar la cita: {error}",
-      "couldNotVerifyAvailability": "No se pudo verificar la disponibilidad del horario.",
-      "couldNotVerifyNewAvailability": "No se pudo verificar la disponibilidad del nuevo horario.",
-      "couldNotReschedule": "No se pudo reagendar la cita: {error}",
-      "createFailed": "Error al crear la cita. Intenta de nuevo.",
-      "updateFailed": "Error al actualizar: {error}"
-    }
-  },
-  "clients": {
-    "errors": {
-      "couldNotCreate": "No se pudo registrar al cliente.",
-      "createFailed": "Error al crear el cliente: {error}",
-      "updateFailed": "Error al guardar los cambios."
-    },
-    "validations": {
-      "namePlaceholder": "Ej. Juan Pérez",
-      "emailPlaceholder": "correo@ejemplo.com",
-      "tags": {
-        "vip": "VIP",
-        "frequent": "Frecuente",
-        "new": "Nuevo"
-      }
-    }
-  },
-  "finances": {
-    "errors": {
-      "savingExpense": "Error al guardar el gasto",
-      "savingPayment": "Error al guardar el cobro",
-      "paymentError": "Error al registrar el pago. Intenta de nuevo."
-    }
-  },
   "monthNames": {
     "january": "Enero",
     "february": "Febrero",
@@ -1274,5 +1256,23 @@
   },
   "passkey": {
     "verifyError": "No se pudo verificar la biometría. Usa tu contraseña."
+  },
+  "toasts": {
+    "clientAdded": "Cliente agregado exitosamente",
+    "clientUpdated": "Cliente actualizado",
+    "clientDeleted": "Cliente eliminado",
+    "appointmentCreated": "Cita agendada exitosamente",
+    "appointmentUpdated": "Cita actualizada",
+    "appointmentCancelled": "Cita cancelada",
+    "paymentRegistered": "Pago registrado exitosamente",
+    "expenseAdded": "Gasto registrado",
+    "serviceAdded": "Servicio agregado exitosamente",
+    "serviceUpdated": "Servicio actualizado",
+    "serviceDeleted": "Servicio eliminado",
+    "settingsSaved": "Configuración guardada",
+    "profileUpdated": "Perfil actualizado",
+    "employeeAdded": "Empleado agregado",
+    "employeeDeleted": "Empleado eliminado",
+    "passwordChanged": "Contraseña actualizada exitosamente"
   }
 }
