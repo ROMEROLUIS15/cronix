@@ -41,9 +41,10 @@ This document details the end-to-end operation of the AI agent deployed on Supab
 
 **Files:** `ai-agent.ts` → `tool-executor.ts`
 
-1. **Reasoning model (Llama-3.1-8b):** Analyzes intent, decides tool call or text response.
-2. **`tool-executor.ts`:** Validates args, executes DB mutation, returns `{ success, result, data }` — structured payload, no string parsing.
-3. **Response model (Llama-3.3-70b):** Converts the tool result into a warm, human-readable WhatsApp message.
+1. **Unified Reasoning Model (Llama-3.3-70b):** Both the decision loop and the final response now use the 70B model. This practically eliminates JSON/Tool-calling format leaks while remaining extremely fast on Groq.
+2. **Contextual Calendar Injection:** `prompt-builder.ts` directly feeds the exact human-readable dates for "Today" and "Tomorrow" into the System Prompt. This relieves the LLM from calendar-math, eradicating date hallucinations.
+3. **Optimized Intent Guardrails:** For cancellations with a *single* appointment, the LLM skips asking "Are you sure?" to save tokens and eliminate UX friction. For multiple appointments or reschedulings, it strictly demands verification.
+4. **`tool-executor.ts`:** Validates args, executes DB mutation, returns `{ success, result, data }` — structured payload, no string parsing.
 
 ### Phase 5: Notification Dispatch (Unified Pipeline)
 
@@ -61,6 +62,7 @@ tool-executor.ts (write success)
         └─ sendOwnerWhatsApp()
               ├─ Resolves owner phone from businesses.phone (set via VINCULAR-slug)
               └─ POST whatsapp-service { type: 'text', to: phone, message, businessName }
+                      └─ Injects Authorization: Bearer SUPABASE_SERVICE_ROLE_KEY to bypass Kong 401 blocks
                       └─ Meta API: free-text message to owner's personal WhatsApp
 ```
 
@@ -68,19 +70,18 @@ tool-executor.ts (write success)
 - `type: 'text'` — free-text messages (owner booking alerts, built by `buildOwnerWhatsAppMessage`)
 - `type: 'template'` — pre-approved Meta templates (client appointment reminders from `cron-reminders`)
 
-**Eliminated:** Legacy `createInternalNotification`, hardcoded `businessName: 'tu negocio'`, and `users` table phone lookup that always returned null. All owner WA alerts now use the verified phone from `businesses.phone`.
+**Internal Gateway Bridge:** Since `whatsapp-service` sits behind the Supabase API Gateway (verifying JWTs by default), `notifications.ts` strictly injects the `SUPABASE_SERVICE_ROLE_KEY` during its `fetch` dispatch. This prevents `401 Unauthorized` errors when Edge Functions communicate with one another.
 
 ---
 
 ## 2. Hardening Guardrails
 
-The WhatsApp agent (as of 2026-04-18) does **not** implement the same confirmation interception or availability-claim guards as the web orchestrator, because:
+The WhatsApp agent (as of 2026-04-19) implements robust prompt-based constraints:
 
-- The WhatsApp flow uses a single-model ReAct loop (no `DecisionEngine`/`ExecutionEngine` split).
-- Confirmation is handled conversationally — the LLM asks "¿Confirmas?" before calling write tools.
+- The WhatsApp flow uses a single-model ReAct loop heavily anchored by contextual constraints.
+- Confirmation is mostly handled conversationally — the LLM asks "¿Confirmas?" before calling write tools, except for direct 1-to-1 cancellations to optimize response tokens.
 - The structured `data` return from `tool-executor.ts` eliminates all string parsing for notification dispatch.
-
-Future versions may adopt shared guardrail primitives.
+- **Empty Output Fallbacks:** If the LLM returns an empty string, the Agent Loop enforces an `INTERNAL_SYNTAX_FALLBACK` instead of crashing the upstream Meta API connection.
 
 ---
 
@@ -118,11 +119,9 @@ Groq → 429 (retry-after: 30s)
 - **Zero message loss:** QStash retry (5 attempts) + `wa_dead_letter_queue` for unrecoverable failures.
 - **Transparent rate limiting:** Groq 429 → QStash retries silently. Client never sees "try again" messages.
 - **Idempotent notifications:** UNIQUE constraint prevents duplicate alerts on QStash retries.
-- **Dual-model efficiency:** Small model (8B) for logic, large model (70B) for copywriting.
-- **Anti-hallucination:** `tool-executor.ts` uses Zero-Trust architecture — LLM cannot mutate DB directly.
+- **Unified 70B Performance:** High-tier tool-calling format accuracy with sub-2s Groq response times.
+- **Anti-hallucination:** `prompt-builder.ts` does exactly the calendar math computation so the LLM doesn't have to guess the dates.
 - **Dashboard isolation:** Async Edge Functions do not affect Next.js performance.
-- **Structured event data:** Write tools return typed `BookingEventData` — no regex on result strings.
-- **Single WA transport:** `whatsapp-service` is the only point that calls Meta API — no scattered direct calls.
 
 ---
 
@@ -139,8 +138,9 @@ Groq → 429 (retry-after: 30s)
 
 | Secret / Config | Where set | Purpose |
 |----------------|-----------|---------|
-| `CRON_SECRET` | Supabase project secrets + `supabase/.env` | Auth between `process-whatsapp` and `whatsapp-service` |
+| `CRON_SECRET` | Supabase project secrets + `supabase/.env` | Webhook identity verification |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase project secrets | Automatically injected by Deno to bypass Kong 401 |
 | `WHATSAPP_PHONE_NUMBER_ID` | Supabase project secrets | Meta API sender ID |
 | `WHATSAPP_ACCESS_TOKEN` | Supabase project secrets | Meta API bearer token |
 | `QSTASH_TOKEN` | Supabase project secrets | Publish to QStash queue |
-| `config.toml` | `[functions.whatsapp-service]` `verify_jwt = false` | Allow internal service-to-service calls |
+
