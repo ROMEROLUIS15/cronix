@@ -37,7 +37,7 @@ async function verifyAssertion(assertion: unknown): Promise<{ verified: boolean;
 }
 
 function redirectWithSession(tokenHash: string) {
-  window.location.href = `/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=email&next=/dashboard`
+  window.location.href = `/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink&next=/dashboard`
 }
 
 export function usePasskeyLogin(): UsePasskeyLoginReturn {

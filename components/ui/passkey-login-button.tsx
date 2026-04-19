@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Fingerprint, Loader2, Info, X } from 'lucide-react'
 import { usePasskeyLogin } from '@/components/hooks/use-passkey-login'
 import { browserSupportsWebAuthnAutofill } from '@simplewebauthn/browser'
@@ -57,7 +56,6 @@ function SetupSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function PasskeyLoginButton() {
-  const router = useRouter()
   const { loading, error, authenticate, startConditional, clearError } = usePasskeyLogin()
   const [supported, setSupported] = useState(false)
   const [noPasskey, setNoPasskey] = useState(false)
