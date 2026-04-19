@@ -76,7 +76,7 @@ export async function getActiveAppointments(
 export async function getConversationHistory(
   businessId:  string,
   senderPhone: string,
-  limit:       number = 4
+  limit:       number = 2
 ): Promise<ChatHistoryItem[]> {
   const { data } = await supabase
     .from('wa_audit_logs')
@@ -108,7 +108,7 @@ export async function getBookedSlots(
   timezone:   string
 ): Promise<Array<{ start_at: string; end_at: string }>> {
   const now      = new Date()
-  const in14days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+  const in7days  = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   const { data } = await supabase
     .from('appointments')
@@ -116,7 +116,7 @@ export async function getBookedSlots(
     .eq('business_id', businessId)
     .not('status', 'in', '("cancelled","no_show")')
     .gte('start_at', now.toISOString())
-    .lte('start_at', in14days.toISOString())
+    .lte('start_at', in7days.toISOString())
     .order('start_at', { ascending: true })
 
   if (!data) return []

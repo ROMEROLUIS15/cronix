@@ -24,7 +24,7 @@ import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
 import { getBusinessesAt8PM, getTomorrowRange }         from './modules/business-scheduler.ts'
 import { getTomorrowAppointments, getSkippedReminderIds } from './modules/appointment-fetcher.ts'
-import { sendWhatsAppReminders }                        from './modules/whatsapp-sender.ts'
+import { sendWhatsAppReminders, sendOwnerWhatsAppSummary }    from './modules/whatsapp-sender.ts'
 import { buildReminderNotification, buildWhatsAppFailureNotification,
          insertNotification, sendPushNotification }     from './modules/notification-builder.ts'
 import { cleanupOldNotifications }                      from './modules/cleanup.ts'
@@ -142,6 +142,9 @@ Deno.serve(async (req: Request) => {
     // ── 3. Send consolidated push to business owner ───────────────────────
     const pushSent = await sendPushNotification(biz, apts, cronSecret)
     if (pushSent) results.push_sent++
+
+    // ── 4. Send Owner WhatsApp Summary ────────────────────────────────────
+    await sendOwnerWhatsAppSummary(biz, apts, cronSecret)
   }
 
   // ── Cleanup: Delete notifications older than 30 days ─────────────────────

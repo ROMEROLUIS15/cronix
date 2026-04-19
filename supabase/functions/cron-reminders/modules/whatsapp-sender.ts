@@ -89,3 +89,50 @@ export async function sendWhatsAppReminders(
 
   return { sent, failed, failedAppointments }
 }
+
+export async function sendOwnerWhatsAppSummary(
+  business: BusinessRow,
+  appointments: AppointmentWithClient[],
+  cronSecret: string
+): Promise<boolean> {
+  if (!business.phone) return false
+  if (appointments.length === 0) return false
+
+  const settings = business.settings as Record<string, unknown> | null
+  const whatsappEnabled = (settings?.notifications as Record<string, unknown>)?.whatsapp !== false
+  if (!whatsappEnabled) return false
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
+  const timezone = business.timezone ?? 'UTC'
+
+  const listed = appointments.map(apt => {
+    const clientName = apt.clients?.name ?? 'Cliente'
+    const serviceName = apt.services?.name ?? 'Servicio'
+    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
+      hour: '2-digit', minute: '2-digit', timeZone: timezone,
+    })
+    return `• ${time} | ${clientName} - ${serviceName}`
+  })
+
+  const messageText = `📋 *Resumen de citas para mañana*\n\nTienes ${appointments.length} cita(s) programada(s):\n\n${listed.join('\n')}\n\n🤖 _Notificación automática de Cronix_`
+
+  try {
+    const res = await fetch(whatsappUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': cronSecret,
+      },
+      body: JSON.stringify({
+        to: business.phone,
+        type: 'text',
+        message: messageText,
+      }),
+    })
+    const data = await res.json().catch(() => ({ success: false })) as { success?: boolean }
+    return data.success === true
+  } catch {
+    return false
+  }
+}

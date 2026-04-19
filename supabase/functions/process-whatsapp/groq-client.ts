@@ -114,8 +114,11 @@ export async function callLlm(
   enableCache    = false,
 ): Promise<{ response: LlmResponse; tokens: number }> {
   // @ts-ignore — Deno runtime global
-  const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
-  if (!apiKey) throw new Error('LLM_API_KEY no configurada')
+  const apiKeysStr = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
+  if (!apiKeysStr) throw new Error('LLM_API_KEY no configurada')
+  
+  const apiKeys = apiKeysStr.split(',').map(k => k.trim()).filter(Boolean)
+  if (apiKeys.length === 0) throw new Error('LLM_API_KEY no configurada correctamente')
 
   const serviceName = 'GROQ_LLM'
   if (!(await checkCircuitBreaker(serviceName))) {
@@ -134,37 +137,57 @@ export async function callLlm(
     payload.parallel_tool_calls  = false  // prevent duplicate bookings from parallel calls
   }
 
-  let res: Response
-  try {
-    res = await fetch(LLM_API_URL, {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type':  'application/json',
-        ...heliconeHeaders(heliconeProps, enableCache),
-      },
-      body: JSON.stringify(payload),
-    })
-  } catch (err) {
-    await reportServiceFailure(serviceName)
-    throw err
-  }
-
-  const data: LlmResponse = await res.json()
-
-  if (!res.ok) {
-    if (res.status === 429) {
-      const retryAfter = parseInt(res.headers.get('retry-after') ?? '60', 10)
-      throw new LlmRateLimitError(isNaN(retryAfter) ? 60 : retryAfter)
+  // Key Pooling: Try keys in sequence if one hits Rate Limit 429
+  for (let i = 0; i < apiKeys.length; i++) {
+    const apiKey = apiKeys[i]!
+    let res: Response;
+    try {
+      res = await fetch(LLM_API_URL, {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type':  'application/json',
+          ...heliconeHeaders(heliconeProps, enableCache),
+        },
+        body: JSON.stringify(payload),
+      })
+    } catch (err) {
+      // Network layer failure
+      if (i === apiKeys.length - 1) {
+        await reportServiceFailure(serviceName)
+        throw err
+      }
+      continue // Try next key
     }
-    if (res.status >= 500) await reportServiceFailure(serviceName)
-    throw new Error(`LLM API Error: ${JSON.stringify(data.error ?? data)}`)
+
+    const data: LlmResponse = await res.json().catch(() => ({ error: { message: 'Invalid JSON response' } }))
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        // If we have more keys, try the next one instantly!
+        if (i < apiKeys.length - 1) {
+          continue
+        }
+        // No more keys, throw the explicit Rate Limit Error so QStash reschedules
+        const retryAfter = parseInt(res.headers.get('retry-after') ?? '60', 10)
+        throw new LlmRateLimitError(isNaN(retryAfter) ? 60 : retryAfter)
+      }
+      
+      if (res.status >= 500) {
+         if (i === apiKeys.length - 1) await reportServiceFailure(serviceName)
+         continue // Optionally try next key on 5xx errors too
+      }
+
+      throw new Error(`LLM API Error: ${JSON.stringify(data.error ?? data)}`)
+    }
+
+    await reportServiceSuccess(serviceName)
+
+    return {
+      response: data,
+      tokens:   data.usage?.total_tokens ?? 0,
+    }
   }
 
-  await reportServiceSuccess(serviceName)
-
-  return {
-    response: data,
-    tokens:   data.usage?.total_tokens ?? 0,
-  }
+  throw new Error('Todas las API keys fallaron')
 }

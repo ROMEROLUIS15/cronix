@@ -224,7 +224,7 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     if (whisperTokens > 0) await trackTokenUsage(business.id, whisperTokens)
 
-    const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 50000
+    const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 300000
     const [withinBusinessQuota, withinTokenQuota] = await Promise.all([
       checkBusinessUsageLimit(business.id),
       checkTokenQuota(business.id, dailyTokenLimit),
@@ -238,7 +238,7 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     if (!withinTokenQuota) {
       addBreadcrumb('Token quota exceeded', 'rate-limit', 'warning', { business_id: business.id })
-      await sendWhatsAppMessage(sender, "🤖 Lo siento, este negocio ha alcanzado su límite de procesamiento diario. Por favor intenta de nuevo mañana o contacta al administrador.")
+      await sendWhatsAppMessage(sender, "🤖 Hemos procesado el volumen máximo de reservas automatizadas por hoy. Pero no te preocupes, tu solicitud fue guardada y el personal del negocio te atenderá directamente por este chat en la brevedad posible.")
       await flushSentry()
       return json({ success: true, message: 'Token quota exceeded — user notified' })
     }
@@ -252,7 +252,7 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     const [activeAppointments, history, bookedSlots] = await Promise.all([
       client ? getActiveAppointments(business.id, client.id) : Promise.resolve([]),
-      getConversationHistory(business.id, sender, 4),
+      getConversationHistory(business.id, sender, 2),
       getBookedSlots(business.id, timezone),
     ])
 
