@@ -43,7 +43,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
       case 'success': return <CheckCircle2 size={14} className="text-[#30D158]" />
       case 'warning': return <AlertCircle size={14} className="text-[#FFD60A]" />
       case 'error':   return <XCircle size={14} className="text-[#FF3B30]" />
-      default:        return <Info size={14} style={{ color: 'hsl(var(--primary))' }} />
+      default:        return <Info size={14} style={{ color: '#0062FF' }} />
     }
   }
 
@@ -76,7 +76,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                 <h3 className="text-sm font-bold text-[#F2F2F2]">{t('title')}</h3>
                 {unreadCount > 0 && (
                   <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black text-white"
-                    style={{ backgroundColor: 'hsl(var(--primary))' }}>
+                    style={{ backgroundColor: '#0062FF' }}>
                     {unreadCount}
                   </span>
                 )}
@@ -85,7 +85,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                 <button
                   onClick={onMarkAllRead}
                   className="flex items-center gap-1.5 text-[11px] font-bold transition-colors hover:opacity-70"
-                  style={{ color: 'hsl(var(--primary))' }}
+                  style={{ color: '#0062FF' }}
                 >
                   <CheckCheck size={12} />
                   {t('markAllRead')}
@@ -109,7 +109,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                     <div
                       key={notif.id}
                       className="group p-4 transition-colors hover:bg-white/5"
-                      style={!notif.is_read ? { backgroundColor: 'rgba(var(--primary-rgb), 0.03)' } : undefined}
+                      style={!notif.is_read ? { backgroundColor: 'rgba(0, 98, 255, 0.03)' } : undefined}
                     >
                       <div className="flex gap-3">
                         <div className="mt-1 flex-shrink-0">
@@ -131,7 +131,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                         </div>
                         {!notif.is_read && (
                           <div className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: 'hsl(var(--primary))', boxShadow: '0 0 8px rgba(var(--primary-rgb), 0.6)' }} />
+                            style={{ backgroundColor: '#0062FF', boxShadow: '0 0 8px rgba(0, 98, 255, 0.6)' }} />
                         )}
                       </div>
                     </div>

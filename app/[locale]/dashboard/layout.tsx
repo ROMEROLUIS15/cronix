@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import type { BusinessSettingsJson } from '@/types'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
@@ -25,7 +24,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   const admin = createAdminClient()
   const { data: dbUser } = await admin
     .from('users')
-    .select('name, role, business_id, avatar_url, color, businesses(name, category, settings, logo_url)')
+    .select('name, role, business_id, avatar_url, color, businesses(name, category)')
     .eq('id', user.id)
     .single()
 
@@ -73,10 +72,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     : null
 
   const businessProfile = rawBiz ? {
-    name:       rawBiz.name,
-    category:   rawBiz.category,
-    logo_url:   rawBiz.logo_url ?? null,
-    brandColor: (rawBiz.settings as BusinessSettingsJson | null)?.brandColor ?? null,
+    name:     rawBiz.name,
+    category: rawBiz.category,
   } : null
 
   return (

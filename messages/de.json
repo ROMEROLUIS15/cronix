@@ -862,20 +862,6 @@
       "fullAccess": "Vollzugriff inklusive",
       "managePlan": "Plan verwalten"
     },
-    "brandingTitle": "Markenidentität",
-    "brandingSub": "Passen Sie Logo und Farbe Ihres Unternehmens an",
-    "brandingLogo": "Unternehmenslogo",
-    "brandingLogoAlt": "Unternehmenslogo",
-    "brandingNoLogo": "Kein Logo",
-    "brandingUploadLogo": "Logo hochladen",
-    "brandingLogoHint": "JPG, PNG, WebP · Max. 2MB",
-    "brandingColor": "Hauptfarbe",
-    "brandingColorHint": "Gilt für Schaltflächen und aktive Elemente im Dashboard",
-    "brandColorSaved": "Markenfarbe gespeichert",
-    "logoUploaded": "Logo erfolgreich hochgeladen",
-    "invalidImageFormat": "Ungültiges Bildformat",
-    "imageTooLarge": "Das Bild muss kleiner als 2MB sein",
-    "uploadError": "Fehler beim Hochladen des Logos"
   },
   "profile": {
     "title": "Mein Profil",

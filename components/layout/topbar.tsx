@@ -109,15 +109,15 @@ export function Topbar({
               <span
                 className="absolute inset-0 h-2.5 w-2.5 rounded-full animate-sonar"
                 style={{
-                  backgroundColor: "hsl(var(--primary))",
-                  boxShadow: "0 0 8px rgba(var(--primary-rgb), 0.6)"
+                  backgroundColor: "#0062FF",
+                  boxShadow: "0 0 8px rgba(0, 98, 255, 0.6)"
                 }}
               />
               <span
                 className="relative block h-2.5 w-2.5 rounded-full"
                 style={{
-                  backgroundColor: "hsl(var(--primary))",
-                  boxShadow: "0 0 12px rgba(var(--primary-rgb), 1)",
+                  backgroundColor: "#0062FF",
+                  boxShadow: "0 0 12px rgba(0, 98, 255, 1)",
                   border: "2px solid #0F0F12"
                 }}
               />

@@ -48,10 +48,7 @@ interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
   user?: Pick<User, 'name' | 'role' | 'avatar_url'> | null;
-  business?: (Pick<Business, 'name' | 'category'> & {
-    logo_url?:   string | null
-    brandColor?: string | null
-  }) | null;
+  business?: Pick<Business, 'name' | 'category'> | null;
 }
 
 export function Sidebar({
@@ -100,45 +97,24 @@ export function Sidebar({
             className="flex items-center gap-3 group min-w-0"
           >
             <div className="h-9 w-9 flex-shrink-0 rounded-xl overflow-hidden">
-              {business?.logo_url ? (
-                <Image
-                  src={business.logo_url}
-                  alt={business.name ?? 'Logo'}
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-cover"
-                  sizes="36px"
-                />
-              ) : (
-                <Image
-                  src="/cronix-logo.jpg"
-                  alt="Cronix"
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-cover"
-                  sizes="36px"
-                />
-              )}
+              <Image
+                src="/cronix-logo.jpg"
+                alt="Cronix"
+                width={36}
+                height={36}
+                className="h-full w-full object-cover"
+                sizes="36px"
+              />
             </div>
-            {/* Show business name when custom logo, Cronix wordmark when default */}
-            {business?.logo_url ? (
-              <span
-                className="text-sm font-bold truncate flex-1"
-                style={{ color: "#F5F5F5" }}
-              >
-                {business.name}
-              </span>
-            ) : (
-              <div className="relative h-6 w-24 flex-shrink-0">
-                <Image
-                  src="/cronix-letras.jpg"
-                  alt="Cronix"
-                  fill
-                  className="object-contain object-left"
-                  sizes="96px"
-                />
-              </div>
-            )}
+            <div className="relative h-6 w-24 flex-shrink-0">
+              <Image
+                src="/cronix-letras.jpg"
+                alt="Cronix"
+                fill
+                className="object-contain object-left"
+                sizes="96px"
+              />
+            </div>
           </Link>
 
           {/* Close button — mobile only */}
@@ -159,13 +135,13 @@ export function Sidebar({
           <div
             className="mx-3 mt-4 px-3 py-2.5 rounded-xl flex-shrink-0"
             style={{
-              backgroundColor: "rgba(var(--primary-rgb), 0.08)",
-              border: "1px solid rgba(var(--primary-rgb), 0.15)",
+              backgroundColor: "rgba(0, 98, 255, 0.08)",
+              border: "1px solid rgba(0, 98, 255, 0.15)",
             }}
           >
             <p
               className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
-              style={{ color: "hsl(var(--primary))" }}
+              style={{ color: "#0062FF" }}
             >
               {t('activeBusiness')}
             </p>
@@ -224,7 +200,7 @@ export function Sidebar({
                   {isActive && (
                     <ChevronRight
                       size={14}
-                      style={{ color: "hsl(var(--primary))" }}
+                      style={{ color: "#0062FF" }}
                       className="flex-shrink-0"
                     />
                   )}
@@ -251,11 +227,11 @@ export function Sidebar({
               style={{
                 backgroundColor:
                   pathname === "/dashboard/profile"
-                    ? "rgba(var(--primary-rgb), 0.1)"
+                    ? "rgba(0, 98, 255, 0.1)"
                     : "#1E1E21",
                 border:
                   pathname === "/dashboard/profile"
-                    ? "1px solid rgba(var(--primary-rgb), 0.2)"
+                    ? "1px solid rgba(0, 98, 255, 0.2)"
                     : "1px solid #262629",
               }}
             >
@@ -276,8 +252,8 @@ export function Sidebar({
                   <div
                     className="h-full w-full flex items-center justify-center text-xs font-bold"
                     style={{
-                      backgroundColor: "rgba(var(--primary-rgb), 0.15)",
-                      color: "hsl(var(--primary))",
+                      backgroundColor: "rgba(0, 98, 255, 0.15)",
+                      color: "#0062FF",
                     }}
                   >
                     {initials}

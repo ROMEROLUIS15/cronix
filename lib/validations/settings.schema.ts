@@ -17,10 +17,6 @@ export const BusinessSettingsSchema = z.object({
     reminderHours:  z.array(z.number()).optional(),  // legacy — no longer editable in UI
   }).optional(),
   maxDailyBookingsPerClient: z.number().int().positive().default(2).optional(),
-  brandColor: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex value like #A855F7')
-    .optional(),
 })
 
 export type BusinessSettingsInput = z.infer<typeof BusinessSettingsSchema>

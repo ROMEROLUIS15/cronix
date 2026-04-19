@@ -863,20 +863,6 @@
       "managePlan": "Gestisci piano",
       "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}"
     },
-    "brandingTitle": "Identità del brand",
-    "brandingSub": "Personalizza il logo e il colore della tua attività",
-    "brandingLogo": "Logo aziendale",
-    "brandingLogoAlt": "Logo aziendale",
-    "brandingNoLogo": "Nessun logo",
-    "brandingUploadLogo": "Carica logo",
-    "brandingLogoHint": "JPG, PNG, WebP · Max 2MB",
-    "brandingColor": "Colore principale",
-    "brandingColorHint": "Applicato a pulsanti ed elementi attivi del pannello",
-    "brandColorSaved": "Colore del brand salvato",
-    "logoUploaded": "Logo caricato con successo",
-    "invalidImageFormat": "Formato immagine non valido",
-    "imageTooLarge": "L'immagine deve essere inferiore a 2MB",
-    "uploadError": "Errore durante il caricamento del logo"
   },
   "profile": {
     "title": "Il Mio Profilo",
