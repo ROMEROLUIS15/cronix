@@ -132,15 +132,15 @@ describe('DecisionEngine', () => {
   // ── Booking intent ──────────────────────────────────────────────────────────
 
   describe('booking intent detection', () => {
-    const bookingPhrases = [
+    // Phrases with no extractable entities → LLM decides next step
+    const llmPhrases = [
       'quiero agendar una cita',
       'necesito agendar',
-      'reserva para mañana',
       'nueva cita para el lunes',
       'programar una cita',
     ]
 
-    for (const phrase of bookingPhrases) {
+    for (const phrase of llmPhrases) {
       it(`routes "${phrase}" to reason_with_llm`, () => {
         const state = makeState()
         const input = makeInput({ text: phrase })
@@ -149,6 +149,16 @@ describe('DecisionEngine', () => {
         expect(decision.type).toBe('reason_with_llm')
       })
     }
+
+    it('routes "reserva para mañana" to continue_collection (date detected, service missing)', () => {
+      const state = makeState()
+      const input = makeInput({ text: 'reserva para mañana' })
+      const decision = engine.analyze(input, state)
+
+      // Engine extracts "mañana" as a concrete date and starts collection flow
+      // to gather the missing service — more specific than a raw LLM call.
+      expect(decision.type).toBe('continue_collection')
+    })
   })
 
   // ── Collecting flows → LLM ──────────────────────────────────────────────────
