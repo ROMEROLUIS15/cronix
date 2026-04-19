@@ -306,9 +306,9 @@ Si se creó, reagendó o canceló una cita, confírmalo de forma celebratoria y 
   addBreadcrumb('Agent loop finished', 'agent', 'info', { total_tokens: totalTokens, steps: step })
 
   finalText = sanitizeOutput(finalText)
-  if (containsInternalSyntax(finalText)) {
-    addBreadcrumb('Internal syntax detected after sanitization — using fallback', 'agent', 'error', {
-      snippet: finalText.slice(0, 100)
+  if (!finalText || finalText.trim() === '' || containsInternalSyntax(finalText)) {
+    addBreadcrumb('Empty text or internal syntax detected after sanitization — using fallback', 'agent', 'warning', {
+      snippet: finalText?.slice(0, 100)
     })
     finalText = INTERNAL_SYNTAX_FALLBACK
   }

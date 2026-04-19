@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Fingerprint, Loader2, Info, X } from 'lucide-react'
 import { usePasskeyLogin } from '@/components/hooks/use-passkey-login'
+import { browserSupportsWebAuthnAutofill } from '@simplewebauthn/browser'
 
 const SETUP_STEPS = [
   'Inicia sesión con tu contraseña o Google',
@@ -57,18 +58,27 @@ function SetupSheet({ onClose }: { onClose: () => void }) {
 
 export function PasskeyLoginButton() {
   const router = useRouter()
-  const { loading, error, authenticate, clearError } = usePasskeyLogin()
+  const { loading, error, authenticate, startConditional, clearError } = usePasskeyLogin()
   const [supported, setSupported] = useState(false)
   const [noPasskey, setNoPasskey] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        .then(ok => setSupported(ok))
-        .catch(() => setSupported(false))
-    }
-  }, [])
+    if (typeof window === 'undefined' || !window.PublicKeyCredential) return
+
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      .then(ok => {
+        setSupported(ok)
+        if (ok) {
+          // Start Conditional UI in background — resolves if user picks a passkey
+          // from the email field autocomplete suggestion (iOS 16+, Chrome, Safari).
+          browserSupportsWebAuthnAutofill().then(autofillOk => {
+            if (autofillOk) startConditional()
+          }).catch(() => {})
+        }
+      })
+      .catch(() => setSupported(false))
+  }, [startConditional])
 
   if (!supported) return null
 

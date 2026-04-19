@@ -31,8 +31,18 @@ export function buildMinimalSystemPrompt(context: BusinessRagContext, customerNa
   const { settings, timezone } = business
 
   const now            = new Date()
+  
+  // Calculate tomorrow by adding 24 hours (safer for UTC basis than getDate() + 1 across timezones sometimes, 
+  // but since we format with user timezone via Intl, it will yield the correct local tomorrow).
+  const tomorrow       = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
   const currentYear    = now.toLocaleDateString('en-CA', { timeZone: timezone, year: 'numeric' }).slice(0, 4)
   const currentDateISO = now.toLocaleDateString('en-CA', { timeZone: timezone })
+  const tomorrowISO    = tomorrow.toLocaleDateString('en-CA', { timeZone: timezone })
+  
+  const todayHuman     = now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: timezone })
+  const tomorrowHuman  = tomorrow.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: timezone })
+
   const currentTime    = now.toLocaleString('es-ES', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true })
   const hours          = settings.working_hours
     ? JSON.stringify(settings.working_hours, null, 2)
@@ -40,12 +50,14 @@ export function buildMinimalSystemPrompt(context: BusinessRagContext, customerNa
 
   let prompt = `Eres el asistente de agendamiento de "${business.name}". Tu función es agendar, reagendar o cancelar citas.
 
-FECHA ACTUAL: ${currentDateISO} (año ${currentYear}). Hora actual: ${currentTime}. Zona horaria: ${timezone}.
-Todas las fechas que uses en los tools DEBEN tener el año ${currentYear}.
+CALENDARIO TEMPORAL Y ZONA HORARIA:
+- HOY ES: ${todayHuman} (ISO: ${currentDateISO})
+- MAÑANA ES: ${tomorrowHuman} (ISO: ${tomorrowISO})
+Hora actual local: ${currentTime} (${timezone}).
 
 AISLAMIENTO: Solo gestionas citas de "${business.name}". No respondas preguntas fuera de agendamiento.
 FORMATO DE HORAS: Siempre usa formato 12 horas con AM/PM al hablar con el cliente (ej: 3:00 PM, 10:30 AM). Nunca uses hora militar (15:00, 22:00).
-FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuestas (lunes, martes, viernes, sábado, etc.). El sistema lo calcula automáticamente en el mensaje final. Si lo calculas tú puede ser incorrecto. Usa solo "el 24 de abril" o la fecha numérica, NUNCA "el sábado 24 de abril".
+FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuestas (lunes, martes, etc.). Usa ÚNICAMENTE "el 20 de abril" o la fecha numérica, NUNCA "el lunes 20 de abril". Cuando llames a los tools, debes usar estrictamente el formato ISO YYYY-MM-DD.
 `
 
   // Client context
@@ -98,25 +110,31 @@ FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuesta
   prompt += `
 --- REGLAS DE LOS TOOLS (OBLIGATORIO) ---
 
-FLUJO DE DOS TURNOS (SIN EXCEPCIONES):
+FLUJO OPTIMIZADO (CANCELACIONES Y REAGENDAMIENTOS):
+1. Si el cliente NO tiene citas en "CITAS ACTIVAS", infórmale amablemente.
+2. Si el cliente tiene VARIAS citas activas y pide cancelar/reagendar, debes preguntarle EXACTAMENTE cuál cita desea afectar antes de hacer nada.
+3. CANCELACIÓN DIRECTA (1 sola cita): Si el cliente tiene SOLO UNA cita activa y pide explícitamente cancelarla ("cancela mi cita"), llama a \`cancel_booking\` INMEDIATAMENTE en ese mismo turno. NO le preguntes si está seguro (para ahorrar tokens).
+4. REAGENDAMIENTO: Requiere saber la nueva fecha y hora. Si el cliente no las da, pregúntale. Una vez tengas la nueva fecha/hora y te asegures que está disponible, llama a \`reschedule_booking\` directamente.
+
+FLUJO DE DOS TURNOS (NUEVAS CITAS, SIN EXCEPCIONES):
 1. Primero propón la cita y pregunta confirmación → SIN llamar ningún tool
 2. Solo cuando el cliente responda "sí", "dale", "ok" o equivalente en su SIGUIENTE mensaje → llamar el tool correspondiente
 NUNCA llames un tool en el mismo turno donde haces una pregunta.
 
-CUANDO TIENES TODOS LOS DATOS (servicio identificado + fecha + hora):
+CUANDO TIENES TODOS LOS DATOS PARA UNA CITA NUEVA:
 - DETÉN las preguntas inmediatamente. No pidas más datos ni ofrezcas alternativas.
 - Propón de inmediato: "¿Confirmo tu cita de [servicio] para el [fecha] a las [hora]?"
 - ESPERA la respuesta del cliente. No continúes el flujo bajo ningún concepto.
 
-CUANDO EL CLIENTE CONFIRMA ("sí", "dale", "ok", "confirmo", "perfecto", "claro", "va"):
+EJECUCIÓN SILENCIOSA AL RECIBIR CONFIRMACIÓN:
+- Cuando el cliente te dé la confirmación explícita ("sí", "dale", "ok", "confirma", "cancela", "reagenda"):
 - Llama el tool DIRECTAMENTE en ese mismo turno, SIN generar ningún texto previo.
-- NO respondas "Perfecto, voy a confirmar..." — solo llama el tool. El sistema envía el mensaje de éxito automáticamente.
+- NO respondas "Perfecto, voy a confirmar..." — solo llama el tool. El sistema enviará un mensaje de éxito automáticamente mediante plantillas internas.
 
 MANEJO DE ERRORES:
 - Si confirm_booking retorna success=false con error SLOT_CONFLICT: ese horario ya está ocupado.
   INFORMA al cliente que no está disponible, SUGIERE horarios alternativos dentro del horario de atención,
   y ESPERA su confirmación antes de volver a llamar confirm_booking. NO reserves automáticamente otro horario.
-- Si cancel_booking o reschedule_booking fallan, informa al cliente y pide que intente con otra cita.
 
 IDENTIFICADORES:
 - Pasa SOLO el UUID en los argumentos del tool. NUNCA incluyas el prefijo "REF#".

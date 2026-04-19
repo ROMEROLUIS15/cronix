@@ -620,6 +620,7 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="username webauthn"
                 placeholder={t('emailPlaceholder')}
                 required
                 className={cn(

@@ -175,6 +175,8 @@ async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string):
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     // @ts-ignore
     const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
+    // @ts-ignore
+    const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
     if (!cronSecret) {
       console.warn('[NOTIFICATION-WA] CRON_SECRET not set — owner WA skipped')
@@ -202,6 +204,7 @@ async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string):
       headers: {
         'Content-Type':      'application/json',
         'x-internal-secret': cronSecret,
+        'Authorization':     `Bearer ${serviceKey}`
       },
       body: JSON.stringify({
         type:         'text',

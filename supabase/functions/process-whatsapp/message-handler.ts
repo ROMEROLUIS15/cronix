@@ -112,10 +112,9 @@ export async function handleMessage(req: Request): Promise<Response> {
           return retryLater(err.retryAfterSecs)
         }
         if (err instanceof CircuitBreakerError) {
-          addBreadcrumb('Whisper Circuit open hit', 'llm', 'error')
-          await sendWhatsAppMessage(sender, "🤖 Lo siento, mi sistema de voz está en mantenimiento breve. ¿Podrías escribirme tu consulta por favor?")
+          addBreadcrumb('Whisper Circuit open hit — delegating retry to QStash buffer', 'llm', 'warning')
           await flushSentry()
-          return json({ success: true })
+          return retryLater(30)
         }
         captureException(err, { stage: 'voice_transcription', sender })
         await sendWhatsAppMessage(sender, "No pude procesar tu audio. Por favor intenta de nuevo o escríbeme tu consulta.")
@@ -155,10 +154,9 @@ export async function handleMessage(req: Request): Promise<Response> {
     // Layer 2: Message rate limit
     const withinRateLimit = await checkMessageRateLimit(sender)
     if (!withinRateLimit) {
-      addBreadcrumb('Message rate limited', 'rate-limit', 'warning')
-      await sendWhatsAppMessage(sender, "⚠️ Estás enviando mensajes demasiado rápido. Por favor, espera un minuto antes de continuar.")
+      addBreadcrumb('Message rate limited — spam dropped silently', 'rate-limit', 'warning')
       await flushSentry()
-      return json({ success: true, message: 'Rate limited — user notified' })
+      return json({ success: true, message: 'Rate limited — spam dropped silently' })
     }
 
     // Slug extraction (BEFORE sanitization — # would be stripped)
@@ -293,15 +291,14 @@ export async function handleMessage(req: Request): Promise<Response> {
         return retryLater(err.retryAfterSecs)
       }
       if (err instanceof CircuitBreakerError) {
-        addBreadcrumb('LLM Circuit open hit', 'llm', 'error')
-        await sendWhatsAppMessage(sender, "🤖 Lo siento, mi cerebro de IA está en mantenimiento breve. Por favor, intenta de nuevo en un minuto.")
+        addBreadcrumb('LLM Circuit open hit — delegating retry to QStash', 'llm', 'warning')
         await flushSentry()
-        return json({ success: true })
+        return retryLater(30)
       }
-      captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text.length })
-      await sendWhatsAppMessage(sender, 'Hubo un problema técnico al procesar tu mensaje. Por favor, inténtalo de nuevo en un momento.')
+      captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text?.length })
       await flushSentry()
-      return json({ success: true })
+      // Transient platform crashes go to a short QStash retry instead of alarming the client
+      return retryLater(15)
     }
 
     addBreadcrumb('Agent loop finished', 'llm', 'info', { response_length: agentResult.text.length, tokens: agentResult.tokens })
@@ -325,17 +322,9 @@ export async function handleMessage(req: Request): Promise<Response> {
     captureException(error, { stage: 'webhook_post_handler_qstash' })
     await logToDLQ(rawBody, error, 'process-whatsapp')
 
-    try {
-      const payload = JSON.parse(rawBody) as MetaWebhookPayload
-      const failSender = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from
-      if (failSender) {
-        await sendWhatsAppMessage(failSender, "⚠️ Lo siento, tuve un problema técnico al procesar tu mensaje. Por favor intenta de nuevo en un momento.")
-      }
-    } catch (notifyErr) {
-      captureException(notifyErr, { stage: 'notify_user_of_error' })
-    }
-
     await flushSentry()
-    return json({ error: 'Internal Server Error' }, 500)
+    // By returning 202 instead of 500, we prevent QStash from infinite-looping fatal bugs or syntax crashes. 
+    // The event is safely locked in the Dead Letter Queue for auditing, with no message leakage to the client.
+    return json({ error: 'Internal logic failed, safely isolated to DLQ' }, 202)
   }
 }
