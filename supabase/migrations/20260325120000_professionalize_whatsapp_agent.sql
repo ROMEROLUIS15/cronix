@@ -7,7 +7,6 @@ BEGIN
   RETURN regexp_replace(p_phone, '\D', '', 'g');
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
 -- 2. Audit Logs Table
 CREATE TABLE IF NOT EXISTS public.wa_audit_logs (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -18,7 +17,6 @@ CREATE TABLE IF NOT EXISTS public.wa_audit_logs (
     tool_calls jsonb,
     created_at timestamptz DEFAULT now()
 );
-
 -- 3. Get Business by Phone (Secure Meta Mapping)
 CREATE OR REPLACE FUNCTION public.fn_get_business_by_phone(p_wa_phone_id text)
 RETURNS TABLE (
@@ -35,7 +33,6 @@ BEGIN
   LIMIT 1;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- 4. Get Available Slots (Professional with interval check)
 CREATE OR REPLACE FUNCTION public.fn_get_available_slots(
     p_business_id uuid, 
@@ -90,7 +87,6 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- 5. Book Appointment (Atomic check & create)
 CREATE OR REPLACE FUNCTION public.fn_book_appointment_wa(
     p_business_id uuid,

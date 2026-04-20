@@ -13,13 +13,10 @@ CREATE TABLE IF NOT EXISTS public.wa_business_usage (
     window_start  timestamptz NOT NULL DEFAULT now(),
     message_count int         NOT NULL DEFAULT 1
 );
-
 COMMENT ON TABLE public.wa_business_usage IS
   'Anti-spam / Cost Control: tracks aggregate WhatsApp messages per business within a sliding window.';
-
 -- RLS: only service_role accesses this table (Edge Functions use service_role_key)
 ALTER TABLE public.wa_business_usage ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic business rate-check function
 --
@@ -69,10 +66,8 @@ BEGIN
     RETURN v_count <= p_max_msgs;
 END;
 $$;
-
 COMMENT ON FUNCTION public.fn_wa_check_business_limit IS
   'Atomic aggregate rate limiter for businesses. Returns TRUE if allowed, FALSE if limited.';
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. Garbage collection: purge stale business windows older than 24 hours
 -- ═══════════════════════════════════════════════════════════════════════════════

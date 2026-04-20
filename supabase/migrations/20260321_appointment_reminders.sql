@@ -17,20 +17,16 @@ CREATE TABLE IF NOT EXISTS public.appointment_reminders (
   sent_at         TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 -- Index for the cron job query: pending reminders due now
 CREATE INDEX IF NOT EXISTS idx_reminders_cron
   ON public.appointment_reminders (status, remind_at)
   WHERE status = 'pending';
-
 -- Index for appointment-scoped lookups (edit form, cancel)
 CREATE INDEX IF NOT EXISTS idx_reminders_appointment
   ON public.appointment_reminders (appointment_id, status);
-
 -- ── Row Level Security ───────────────────────────────────────────────────────
 ALTER TABLE public.appointment_reminders ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "reminders_select_own_business" ON public.appointment_reminders;
+-- Business staff can read reminders for their own business
 CREATE POLICY "reminders_select_own_business"
   ON public.appointment_reminders FOR SELECT
   USING (
@@ -38,8 +34,7 @@ CREATE POLICY "reminders_select_own_business"
       SELECT business_id FROM public.users WHERE id = auth.uid()
     )
   );
-
-DROP POLICY IF EXISTS "reminders_insert_own_business" ON public.appointment_reminders;
+-- Business staff can insert reminders for their own business
 CREATE POLICY "reminders_insert_own_business"
   ON public.appointment_reminders FOR INSERT
   WITH CHECK (
@@ -47,8 +42,7 @@ CREATE POLICY "reminders_insert_own_business"
       SELECT business_id FROM public.users WHERE id = auth.uid()
     )
   );
-
-DROP POLICY IF EXISTS "reminders_update_own_business" ON public.appointment_reminders;
+-- Business staff can update (cancel) reminders for their own business
 CREATE POLICY "reminders_update_own_business"
   ON public.appointment_reminders FOR UPDATE
   USING (
@@ -56,8 +50,7 @@ CREATE POLICY "reminders_update_own_business"
       SELECT business_id FROM public.users WHERE id = auth.uid()
     )
   );
-
-DROP POLICY IF EXISTS "reminders_delete_own_business" ON public.appointment_reminders;
+-- Business staff can delete pending reminders for their own business
 CREATE POLICY "reminders_delete_own_business"
   ON public.appointment_reminders FOR DELETE
   USING (

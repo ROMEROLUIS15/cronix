@@ -11,7 +11,6 @@
 -- All policies across ALL tables now use the same optimized pattern.
 
 BEGIN;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Create STABLE helper function — PostgreSQL evaluates once per query
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +23,6 @@ SET search_path = 'public'
 AS $$
     SELECT business_id FROM public.users WHERE id = auth.uid()
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. appointments — main table, highest query volume
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -33,7 +31,6 @@ CREATE POLICY "appointments_all" ON public.appointments
   TO authenticated
   USING (business_id = public.current_business_id())
   WITH CHECK (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. clients — second highest query volume (list + AI fuzzy match)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -42,7 +39,6 @@ CREATE POLICY "clients_all" ON public.clients
   TO authenticated
   USING (business_id = public.current_business_id())
   WITH CHECK (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. services — active list fetched on every dashboard load
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -51,7 +47,6 @@ CREATE POLICY "services_all" ON public.services
   TO authenticated
   USING (business_id = public.current_business_id())
   WITH CHECK (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. transactions — finance queries
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -60,7 +55,6 @@ CREATE POLICY "transactions_all" ON public.transactions
   TO authenticated
   USING (business_id = public.current_business_id())
   WITH CHECK (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. appointment_reminders — 4 policies (select/insert/update/delete)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -68,22 +62,18 @@ DROP POLICY IF EXISTS "reminders_select_own_business" ON public.appointment_remi
 CREATE POLICY "reminders_select_own_business" ON public.appointment_reminders
   FOR SELECT TO authenticated
   USING (business_id = public.current_business_id());
-
 DROP POLICY IF EXISTS "reminders_insert_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_insert_own_business" ON public.appointment_reminders
   FOR INSERT TO authenticated
   WITH CHECK (business_id = public.current_business_id());
-
 DROP POLICY IF EXISTS "reminders_update_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_update_own_business" ON public.appointment_reminders
   FOR UPDATE TO authenticated
   USING (business_id = public.current_business_id());
-
 DROP POLICY IF EXISTS "reminders_delete_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_delete_own_business" ON public.appointment_reminders
   FOR DELETE TO authenticated
   USING (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. businesses — owner-based access (not business_id-based)
 --    These use owner_id = auth.uid() directly — no subquery needed.
@@ -96,19 +86,16 @@ CREATE POLICY "businesses_select" ON public.businesses
     owner_id = auth.uid()
     OR id = public.current_business_id()
   );
-
 -- businesses_insert and businesses_update use owner_id = auth.uid() directly.
 -- No subquery, no change needed. But let's drop/recreate for consistency.
 DROP POLICY IF EXISTS "businesses_insert" ON public.businesses;
 CREATE POLICY "businesses_insert" ON public.businesses
   FOR INSERT TO authenticated
   WITH CHECK (owner_id = auth.uid());
-
 DROP POLICY IF EXISTS "businesses_update" ON public.businesses;
 CREATE POLICY "businesses_update" ON public.businesses
   FOR UPDATE TO authenticated
   USING (owner_id = auth.uid());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 8. expenses — business-scoped
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -117,7 +104,6 @@ CREATE POLICY "expenses_all" ON public.expenses
   TO authenticated
   USING (business_id = public.current_business_id())
   WITH CHECK (business_id = public.current_business_id());
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 9. appointment_services — junction table, accessed via appointment_id
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +116,6 @@ CREATE POLICY "appointment_services_all" ON public.appointment_services
       WHERE a.business_id = public.current_business_id()
     )
   );
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 10. notifications — in-app notifications (if table exists)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -166,7 +151,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 11. wa_audit_logs — WhatsApp audit (if table exists)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +167,6 @@ BEGIN
       WITH CHECK (business_id = public.current_business_id());
   END IF;
 END $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 12. wa_sessions — WhatsApp sessions (if table exists)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -207,7 +190,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 13. users table — special case: users are accessed by id OR business_id
 --     users_select_same_business already uses get_my_business_id().

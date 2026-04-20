@@ -21,17 +21,13 @@ CREATE TABLE IF NOT EXISTS ai_tool_audit_log (
   -- SHA256 truncado de los argumentos de la tool.
   args_fingerprint text
 );
-
 -- Índices para queries de análisis frecuentes
 CREATE INDEX IF NOT EXISTS idx_audit_log_business_time 
   ON ai_tool_audit_log (business_id, created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_audit_log_user_tool 
   ON ai_tool_audit_log (user_id, tool_name);
-
 -- RLS: Habilitado. Los owners leen solo sus propios logs.
 ALTER TABLE ai_tool_audit_log ENABLE ROW LEVEL SECURITY;
-
 -- Policy: SELECT solo para el owner del business_id
 CREATE POLICY "business_owner_read_audit_log"
   ON ai_tool_audit_log
@@ -41,7 +37,6 @@ CREATE POLICY "business_owner_read_audit_log"
       SELECT business_id FROM users WHERE id = auth.uid()
     )
   );
-
 -- INSERT bloqueado para el anon role — solo el service_role (server-side) puede insertar.
 -- Esto previene que usuarios falsifiquen entradas de auditoría.
 CREATE POLICY "service_role_insert_audit_log"
@@ -49,7 +44,6 @@ CREATE POLICY "service_role_insert_audit_log"
   FOR INSERT
   TO service_role
   WITH CHECK (true);
-
 -- Comentarios para documentación en Supabase Studio
 COMMENT ON TABLE  ai_tool_audit_log IS 'Append-only log of AI tool executions. Used for debugging, abuse detection, and observability. No PII stored directly.';
 COMMENT ON COLUMN ai_tool_audit_log.args_fingerprint IS 'Truncated SHA256 of tool arguments for correlation without exposing PII.';

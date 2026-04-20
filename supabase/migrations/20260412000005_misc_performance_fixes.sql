@@ -8,7 +8,6 @@
 -- FIX: Check most severe threshold first (>= 5 → CRITICAL), then >= 50 → SEVERE
 
 DROP VIEW IF EXISTS public.v_web_suspicious_activity;
-
 CREATE VIEW public.v_web_suspicious_activity
   WITH (security_invoker = true)
 AS
@@ -24,7 +23,6 @@ AS
    FROM public.web_rate_limits
   WHERE (window_start > (now() - '24:00:00'::interval))
   ORDER BY request_count DESC;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. FIX: fn_wa_report_service_failure — UPSERT to eliminate TOCTOU race
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -52,7 +50,6 @@ BEGIN
         END;
 END;
 $$;
-
 -- Also fix fn_wa_report_service_success for consistency (UPSERT pattern)
 CREATE OR REPLACE FUNCTION public.fn_wa_report_service_success(
     p_service_name text
@@ -70,7 +67,6 @@ BEGIN
         status        = 'CLOSED';
 END;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. ADD: CHECK constraint end_at > start_at on appointments
 -- ─────────────────────────────────────────────────────────────────────────────

@@ -15,21 +15,17 @@ ALTER TABLE public.clients
     ADD COLUMN phone_digits text GENERATED ALWAYS AS (
         regexp_replace(phone, '[^0-9]', '', 'g')
     ) STORED;
-
 -- Partial unique index: active clients only, unique per business
 -- Replaces the old partial unique index on phone (which couldn't be used by fn_clean_phone)
 -- First, drop the old one if it exists
 DROP INDEX IF EXISTS clients_business_phone_unique;
-
 CREATE UNIQUE INDEX idx_clients_business_phone_digits
     ON public.clients (business_id, phone_digits)
     WHERE phone_digits IS NOT NULL AND deleted_at IS NULL;
-
 -- Standalone B-tree index for fast phone lookups
 CREATE INDEX IF NOT EXISTS idx_clients_phone_digits
     ON public.clients (phone_digits)
     WHERE phone_digits IS NOT NULL AND deleted_at IS NULL;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. businesses.phone_digits — GENERATED ALWAYS AS STORED
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -38,11 +34,9 @@ ALTER TABLE public.businesses
     ADD COLUMN phone_digits text GENERATED ALWAYS AS (
         regexp_replace(phone, '[^0-9]', '', 'g')
     ) STORED;
-
 CREATE INDEX IF NOT EXISTS idx_businesses_phone_digits
     ON public.businesses (phone_digits)
     WHERE phone_digits IS NOT NULL;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. REWRITE: fn_find_client_by_phone — Use phone_digits index
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -106,7 +100,6 @@ BEGIN
     END IF;
 END;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. REWRITE: fn_get_business_by_phone — Use phone_digits index
 -- ─────────────────────────────────────────────────────────────────────────────

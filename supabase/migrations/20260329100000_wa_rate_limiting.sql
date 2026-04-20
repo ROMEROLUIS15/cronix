@@ -13,13 +13,10 @@ CREATE TABLE IF NOT EXISTS public.wa_rate_limits (
     window_start  timestamptz NOT NULL DEFAULT now(),
     message_count int         NOT NULL DEFAULT 1
 );
-
 COMMENT ON TABLE public.wa_rate_limits IS
   'Sliding-window rate limiter for WhatsApp messages. One row per sender.';
-
 -- RLS: only service_role accesses this table (Edge Functions use service_role_key)
 ALTER TABLE public.wa_rate_limits ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic rate-check function
 --
@@ -69,10 +66,8 @@ BEGIN
     RETURN v_count <= p_max_msgs;
 END;
 $$;
-
 COMMENT ON FUNCTION public.fn_wa_check_rate_limit IS
   'Atomic sliding-window rate limiter. Returns TRUE if allowed, FALSE if limited.';
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. Garbage collection: purge stale windows older than 1 hour
 --    Called opportunistically — not critical, just keeps the table small.

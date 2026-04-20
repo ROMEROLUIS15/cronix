@@ -21,6 +21,8 @@
 
 import { supabase }     from "./db-client.ts"
 import { captureException } from "../_shared/sentry.ts"
+import { utcToLocalParts } from "./time-utils.ts"
+import { formatLocalTime } from "./prompt-builder.ts"
 import type { BusinessRagContext } from "./types.ts"
 
 // ── AppointmentEvent contract (mirrors lib/ai/orchestrator/events.ts) ─────────
@@ -63,11 +65,13 @@ function buildContent(event: AppointmentEvent): string {
 }
 
 function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
+  // Convert HH:mm (24h) → "h:mm am/pm"; fall back to raw value if format unexpected.
+  const prettyTime = /^\d{2}:\d{2}$/.test(event.time) ? formatLocalTime(event.time) : event.time
   switch (event.type) {
     case 'appointment.created':
       return (
         `¡Hola! 👋🤖\n\n` +
-        `Ha sido agendada una cita para *${event.clientName}* el día *${event.date}* a las *${event.time}*\n` +
+        `Ha sido agendada una cita para *${event.clientName}* el día *${event.date}* a las *${prettyTime}*\n` +
         `Servicio: *${event.serviceName}*\n\n` +
         `¡Reserva confirmada vía WhatsApp! 💪🚀`
       )
@@ -75,14 +79,14 @@ function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
       return (
         `¡Reagenda! 🔄🤖\n\n` +
         `*${event.clientName}* movió su cita de *${event.serviceName}*.\n` +
-        `Nueva fecha: *${event.date}* a las *${event.time}*\n\n` +
+        `Nueva fecha: *${event.date}* a las *${prettyTime}*\n\n` +
         `¡Tu agenda ha sido actualizada! 💪🚀`
       )
     case 'appointment.cancelled':
       return (
         `¡Cita cancelada! ❌🤖\n\n` +
         `*${event.clientName}* canceló su cita de *${event.serviceName}*` +
-        (event.date ? ` del *${event.date}* a las *${event.time}*` : '') +
+        (event.date ? ` del *${event.date}* a las *${prettyTime}*` : '') +
         `.\n\n¡Tienes un nuevo espacio libre! 💪🚀`
       )
   }
@@ -172,14 +176,12 @@ async function pushToRealtime(event: AppointmentEvent): Promise<void> {
 async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string): Promise<void> {
   try {
     // @ts-ignore — Deno runtime globals
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? ''
     // @ts-ignore
-    const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
-    // @ts-ignore
-    const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const accessToken   = Deno.env.get('WHATSAPP_ACCESS_TOKEN')   ?? ''
 
-    if (!cronSecret) {
-      console.warn('[NOTIFICATION-WA] CRON_SECRET not set — owner WA skipped')
+    if (!phoneNumberId || !accessToken) {
+      console.warn('[NOTIFICATION-WA] WHATSAPP credentials not set — owner WA skipped')
       return
     }
 
@@ -190,31 +192,41 @@ async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string):
       .eq('id', event.businessId)
       .maybeSingle()
 
-    const phone = (bData as { phone?: string | null })?.phone
+    const rawPhone = (bData as { phone?: string | null })?.phone
 
-    if (!phone) {
+    if (!rawPhone) {
       console.warn('[NOTIFICATION-WA] No owner phone found for business, skipping WA notification', event.businessId)
       return
     }
 
+    // Normalize phone: strip spaces, dashes, parens, leading +
+    // businesses.phone is stored WITHOUT '+' (e.g. '584247092980')
+    // Meta Graph API expects the number WITHOUT '+', as E.164 digits only
+    const phone = rawPhone.replace(/[\s\-\+\(\)]/g, '')
+
     const message = buildOwnerWhatsAppMessage(event)
 
-    await fetch(`${supabaseUrl}/functions/v1/whatsapp-service`, {
+    // Call Meta Graph API directly with a free-text message.
+    // NOTE: whatsapp-service only supports the appointment_reminder TEMPLATE,
+    // so we bypass it here and call Meta directly for owner notifications.
+    const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
       method:  'POST',
       headers: {
-        'Content-Type':      'application/json',
-        'x-internal-secret': cronSecret,
-        'Authorization':     `Bearer ${serviceKey}`
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        type:         'text',
-        to:           phone,
-        message,
-        // kept for traceability in whatsapp-service logs
-        clientName:   event.clientName,
-        businessName,
+        messaging_product: 'whatsapp',
+        to:                phone,
+        type:              'text',
+        text:              { body: message },
       }),
     })
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      console.warn('[NOTIFICATION-WA] Meta API error:', (errBody as { error?: { message?: string } })?.error?.message ?? res.status)
+    }
   } catch (err) {
     // Non-critical — booking already committed, notification is best-effort
     console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
@@ -263,6 +275,13 @@ export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
 // Replace the old fireOwnerNotifications / fireCancelNotifications / fireRescheduleNotifications.
 // Each constructs a typed AppointmentEvent and calls emitBookingEvent (fire-and-forget).
 
+// Deterministic event IDs: same tool + same appointment + same date/time = same eventId.
+// Prevents duplicate owner notifications when the ReAct loop or QStash retries
+// re-invoke the same tool call. Idempotency check in emitBookingEvent relies on this.
+function buildEventId(type: string, businessId: string, appointmentId: string, date: string, time: string): string {
+  return `${type}:${businessId}:${appointmentId}:${date}:${time}`
+}
+
 export function emitCreatedEvent(
   business:      BusinessRagContext['business'],
   clientName:    string,
@@ -272,8 +291,7 @@ export function emitCreatedEvent(
   appointmentId: string,
 ): void {
   void emitBookingEvent({
-    // @ts-ignore — crypto is available in Deno
-    eventId:      crypto.randomUUID(),
+    eventId:      buildEventId('created', business.id, appointmentId, date, time),
     type:         'appointment.created',
     businessId:   business.id,
     businessName: business.name,
@@ -281,8 +299,6 @@ export function emitCreatedEvent(
     serviceName,
     date,
     time,
-    // In the WhatsApp channel the client is unauthenticated (no Supabase userId).
-    // 'whatsapp-agent' is a stable sentinel that identifies this origin in audit logs.
     userId:       'whatsapp-agent',
     channel:      'whatsapp',
   })
@@ -297,8 +313,7 @@ export function emitRescheduledEvent(
   newTime:       string,
 ): void {
   void emitBookingEvent({
-    // @ts-ignore
-    eventId:      crypto.randomUUID(),
+    eventId:      buildEventId('rescheduled', business.id, appointmentId, newDate, newTime),
     type:         'appointment.rescheduled',
     businessId:   business.id,
     businessName: business.name,
@@ -318,13 +333,11 @@ export function emitCancelledEvent(
   appointmentId: string,
   oldStartAt:    string,
 ): void {
-  // Extract date/time from the ISO start_at string
-  const date = oldStartAt.slice(0, 10)   // YYYY-MM-DD
-  const time = oldStartAt.slice(11, 16)  // HH:mm
+  // Convert the stored UTC ISO start_at to the business's local tz for humans.
+  const { date, time } = utcToLocalParts(oldStartAt, business.timezone)
 
   void emitBookingEvent({
-    // @ts-ignore
-    eventId:      crypto.randomUUID(),
+    eventId:      buildEventId('cancelled', business.id, appointmentId, date, time),
     type:         'appointment.cancelled',
     businessId:   business.id,
     businessName: business.name,

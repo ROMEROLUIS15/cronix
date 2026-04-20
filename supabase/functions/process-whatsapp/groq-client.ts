@@ -14,14 +14,10 @@ import {
   reportServiceSuccess,
 } from "./guards.ts"
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
-export const SMALL_MODEL   = 'llama-3.3-70b-versatile'    // decision loop + tool calling
-export const LARGE_MODEL   = 'llama-3.3-70b-versatile'  // final empathetic response
+export const SMALL_MODEL   = 'llama-3.1-8b-instant'         // decision loop + tool calling (fast, literal, free)
+export const LARGE_MODEL   = 'llama-3.3-70b-versatile'      // final empathetic response (only when needed)
 export const WHISPER_MODEL = 'whisper-large-v3-turbo'
-export const MAX_STEPS     = 2
-
-// Helicone gateway: proxies Groq calls for latency, cost, and threat monitoring.
+export const MAX_STEPS     = 3
 // @ts-ignore — Deno runtime global
 const HELICONE_API_KEY = Deno.env.get('HELICONE_API_KEY') ?? ''
 const GROQ_BASE        = HELICONE_API_KEY

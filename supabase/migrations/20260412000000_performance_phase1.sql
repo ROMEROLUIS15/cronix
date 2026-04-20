@@ -62,7 +62,6 @@ AS $$
     )
     ORDER BY s.slot_start_local;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. FIX: search_path hardening on functions missing it
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -80,7 +79,6 @@ AS $$
        OR (b.settings->>'wa_phone_number_id') = p_wa_phone_id
     LIMIT 1;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. FIX: fn_wa_report_service_failure — UPSERT to eliminate TOCTOU race
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +108,6 @@ BEGIN
         END;
 END;
 $$;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. FIX: CHECK constraint — prevent invalid appointments
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -125,10 +122,8 @@ BEGIN
         RAISE EXCEPTION 'Cannot add CHECK constraint: existing appointments violate end_at > start_at';
     END IF;
 END $$;
-
 ALTER TABLE public.appointments
     ADD CONSTRAINT chk_appointment_time_order CHECK (end_at > start_at);
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. MISSING INDEXES
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -137,20 +132,16 @@ ALTER TABLE public.appointments
 --     Every request hitting businesses table does this lookup.
 CREATE INDEX IF NOT EXISTS idx_businesses_owner_id
     ON public.businesses (owner_id);
-
 -- 5b. businesses.phone — used by fn_get_business_by_phone for WhatsApp webhook routing
 CREATE INDEX IF NOT EXISTS idx_businesses_phone
     ON public.businesses (phone) WHERE phone IS NOT NULL;
-
 -- 5c. notifications.user_id — partial index for unread notifications (hot read path)
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
     ON public.notifications (user_id) WHERE is_read = false;
-
 -- 5d. wa_dead_letter_queue — composite index for retry queries
 CREATE INDEX IF NOT EXISTS idx_dlq_service_retry
     ON public.wa_dead_letter_queue (service_type, retry_count)
     WHERE retry_count < 3;
-
 -- 5e. ai_memories embedding — HNSW index for vector similarity search
 --     Only create if pgvector extension is available and column exists
 DO $$

@@ -861,7 +861,7 @@
       "current": "Plan {plan, select, free {Kostenlos} pro {Pro} enterprise {Unternehmen} other {Kostenlos}}",
       "fullAccess": "Vollzugriff inklusive",
       "managePlan": "Plan verwalten"
-    },
+    }
   },
   "profile": {
     "title": "Mein Profil",

@@ -20,7 +20,6 @@ WHERE a.business_id = b.business_id
   AND a.deleted_at  IS NULL
   AND b.deleted_at  IS NULL
   AND a.created_at   > b.created_at;
-
 -- Partial unique index: phone must be unique within a business for active clients.
 CREATE UNIQUE INDEX clients_business_phone_unique
   ON public.clients (business_id, phone)

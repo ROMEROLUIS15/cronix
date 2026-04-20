@@ -5,6 +5,5 @@
 
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
-
 ALTER TABLE transactions
   ADD CONSTRAINT transactions_idempotency_key_unique UNIQUE (idempotency_key);

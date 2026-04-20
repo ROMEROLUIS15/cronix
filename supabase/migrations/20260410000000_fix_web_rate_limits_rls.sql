@@ -5,7 +5,6 @@
 
 ALTER TABLE public.web_rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.web_rate_limits FORCE ROW LEVEL SECURITY;
-
 -- Deny all access to ordinary roles (only service_role should bypass or manage this)
 DO $$
 BEGIN

@@ -22,10 +22,8 @@
 --   owner/employee  → sees own row + all teammates in same business
 
 BEGIN;
-
 -- Drop the policy that introduced the recursion
 DROP POLICY IF EXISTS "users_isolation" ON public.users;
-
 -- Recreate with current_business_id() — identical semantics, zero recursion
 CREATE POLICY "users_isolation" ON public.users
   FOR SELECT TO authenticated
@@ -34,5 +32,4 @@ CREATE POLICY "users_isolation" ON public.users
     OR
     business_id = public.current_business_id()
   );
-
 COMMIT;

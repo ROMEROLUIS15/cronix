@@ -18,10 +18,8 @@ SELECT
 FROM public.web_rate_limits
 WHERE window_start > now() - interval '24 hours'
 ORDER BY request_count DESC;
-
 COMMENT ON VIEW public.v_web_suspicious_activity IS
   'Real-time monitoring of rate-limited identifiers for the web platform.';
-
 -- Helper function to clear all rate limits (Emergency reset)
 CREATE OR REPLACE FUNCTION public.fn_reset_all_web_rate_limits()
 RETURNS void

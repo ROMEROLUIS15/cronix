@@ -15,7 +15,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "users_select" ON public.users;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. ENSURE business-scoped SELECT policy exists (idempotent)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -26,7 +25,6 @@ DROP POLICY IF EXISTS "users_select" ON public.users;
 -- Drop old policies to recreate cleanly
 DROP POLICY IF EXISTS "users_select_same_business" ON public.users;
 DROP POLICY IF EXISTS "users_self_select" ON public.users;
-
 -- Single consolidated policy: own row OR same-business members
 CREATE POLICY "users_isolation" ON public.users
   FOR SELECT TO authenticated
@@ -40,7 +38,6 @@ CREATE POLICY "users_isolation" ON public.users
       LIMIT 1
     )
   );
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. VERIFY remaining policies are correctly scoped
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -55,4 +52,4 @@ CREATE POLICY "users_isolation" ON public.users
 
 -- No UPDATE/DELETE policy should allow cross-user modification.
 -- Team management is handled at the application layer via Server Actions
--- that assert owner role before calling repository methods.
+-- that assert owner role before calling repository methods.;

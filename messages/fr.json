@@ -861,7 +861,7 @@
       "fullAccess": "Accès complet inclus",
       "managePlan": "Gérer le forfait",
       "current": "Forfait {plan, select, free {Gratuit} pro {Pro} enterprise {Entreprise} other {Gratuit}}"
-    },
+    }
   },
   "profile": {
     "title": "Mon Profil",

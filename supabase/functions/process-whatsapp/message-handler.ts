@@ -21,6 +21,13 @@ import { logInteraction }    from "./audit.ts"
 import { verifyQStash, sanitizeMessage } from "./security.ts"
 import { captureException, addBreadcrumb, setSentryTag, flushSentry } from "../_shared/sentry.ts"
 import { logToDLQ }          from "../_shared/supabase.ts"
+import { renderClientConfirmation } from "./prompt-builder.ts"
+
+type ToolTrace = {
+  tool:    string
+  success: boolean
+  result:  Record<string, string> | string | null
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -297,13 +304,28 @@ export async function handleMessage(req: Request): Promise<Response> {
       }
       captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text?.length })
       await flushSentry()
-      // Transient platform crashes go to a short QStash retry instead of alarming the client
+      // Transient platform crashes go to a short QStash retry instead of alarming the client.
+      // El cliente recibirá la respuesta final automáticamente una vez que el encolador destrabe el cuello de botella.
       return retryLater(15)
     }
 
     addBreadcrumb('Agent loop finished', 'llm', 'info', { response_length: agentResult.text.length, tokens: agentResult.tokens })
 
     await sendWhatsAppMessage(sender, agentResult.text)
+
+    // ── Additional formal client confirmation (additive, never replaces above) ──
+    // Triggered when the last ReAct step was a successful confirm/reschedule/cancel.
+    const lastTrace = (agentResult.toolCallsTrace as ToolTrace[] | undefined)?.slice(-1)[0]
+    if (lastTrace && lastTrace.success && typeof lastTrace.result === 'object' && lastTrace.result) {
+      const formalText = renderClientConfirmation(lastTrace.tool, lastTrace.result, customerName)
+      if (formalText) {
+        try {
+          await sendWhatsAppMessage(sender, formalText)
+        } catch (err) {
+          captureException(err, { stage: 'client_formal_confirmation_send', tool: lastTrace.tool })
+        }
+      }
+    }
 
     await logInteraction({
       business_id:  business.id,

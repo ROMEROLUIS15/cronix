@@ -14,11 +14,11 @@ function firstSentenceEnd(text: string): number {
   return m?.index !== undefined ? m.index + 1 : -1
 }
 
-// quality: 70b para acciones de escritura (mayor fiabilidad en tool-calling)
-// fast:    8b para consultas de lectura (500k TPD, respuesta rápida)
+// quality: para acciones de escritura (ahora usamos 8b-instant como primario para no saturar los Rate Limits de Groq)
+// fast:    para consultas de lectura (respuesta más rápida)
 const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string }> = {
-  quality: { primary: 'llama-3.3-70b-versatile', fallback: 'llama-3.1-8b-instant' },
-  fast:    { primary: 'llama-3.1-8b-instant',    fallback: 'llama-3.3-70b-versatile' },
+  quality: { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
+  fast:    { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
 }
 
 export class GroqProvider implements ISttProvider, ILlmProvider {

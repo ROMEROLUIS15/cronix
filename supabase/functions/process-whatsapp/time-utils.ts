@@ -57,3 +57,23 @@ export function localTimeToUTC(dateStr: string, timeStr: string, timezone: strin
 
   return guess.toISOString()
 }
+
+/**
+ * Converts a UTC ISO timestamp to local {date: YYYY-MM-DD, time: HH:mm} in the given IANA timezone.
+ * Used for notifications where the stored value is UTC but humans read local time.
+ */
+export function utcToLocalParts(utcIso: string, timezone: string): { date: string; time: string } {
+  const d = new Date(utcIso)
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  const hour = map.hour === '24' ? '00' : map.hour
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    time: `${hour}:${map.minute}`,
+  }
+}

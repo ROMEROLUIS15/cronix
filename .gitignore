@@ -76,3 +76,6 @@ docs/architecture/TECHNICAL_DOCUMENTATION_ES.md
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Auditorías internas
+CRONIX_AUDIT_REPORT.md

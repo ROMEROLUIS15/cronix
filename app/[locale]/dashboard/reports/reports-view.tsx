@@ -5,6 +5,7 @@ import { BarChart3, TrendingUp, Download, Users, Calendar, DollarSign, Star } fr
 import { Card, StatCard } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { downloadElementAsPDF } from '@/lib/utils/pdf-generator'
 import { useTranslations } from 'next-intl'
 
 interface ReportAppointment {
@@ -44,33 +45,7 @@ export function ReportsView({ data }: ReportsViewProps) {
   const t = useTranslations('reports')
 
   const handleDownloadReport = () => {
-    const lines = [
-      t('txtTitle'),
-      '========================',
-      '',
-      `${t('txtTotalApp')}      ${data.totalAppointments}`,
-      `${t('txtCompletedApp')}  ${data.completedAppointments}`,
-      `${t('txtCancelledApp')}   ${data.cancelledAppointments}`,
-      `${t('txtTotalClients')}     ${data.totalClients}`,
-      '',
-      `${t('txtIncome')}   ${formatCurrency(data.totalRevenue)}`,
-      `${t('txtExpenses')}     ${formatCurrency(data.totalExpenses)}`,
-      `${t('txtNetProfit')}      ${formatCurrency(data.netProfit)}`,
-      '',
-      t('txtPopularServices'),
-      ...Object.entries(data.byService)
-        .sort((a, b) => b[1].count - a[1].count)
-        .map(([name, { count, revenue }]) =>
-          `  ${name}: ${count} ${t('txtAppSuffix')} — ${formatCurrency(revenue)}`
-        ),
-    ]
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `reporte-cronix-${new Date().toISOString().split('T')[0]}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadElementAsPDF('reports-wrapper', `Reporte_Cronix_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
   const reportCards = [
@@ -81,7 +56,7 @@ export function ReportsView({ data }: ReportsViewProps) {
   ]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div id="reports-wrapper" className="space-y-6 animate-fade-in bg-[#0C0C0F] p-4 rounded-xl -m-4">
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -143,7 +118,7 @@ export function ReportsView({ data }: ReportsViewProps) {
                     leftIcon={<Download size={14} />}
                     onClick={(e) => { e.stopPropagation(); handleDownloadReport() }}
                   >
-                    TXT
+                    PDF
                   </Button>
                 </div>
               </div>

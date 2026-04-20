@@ -27,6 +27,39 @@ export async function getClientDetail(clientId: string, businessId: string) {
   return { client, clientAppointments }
 }
 
+export async function getClientDebts(businessId: string): Promise<Record<string, number>> {
+  const { createClient } = await import('@/lib/supabase/server')
+  const supabase = await createClient()
+
+  // Fetch only relevant past appointments with their costs and transactions
+  const { data: apts } = await supabase
+    .from('appointments')
+    .select('client_id, service:services(price), transactions(net_amount)')
+    .eq('business_id', businessId)
+    .not('status', 'in', '("cancelled","no_show")')
+    .lt('start_at', new Date().toISOString())
+
+  const debts: Record<string, number> = {}
+  
+  if (!apts) return debts
+  
+  apts.forEach((apt: any) => {
+    if (!apt.client_id) return
+    const price = apt.service?.price ?? 0
+    // sum transactions if any
+    const paid = Array.isArray(apt.transactions) 
+      ? apt.transactions.reduce((sum: number, t: any) => sum + Number(t.net_amount ?? 0), 0)
+      : 0
+    const owes = price - paid
+    
+    if (owes > 0) {
+      debts[apt.client_id] = (debts[apt.client_id] ?? 0) + owes
+    }
+  })
+
+  return debts
+}
+
 // ── New client creation ────────────────────────────────────────────────────
 
 export async function createNewClient(input: {

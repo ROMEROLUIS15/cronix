@@ -15,7 +15,7 @@ export function CalendarLegend() {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-4 sm:gap-6 px-5 py-3.5 rounded-2xl"
+      className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 px-5 py-3.5 rounded-2xl"
       style={{
         background: "linear-gradient(180deg, #22222E 0%, #1C1C28 100%)",
         border:     "1px solid #2A2A38",

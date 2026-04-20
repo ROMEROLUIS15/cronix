@@ -66,6 +66,7 @@ export function DashboardClient({
     actionError,
     setActionError,
     setConfirmDelete,
+    confirmDelete,
   } = useDashboardData({ businessId, initialStats, initialHasServices })
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -149,7 +150,10 @@ export function DashboardClient({
         )}
 
         {tab === "resumen" && (
-          <ResumenTab stats={stats ?? { todayCount: 0, totalClients: 0, monthRevenue: 0, pending: 0 }} />
+          <ResumenTab 
+            stats={stats ?? { todayCount: 0, totalClients: 0, monthRevenue: 0, pending: 0 }} 
+            monthApts={monthApts}
+          />
         )}
       </div>
 
@@ -162,7 +166,7 @@ export function DashboardClient({
         loading={loading}
         updatingStatus={updatingStatus}
         deletingId={deletingId}
-        confirmDelete={deletingId}
+        confirmDelete={confirmDelete}
         onClose={closeDayPanel}
         onAptClick={openAptPanel}
         onConfirmDelete={setConfirmDelete}

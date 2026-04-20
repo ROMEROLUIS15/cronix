@@ -861,7 +861,7 @@
       "fullAccess": "Full access included",
       "managePlan": "Manage plan",
       "current": "Plan {plan, select, free {Free} pro {Pro} enterprise {Enterprise} other {Free}}"
-    },
+    }
   },
   "profile": {
     "title": "My Profile",

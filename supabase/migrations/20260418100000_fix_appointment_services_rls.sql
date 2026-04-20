@@ -4,7 +4,6 @@
 -- authenticated users. This blocked manual edit, delete, and confirm from the UI.
 
 DROP POLICY IF EXISTS "appointment_services_all" ON public.appointment_services;
-
 CREATE POLICY "appointment_services_all" ON public.appointment_services
   FOR ALL TO authenticated
   USING (

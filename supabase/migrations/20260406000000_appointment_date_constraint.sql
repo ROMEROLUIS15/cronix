@@ -14,9 +14,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS trg_validate_appointment_date ON appointments;
-
 CREATE TRIGGER trg_validate_appointment_date
   BEFORE INSERT OR UPDATE ON appointments
   FOR EACH ROW EXECUTE FUNCTION fn_validate_appointment_date();

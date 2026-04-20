@@ -84,8 +84,8 @@ export async function runAgentLoop(
 ): Promise<{ text: string; tokens: number; toolCallsTrace: unknown[] }> {
   const { business } = context
 
-  // Cap history at 8 messages (~4 turns) to prevent unbounded token growth
-  const cappedHistory = context.history.slice(-8)
+  // Cap history at 14 messages (~7 turns) for much better memory
+  const cappedHistory = context.history.slice(-14)
 
   // Build initial messages array
   const messages: AgentMessage[] = [
@@ -252,55 +252,40 @@ export async function runAgentLoop(
   const lastToolParsed = lastToolMsg ? (() => { try { return JSON.parse(lastToolMsg.content ?? '') } catch { return null } })() : null
   const lastTrace      = toolCallsTrace[toolCallsTrace.length - 1] as { tool: string } | undefined
 
-  if (actionPerformed && lastToolParsed?.success === true && !loopExhausted) {
-    // Tool succeeded → use predefined template, skip LARGE_MODEL entirely
+  if (actionPerformed && lastToolParsed?.success === true) {
+    // Tool succeeded → use predefined template, skip LLM entirely.
+    // Runs even if loop exhausted: a successful last action is still a valid outcome.
     finalText = renderBookingSuccessTemplate(
       lastTrace?.tool ?? '',
       lastToolParsed,
       business.timezone,
     )
-    addBreadcrumb('Skipped LARGE_MODEL (success template used)', 'agent', 'info', { tool: lastTrace?.tool })
-  } else if (actionPerformed || !loopText) {
-    // Tool failed or loop exhausted → LARGE_MODEL explains the error naturally
-    const personality = business.settings.ai_personality ?? 'amable, profesional y muy breve'
-
-    messages.push({
-      role:    'system',
-      content: `El trabajo administrativo está completo. Ahora responde al cliente de forma cálida y natural en español.
-Personalidad: ${personality}.
-Sé conciso: máximo 2-3 oraciones.
-NUNCA menciones UUIDs, REF#, IDs técnicos ni detalles de sistema al cliente.
-Si se creó, reagendó o canceló una cita, confírmalo de forma celebratoria y breve.`,
-    })
-
-    const { response: finalRes, tokens: finalTokens } = await callLlm(
-      LARGE_MODEL,
-      messages,
-      [],
-      { tenant: business.slug ?? 'unknown', customer: customerName, loop_step: 'final' },
-      true, // enableCache: empathetic responses are more cacheable
-    )
-    totalTokens += finalTokens
-
-    finalText = finalRes.choices?.[0]?.message?.content?.trim() ?? ''
-    if (!finalText) {
-      if (loopExhausted) {
-        // Loop exhausted AND final model returned nothing — return user-friendly message, no throw
-        addBreadcrumb('Final pass empty after loop exhaustion — returning graceful fallback', 'agent', 'error')
-        return {
-          text:           'Intenté varias veces procesar tu solicitud pero no pude completarla. Por favor, intenta de nuevo en un momento o escríbenos directamente.',
-          tokens:         totalTokens,
-          toolCallsTrace,
-        }
-      }
-      // Normal (non-exhaustion) final pass failure → throw so Sentry/DLQ capture it
-      addBreadcrumb('LARGE_MODEL returned empty final response', 'agent', 'error')
-      throw new Error('Respuesta vacía del LLM en el paso final')
+    addBreadcrumb('Skipped final LLM pass (success template used)', 'agent', 'info', { tool: lastTrace?.tool, loop_exhausted: loopExhausted })
+  } else if (actionPerformed && lastToolParsed?.success === false) {
+    // Tool failed with a known error — return deterministic message, NO second LLM call
+    // A second LLM call here is the root cause of the 400→circuit breaker→503 loop
+    const errorCode = String(lastToolParsed?.error ?? '')
+    if (errorCode.includes('SLOT_CONFLICT') || errorCode.includes('Slot no disponible')) {
+      finalText = '⚠️ Ese horario ya está ocupado. ¿Te gustaría intentar con otra fecha u hora disponible?'
+    } else if (errorCode.includes('BOOKING_RATE_LIMIT')) {
+      finalText = '⚠️ Has alcanzado el límite de citas nuevas por hoy. Por favor contáctanos directamente si necesitas agendar con urgencia.'
+    } else if (errorCode.includes('INVALID_ARGS')) {
+      finalText = '⚠️ Hubo un problema con los datos de la cita. Por favor indícame nuevamente el servicio, fecha y hora.'
+    } else if (errorCode.includes('UNAUTHORIZED') || errorCode.includes('NOT_FOUND')) {
+      finalText = '⚠️ No encontré esa cita en tu historial. ¿Puedes confirmarme los detalles?'
+    } else {
+      finalText = '⚠️ No pude procesar tu solicitud en este momento. Por favor intenta de nuevo en unos minutos.'
     }
+    addBreadcrumb('Tool failed — using deterministic error response', 'agent', 'warning', { errorCode })
+  } else if (!loopText) {
+    // No tool call, empty text: LLM produced nothing useful.
+    // Graceful fallback that invites the customer to clarify — better UX than a cold error.
+    addBreadcrumb('Empty loop response without action — asking customer to clarify', 'agent', 'warning', { loop_exhausted: loopExhausted })
+    finalText = '¿Podrías indicarme con más detalle qué te gustaría hacer? Estoy aquí para ayudarte.'
   } else {
     // 8B already produced a complete conversational response — use it directly
     finalText = loopText
-    addBreadcrumb('Skipped LARGE_MODEL pass (conversational response from 8B)', 'agent', 'info')
+    addBreadcrumb('Using direct 8B conversational response', 'agent', 'info')
   }
 
   addBreadcrumb('Agent loop finished', 'agent', 'info', { total_tokens: totalTokens, steps: step })

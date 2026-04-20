@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { X, Pencil, Check, Ban, Clock, Phone, User, Loader2 } from "lucide-react"
+import { X, Pencil, Check, Ban, Clock, Phone, User, Loader2, Printer } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { getStatusColor } from "../_constants"
 import { formatTime, formatCurrency } from "@/lib/utils"
+import { downloadElementAsPDF } from "@/lib/utils/pdf-generator"
 import type { AppointmentStatus, AppointmentWithRelations } from "@/types"
 
 interface AptDetailPanelProps {
@@ -43,6 +44,7 @@ export function AptDetailPanel({
 
   return (
     <div
+      id="ticket-to-print"
       className={[
         "fixed inset-x-0 bottom-0 z-50 flex flex-col transition-transform duration-300 rounded-t-3xl",
         "lg:inset-x-auto lg:right-0 lg:top-0 lg:h-full lg:rounded-none lg:w-80 xl:w-96",
@@ -164,6 +166,16 @@ export function AptDetailPanel({
 
           {/* Footer */}
           <div className="p-4 space-y-2 flex-shrink-0" style={{ borderTop: "1px solid #262629" }}>
+            <button
+              onClick={() => {
+                const docName = `Recibo_${apt.client?.name?.replace(/\s+/g, '_') ?? 'Cita'}.pdf`
+                downloadElementAsPDF('ticket-to-print', docName)
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-80"
+              style={{ background: "#262629", color: "#F5F5F5", border: "1px solid #3F3F46" }}
+            >
+              <Printer size={15} /> Descargar Recibo PDF
+            </button>
             <Link
               href={`/dashboard/appointments/${apt.id}/edit`}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold"

@@ -57,7 +57,7 @@ Hora actual local: ${currentTime} (${timezone}).
 
 AISLAMIENTO: Solo gestionas citas de "${business.name}". No respondas preguntas fuera de agendamiento.
 FORMATO DE HORAS: Siempre usa formato 12 horas con AM/PM al hablar con el cliente (ej: 3:00 PM, 10:30 AM). Nunca uses hora militar (15:00, 22:00).
-FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuestas (lunes, martes, etc.). Usa ÚNICAMENTE "el 20 de abril" o la fecha numérica, NUNCA "el lunes 20 de abril". Cuando llames a los tools, debes usar estrictamente el formato ISO YYYY-MM-DD.
+FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuestas (lunes, martes, etc.). Usa ÚNICAMENTE "el 20 de abril" o la fecha numérica, NUNCA "el lunes 20 de abril". Cuando llames a los tools, debes usar estrictamente el formato ISO YYYY-MM-DD. Si ya definiste una fecha en el turno anterior, MANTÉNLA, no la cambies arbitrariamente al día siguiente.
 `
 
   // Client context
@@ -110,26 +110,34 @@ FECHAS — REGLA CRÍTICA: NUNCA menciones el día de la semana en tus respuesta
   prompt += `
 --- REGLAS DE LOS TOOLS (OBLIGATORIO) ---
 
-FLUJO OPTIMIZADO (CANCELACIONES Y REAGENDAMIENTOS):
-1. Si el cliente NO tiene citas en "CITAS ACTIVAS", infórmale amablemente.
-2. Si el cliente tiene VARIAS citas activas y pide cancelar/reagendar, debes preguntarle EXACTAMENTE cuál cita desea afectar antes de hacer nada.
-3. CANCELACIÓN DIRECTA (1 sola cita): Si el cliente tiene SOLO UNA cita activa y pide explícitamente cancelarla ("cancela mi cita"), llama a \`cancel_booking\` INMEDIATAMENTE en ese mismo turno. NO le preguntes si está seguro (para ahorrar tokens).
-4. REAGENDAMIENTO: Requiere saber la nueva fecha y hora. Si el cliente no las da, pregúntale. Una vez tengas la nueva fecha/hora y te asegures que está disponible, llama a \`reschedule_booking\` directamente.
+FLUJO ESTRICTO DE DOS TURNOS — OBLIGATORIO PARA LOS 3 TOOLS.
+Regla maestra: JAMÁS llames un tool sin confirmación explícita del cliente en el turno inmediatamente anterior.
 
-FLUJO DE DOS TURNOS (NUEVAS CITAS, SIN EXCEPCIONES):
-1. Primero propón la cita y pregunta confirmación → SIN llamar ningún tool
-2. Solo cuando el cliente responda "sí", "dale", "ok" o equivalente en su SIGUIENTE mensaje → llamar el tool correspondiente
-NUNCA llames un tool en el mismo turno donde haces una pregunta.
+CITAS NUEVAS (confirm_booking):
+1. Reúne servicio + fecha + hora. Si falta algo, pregunta.
+2. Con los 3 datos, propón: "¿Confirmo tu cita de [servicio] para el [fecha] a las [hora]?"
+3. ESPERA respuesta. Solo con "sí/dale/ok/confirma" del cliente → llama confirm_booking.
 
-CUANDO TIENES TODOS LOS DATOS PARA UNA CITA NUEVA:
-- DETÉN las preguntas inmediatamente. No pidas más datos ni ofrezcas alternativas.
-- Propón de inmediato: "¿Confirmo tu cita de [servicio] para el [fecha] a las [hora]?"
-- ESPERA la respuesta del cliente. No continúes el flujo bajo ningún concepto.
+REAGENDAMIENTO (reschedule_booking):
+1. Si NO tiene citas activas, infórmale y termina.
+2. Si tiene VARIAS, pregunta CUÁL quiere reagendar.
+3. PROHIBIDO reutilizar la fecha/hora actual o inventar fechas. Si el cliente no dio new_date y new_time explícitas, PREGUNTA: "¿Para qué fecha y hora quieres reagendarla?"
+4. Con new_date y new_time del cliente, propón: "¿Reagendo tu cita de [servicio] al [nueva fecha] a las [nueva hora]?"
+5. ESPERA respuesta. Solo con "sí/dale/ok/confirma" → llama reschedule_booking.
+
+CANCELACIÓN (cancel_booking):
+1. Si NO tiene citas activas, infórmale y termina.
+2. Si tiene VARIAS, pregunta CUÁL.
+3. Propón: "¿Confirmas que cancele tu cita de [servicio] del [fecha] a las [hora]?"
+4. ESPERA respuesta. Solo con "sí/dale/ok/confirma" → llama cancel_booking.
 
 EJECUCIÓN SILENCIOSA AL RECIBIR CONFIRMACIÓN:
-- Cuando el cliente te dé la confirmación explícita ("sí", "dale", "ok", "confirma", "cancela", "reagenda"):
-- Llama el tool DIRECTAMENTE en ese mismo turno, SIN generar ningún texto previo.
-- NO respondas "Perfecto, voy a confirmar..." — solo llama el tool. El sistema enviará un mensaje de éxito automáticamente mediante plantillas internas.
+- Llama el tool DIRECTAMENTE, SIN generar texto previo. El sistema responde con plantilla automática.
+- NO respondas "Perfecto, voy a confirmar..." — solo llama el tool.
+
+PROHIBICIONES ABSOLUTAS:
+- JAMÁS llames un tool con datos que el cliente no dijo explícitamente.
+- JAMÁS saltes el paso "¿Confirmo...?" — los 3 tools lo requieren.
 
 MANEJO DE ERRORES:
 - Si confirm_booking retorna success=false con error SLOT_CONFLICT: ese horario ya está ocupado.
@@ -187,5 +195,61 @@ export function renderBookingSuccessTemplate(
       return `✅ Tu cita de *${data.service_name}* ha sido cancelada. Cuando quieras agendar de nuevo, aquí estamos. 😊`
     default:
       return '✅ Acción completada.'
+  }
+}
+
+// ── Client Formal Confirmation (additional message) ──────────────────────────
+
+/**
+ * Builds a formal, structured confirmation message addressed to the client by name.
+ * Sent AFTER the conversational success template as a second WhatsApp message.
+ * Returns null if the tool/data combination doesn't warrant a formal block.
+ */
+export function renderClientConfirmation(
+  toolName:   string,
+  data:       Record<string, string>,
+  clientName: string,
+): string | null {
+  const name = (clientName || '').trim() || 'cliente'
+
+  switch (toolName) {
+    case 'confirm_booking': {
+      const date        = data['date']         ?? ''
+      const time        = data['time']         ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !serviceName) return null
+      const [y, m, d] = date.split('-').map(Number) as [number, number, number]
+      const dateStr = new Date(Date.UTC(y, m - 1, d))
+        .toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+      const timeStr = formatLocalTime(time)
+      return `✨ ¡Perfecto, ${name}! Tu cita ha sido agendada:\n\n📅 *Fecha:* ${dateStr}\n⏰ *Hora:* ${timeStr}\n💼 *Servicio:* ${serviceName}\n\n¡Te esperamos! 💪`
+    }
+    case 'reschedule_booking': {
+      const newDate     = data['new_date']     ?? ''
+      const newTime     = data['new_time']     ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || !/^\d{2}:\d{2}$/.test(newTime) || !serviceName) return null
+      const [y, m, d] = newDate.split('-').map(Number) as [number, number, number]
+      const dateStr = new Date(Date.UTC(y, m - 1, d))
+        .toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+      const timeStr = formatLocalTime(newTime)
+      return `🔄 ¡Listo, ${name}! Tu cita ha sido reagendada:\n\n📅 *Nueva fecha:* ${dateStr}\n⏰ *Nueva hora:* ${timeStr}\n💼 *Servicio:* ${serviceName}\n\n¡Nos vemos pronto! 🚀`
+    }
+    case 'cancel_booking': {
+      const date        = data['date']         ?? ''
+      const time        = data['time']         ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!serviceName) return null
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+        return `❌ Entendido, ${name}. Tu cita de *${serviceName}* ha sido cancelada. Cuando quieras agendar de nuevo, aquí estamos. 😊`
+      }
+      const [y, m, d] = date.split('-').map(Number) as [number, number, number]
+      const dateStr = new Date(Date.UTC(y, m - 1, d))
+        .toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+      const timeStr = formatLocalTime(time)
+      return `❌ Entendido, ${name}. Tu cita ha sido cancelada:\n\n📅 *Fecha:* ${dateStr}\n⏰ *Hora:* ${timeStr}\n💼 *Servicio:* ${serviceName}\n\nCuando quieras agendar de nuevo, aquí estamos. 😊`
+    }
+    default:
+      return null
   }
 }

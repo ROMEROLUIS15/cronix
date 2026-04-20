@@ -25,6 +25,11 @@ function ClientRow({ client }: { client: Client }) {
             {client.name}
           </p>
           {isVIP && <span className="text-brand-600"><Star size={14} fill="currentColor" /></span>}
+          {(client.total_debt ?? 0) > 0 && (
+            <Badge variant="warning" className="text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/10 tracking-tighter">
+              DEUDA
+            </Badge>
+          )}
           {(client.tags ?? []).filter(t => t !== 'VIP').map(tag => (
             <Badge key={tag} variant="brand" className="text-[10px] px-1.5 py-0">{tag}</Badge>
           ))}
@@ -43,7 +48,11 @@ function ClientRow({ client }: { client: Client }) {
         </div>
       </div>
       <div className="text-right flex-shrink-0 hidden sm:block">
-        <p className="text-sm font-semibold text-foreground">{formatCurrency(client.total_spent ?? 0)}</p>
+        {(client.total_debt ?? 0) > 0 ? (
+          <p className="text-sm font-bold text-red-500">Debe {formatCurrency(client.total_debt!)}</p>
+        ) : (
+          <p className="text-sm font-semibold text-foreground">{formatCurrency(client.total_spent ?? 0)}</p>
+        )}
         <p className="text-xs text-muted-foreground">{client.total_appointments ?? 0} {t('visits')}</p>
         {client.last_visit_at && (
           <p className="text-xs text-muted-foreground">{formatRelative(client.last_visit_at)}</p>

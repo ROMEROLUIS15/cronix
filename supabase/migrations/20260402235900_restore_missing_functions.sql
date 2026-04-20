@@ -6,7 +6,6 @@
 -- 0. Extensions
 CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "public";
 CREATE EXTENSION IF NOT EXISTS "pgtap" WITH SCHEMA "public";
-
 -- 1. Tables: WhatsApp Integration
 CREATE TABLE IF NOT EXISTS public.wa_audit_logs (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -17,20 +16,17 @@ CREATE TABLE IF NOT EXISTS public.wa_audit_logs (
     tool_calls jsonb,
     created_at timestamptz DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_sessions (
     sender_phone text PRIMARY KEY,
     business_id uuid REFERENCES public.businesses(id),
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_rate_limits (
     sender_phone text PRIMARY KEY,
     window_start timestamptz DEFAULT now(),
     message_count int DEFAULT 1
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_booking_limits (
     sender_phone text,
     business_id uuid REFERENCES public.businesses(id),
@@ -38,20 +34,17 @@ CREATE TABLE IF NOT EXISTS public.wa_booking_limits (
     booking_count int DEFAULT 1,
     PRIMARY KEY (sender_phone, business_id)
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_business_usage (
     business_id uuid PRIMARY KEY REFERENCES public.businesses(id),
     window_start timestamptz DEFAULT now(),
     message_count int DEFAULT 1
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_token_usage (
     business_id uuid REFERENCES public.businesses(id),
     usage_date date DEFAULT CURRENT_DATE,
     total_tokens bigint DEFAULT 0,
     PRIMARY KEY (business_id, usage_date)
 );
-
 CREATE TABLE IF NOT EXISTS public.wa_dead_letter_queue (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     payload jsonb,
@@ -61,7 +54,6 @@ CREATE TABLE IF NOT EXISTS public.wa_dead_letter_queue (
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
-
 -- 2. Tables: AI memories
 CREATE TABLE IF NOT EXISTS public.ai_memories (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -72,7 +64,6 @@ CREATE TABLE IF NOT EXISTS public.ai_memories (
     metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now()
 );
-
 -- 3. Restore Functions
 -- [fn_book_appointment_wa]
 CREATE OR REPLACE FUNCTION public.fn_book_appointment_wa(p_business_id uuid, p_client_phone text, p_client_name text, p_service_id uuid, p_start_at timestamp with time zone)
@@ -98,13 +89,11 @@ BEGIN
     RETURNING id INTO v_appointment_id;
     RETURN jsonb_build_object('success', true, 'appointment_id', v_appointment_id);
 END; $$;
-
 -- [fn_reset_all_web_rate_limits]
 CREATE OR REPLACE FUNCTION public.fn_reset_all_web_rate_limits()
  RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path TO '' AS $$
     DELETE FROM public.web_rate_limits;
 $$;
-
 -- [get_inactive_clients_rpc]
 CREATE OR REPLACE FUNCTION public.get_inactive_clients_rpc(biz_id uuid, sixty_days_ago timestamp with time zone)
  RETURNS TABLE(id uuid, name text, last_appt timestamp with time zone)
@@ -119,13 +108,11 @@ BEGIN
   HAVING MAX(a.start_at) < sixty_days_ago OR MAX(a.start_at) IS NULL
   ORDER BY last_appt DESC NULLS FIRST LIMIT 5;
 END; $$;
-
 -- [get_my_business_id]
 CREATE OR REPLACE FUNCTION public.get_my_business_id()
  RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
   SELECT business_id FROM public.users WHERE id = (SELECT auth.uid()) LIMIT 1;
 $$;
-
 -- [fn_validate_appointment_date]
 CREATE OR REPLACE FUNCTION public.fn_validate_appointment_date()
  RETURNS trigger LANGUAGE plpgsql AS $$
@@ -137,7 +124,6 @@ BEGIN
   END IF;
   RETURN NEW;
 END; $$;
-
 -- [match_memories]
 CREATE OR REPLACE FUNCTION public.match_memories(query_embedding vector, match_threshold double precision, match_count integer, p_user_id uuid, p_business_id uuid)
  RETURNS TABLE(id uuid, content text, metadata jsonb, similarity double precision)
@@ -149,7 +135,6 @@ begin
     and 1 - (ai_memories.embedding <=> query_embedding) > match_threshold
   order by similarity desc limit match_count;
 end; $$;
-
 -- [protect_platform_admin_role]
 CREATE OR REPLACE FUNCTION public.protect_platform_admin_role()
  RETURNS trigger LANGUAGE plpgsql AS $$
@@ -164,7 +149,6 @@ BEGIN
     END IF;
     RETURN NEW;
 END; $$;
-
 -- 4. Final Hardening: Enable RLS on restored tables
 ALTER TABLE public.wa_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_sessions ENABLE ROW LEVEL SECURITY;
@@ -174,17 +158,13 @@ ALTER TABLE public.wa_business_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_token_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wa_dead_letter_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_memories ENABLE ROW LEVEL SECURITY;
-
 -- 5. Restore basic isolation policies (Sync with prod)
 -- Note: These are simplified to match verification tests expectations.
 CREATE POLICY "Enable read for service_role" ON public.wa_audit_logs FOR SELECT TO service_role USING (true);
 CREATE POLICY "Deny read for authenticated" ON public.wa_audit_logs FOR SELECT TO authenticated USING (false);
-
 CREATE POLICY "Enable read for service_role" ON public.wa_dead_letter_queue FOR SELECT TO service_role USING (true);
 CREATE POLICY "Deny read for authenticated" ON public.wa_dead_letter_queue FOR SELECT TO authenticated USING (false);
-
 CREATE POLICY "Enable read for service_role" ON public.ai_memories FOR SELECT TO service_role USING (true);
 CREATE POLICY "Deny read for authenticated" ON public.ai_memories FOR SELECT TO authenticated USING (false);
-
 -- Default-Deny for others (Authenticated but not admin) is implicit if no other policy matches.
--- If the tests expect "Owner A can see own memories", we might need more, but let's start with this.
+-- If the tests expect "Owner A can see own memories", we might need more, but let's start with this.;

@@ -15,12 +15,9 @@ CREATE TABLE IF NOT EXISTS public.wa_token_usage (
     total_tokens    bigint      NOT NULL DEFAULT 0,
     PRIMARY KEY (business_id, usage_date)
 );
-
 COMMENT ON TABLE public.wa_token_usage IS
   'Tracks daily cumulative token consumption for AI cost control.';
-
 ALTER TABLE public.wa_token_usage ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic check for token quota
 --
@@ -51,7 +48,6 @@ BEGIN
     RETURN v_total < p_daily_limit;
 END;
 $$;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. Update token usage
 -- ═══════════════════════════════════════════════════════════════════════════════

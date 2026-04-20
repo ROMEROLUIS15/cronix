@@ -3,7 +3,7 @@
 import { Loader2 } from 'lucide-react'
 import {
   TrendingUp, TrendingDown, DollarSign, CreditCard,
-  Receipt, Plus, ArrowRight,
+  Receipt, Plus, ArrowRight, Printer
 } from 'lucide-react'
 import Link from 'next/link'
 import { StatCard, Card } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import {
   formatCurrency, formatDate,
   paymentMethodLabels, expenseCategoryLabels,
 } from '@/lib/utils'
+import { downloadElementAsPDF } from '@/lib/utils/pdf-generator'
 import type { PaymentMethod, ExpenseCategory } from '@/types'
 import { useTranslations } from 'next-intl'
 import { useFinancesDashboard } from './hooks/use-finances-dashboard'
@@ -41,15 +42,21 @@ export default function FinancesPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 animate-fade-in">
-
-      {/* Header */}
+    <div id="finances-report" className="space-y-6 animate-fade-in bg-[#0C0C0F] p-4 rounded-xl -m-4">
       <div className="flex items-start sm:items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
           <p className="text-muted-foreground text-sm">{t('subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button 
+            variant="secondary" 
+            leftIcon={<Printer size={16} />} 
+            className="w-full sm:w-auto"
+            onClick={() => downloadElementAsPDF('finances-report', 'Reporte_Financiero_Mes.pdf')}
+          >
+            Exportar PDF
+          </Button>
           <Link href="/dashboard/finances/expense" className="block flex-1 sm:flex-none">
             <Button variant="secondary" leftIcon={<Receipt size={16} />} className="w-full sm:w-auto">
               {t('registerExpense')}

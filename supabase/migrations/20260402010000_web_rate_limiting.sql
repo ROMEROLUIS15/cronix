@@ -13,14 +13,11 @@ CREATE TABLE IF NOT EXISTS public.web_rate_limits (
     window_start  timestamptz NOT NULL DEFAULT now(),
     request_count int         NOT NULL DEFAULT 1
 );
-
 COMMENT ON TABLE public.web_rate_limits IS
   'Sliding-window rate limiter for Web Auth and API routes. One row per identifier.';
-
 -- RLS: only service_role and anon (client-side middleware call) can access for reading,
 -- but the increment logic is encapsulated in a SECURITY DEFINER function.
 ALTER TABLE public.web_rate_limits ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic web rate-check function
 --
@@ -70,10 +67,8 @@ BEGIN
     RETURN v_count <= p_max_req;
 END;
 $$;
-
 COMMENT ON FUNCTION public.fn_web_check_rate_limit IS
   'Atomic sliding-window rate limiter for Web routes. Returns TRUE if allowed, FALSE if limited.';
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. Garbage collection: purge stale windows older than 24 hours
 -- ═══════════════════════════════════════════════════════════════════════════════

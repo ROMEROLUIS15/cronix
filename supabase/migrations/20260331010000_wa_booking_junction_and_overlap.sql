@@ -64,7 +64,6 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'appointment_id', v_appointment_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- ── 2. Back-fill existing AI appointments missing junction records ───────────
 
 INSERT INTO public.appointment_services (appointment_id, service_id, sort_order)

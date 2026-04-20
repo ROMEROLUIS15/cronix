@@ -5,7 +5,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DROP VIEW IF EXISTS public.v_web_suspicious_activity;
-
 CREATE VIEW public.v_web_suspicious_activity
   WITH (security_invoker = true)
 AS
@@ -21,8 +20,7 @@ AS
    FROM public.web_rate_limits
   WHERE (window_start > (now() - '24:00:00'::interval))
   ORDER BY request_count DESC;
-
 -- Revoke all from public and grant only to authenticated/service_role if needed
 -- Actually, with security_invoker = true, if RLS is enabled on web_rate_limits (which we just did),
 -- an ordinary user will see 0 rows unless they have permission on the base table.
--- This is exactly what we want.
+-- This is exactly what we want.;

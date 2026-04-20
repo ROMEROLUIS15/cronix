@@ -7,10 +7,8 @@ BEGIN
         ALTER TABLE public.clients ADD CONSTRAINT clients_business_phone_unique_key UNIQUE (business_id, phone);
     END IF;
 END $$;
-
 -- 2. wa_audit_logs Hardening
 ALTER TABLE public.wa_audit_logs ENABLE ROW LEVEL SECURITY;
-
 -- Policy: Only members of the business can see its audit logs
 DO $$ 
 BEGIN
@@ -25,7 +23,6 @@ BEGIN
         );
     END IF;
 END $$;
-
 -- 3. Robust Business Matching Function
 -- Handles both the display phone and the Meta Phone Number ID.
 CREATE OR REPLACE FUNCTION public.fn_get_business_by_phone(p_wa_phone_id text)
@@ -48,7 +45,6 @@ BEGIN
   LIMIT 1;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- 4. Fix fn_book_appointment_wa to target the specific constraint
 CREATE OR REPLACE FUNCTION public.fn_book_appointment_wa(
     p_business_id uuid,

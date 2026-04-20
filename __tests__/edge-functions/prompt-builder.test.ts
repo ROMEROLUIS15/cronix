@@ -134,8 +134,9 @@ describe('WhatsApp Agent — buildMinimalSystemPrompt', () => {
     const ctx = makeContext()
     const prompt = buildMinimalSystemPrompt(ctx, 'María')
 
-    expect(prompt).toContain('FLUJO DE DOS TURNOS')
-    expect(prompt).toContain('NUNCA llames un tool')
+    expect(prompt).toContain('CATÁLOGO DE SERVICIOS')
+    expect(prompt).toContain('HORARIO Y REGLAS')
+    expect(prompt).toContain('FECHAS')
   })
 })
 

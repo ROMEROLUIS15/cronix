@@ -16,12 +16,9 @@ CREATE TABLE IF NOT EXISTS public.service_health (
     last_failure    timestamptz,
     status          text        NOT NULL DEFAULT 'CLOSED' CHECK (status IN ('CLOSED', 'OPEN'))
 );
-
 COMMENT ON TABLE public.service_health IS
   'Tracks performance and health of external providers for Circuit Breaker pattern.';
-
 ALTER TABLE public.service_health ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic circuit check
 --
@@ -69,7 +66,6 @@ BEGIN
     RETURN TRUE;
 END;
 $$;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. Failure reporting
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -91,7 +87,6 @@ BEGIN
     WHERE service_name = p_service_name;
 END;
 $$;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 4. Success reporting
 -- ═══════════════════════════════════════════════════════════════════════════════

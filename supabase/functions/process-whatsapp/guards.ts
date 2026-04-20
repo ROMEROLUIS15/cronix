@@ -18,7 +18,7 @@ export async function checkMessageRateLimit(senderPhone: string): Promise<boolea
   return data as boolean
 }
 
-/** Returns true if the sender hasn't exceeded the booking limit for this business (2 / 24h). */
+/** Returns true if the client has fewer than 5 upcoming active appointments at this business. */
 export async function checkBookingRateLimit(
   senderPhone: string,
   businessId:  string
@@ -27,7 +27,7 @@ export async function checkBookingRateLimit(
     p_sender:       senderPhone,
     p_business_id:  businessId,
     p_window_secs:  86400,
-    p_max_bookings: 2,
+    p_max_bookings: 5,
   })
   if (error) return true  // fail-open
   return data as boolean

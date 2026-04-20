@@ -12,23 +12,20 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   metadata jsonb DEFAULT '{}', -- Store appointment_id, client_id, etc.
   created_at timestamptz DEFAULT now()
 );
-
 -- Enable RLS
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-
 -- Indexing for performance
 CREATE INDEX idx_notifications_business_id ON public.notifications (business_id);
 CREATE INDEX idx_notifications_is_read ON public.notifications (is_read) WHERE is_read = false;
-
 -- RLS Policies
 CREATE POLICY "Users can view notifications for their business"
   ON public.notifications FOR SELECT
   USING (business_id = (SELECT business_id FROM public.users WHERE id = auth.uid()));
-
 CREATE POLICY "Users can mark their business notifications as read"
   ON public.notifications FOR UPDATE
   USING (business_id = (SELECT business_id FROM public.users WHERE id = auth.uid()))
-  WITH CHECK (is_read = true); -- Only allow changing is_read to true
+  WITH CHECK (is_read = true);
+-- Only allow changing is_read to true
 
 -- Helper Function to Mark All as Read (Convenience)
 CREATE OR REPLACE FUNCTION public.fn_mark_all_notifications_as_read(target_business_id uuid)

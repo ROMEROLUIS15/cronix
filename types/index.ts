@@ -18,7 +18,7 @@ export type ExpenseCategory = Enums['expense_category']
 // ── Core Entities (Rows) ───────────────────────────────────
 export type User = Tables['users']['Row']
 export type Business = Tables['businesses']['Row']
-export type Client = Tables['clients']['Row']
+export type Client = Tables['clients']['Row'] & { total_debt?: number }
 export type Service = Tables['services']['Row']
 export type Appointment = Tables['appointments']['Row'] & {
   client?: Pick<Client, 'id' | 'name' | 'phone' | 'avatar_url'>

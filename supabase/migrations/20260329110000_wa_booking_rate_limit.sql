@@ -15,16 +15,12 @@ CREATE TABLE IF NOT EXISTS public.wa_booking_limits (
     booking_count int         NOT NULL DEFAULT 1,
     PRIMARY KEY (sender_phone, business_id)
 );
-
 COMMENT ON TABLE public.wa_booking_limits IS
   'Anti-spam: tracks WhatsApp bookings per sender per business within a 24-hour window.';
-
 CREATE INDEX IF NOT EXISTS idx_wa_booking_limits_business
   ON public.wa_booking_limits (business_id);
-
 -- RLS: only service_role (Edge Functions) accesses this table
 ALTER TABLE public.wa_booking_limits ENABLE ROW LEVEL SECURITY;
-
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. Atomic booking-limit check function
 --
@@ -71,6 +67,5 @@ BEGIN
     RETURN v_count <= p_max_bookings;
 END;
 $$;
-
 COMMENT ON FUNCTION public.fn_wa_check_booking_limit IS
   'Atomic booking rate limiter per sender+business. Returns TRUE if booking allowed.';

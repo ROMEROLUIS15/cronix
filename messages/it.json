@@ -862,7 +862,7 @@
       "fullAccess": "Accesso completo incluso",
       "managePlan": "Gestisci piano",
       "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}"
-    },
+    }
   },
   "profile": {
     "title": "Il Mio Profilo",

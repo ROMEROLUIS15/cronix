@@ -55,36 +55,24 @@ export async function getAppointmentDetails(appointmentId: string): Promise<{
 }
 
 /**
- * Reschedules an appointment, preserving the original duration.
- * Verifies business ownership twice (fetch + update) to prevent IDOR.
+ * Reschedules an appointment via the atomic RPC `fn_reschedule_appointment_wa`.
+ * The RPC preserves the original duration, checks for slot-conflict against
+ * other active appointments, and enforces business ownership. Returns a
+ * structured result — callers must check `result.success`.
  */
 export async function rescheduleAppointment(
   appointmentId: string,
   newStartAt:    string,
   businessId:    string
-): Promise<void> {
-  const { data: original, error: fetchErr } = await supabase
-    .from('appointments')
-    .select('start_at, end_at, business_id')
-    .eq('id', appointmentId)
-    .eq('business_id', businessId)
-    .single()
+): Promise<BookingResult> {
+  const { data, error } = await supabase.rpc('fn_reschedule_appointment_wa', {
+    p_appointment_id: appointmentId,
+    p_business_id:    businessId,
+    p_new_start_at:   newStartAt,
+  })
 
-  if (fetchErr || !original) {
-    throw new Error(`rescheduleAppointment: appointment ${appointmentId} not found or access denied`)
-  }
-
-  const apt        = original as { start_at: string; end_at: string }
-  const durationMs = new Date(apt.end_at).getTime() - new Date(apt.start_at).getTime()
-  const newEndAt   = new Date(new Date(newStartAt).getTime() + durationMs).toISOString()
-
-  const { error: updateErr } = await supabase
-    .from('appointments')
-    .update({ start_at: newStartAt, end_at: newEndAt, updated_at: new Date().toISOString() })
-    .eq('id', appointmentId)
-    .eq('business_id', businessId)
-
-  if (updateErr) throw new Error(`rescheduleAppointment update failed: ${updateErr.message}`)
+  if (error) throw new Error(`rescheduleAppointment RPC error: ${error.message}`)
+  return data as BookingResult
 }
 
 /**

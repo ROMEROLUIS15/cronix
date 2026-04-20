@@ -7,10 +7,11 @@
 
 'use client';
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths } from 'date-fns'
 import { getBrowserContainer } from '@/lib/browser-container'
+import { createClient } from '@/lib/supabase/client'
 import {
   notificationForAppointmentConfirmed,
   notificationForAppointmentCancelled,
@@ -19,6 +20,8 @@ import { notifyOwner } from '@/lib/services/push-notify.service'
 import { logger } from '@/lib/logger'
 import type { AppointmentStatus, AppointmentWithRelations } from '@/types'
 import type { DashboardStats } from '@/app/[locale]/dashboard/_hooks/useDashboard'
+
+import { parseISO, isPast } from 'date-fns' // For simpler time checking
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -128,6 +131,8 @@ export function useDashboardData({
 
   const loading = loadingApts || loadingStats
 
+
+
   // ── Derived state ───────────────────────────────────────────────────────
 
   const calendarDays = useCallback(() => {
@@ -169,6 +174,63 @@ export function useDashboardData({
       void queryClient.invalidateQueries({ queryKey: ['dashboard-stats', businessId] })
     },
   })
+
+  // ── Realtime: refresh calendar when WhatsApp agent mutates appointments ─
+  useEffect(() => {
+    if (!businessId) return
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`appointments-${businessId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments',
+          filter: `business_id=eq.${businessId}`,
+        },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ['appointments', businessId] })
+          void queryClient.invalidateQueries({ queryKey: ['dashboard-stats', businessId] })
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [businessId, queryClient])
+
+  // ── Auto-Completion Hook ────────────────────────────────────────────────
+  // Ubicado aquí abajo para tener acceso a updateStatusMutation
+  useEffect(() => {
+    if (loadingApts || !businessId || !monthApts || monthApts.length === 0) return
+
+    const parts = new Date().toISOString().split('T')
+    const todayStr = parts[0]
+    if (!todayStr) return
+
+    const expired = monthApts.filter(apt => {
+      if (apt.status !== 'pending' && apt.status !== 'confirmed') return false
+      return isPast(parseISO(apt.end_at))
+    })
+
+    if (expired.length === 0) return
+
+    const runAutoCheckout = async () => {
+      for (const apt of expired) {
+        try {
+          await updateStatusMutation.mutateAsync({ appointmentId: apt.id, status: 'completed' })
+          logger.info('dashboard', `Auto-checked out appointment ${apt.id}`)
+        } catch (e) {
+          logger.error('dashboard', `Failed to auto-checkout ${apt.id}`)
+        }
+      }
+    }
+
+    void runAutoCheckout()
+  }, [monthApts, loadingApts, businessId, updateStatusMutation])
 
   const handleUpdateStatus = useCallback(async (
     status: AppointmentStatus,
@@ -231,9 +293,7 @@ export function useDashboardData({
     setDeletingId(id)
     try {
       if (!businessId) throw new Error('No business ID')
-      const container = getBrowserContainer()
-      const result = await container.appointments.updateStatus(id, 'cancelled', businessId)
-      if (result.error) throw new Error(result.error)
+      await updateStatusMutation.mutateAsync({ appointmentId: id, status: 'cancelled' })
 
       // Create notification for cancellation
       if (selectedApt) {
@@ -261,7 +321,7 @@ export function useDashboardData({
     } finally {
       setDeletingId(null)
     }
-  }, [businessId])
+  }, [businessId, updateStatusMutation])
 
   const quickConfirmApt = useCallback(async (aptId: string) => {
     setUpdatingStatus(true)
@@ -281,11 +341,7 @@ export function useDashboardData({
       
       const apt = aptResult.data?.find(a => a.id === aptId)
 
-      const result = await container.appointments.updateStatus(aptId, 'confirmed', businessId)
-      if (result.error) {
-        logger.error('dashboard', `Quick confirm failed: ${result.error}`)
-        return
-      }
+      await updateStatusMutation.mutateAsync({ appointmentId: aptId, status: 'confirmed' })
 
       // Create notification for confirmation
       if (apt) {
@@ -309,7 +365,7 @@ export function useDashboardData({
     } finally {
       setUpdatingStatus(false)
     }
-  }, [businessId])
+  }, [businessId, updateStatusMutation])
 
   // ── Return ──────────────────────────────────────────────────────────────
 

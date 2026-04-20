@@ -194,6 +194,61 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
     status: string,
     businessId: string
   ): Promise<Result<void>> {
+    // ---- Auto-Facturación / Checkout ----
+    if (status === 'completed') {
+      try {
+        // Fetch to calculate total revenue AND any previous partial payments (abonos)
+        const { data: apt } = await this.supabase
+          .from('appointments')
+          .select(`
+            appointment_services (
+              service:services(price, name)
+            ),
+            transactions (
+              net_amount
+            )
+          `)
+          .eq('id', appointmentId)
+          .single()
+
+        let totalAmount = 0
+        let notes = 'Cobro automático (completada)'
+
+        if (apt?.appointment_services && Array.isArray(apt.appointment_services)) {
+           totalAmount = apt.appointment_services.reduce((sum: number, relation: any) => sum + Number(relation.service?.price ?? 0), 0)
+           const serviceNames = apt.appointment_services.map((r: any) => r.service?.name).filter(Boolean).join(', ')
+           if (serviceNames) notes = `Cobro: ${serviceNames}`
+        }
+
+        // Subtract what was already paid (if they made partial payments before completion)
+        const alreadyPaid = apt?.transactions && Array.isArray(apt.transactions)
+          ? apt.transactions.reduce((sum: number, t: any) => sum + Number(t.net_amount ?? 0), 0)
+          : 0
+
+        const debt = totalAmount - alreadyPaid
+
+        if (debt > 0) {
+          // Attempt upsert with idempotency key ONLY for the remaining debt
+          await this.supabase
+            .from('transactions')
+            .upsert({
+              business_id: businessId,
+              appointment_id: appointmentId,
+              amount: debt,
+              net_amount: debt,
+              discount: 0,
+              tip: 0,
+              method: 'cash', // Default to cash for leftover auto-checkout
+              notes: alreadyPaid > 0 ? `Liquidación de saldo. ${notes}` : notes,
+              paid_at: new Date().toISOString(),
+              idempotency_key: `checkout_${appointmentId}`
+            }, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+        }
+      } catch (err) {
+        console.error('Error in auto-billing hook:', err)
+      }
+    }
+
     const { error } = await this.supabase
       .from('appointments')
       .update({
