@@ -55,11 +55,10 @@ test.describe('Voice Assistant E2E', () => {
     businessId = biz.id as string
 
     // Link user to business as owner
-    await supabase.from('business_users').insert({
+    await supabase.from('users').update({
       business_id: businessId,
-      user_id: user.id as string,
       role: 'owner',
-    })
+    }).eq('id', user.id as string)
   })
 
   test.beforeEach(async ({ page }) => {
