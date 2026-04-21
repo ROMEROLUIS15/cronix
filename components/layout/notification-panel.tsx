@@ -117,15 +117,15 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start gap-2 mb-0.5">
-                            <p className={`text-sm font-bold truncate ${!notif.is_read ? 'text-[#F2F2F2]' : 'text-[#909098]'}`}>
+                            <p className="text-sm font-bold truncate text-[#F2F2F2]">
                               {notif.title}
                             </p>
-                            <div className="flex items-center gap-1 text-[10px] text-[#505058] flex-shrink-0 whitespace-nowrap">
+                            <div className="flex items-center gap-1 text-[10px] text-[#909098] flex-shrink-0 whitespace-nowrap">
                               <Clock size={10} />
                               {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true, locale: dateFnsLocale })}
                             </div>
                           </div>
-                          <p className={`text-xs leading-relaxed ${!notif.is_read ? 'text-[#C0C0C8]' : 'text-[#707078]'}`}>
+                          <p className="text-xs leading-relaxed text-[#E0E0E8]">
                             {notif.content}
                           </p>
                         </div>

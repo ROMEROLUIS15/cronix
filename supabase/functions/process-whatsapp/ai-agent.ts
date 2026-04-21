@@ -19,7 +19,7 @@
  *  - notifications.ts  → fireOwnerNotifications(), sendWhatsAppWithRetry()
  */
 
-import type { BusinessRagContext } from "./types.ts"
+import type { BusinessRagContext, ActiveAppointmentRow } from "./types.ts"
 import { addBreadcrumb, captureException } from "../_shared/sentry.ts"
 import {
   checkCircuitBreaker,
@@ -45,6 +45,8 @@ export { LlmRateLimitError, CircuitBreakerError }
 
 // ── Output Sanitization ────────────────────────────────────────────────────────
 
+const TOOL_NAME_ALTERNATION = '(?:confirm|cancel|reschedule)_booking'
+
 function sanitizeOutput(text: string): string {
   if (!text) return text
   return text
@@ -52,14 +54,105 @@ function sanitizeOutput(text: string): string {
     .replace(/<function>[\s\S]*?<\/function>/gi, '')
     .replace(/\[CONFIRM_[^\]]+\]/gi, '')
     .replace(/\{[\s\S]*?"(?:service_id|client_id|appointment_id|date|time)":[\s\S]*?\}/gi, '')
+    // Strip plaintext tool invocations leaking through when tool_choice is 'none'
+    .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\s*\\([^)]*\\)`, 'gi'), '')
+    .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\s*[:=]\\s*\\{[^}]*\\}`, 'gi'), '')
+    .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\b`, 'gi'), '')
+    // Collapse whitespace left behind
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
 function containsInternalSyntax(text: string): boolean {
-  return /<function[=\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"/i.test(text)
+  return new RegExp(`<function[=\\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"|\\b${TOOL_NAME_ALTERNATION}\\b`, 'i').test(text)
 }
 
 const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
+
+// ── Tool-gating (deterministic 2-turn enforcement) ───────────────────────────
+// The 8B model is prone to hallucinating tool args on the first user message.
+// Instead of relying on the prompt alone, we gate tool availability:
+//  - If the immediately prior assistant turn was a confirmation question AND
+//    the current user message is an affirmative → allow tools (tool_choice: 'auto').
+//  - Otherwise → forbid tools (tool_choice: 'none') so the model must converse,
+//    gather data, and propose a confirmation before any booking action runs.
+
+const CONFIRMATION_QUESTION_RE =
+  /¿\s*(Confirmo|Reagendo|Confirmas\s+que\s+cancele|Confirmas\s+la\s+cancelaci[óo]n)/i
+
+// Broad Spanish/LatAm affirmative lexicon. Matches the first token(s) so the user
+// can append anything ("ok amiga gracias", "dale agenda"). Negations are filtered
+// separately so "no" / "no quiero" never pass even if followed by an affirmative word.
+const AFFIRMATIVE_RE =
+  /^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\s+supuesto|as[íi]\s+es|est[áa]\s+bien|todo\s+bien|me\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\s+acuerdo|de\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)\b/i
+
+const NEGATIVE_RE =
+  /^(no+|nop[ea]?|nada|para\s+nada|todav[íi]a\s+no|a[úu]n\s+no|mejor\s+no|cancela\s+eso)\b/i
+
+function lastAssistantWasConfirmation(history: { role: string; text: string }[]): boolean {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if (!h) continue
+    if (h.role === 'model' || h.role === 'assistant') {
+      return CONFIRMATION_QUESTION_RE.test(h.text ?? '')
+    }
+  }
+  return false
+}
+
+function isAffirmative(text: string): boolean {
+  const t = (text ?? '').trim().toLowerCase().replace(/[.,!¡?¿]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!t || t.length > 60) return false
+  if (NEGATIVE_RE.test(t)) return false
+  return AFFIRMATIVE_RE.test(t)
+}
+
+// ── Deterministic intent fallback ─────────────────────────────────────────────
+// Used ONLY when the 8B produces empty/unusable output while the gate is blocked.
+// Builds the clarification/confirmation question directly from DB state so the
+// client always receives a specific, correct answer even if the model fails.
+
+const CANCEL_INTENT_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
+const RESCHEDULE_INTENT_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?\s+(?:mi\s+)?(?:cita|hora|fecha))\b/i
+
+function formatApt(apt: ActiveAppointmentRow, timezone: string): { dateStr: string; timeStr: string } {
+  const dt      = new Date(apt.start_at)
+  const dateStr = dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: timezone })
+  const timeStr = dt.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone })
+  return { dateStr, timeStr }
+}
+
+function buildDeterministicIntentResponse(
+  userText:           string,
+  activeAppointments: ActiveAppointmentRow[],
+  timezone:           string,
+): string | null {
+  const cancelIntent     = CANCEL_INTENT_RE.test(userText)
+  const rescheduleIntent = RESCHEDULE_INTENT_RE.test(userText)
+
+  if (!cancelIntent && !rescheduleIntent) return null
+
+  if (activeAppointments.length === 0) {
+    return 'No veo ninguna cita activa a tu nombre. ¿Quieres agendar una nueva?'
+  }
+
+  if (activeAppointments.length === 1) {
+    const apt = activeAppointments[0]!
+    const { dateStr, timeStr } = formatApt(apt, timezone)
+    if (cancelIntent) {
+      return `¿Confirmas que cancele tu cita de *${apt.service_name}* del ${dateStr} a las ${timeStr}?`
+    }
+    return `¿Para qué nueva fecha y hora te gustaría reagendar tu cita de *${apt.service_name}* del ${dateStr} a las ${timeStr}?`
+  }
+
+  const list = activeAppointments.slice(0, 5).map((apt, i) => {
+    const { dateStr, timeStr } = formatApt(apt, timezone)
+    return `${i + 1}. *${apt.service_name}* — ${dateStr} a las ${timeStr}`
+  }).join('\n')
+
+  const verb = cancelIntent ? 'cancelar' : 'reagendar'
+  return `Tienes varias citas activas:\n\n${list}\n\n¿Cuál de ellas quieres ${verb}?`
+}
 
 // ── Public API: Agent Loop ────────────────────────────────────────────────────
 
@@ -98,6 +191,14 @@ export async function runAgentLoop(
     { role: 'user', content: userText },
   ]
 
+  // Deterministic 2-turn gate: tools only become callable when the prior
+  // assistant turn was a "¿Confirmo...?" and the user answered affirmatively.
+  // When blocked, we pass an empty tools array so the model does not see the
+  // tool schemas at all — removes the hallucination surface entirely.
+  const toolsAllowed       = lastAssistantWasConfirmation(cappedHistory) && isAffirmative(userText)
+  const activeTools        = toolsAllowed ? BOOKING_TOOLS : []
+  const toolChoice: 'auto' | 'none' = 'auto'
+
   let totalTokens:    number    = 0
   let step:           number    = 0
   let actionPerformed = false
@@ -120,8 +221,10 @@ export async function runAgentLoop(
     const { response, tokens } = await callLlm(
       SMALL_MODEL,
       messages,
-      BOOKING_TOOLS,
+      activeTools,
       { tenant: business.slug ?? 'unknown', customer: customerName, loop_step: String(step) },
+      false,
+      toolChoice,
     )
     totalTokens += tokens
 
@@ -129,7 +232,10 @@ export async function runAgentLoop(
     if (!assistantMsg) break
 
     // ── Embedded function recovery ─────────────────────────────────────────
-    if (assistantMsg.content && (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0)) {
+    // Only attempt to promote leaked text into a real tool_call when the gate
+    // allows it. Otherwise we'd be executing exactly the hallucinations the gate
+    // is supposed to block.
+    if (toolsAllowed && assistantMsg.content && (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0)) {
       const match1 = assistantMsg.content.match(/<function=([a-z_]+)>([\s\S]*?)<\/function>/i)
       const match2 = assistantMsg.content.match(/<function>\s*([a-z_]+)\s*<\/function>\s*(\{[\s\S]*\})/i)
       let fnName = ''
@@ -295,7 +401,13 @@ export async function runAgentLoop(
     addBreadcrumb('Empty text or internal syntax detected after sanitization — using fallback', 'agent', 'warning', {
       snippet: finalText?.slice(0, 100)
     })
-    finalText = INTERNAL_SYNTAX_FALLBACK
+    // Prefer a DB-driven, intent-aware response over the generic fallback so the
+    // client always sees the actual appointment details when they ask to cancel
+    // or reschedule — no matter what the 8B produced.
+    const deterministic = !toolsAllowed
+      ? buildDeterministicIntentResponse(userText, context.activeAppointments, business.timezone)
+      : null
+    finalText = deterministic ?? INTERNAL_SYNTAX_FALLBACK
   }
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }

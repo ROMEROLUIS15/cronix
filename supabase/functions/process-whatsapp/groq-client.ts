@@ -108,6 +108,7 @@ export async function callLlm(
   tools:         unknown[],
   heliconeProps: Record<string, string> = {},
   enableCache    = false,
+  toolChoice:    'auto' | 'none' = 'auto',
 ): Promise<{ response: LlmResponse; tokens: number }> {
   // @ts-ignore — Deno runtime global
   const apiKeysStr = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
@@ -129,7 +130,7 @@ export async function callLlm(
   }
   if (tools.length > 0) {
     payload.tools                = tools
-    payload.tool_choice          = 'auto'
+    payload.tool_choice          = toolChoice
     payload.parallel_tool_calls  = false  // prevent duplicate bookings from parallel calls
   }
 

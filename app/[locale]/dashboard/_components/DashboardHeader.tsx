@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { format } from "date-fns"
 import { es }     from "date-fns/locale"
+import { useEffect, useState } from "react"
 import { CalendarDays, BarChart3, DollarSign, User, Plus } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,11 @@ interface DashboardHeaderProps {
  */
 export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderProps) {
   const t     = useTranslations('dashboard')
-  const today = new Date()
+  const [today, setToday] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setToday(new Date())
+  }, [])
 
   return (
     <div className="space-y-3">
@@ -27,45 +32,61 @@ export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderP
         <h1 className="text-xl sm:text-2xl font-black" style={{ color: "#F5F5F5", letterSpacing: "-0.03em" }}>
           {t('greeting')}, {userName} 👋
         </h1>
-        <p className="text-xs sm:text-sm capitalize mt-0.5" style={{ color: "#8A8A90" }}>
-          {format(today, "EEEE d 'de' MMMM yyyy", { locale: es })}
-        </p>
+        {today && (
+          <p className="text-xs sm:text-sm capitalize mt-0.5" style={{ color: "#8A8A90" }}>
+            {format(today, "EEEE d 'de' MMMM yyyy", { locale: es })}
+          </p>
+        )}
       </div>
 
-      {/* Mobile: 2x2 grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:hidden">
-        <button
-          onClick={() => onTabChange("agenda")}
-          className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-          style={tab === "agenda"
-            ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }
-            : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.15)" }}
-        >
-          <CalendarDays size={16} /><span>{t('tabs.agenda')}</span>
-        </button>
-
-        <Link href="/dashboard/finances/new" className="w-full">
-          <button className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.15)" }}>
-            <DollarSign size={16} /><span>{t('quickActions.registerPayment')}</span>
+      {/* Mobile: 2-row layout - Tabs + Actions */}
+      <div className="space-y-3 sm:hidden">
+        {/* Row 1: Navigation Tabs */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => onTabChange("agenda")}
+            className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            style={tab === "agenda"
+              ? { background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }
+              : { background: "rgba(0,98,255,0.08)", color: "#3884FF", border: "1px solid rgba(0,98,255,0.15)" }}
+          >
+            <CalendarDays size={16} /><span>{t('tabs.agenda')}</span>
           </button>
-        </Link>
 
-        <Link href="/dashboard/clients/new" className="w-full">
-          <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
+          <button
+            onClick={() => onTabChange("resumen")}
+            className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
-            leftIcon={<User size={16} />}>
-            {t('quickActions.newClient')}
-          </Button>
-        </Link>
+          >
+            <BarChart3 size={16} /><span>{t('tabs.metrics')}</span>
+          </button>
+        </div>
 
-        <Link href="/dashboard/appointments/new" className="w-full">
-          <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
-            style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
-            leftIcon={<Plus size={16} />}>
-            {t('quickActions.newAppointment')}
-          </Button>
-        </Link>
+        {/* Row 2: Action Buttons */}
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/dashboard/finances/new" className="w-full">
+            <button className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+              style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.15)" }}>
+              <DollarSign size={16} /><span>Pagos</span>
+            </button>
+          </Link>
+
+          <Link href="/dashboard/clients/new" className="w-full">
+            <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
+              style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
+              leftIcon={<User size={16} />}>
+              Cliente
+            </Button>
+          </Link>
+
+          <Link href="/dashboard/appointments/new" className="w-full">
+            <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
+              style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
+              leftIcon={<Plus size={16} />}>
+              Cita
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* sm+: 4–5 column action bar */}
