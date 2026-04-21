@@ -14,10 +14,12 @@ function firstSentenceEnd(text: string): number {
   return m?.index !== undefined ? m.index + 1 : -1
 }
 
-// quality: para acciones de escritura (70B como primario para mejor tool-calling, 8B fallback)
-// fast:    para consultas de lectura (respuesta más rápida, 8B primario)
+// quality: para acciones de escritura (8b-instant primario por estabilidad + rate limits; 70b fallback)
+// fast:    para consultas de lectura (respuesta más rápida)
+// NOTA: 70B como primario causaba timeouts y rate limits en Groq free tier.
+// Volvemos a 8B primario; la mejora de precisión viene de mejor prompt + memoria de entidades.
 const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string }> = {
-  quality: { primary: 'llama-3.3-70b-versatile', fallback: 'llama-3.1-8b-instant' },
+  quality: { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
   fast:    { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
 }
 

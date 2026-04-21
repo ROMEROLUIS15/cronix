@@ -268,8 +268,15 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   const output = await orchestrator.process(aiInput)
 
   // 7. Persist session to Redis (messages + entities)
+  // CRITICAL: Strip tool_calls and tool messages from history before saving.
+  // Groq API rejects requests with orphaned tool_calls (when slice truncates
+  // the chain). Only save clean user/assistant text pairs — same shape the
+  // frontend was sending before, which was working.
+  const cleanHistory: LlmMessage[] = output.history
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+    .map((m) => ({ role: m.role, content: m.content ?? '' }))
   const updatedSession = {
-    messages: output.history,
+    messages: cleanHistory,
     entities: entityContext,
   }
   const sessionSavePromise = sessionStore.saveSession(user.id, updatedSession)

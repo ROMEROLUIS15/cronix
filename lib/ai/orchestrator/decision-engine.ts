@@ -103,8 +103,9 @@ const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\
 const TOMORROW_QUERY_PATTERN = /qu[eé]\s+tengo\s+ma[nñ]ana|citas?\s+de\s+ma[nñ]ana|agenda\s+d[e]?\s+ma[nñ]ana/i
 /** "cancela la última", "cancela lo último", "cancela eso", "elimina la cita" */
 const CANCEL_LAST_PATTERN    = /cancel[ae][rs]?\s+(l[ao]\s+)?[úu]ltim[ao]|cancela\s+eso|elimin[ae].*cita/i
-/** Anaphora patterns: "esta cita", "esa cita", "la misma", "la de antes", "reagéndala", "cancélala", etc. */
-const ANAPHORA_PATTERN       = /(?:esta|esa|la|la\s+misma|la\s+de\s+antes|lo\s+mismo)\s+cita|reagéndala|cancélala|la\s+cita$/i
+/** Anaphora patterns (demostrativos estrictos): "esta cita", "esa cita", "la misma", "la de antes", "reagéndala", "cancélala".
+ *  NO incluye "la cita" genérico para evitar disparo en "cancela la cita de Luis". */
+const ANAPHORA_PATTERN       = /\b(?:esta|esa|aquella|la\s+misma|la\s+de\s+antes|esa\s+misma|lo\s+mismo)\s+cita\b|\breag[eé]ndala\b|\bcanc[eé]lala\b/i
 
 
 // ── Helper: Extract known entities from text ──────────────────────────────────
