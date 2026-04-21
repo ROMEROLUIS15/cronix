@@ -11,6 +11,7 @@ import { shieldOutput } from '@/lib/ai/output-shield'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getRepos } from '@/lib/repositories'
 import { createProductionOrchestrator } from '@/lib/ai/orchestrator/orchestrator-factory'
+import { sessionStore } from '@/lib/ai/session-store'
 import type { AiInput, UserRole } from '@/lib/ai/orchestrator'
 import type { LlmMessage } from '@/lib/ai/providers/types'
 
@@ -105,7 +106,12 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     return NextResponse.json({ error: 'No business attached' }, { status: 403 })
   }
 
-  // 2b. Token quota
+  // 2b. Load session from Redis (server-side truth, not client-supplied history)
+  const session = await sessionStore.getSession(user.id)
+  const serverHistory = session.messages
+  const entityContext = session.entities as Record<string, unknown>
+
+  // 2c. Token quota
   const quota = await checkTokenQuota(businessId)
   if (!quota.allowed) {
     logger.warn('AI-ASSISTANT', `Token quota exceeded: ${quota.used}/${quota.limit}`, { businessId })
@@ -229,9 +235,10 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     userRole:   (userRole as UserRole),
     timezone,
     channel:    'web',
-    history:    clientHistory as LlmMessage[],
+    history:    serverHistory,
     requestId:  requestId ?? undefined,
     userName,
+    entityContext,
     context: {
       businessId,
       businessName,
@@ -260,10 +267,17 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   const orchestrator = createProductionOrchestrator(admin, GROQ_API_KEY)
   const output = await orchestrator.process(aiInput)
 
-  // 7. Token usage (fire-and-forget)
+  // 7. Persist session to Redis (messages + entities)
+  const updatedSession = {
+    messages: output.history,
+    entities: entityContext,
+  }
+  const sessionSavePromise = sessionStore.saveSession(user.id, updatedSession)
+
+  // 8. Token usage (fire-and-forget)
   void recordTokenUsage(businessId, output.tokens)
 
-  // 8. TTS
+  // 9. TTS (parallelized with session save)
   let audioUrl: string | null = null
   let ttsLatencyMs = 0
 
@@ -280,9 +294,16 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     })()
 
     const ttsStart = Date.now()
-    const ttsRes   = await ttsEngine.synthesize(ttsInput)
-    ttsLatencyMs   = Date.now() - ttsStart
-    audioUrl       = ttsRes.audioUrl ?? null
+    // Parallelize TTS synthesis with session persistence
+    const [ttsRes] = await Promise.all([
+      ttsEngine.synthesize(ttsInput),
+      sessionSavePromise,
+    ])
+    ttsLatencyMs = Date.now() - ttsStart
+    audioUrl = ttsRes.audioUrl ?? null
+  } else {
+    // Even if no TTS, wait for session save to complete
+    await sessionSavePromise
   }
 
   logger.metric({

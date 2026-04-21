@@ -73,6 +73,13 @@ function isRejection(text: string): boolean {
   )
 }
 
+// ── Helper: Detect anaphora (refer to previous entity) ─────────────────────────
+// "esta cita", "esa cita", "la misma", "reagéndala" → resolve via entityContext
+
+function detectAnaphora(text: string): boolean {
+  return ANAPHORA_PATTERN.test(text)
+}
+
 // ── Helper: Detect booking intent from text ───────────────────────────────────
 
 const BOOKING_SIGNALS = [
@@ -96,6 +103,8 @@ const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\
 const TOMORROW_QUERY_PATTERN = /qu[eé]\s+tengo\s+ma[nñ]ana|citas?\s+de\s+ma[nñ]ana|agenda\s+d[e]?\s+ma[nñ]ana/i
 /** "cancela la última", "cancela lo último", "cancela eso", "elimina la cita" */
 const CANCEL_LAST_PATTERN    = /cancel[ae][rs]?\s+(l[ao]\s+)?[úu]ltim[ao]|cancela\s+eso|elimin[ae].*cita/i
+/** Anaphora patterns: "esta cita", "esa cita", "la misma", "la de antes", "reagéndala", "cancélala", etc. */
+const ANAPHORA_PATTERN       = /(?:esta|esa|la|la\s+misma|la\s+de\s+antes|lo\s+mismo)\s+cita|reagéndala|cancélala|la\s+cita$/i
 
 
 // ── Helper: Extract known entities from text ──────────────────────────────────
@@ -364,6 +373,43 @@ export class DecisionEngine implements IDecisionEngine {
           type:   'execute_immediately',
           intent: 'cancel_booking',
           args:   { appointment_id: state.lastAction.appointmentId },
+        }
+      }
+
+      // Fast path C2 — Anaphora resolution: "cancela esta cita", "reagéndala", etc.
+      // Resolves via entityContext.lastAppointmentId persisted from Redis
+      if (detectAnaphora(input.text) && input.entityContext?.lastAppointmentId) {
+        const intent = input.text.toLowerCase().includes('cancel') ? 'cancel_booking' : 'reschedule'
+        logger.info('DECISION-ENGINE', 'Owner anaphora resolution fast-path', {
+          userId:        input.userId,
+          appointmentId: input.entityContext.lastAppointmentId,
+          intent,
+        })
+
+        if (intent === 'cancel_booking') {
+          return {
+            type:   'execute_immediately',
+            intent: 'cancel_booking',
+            args:   { appointment_id: input.entityContext.lastAppointmentId },
+          }
+        } else {
+          // Reschedule needs date/time, pass to LLM with pre-resolved appointment
+          return {
+            type: 'reason_with_llm',
+            messages: [
+              {
+                role: 'system',
+                content: `El usuario se refiere a la cita con ID ${input.entityContext.lastAppointmentId}. ` +
+                         `Esta cita es: Cliente "${input.entityContext.lastClientName}", ` +
+                         `Servicio "${input.entityContext.lastServiceName}", ` +
+                         `Fecha ${input.entityContext.lastDate}. ` +
+                         `Necesitas obtener la nueva fecha/hora del usuario para reagendar.`,
+              },
+              ...input.history,
+              { role: 'user', content: input.text },
+            ],
+            toolDefs: buildToolDefsForRole(strategy, 'collecting_reschedule'),
+          }
         }
       }
 

@@ -66,6 +66,8 @@ export interface AiInput {
   requestId?: string
   /** Optional: user display name */
   userName?: string
+  /** Optional: persistent entity context for anaphora resolution */
+  entityContext?: Record<string, unknown>
 }
 
 // ── ConversationState ─────────────────────────────────────────────────────────
