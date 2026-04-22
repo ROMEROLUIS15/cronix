@@ -273,6 +273,24 @@ function containsInternalSyntax(text: string): boolean {
 const INTERNAL_SYNTAX_FALLBACK =
   'Estoy verificando la información para confirmarte correctamente. ¿Te parece bien ese horario?'
 
+/**
+ * Builds a deterministic owner-facing success line from structured write-tool data.
+ * Used when the LLM finishes the turn without emitting text but a write tool
+ * already succeeded in a previous iteration — avoids the generic "No pude procesar" fallback.
+ */
+function renderOwnerSuccessMessage(data: BookingEventData): string {
+  const client  = data.clientName  || 'el cliente'
+  const service = data.serviceName ? ` para ${data.serviceName}` : ''
+  switch (data.action) {
+    case 'created':
+      return `Listo. Agendé a ${client}${service} el ${data.date} a las ${data.time}.`
+    case 'cancelled':
+      return `Listo. Cancelé la cita de ${client}${data.serviceName ? ` (${data.serviceName})` : ''}.`
+    case 'rescheduled':
+      return `Listo. Reagendé la cita de ${client} para el ${data.date} a las ${data.time}.`
+  }
+}
+
 export class ExecutionEngine implements IExecutionEngine {
   /**
    * Set de eventIds emitidos en este request.
@@ -616,6 +634,12 @@ export class ExecutionEngine implements IExecutionEngine {
       }
 
       if (!lastLlmResponse.content && !lastLlmResponse.tool_calls?.length) {
+        // Anti-fallback: a write tool already succeeded in a prior iteration.
+        // Rendering the template is correct; falling to "No pude procesar" would lie to the user.
+        if (actionPerformed && lastSuccessfulWriteData) {
+          responseText = renderOwnerSuccessMessage(lastSuccessfulWriteData)
+          break
+        }
         responseText = 'No pude procesar esa solicitud. Por favor, inténtalo de nuevo.'
         break
       }
@@ -840,7 +864,12 @@ export class ExecutionEngine implements IExecutionEngine {
 
     // If loop exhausted without a response
     if (!responseText) {
-      responseText = 'Intenté procesar tu solicitud pero no pude completarla. Por favor, inténtalo de nuevo.'
+      // Same anti-fallback rule: prefer the success template when we already wrote data.
+      if (actionPerformed && lastSuccessfulWriteData) {
+        responseText = renderOwnerSuccessMessage(lastSuccessfulWriteData)
+      } else {
+        responseText = 'Intenté procesar tu solicitud pero no pude completarla. Por favor, inténtalo de nuevo.'
+      }
     }
 
     // Sanitize: strip false-certainty phrases that appear when no tool was called.
@@ -876,6 +905,13 @@ export class ExecutionEngine implements IExecutionEngine {
     // so the orchestrator can include tool call context in the returned history.
     const turnMessages = messages.slice(decision.messages.length) as LlmMessage[]
 
+    // Reset flow when the turn is clearly over:
+    //   - action succeeded (booking completed)       → next message should be a fresh intent
+    //   - write tool failed (bail-out path)          → don't leave the user trapped in collecting_booking
+    // Keeps the draft/flow intact for genuine mid-collection turns where the LLM is
+    // legitimately asking for one more field.
+    const shouldResetFlow = actionPerformed || writeToolFailed
+
     return {
       text: responseText,
       actionPerformed,
@@ -883,6 +919,10 @@ export class ExecutionEngine implements IExecutionEngine {
       tokens: estimatedTokens,
       nextState: {
         ...state,
+        flow:          shouldResetFlow ? 'idle' : state.flow,
+        draft:         shouldResetFlow ? null   : state.draft,
+        missingFields: shouldResetFlow ? []     : state.missingFields,
+        lastIntent:    shouldResetFlow ? null   : state.lastIntent,
         lastToolCalls: lastLlmResponse?.tool_calls ?? null,
         // Propagate lastAction: use the new write-tool result if one succeeded this turn,
         // otherwise carry forward the existing session lastAction (or null if none).

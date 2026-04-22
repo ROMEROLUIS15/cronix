@@ -22,6 +22,7 @@ import type { IUserStrategy } from './strategy'
 import { StrategyFactory } from './strategy'
 import { logger } from '@/lib/logger'
 import { normalizeDateInput, normalizeTimeInput } from '@/lib/ai/utils/date-normalize'
+import { similarity, normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
 
 
 // ── Confirmation keywords (Spanish) ──────────────────────────────────────────
@@ -213,22 +214,52 @@ function detectOwnerBookingIntent(text: string): boolean {
 }
 
 /**
- * Fuzzy-matches a service name from free text against the business catalog.
- * Tries exact service name match first, then significant-word match (>3 chars).
+ * Fuzzy-matches a service name embedded in free user text against the business catalog.
+ *
+ * Three-layer strategy (best→weakest):
+ *   1. Substring on normalized text — "tarjetas" finds catalog entry "Tarjetas".
+ *   2. Word-level Levenshtein — handles singular↔plural (tarjeta/tarjetas,
+ *      corte/cortes, cabello/cabellos) and typos (cabeyo→cabello) via
+ *      similarity ≥ 0.82 on at least one word pair.
+ *   3. No match → null (LLM path handles disambiguation via prompt flexibility rules).
+ *
+ * Why not reuse `fuzzyFind`: that helper compares one entity's name head-to-head
+ * with a spoken name. Here the service name is *embedded* in a longer utterance
+ * ("agenda a Juan el 3 de mayo con tarjetas") so we scan words instead.
  */
+const SERVICE_WORD_MATCH_THRESHOLD = 0.82
 function fuzzyMatchService(
   text: string,
   services: AiInput['context']['services'],
 ): { id: string; name: string } | null {
   if (!services || services.length === 0) return null
-  const n = normalizeForMatch(text)
+
+  const textNorm  = normalizeForFuzzy(text)
+  const textWords = textNorm.split(/\s+/).filter((w) => w.length >= 3)
+
+  let best: { svc: { id: string; name: string }; score: number } | null = null
+
   for (const svc of services) {
-    const svcN = normalizeForMatch(svc.name)
-    if (n.includes(svcN)) return { id: svc.id, name: svc.name }
-    const words = svcN.split(/\s+/).filter((w) => w.length > 3)
-    if (words.length > 0 && words.some((w) => n.includes(w))) return { id: svc.id, name: svc.name }
+    const svcNorm = normalizeForFuzzy(svc.name)
+
+    // Layer 1: direct substring match — highest confidence, short-circuit.
+    if (textNorm.includes(svcNorm)) {
+      return { id: svc.id, name: svc.name }
+    }
+
+    // Layer 2: word-level Levenshtein — catches singular/plural variants and typos.
+    const svcWords = svcNorm.split(/\s+/).filter((w) => w.length >= 3)
+    for (const sw of svcWords) {
+      for (const tw of textWords) {
+        const s = similarity(sw, tw)
+        if (s >= SERVICE_WORD_MATCH_THRESHOLD && (!best || s > best.score)) {
+          best = { svc: { id: svc.id, name: svc.name }, score: s }
+        }
+      }
+    }
   }
-  return null
+
+  return best?.svc ?? null
 }
 
 /**
@@ -522,7 +553,8 @@ export class DecisionEngine implements IDecisionEngine {
       }
 
       const entities = extractEntities(input.text, input.timezone)
-      const systemPrompt = buildSystemPrompt(input, state, entities)
+      const resolved = mergeResolvedEntities(entities, state.draft, input.context.services)
+      const systemPrompt = buildSystemPrompt(input, state, resolved)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -538,12 +570,13 @@ export class DecisionEngine implements IDecisionEngine {
     // Results are passed to buildSystemPrompt so the LLM uses the exact
     // resolved values instead of re-computing them (fixes timezone drift).
     const entities = extractEntities(input.text, input.timezone)
+    const resolved = mergeResolvedEntities(entities, state.draft, input.context.services)
 
     // ── 4. Booking intent detected → delegate to LLM ─────────────────────────
     // The LLM receives context.services with UUIDs and resolves all fields.
     // No hybrid regex+LLM collection — single responsibility.
     if (detectBookingIntent(input.text)) {
-      const systemPrompt = buildSystemPrompt(input, state, entities)
+      const systemPrompt = buildSystemPrompt(input, state, resolved)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -557,7 +590,7 @@ export class DecisionEngine implements IDecisionEngine {
 
     // ── 5. Default: delegate to LLM for reasoning ────────────────────────────
     // Build messages array with system prompt context
-    const systemPrompt = buildSystemPrompt(input, state, entities)
+    const systemPrompt = buildSystemPrompt(input, state, resolved)
 
     const intent = classifyIntent(input.text)
 
@@ -582,10 +615,46 @@ export class DecisionEngine implements IDecisionEngine {
 
 // ── Helpers: System prompt and tool definitions ───────────────────────────────
 
+interface ResolvedEntities {
+  date?:        string
+  time?:        string
+  clientName?:  string
+  serviceName?: string
+}
+
+/**
+ * Fuses current-turn extracted entities with surviving draft fields so the
+ * system prompt tells the LLM everything already known.
+ *
+ * Precedence: current-turn extraction > draft (newer info wins for date/time).
+ * Service name is resolved from the services catalog when the draft only has a UUID.
+ */
+function mergeResolvedEntities(
+  extracted: ExtractedEntities,
+  draft: ConversationState['draft'],
+  services: AiInput['context']['services'],
+): ResolvedEntities {
+  const d = draft as Record<string, string | undefined> | null
+
+  let serviceName: string | undefined
+  if (d?.['service_id'] && services) {
+    serviceName = services.find((s) => s.id === d['service_id'])?.name ?? d['service_name']
+  } else if (d?.['service_name']) {
+    serviceName = d['service_name']
+  }
+
+  return {
+    date:        extracted.date ?? d?.['date'],
+    time:        extracted.time ?? d?.['time'],
+    clientName:  d?.['client_name'],
+    serviceName,
+  }
+}
+
 function buildSystemPrompt(
   input: AiInput,
   state: ConversationState,
-  resolvedEntities?: { date?: string; time?: string },
+  resolvedEntities?: ResolvedEntities,
 ): string {
   const now = new Date().toLocaleString('es-ES', {
     timeZone: input.timezone,
@@ -604,12 +673,20 @@ function buildSystemPrompt(
   prompt += `\nUsuario: ${input.userName ?? 'Usuario'} (${input.userRole})`
 
   // ── Fix #2: Inject pre-resolved entities ───────────────────────────────────────────
-  // These values were resolved deterministically (no LLM inference, timezone-aware).
-  // Use them DIRECTLY in tool calls — do NOT recalculate or re-interpret.
-  if (resolvedEntities?.date || resolvedEntities?.time) {
-    prompt += '\n\nENTIDADES YA RESUELTAS (usar estos valores directamente, no recalcular):'
-    if (resolvedEntities.date) prompt += `\n- Fecha: ${resolvedEntities.date}`
-    if (resolvedEntities.time) prompt += `\n- Hora: ${resolvedEntities.time}`
+  // These values were resolved deterministically (fast-path D extraction, prior-turn draft)
+  // or survived from the draft across turns. Use them DIRECTLY — do NOT re-prompt the user
+  // for fields already present, and do NOT recalculate dates.
+  const hasAny =
+    resolvedEntities?.date ||
+    resolvedEntities?.time ||
+    resolvedEntities?.clientName ||
+    resolvedEntities?.serviceName
+  if (hasAny) {
+    prompt += '\n\nENTIDADES YA RESUELTAS (usar estos valores directamente, NO volver a pedirlos):'
+    if (resolvedEntities?.date)        prompt += `\n- Fecha: ${resolvedEntities.date}`
+    if (resolvedEntities?.time)        prompt += `\n- Hora: ${resolvedEntities.time}`
+    if (resolvedEntities?.clientName)  prompt += `\n- Cliente: ${resolvedEntities.clientName} (NO preguntes "a nombre de quién"; ya tienes el nombre)`
+    if (resolvedEntities?.serviceName) prompt += `\n- Servicio: ${resolvedEntities.serviceName} (NO preguntes "qué servicio"; ya está resuelto)`
   }
 
   // ── Response format (voice-first) ────────────────────────────────────────────

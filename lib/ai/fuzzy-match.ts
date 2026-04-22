@@ -43,9 +43,18 @@ function levenshtein(a: string, b: string): number {
 }
 
 // ── Similarity score [0..1] ────────────────────────────────────────────────
-function similarity(a: string, b: string): number {
+export function similarity(a: string, b: string): number {
   const dist = levenshtein(a, b)
   return 1 - dist / Math.max(a.length, b.length, 1)
+}
+
+/**
+ * Normalizes a string the same way fuzzyFind does (lowercase, strip accents,
+ * collapse whitespace). Exposed so callers building bespoke scanners can
+ * stay consistent with fuzzy matching.
+ */
+export function normalizeForFuzzy(s: string): string {
+  return normalize(s)
 }
 
 const MATCH_THRESHOLD = 0.45 // tolerante para nombres hablados con errores

@@ -423,8 +423,12 @@ export async function runAgentLoop(
  */
 export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<{ text: string | null; tokens: number }> {
   // @ts-ignore — Deno runtime global
-  const apiKey = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
-  if (!apiKey) throw new Error('LLM_API_KEY no configurada')
+  const apiKeysStr = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
+  if (!apiKeysStr) throw new Error('LLM_API_KEY no configurada')
+  // Mirror callLlm() key pooling: accept comma-separated keys, use the first.
+  // Single-key configs still produce a 1-element array, so behavior is unchanged.
+  const apiKey = apiKeysStr.split(',').map(k => k.trim()).filter(Boolean)[0]
+  if (!apiKey) throw new Error('LLM_API_KEY no configurada correctamente')
 
   // Normalize MIME: strip codec suffix (e.g. 'audio/ogg; codecs=opus' → 'audio/ogg').
   // Groq Whisper rejects the codec suffix in the Content-Type header of the multipart part,

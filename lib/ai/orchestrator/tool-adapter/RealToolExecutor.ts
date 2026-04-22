@@ -69,6 +69,16 @@ const GetAvailableSlotsSchema = z.object({
  */
 type ExecResult = { success: boolean; result: string; error?: string; data?: BookingEventData }
 
+/**
+ * Result of a fuzzy client lookup.
+ * `ambiguous` surfaces candidate names back to the LLM so it can ask which one
+ * the user meant instead of silently picking the first match.
+ */
+type ClientResolution =
+  | { status: 'found';     client:     { id: string; name: string } }
+  | { status: 'ambiguous'; candidates: { id: string; name: string }[] }
+  | { status: 'not_found' }
+
 
 // ── Implementation ─────────────────────────────────────────────────────────────
 
@@ -105,21 +115,29 @@ export class RealToolExecutor implements IToolExecutor {
     businessId: string,
     clientName?: string,
     clientId?: string,
-  ): Promise<{ id: string; name: string } | null> {
+  ): Promise<ClientResolution> {
     if (clientId) {
       const res = await this.clientRepo.getById(clientId, businessId)
-      if (res.error || !res.data) return null
-      return { id: res.data.id, name: res.data.name }
+      if (res.error || !res.data) return { status: 'not_found' }
+      return { status: 'found', client: { id: res.data.id, name: res.data.name } }
     }
 
-    if (!clientName) return null
+    if (!clientName) return { status: 'not_found' }
 
     const allRes = await this.clientRepo.findActiveForAI(businessId)
-    if (allRes.error || !allRes.data?.length) return null
+    if (allRes.error || !allRes.data?.length) return { status: 'not_found' }
 
     const found = fuzzyFind(allRes.data, clientName)
-    if (found.status !== 'found') return null
-    return { id: found.match.id, name: found.match.name }
+    if (found.status === 'found') {
+      return { status: 'found', client: { id: found.match.id, name: found.match.name } }
+    }
+    if (found.status === 'ambiguous') {
+      return {
+        status:     'ambiguous',
+        candidates: found.candidates.map((c) => ({ id: c.id, name: c.name })),
+      }
+    }
+    return { status: 'not_found' }
   }
 
   private async resolveService(
@@ -147,8 +165,13 @@ export class RealToolExecutor implements IToolExecutor {
 
     const { service_id, date, time, client_name, client_id, staff_id } = parsed.data
 
-    const client = await this.resolveClient(p.businessId, client_name, client_id)
-    if (!client) {
+    const resolution = await this.resolveClient(p.businessId, client_name, client_id)
+    if (resolution.status === 'ambiguous') {
+      // Surface candidates to the LLM as a tool result; it will ask the user to pick one.
+      const names = resolution.candidates.map((c) => c.name).join(', ')
+      return { success: false, result: `Encontré varios clientes con ese nombre: ${names}. ¿Cuál de ellos?` }
+    }
+    if (resolution.status === 'not_found') {
       const label = client_name ?? client_id ?? 'el cliente'
       return { success: false, result: `No encontré al cliente "${label}". ¿Está registrado?` }
     }
@@ -163,7 +186,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:     p.businessId,
-      clientId:       client.id,
+      clientId:       resolution.client.id,
       serviceIds:     [service_id],
       startAt:        startISO,
       endAt:          endISO,
@@ -174,10 +197,10 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result:  `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}.`,
+      result:  `Listo. Agendé a ${resolution.client.name} para ${service.name} el ${date} a las ${time}.`,
       data: {
         appointmentId: result.data?.id ?? '',
-        clientName:    client.name,
+        clientName:    resolution.client.name,
         serviceName:   service.name,
         date,
         time,
