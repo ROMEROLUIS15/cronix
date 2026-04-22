@@ -10,8 +10,9 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Download, Share, X, Smartphone, Monitor } from 'lucide-react'
+import { Download, Share, X, Smartphone, Monitor, AlertCircle } from 'lucide-react'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
+import { usePwaInstallFallback } from '@/lib/hooks/use-pwa-install-fallback'
 import { useTranslations } from 'next-intl'
 
 interface PwaInstallBannerProps {
@@ -20,24 +21,40 @@ interface PwaInstallBannerProps {
 
 export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
   const { canInstall, isIos, isInstalled, install } = usePwaInstall()
+  const fallback = usePwaInstallFallback()
   const [showIosGuide, setShowIosGuide] = useState(false)
+  const [showFallback, setShowFallback] = useState(false)
   const [dismissed,    setDismissed]    = useState(false)
   const t = useTranslations('pwa')
 
+  // Determine if we should show any install UI
+  const shouldShowAny = !isInstalled && (canInstall || isIos || (fallback.hasManifest && fallback.hasSW))
+
   if (dismissed) return null
-  
-  // En el modo navbar, queremos que sea visible para diseño incluso si canInstall es falso
-  if (variant !== 'navbar' && isInstalled) return null
-  if (variant !== 'navbar' && !canInstall && !isIos) return null
 
   const isNavbar = variant === 'navbar'
 
+  // navbar always shows if not installed; hero/login only shows if installable
+  if (isInstalled) return null
+  if (variant !== 'navbar' && !shouldShowAny) return null
+
   // ── RENDER NAVBAR VARIANT (Simple Button) ──────────────────────────────────
   if (isNavbar) {
+    const handleClick = async () => {
+      if (canInstall) {
+        await install()
+      } else if (isIos) {
+        setShowIosGuide(v => !v)
+      } else if (fallback.hasManifest && fallback.hasSW) {
+        setShowFallback(true)
+      }
+    }
+
     return (
-      <button
-        onClick={canInstall ? install : (isIos ? () => setShowIosGuide(v => !v) : () => {})}
-        style={{
+      <>
+        <button
+          onClick={handleClick}
+          style={{
           display:         'inline-flex',
           alignItems:      'center',
           justifyContent:  'center',
@@ -60,6 +77,63 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
         <Download size={16} />
         {t('downloadApp')}
       </button>
+
+      {/* Fallback modal when no beforeinstallprompt but app is installable */}
+      {showFallback && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50000,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'flex-end',
+        }} onClick={() => setShowFallback(false)}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              background: '#161619',
+              borderRadius: '16px 16px 0 0',
+              padding: '24px',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
+            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: '#F2F2F2', fontSize: '16px', fontWeight: 700 }}>
+                Install Cronix App
+              </h3>
+              <button
+                onClick={() => setShowFallback(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <X size={20} style={{ color: '#909098' }} />
+              </button>
+            </div>
+
+            <p style={{ color: '#909098', marginBottom: '20px', fontSize: '14px' }}>
+              {fallback.instruction}
+            </p>
+
+            <button
+              onClick={() => setShowFallback(false)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
+    </>
     )
   }
 

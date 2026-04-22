@@ -55,12 +55,14 @@ if (typeof window !== 'undefined') {
     e.preventDefault()
     _deferred = e as BeforeInstallPromptEvent
     window.__pwaDeferred = _deferred
+    console.log('[usePwaInstall] beforeinstallprompt captured')
     notifySubscribers()
   })
 
   window.addEventListener('appinstalled', () => {
     _deferred = null
     window.__pwaDeferred = undefined
+    console.log('[usePwaInstall] app installed')
     notifySubscribers()
   })
 }
@@ -93,12 +95,22 @@ export function usePwaInstall(): PwaInstallState {
     // Sync with both capture sources
     const deferred = window.__pwaDeferred ?? _deferred ?? null
     if (deferred && !_deferred) _deferred = deferred
-    setHasEvent(deferred !== null)
+
+    // Fallback: check for PWA manifest (always show for non-iOS if manifest exists)
+    const hasManifest = !!document.querySelector('link[rel="manifest"]')
+
+    // Show install button if: has deferred event OR (has manifest AND not iOS)
+    const shouldShow = deferred !== null || (hasManifest && !ios)
+    setHasEvent(shouldShow)
 
     // Subscribe to future updates
     const onUpdate = () => {
-      setHasEvent(_deferred !== null)
-      if (_deferred === null) setIsInstalled(true)
+      const deferred = _deferred
+      const shouldShow = deferred !== null || (hasManifest && !ios)
+      setHasEvent(shouldShow)
+      if (deferred === null && _deferred === null) {
+        setIsInstalled(true)
+      }
     }
 
     _subscribers.add(onUpdate)
@@ -106,13 +118,40 @@ export function usePwaInstall(): PwaInstallState {
   }, [])
 
   const install = useCallback(async () => {
-    if (!_deferred) return
-    await _deferred.prompt()
-    const { outcome } = await _deferred.userChoice
-    if (outcome === 'accepted') {
-      _deferred = null
-      setHasEvent(false)
-      setIsInstalled(true)
+    console.log('[usePwaInstall] install() called, _deferred:', !!_deferred)
+
+    if (_deferred) {
+      try {
+        console.log('[usePwaInstall] showing native prompt')
+        await _deferred.prompt()
+        const { outcome } = await _deferred.userChoice
+        console.log('[usePwaInstall] user choice:', outcome)
+        if (outcome === 'accepted') {
+          _deferred = null
+          setHasEvent(false)
+          setIsInstalled(true)
+        }
+      } catch (err) {
+        console.error('[usePwaInstall] prompt error:', err)
+        notifySubscribers()
+      }
+    } else {
+      // Fallback: if no deferred event, browser may show install UI automatically
+      // or user needs to use browser menu. Log this for debugging.
+      console.warn('[usePwaInstall] No beforeinstallprompt event available.')
+      console.warn('[usePwaInstall] Installation may require:')
+      console.warn('  1. Android: Chrome menu > Install app')
+      console.warn('  2. iOS: Safari > Share > Add to Home Screen')
+      console.warn('[usePwaInstall] Visit the site multiple times to trigger the prompt')
+
+      // Try to check if manifest and SW are properly set up
+      const hasManifest = !!document.querySelector('link[rel="manifest"]')
+      const swReg = await navigator.serviceWorker?.getRegistration()
+      console.log('[usePwaInstall] Manifest:', hasManifest, 'SW:', !!swReg)
+
+      if (hasManifest && swReg) {
+        alert('App is ready to install!\n\nAndroid: Use Chrome menu (⋮) > Install app\n\niOS: Tap Share > Add to Home Screen')
+      }
     }
   }, [])
 

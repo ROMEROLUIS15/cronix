@@ -171,9 +171,33 @@ export class RealToolExecutor implements IToolExecutor {
       const names = resolution.candidates.map((c) => c.name).join(', ')
       return { success: false, result: `Encontré varios clientes con ese nombre: ${names}. ¿Cuál de ellos?` }
     }
-    if (resolution.status === 'not_found') {
-      const label = client_name ?? client_id ?? 'el cliente'
-      return { success: false, result: `No encontré al cliente "${label}". ¿Está registrado?` }
+
+    // ── Auto-create path ───────────────────────────────────────────────────
+    // Owner/staff flow: if the client doesn't exist in the DB but we have a
+    // name, register them and continue with the booking in the same turn.
+    // Avoids the "¿está registrado?" dead-end and matches what the LLM system
+    // prompt already instructs for the reasoning path.
+    let clientFinal: { id: string; name: string }
+    if (resolution.status === 'found') {
+      clientFinal = resolution.client
+    } else {
+      if (!client_name || client_id) {
+        const label = client_name ?? client_id ?? 'el cliente'
+        return { success: false, result: `No encontré al cliente "${label}". ¿Puedes darme el nombre completo?` }
+      }
+      const created = await new CreateClientUseCase(this.clientRepo).execute({
+        businessId: p.businessId,
+        name:       client_name,
+      })
+      if (created.error || !created.data) {
+        return { success: false, result: created.error ?? `No pude registrar a ${client_name}.` }
+      }
+      logger.info('REAL-TOOL-EXECUTOR', 'Auto-created client from confirm_booking', {
+        businessId: p.businessId,
+        clientId:   created.data.id,
+        name:       created.data.name,
+      })
+      clientFinal = { id: created.data.id, name: created.data.name }
     }
 
     const service = await this.resolveService(p.businessId, service_id)
@@ -186,7 +210,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:     p.businessId,
-      clientId:       resolution.client.id,
+      clientId:       clientFinal.id,
       serviceIds:     [service_id],
       startAt:        startISO,
       endAt:          endISO,
@@ -197,10 +221,10 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result:  `Listo. Agendé a ${resolution.client.name} para ${service.name} el ${date} a las ${time}.`,
+      result:  `Listo. Agendé a ${clientFinal.name} para ${service.name} el ${date} a las ${time}.`,
       data: {
         appointmentId: result.data?.id ?? '',
-        clientName:    resolution.client.name,
+        clientName:    clientFinal.name,
         serviceName:   service.name,
         date,
         time,

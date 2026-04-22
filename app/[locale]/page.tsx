@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { PwaInstallFloating } from "@/components/ui/pwa-install-floating";
+import { PwaDebug } from "@/components/ui/pwa-debug";
 
 export default async function RootPage() {
   const t = await getTranslations('landing');
@@ -511,6 +512,9 @@ export default async function RootPage() {
         {/* PWA floating install prompt */}
         <PwaInstallFloating />
       </main>
+
+      {/* PWA Debug Panel (dev only) */}
+      <PwaDebug />
 
       <style>{`
         @keyframes pulse {

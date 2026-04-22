@@ -101,9 +101,39 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       */}
       <head>
         <link rel="icon" href="/icon.png?v=2" />
-        <script dangerouslySetInnerHTML={{ __html:
-          `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__pwaDeferred=e;});`
-        }} />
+        <script dangerouslySetInnerHTML={{ __html: `
+          console.log('[PWA] Layout script executing');
+          (function(){
+            // Capture beforeinstallprompt as early as possible
+            window.addEventListener('beforeinstallprompt', function(e){
+              console.log('[PWA] beforeinstallprompt FIRED - event captured');
+              e.preventDefault();
+              window.__pwaDeferred = e;
+              window.__pwaReady = true;
+              // Dispatch custom event so React can react to it
+              window.dispatchEvent(new CustomEvent('pwa:prompt-ready'));
+            }, true); // Use capture phase for earliest capture
+
+            window.addEventListener('appinstalled', function(){
+              console.log('[PWA] appinstalled event fired');
+              window.__pwaDeferred = undefined;
+              window.__pwaReady = false;
+            }, true);
+          })();
+
+          // Check PWA criteria
+          setTimeout(function(){
+            console.log('[PWA] Checking PWA installation criteria:');
+            console.log('[PWA] - Manifest:', !!document.querySelector('link[rel="manifest"]'));
+            console.log('[PWA] - HTTPS:', location.protocol === 'https:');
+            console.log('[PWA] - beforeinstallprompt support:', 'onbeforeinstallprompt' in window);
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistration().then(reg => {
+                console.log('[PWA] - Service Worker:', !!reg, reg ? 'Scope: ' + reg.scope : '');
+              });
+            }
+          }, 100);
+        ` }} />
       </head>
       <body suppressHydrationWarning>
         {children}

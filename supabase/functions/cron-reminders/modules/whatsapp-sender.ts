@@ -117,22 +117,58 @@ export async function sendOwnerWhatsAppSummary(
 
   const messageText = `📋 *Resumen de citas para mañana*\n\nTienes ${appointments.length} cita(s) programada(s):\n\n${listed.join('\n')}\n\n🤖 _Notificación automática de Cronix_`
 
-  try {
-    const res = await fetch(whatsappUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': cronSecret,
-      },
-      body: JSON.stringify({
-        to: business.phone,
-        type: 'text',
-        message: messageText,
-      }),
-    })
-    const data = await res.json().catch(() => ({ success: false })) as { success?: boolean }
-    return data.success === true
-  } catch {
-    return false
+  // Strategy: try the approved Meta template first (works OUTSIDE the 24h session
+  // window — which is the whole point of this feature), then fall back to free-form
+  // text if the template send fails (template pending approval, quota issue, etc.).
+  // Once the template is approved, owners receive the summary regardless of whether
+  // they've interacted with the bot in the last 24 hours.
+  const tryTemplate = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(whatsappUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': cronSecret,
+        },
+        body: JSON.stringify({
+          to:           business.phone,
+          type:         'template',
+          template:     'daily_owner_summary',
+          languageCode: 'es',
+          parameters: [
+            String(appointments.length),
+            listed.join('\n'),
+          ],
+        }),
+      })
+      const data = await res.json().catch(() => ({ success: false })) as { success?: boolean }
+      return data.success === true
+    } catch {
+      return false
+    }
   }
+
+  const tryText = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(whatsappUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': cronSecret,
+        },
+        body: JSON.stringify({
+          to:      business.phone,
+          type:    'text',
+          message: messageText,
+        }),
+      })
+      const data = await res.json().catch(() => ({ success: false })) as { success?: boolean }
+      return data.success === true
+    } catch {
+      return false
+    }
+  }
+
+  if (await tryTemplate()) return true
+  return await tryText()
 }

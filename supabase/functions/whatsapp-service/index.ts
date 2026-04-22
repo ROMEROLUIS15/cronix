@@ -60,7 +60,9 @@ Deno.serve(async (req: Request) => {
       businessName: string,
       date: string,
       time: string,
-      template: string
+      template: string,
+      parameters: string[],
+      languageCode: string
 
   try {
     const body = await req.json() as Record<string, unknown>
@@ -72,10 +74,15 @@ Deno.serve(async (req: Request) => {
     date         = (body['date']        as string | undefined) ?? ''
     time         = (body['time']        as string | undefined) ?? ''
     template     = (body['template']    as string | undefined) ?? 'appointment_reminder'
+    parameters   = Array.isArray(body['parameters']) ? (body['parameters'] as string[]) : []
+    languageCode = (body['languageCode'] as string | undefined) ?? 'es'
 
     if (!to) throw new Error('Missing required field: to')
     if (type === 'text' && !message) throw new Error('Missing required field: message for type text')
-    if (type === 'template' && !clientName) throw new Error('Missing required field: clientName for type template')
+    // Template mode: accept either legacy (clientName) or new generic (parameters[])
+    if (type === 'template' && !clientName && parameters.length === 0) {
+      throw new Error('Missing required field: clientName or parameters[] for type template')
+    }
   } catch (e) {
     captureException(e, { stage: 'parse_body' })
     await flushSentry()
@@ -115,27 +122,33 @@ Deno.serve(async (req: Request) => {
       text:              { body: message },
     }
   } else {
-    const components = [
-      {
-        type: 'body',
-        parameters: [
-          { type: 'text', text: clientName   },
-          { type: 'text', text: businessName },
-        ],
-      },
-    ]
-    if (template === 'appointment_reminder') {
-      components[0].parameters.push({ type: 'text', text: date })
-      components[0].parameters.push({ type: 'text', text: time })
+    // Build template parameters.
+    //   - Generic mode (new): caller provides `parameters[]` directly — used by
+    //     templates like `daily_owner_summary` that don't fit the legacy shape.
+    //   - Legacy mode: preserved exactly for `appointment_reminder` callers.
+    let templateParams: Array<{ type: 'text'; text: string }>
+
+    if (parameters.length > 0) {
+      templateParams = parameters.map(p => ({ type: 'text' as const, text: p }))
+    } else {
+      templateParams = [
+        { type: 'text', text: clientName   },
+        { type: 'text', text: businessName },
+      ]
+      if (template === 'appointment_reminder') {
+        templateParams.push({ type: 'text', text: date })
+        templateParams.push({ type: 'text', text: time })
+      }
     }
+
     waPayload = {
       messaging_product: 'whatsapp',
       to:                phone,
       type:              'template',
       template: {
         name:       template,
-        language:   { code: 'es' },
-        components,
+        language:   { code: languageCode },
+        components: [{ type: 'body', parameters: templateParams }],
       },
     }
   }

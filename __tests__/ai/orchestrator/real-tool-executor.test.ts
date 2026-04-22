@@ -130,7 +130,29 @@ describe('RealToolExecutor', () => {
       expect(result.success).toBe(true)
     })
 
-    it('fails when client is not found', async () => {
+    it('auto-creates client when name is new and proceeds with booking', async () => {
+      const insertMock = vi.fn().mockResolvedValue({ data: { id: CLI_NEW, name: 'Carlos Pérez', phone: '' }, error: null })
+      const executor = buildExecutor({
+        clientRepo: {
+          getById:         vi.fn().mockResolvedValue({ data: null, error: 'not found' }),
+          findActiveForAI: vi.fn().mockResolvedValue({ data: [], error: null }),
+          insert:          insertMock,
+        },
+      })
+      const result = await executor.execute(makeParams('confirm_booking', {
+        service_id:  SVC_UUID,
+        client_name: 'Carlos Pérez',
+        date:        '2026-05-01',
+        time:        '10:00',
+      }))
+
+      expect(result.success).toBe(true)
+      expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ name: 'Carlos Pérez', business_id: 'biz-1' }))
+      expect(result.data?.clientName).toBe('Carlos Pérez')
+      expect(result.data?.action).toBe('created')
+    })
+
+    it('fails when client_id is provided but not found (no auto-create without a name)', async () => {
       const executor = buildExecutor({
         clientRepo: {
           getById:         vi.fn().mockResolvedValue({ data: null, error: 'not found' }),
@@ -138,10 +160,10 @@ describe('RealToolExecutor', () => {
         },
       })
       const result = await executor.execute(makeParams('confirm_booking', {
-        service_id:  SVC_UUID,
-        client_name: 'Nadie',
-        date:        '2026-05-01',
-        time:        '10:00',
+        service_id: SVC_UUID,
+        client_id:  CLI_UUID,
+        date:       '2026-05-01',
+        time:       '10:00',
       }))
 
       expect(result.success).toBe(false)
