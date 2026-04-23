@@ -275,7 +275,7 @@
       "title": "Sin citas",
       "desc": "No hay citas programadas para este día."
     },
-    "greeting": "Buenos días",
+    "greeting": "Hola",
     "greetingFallback": "Hola",
     "quickActions": {
       "newClient": "Nuevo cliente",
@@ -363,7 +363,7 @@
     "form": {
       "loadingApt": "Cargando cita...",
       "loadingForm": "Cargando datos del formulario...",
-      "backToAgenda": "Volver a la agenda",
+      "backToAgenda": "Agenda",
       "editAptTitle": "Editar Cita",
       "editAptSubtitle": "Modifica los detalles de la cita",
       "newAptTitle": "Nueva Cita",
@@ -457,8 +457,8 @@
       "paymentError": "Error al registrar el pago. Intenta de nuevo."
     },
     "form": {
-      "backToClients": "Volver a clientes",
-      "backToAgenda": "Volver a agenda",
+      "backToClients": "Clientes",
+      "backToAgenda": "Agenda",
       "backToProfile": "Volver al perfil",
       "sessionError": "No se pudo obtener la sesión. Recarga la página.",
       "duplicatePhone": "Este número ya está registrado para el cliente \"{name}\". Cada teléfono debe ser único por negocio.",

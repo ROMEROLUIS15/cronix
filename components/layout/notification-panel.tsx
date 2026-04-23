@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, CheckCheck, Clock, Info, CheckCircle2, AlertCircle, XCircle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { DATE_FNS_LOCALE_MAP } from '@/lib/i18n/date-locale'
+import { displayTimeString } from '@/lib/utils'
 import type { Locale as DateFnsLocale } from 'date-fns'
 import type { Locale } from '@/i18n/routing'
 
@@ -126,7 +127,7 @@ export function NotificationPanel({ isOpen, onClose, notifications, onMarkAllRea
                             </div>
                           </div>
                           <p className="text-xs leading-relaxed text-[#E0E0E8]">
-                            {notif.content}
+                            {displayTimeString(notif.content)}
                           </p>
                         </div>
                         {!notif.is_read && (

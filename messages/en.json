@@ -275,7 +275,7 @@
       "title": "No appointments",
       "desc": "There are no appointments scheduled for this day."
     },
-    "greeting": "Good morning",
+    "greeting": "Hello",
     "greetingFallback": "Hello",
     "quickActions": {
       "newClient": "New Client",

@@ -242,7 +242,9 @@ export async function book_appointment(
     const clientMatch  = fuzzyFind(clientsResult.data, client_name)
     const serviceMatch = fuzzyFind(servicesResult.data, service_name)
 
-    if (clientMatch.status !== 'found')  return `No encontré al cliente ${client_name}.`
+    if (clientMatch.status !== 'found') {
+      return `El cliente "${client_name}" no está registrado en el negocio. Informa al usuario con naturalidad que no está registrado y pide su teléfono para registrarlo con create_client antes de agendar la cita.`
+    }
     if (serviceMatch.status !== 'found') return `No encontré el servicio ${service_name}.`
 
     const client  = clientMatch.match

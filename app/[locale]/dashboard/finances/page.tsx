@@ -159,7 +159,7 @@ export default function FinancesPage() {
                       {paymentMethodLabels[txn.method as PaymentMethod] ?? t('payment')}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {txn.paid_at ? formatDate(txn.paid_at, 'd MMM, HH:mm') : '—'}
+                      {txn.paid_at ? formatDate(txn.paid_at, "d MMM, h:mm a") : '—'}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">

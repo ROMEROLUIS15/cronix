@@ -185,7 +185,8 @@ function getRedis(): Redis | null {
   return _redis
 }
 
-const STATE_TTL_SECS = 30 * 60 // 30 min — same TTL as session-store.ts
+const STATE_TTL_SECS     = 30 * 60      // 30 min inactivity — same as session-store.ts
+const MAX_STATE_TTL_SECS = 12 * 60 * 60 // 12 h absolute cap — same as session-store.ts
 
 function redisStateKey(userId: string, businessId: string): string {
   return `conv:state:${userId}:${businessId}`
@@ -202,7 +203,14 @@ export class RedisStateManager implements IStateManager {
     const redis = getRedis()
     if (!redis) return null
     try {
-      return await redis.get<ConversationState>(redisStateKey(userId, businessId))
+      const state = await redis.get<ConversationState>(redisStateKey(userId, businessId))
+      if (!state) return null
+      const ageMs = Date.now() - new Date(state.createdAt).getTime()
+      if (ageMs > MAX_STATE_TTL_SECS * 1000) {
+        void redis.del(redisStateKey(userId, businessId))
+        return null
+      }
+      return state
     } catch {
       return null
     }
@@ -277,7 +285,14 @@ export class RedisStateManager implements IStateManager {
     const redis = getRedis()
     if (!redis) return
     try {
-      await redis.set(redisStateKey(state.userId, state.businessId), state, { ex: STATE_TTL_SECS })
+      const ageMs        = Date.now() - new Date(state.createdAt).getTime()
+      const remainingSec = Math.floor((MAX_STATE_TTL_SECS * 1000 - ageMs) / 1000)
+      if (remainingSec <= 0) {
+        void redis.del(redisStateKey(state.userId, state.businessId))
+        return
+      }
+      const ttl = Math.min(STATE_TTL_SECS, remainingSec)
+      await redis.set(redisStateKey(state.userId, state.businessId), state, { ex: ttl })
     } catch { /* fail silently — conversation continues without persistence */ }
   }
 

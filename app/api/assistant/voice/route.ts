@@ -267,6 +267,15 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   const orchestrator = createProductionOrchestrator(admin, GROQ_API_KEY)
   const output = await orchestrator.process(aiInput)
 
+  // Safety net: actions that completed MUST produce a non-empty response.
+  // Prevents "silent orphan booking" — the DB reflects the action but the user
+  // hears nothing and assumes it failed. If the orchestrator's internal fallbacks
+  // were bypassed and text is empty/whitespace while actionPerformed=true,
+  // force a generic confirmation so TTS and the client always have something to play.
+  const responseText = (output.actionPerformed && !output.text?.trim())
+    ? 'Listo, acción completada.'
+    : output.text
+
   // 7. Persist session to Redis (messages + entities)
   // CRITICAL: Strip tool_calls and tool messages from history before saving.
   // Groq API rejects requests with orphaned tool_calls (when slice truncates
@@ -288,9 +297,9 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   let audioUrl: string | null = null
   let ttsLatencyMs = 0
 
-  if (ttsEngine && output.text) {
+  if (ttsEngine && responseText) {
     // Shield before vocalizing — prevents jailbroken text from being spoken
-    const shielded = shieldOutput(output.text, user.id)
+    const shielded = shieldOutput(responseText, user.id)
 
     // Truncate to first ~220 chars at a sentence boundary for lower TTS latency
     const ttsInput = (() => {
@@ -326,7 +335,7 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   })
 
   return NextResponse.json({
-    text:              output.text,
+    text:              responseText,
     audioUrl,
     useNativeFallback: !audioUrl,
     actionPerformed:   output.actionPerformed,

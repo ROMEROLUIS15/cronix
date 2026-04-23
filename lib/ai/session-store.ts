@@ -29,8 +29,11 @@ import { logger } from '@/lib/logger'
 const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 
-/** Tiempo de inactividad antes de que la sesión expire automáticamente */
+/** Sliding inactivity TTL — session expires after 30 min of silence */
 const TTL_SECONDS = 30 * 60 // 30 minutos
+
+/** Absolute hard cap — a session can never live longer than this regardless of activity */
+const MAX_TTL_SECONDS = 12 * 60 * 60 // 12 horas
 
 /** Cap de mensajes por sesión — aumentado de 8 a 20 (10 intercambios) */
 const MAX_MESSAGES = 20
@@ -49,8 +52,10 @@ export interface EntityContext {
 }
 
 export interface Session {
-  messages:  LlmMessage[]
-  entities:  EntityContext
+  messages:   LlmMessage[]
+  entities:   EntityContext
+  /** Unix timestamp (ms) when the session was first created — used for the 12h hard cap */
+  createdAt?: number
 }
 
 // ── Redis HTTP client (sin dependencias externas) ────────────────────────────
@@ -100,9 +105,16 @@ export const sessionStore = {
         return { messages: [], entities: {} }
       }
       const parsed = JSON.parse(raw) as Session
+      // Hard cap: if the session is older than 12 h, treat as expired
+      if (parsed.createdAt && Date.now() - parsed.createdAt > MAX_TTL_SECONDS * 1000) {
+        void redisCommand(['DEL', sessionKey(userId)])
+        logger.info('SESSION-STORE', '12h hard cap reached — session cleared', { userId })
+        return { messages: [], entities: {} }
+      }
       return {
-        messages: parsed.messages || [],
-        entities: parsed.entities || {},
+        messages:  parsed.messages  || [],
+        entities:  parsed.entities  || {},
+        createdAt: parsed.createdAt,
       }
     } catch {
       return { messages: [], entities: {} }
@@ -115,10 +127,24 @@ export const sessionStore = {
    */
   async saveSession(userId: string, session: Session): Promise<void> {
     try {
-      const capped = session.messages.slice(-MAX_MESSAGES)
+      const now              = Date.now()
+      const createdAt        = session.createdAt ?? now
+      const ageMs            = now - createdAt
+      const remainingSecs    = Math.floor((MAX_TTL_SECONDS * 1000 - ageMs) / 1000)
+
+      // Absolute cap exceeded — wipe the session instead of refreshing it
+      if (remainingSecs <= 0) {
+        void redisCommand(['DEL', sessionKey(userId)])
+        logger.info('SESSION-STORE', '12h hard cap reached at save — session cleared', { userId })
+        return
+      }
+
+      const ttl     = Math.min(TTL_SECONDS, remainingSecs)
+      const capped  = session.messages.slice(-MAX_MESSAGES)
       const toSave: Session = {
-        messages: capped,
-        entities: session.entities || {},
+        messages:  capped,
+        entities:  session.entities || {},
+        createdAt,
       }
 
       await redisCommand([
@@ -126,7 +152,7 @@ export const sessionStore = {
         sessionKey(userId),
         JSON.stringify(toSave),
         'EX',
-        String(TTL_SECONDS),
+        String(ttl),
       ])
     } catch (err: any) {
       logger.warn('SESSION-STORE', `saveSession failed: ${err.message}`, { userId })

@@ -275,7 +275,7 @@
       "title": "Nessun appuntamento",
       "desc": "Non ci sono appuntamenti per questo giorno."
     },
-    "greeting": "Buongiorno",
+    "greeting": "Ciao",
     "greetingFallback": "Ciao",
     "quickActions": {
       "newClient": "Nuovo Cliente",

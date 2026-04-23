@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+.next/
+playwright-report/
+coverage/
+.turbo/
+.vercel/
