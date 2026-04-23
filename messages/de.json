@@ -275,7 +275,7 @@
       "title": "Keine Termine",
       "desc": "Für diesen Tag sind keine Termine geplant."
     },
-    "greeting": "Guten Morgen",
+    "greeting": "Hallo",
     "greetingFallback": "Hallo",
     "quickActions": {
       "newClient": "Neuer Kunde",

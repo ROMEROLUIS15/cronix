@@ -214,7 +214,7 @@ export class AssistantService {
       })
     }
 
-    // 4. Response resolution — tool result OR pure LLM text.
+    // 4. Response resolution — LLM wrap-up OR tool result OR pure LLM text.
     //
     // ARCHITECTURE DECISION: the quality-tier LLM pass has been removed for tool-calling paths.
     //
@@ -223,15 +223,19 @@ export class AssistantService {
     // requests, (b) uses the 70b fallback when rate-limited which is slow and generates off-topic
     // responses, (c) was the proximate cause of "me habló de agendar cuando pedí cancelar".
     //
-    // New design:
-    //   - Tools return self-contained Spanish text (already readable by humans / TTS).
-    //   - The LAST tool message IS the response. No LLM reformulation.
-    //   - Quality LLM only runs when there are NO tool results (pure reasoning path).
-    if (actionPerformed) {
+    // Current design:
+    //   - If the LLM produced a wrap-up text AFTER tool calls inside the ReAct loop, respect it —
+    //     the LLM already has tool results in context and its follow-up question (e.g. "no encontré
+    //     al cliente, ¿me das su teléfono?") is the correct response. Overwriting this would silence
+    //     legitimate multi-turn conversations where a READ tool result isn't the final answer.
+    //   - If the LLM returned ONLY tool calls with no wrap-up text, use the last tool result verbatim
+    //     (WRITE tools return "Listo. X" which is speech-ready).
+    //   - Quality LLM only runs when there are NO tool calls at all (pure reasoning path).
+    if (actionPerformed && !replyText) {
       const toolResults = messages.filter(m => m.role === 'tool')
       const lastToolResult = toolResults[toolResults.length - 1]
       replyText = lastToolResult?.content || 'Acción completada.'
-      logger.info('AI-ASSISTANT', 'Tool result used directly — quality tier bypassed', {
+      logger.info('AI-ASSISTANT', 'Tool result used directly — no LLM wrap-up needed', {
         userId,
         tool: toolsAttempted[toolsAttempted.length - 1],
         preview: replyText.slice(0, 80),

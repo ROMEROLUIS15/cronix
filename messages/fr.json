@@ -275,7 +275,7 @@
       "title": "Aucun rendez-vous",
       "desc": "Aucun rendez-vous prévu pour ce jour."
     },
-    "greeting": "Bonjour",
+    "greeting": "Salut",
     "greetingFallback": "Salut",
     "quickActions": {
       "newClient": "Nouveau Client",

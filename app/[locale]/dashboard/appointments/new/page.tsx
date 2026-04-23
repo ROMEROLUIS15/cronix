@@ -68,15 +68,17 @@ function NewAppointmentForm() {
 
       {/* Mobile nav — solid blue buttons */}
       <div className="flex sm:hidden items-center gap-3">
-        <Link href="/dashboard/appointments"
-          className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-xl"
-          style={{ background: '#0062FF', color: '#fff', border: '1px solid #0062FF' }}>
-          <ArrowLeft size={16} /> {t('backToAgenda')}
+        <Link href="/dashboard/appointments" className="flex-1">
+          <Button variant="primary" className="w-full h-11 rounded-xl text-[13px] font-bold"
+            leftIcon={<ArrowLeft size={16} />}>
+            {t('backToAgenda')}
+          </Button>
         </Link>
-        <Link href="/dashboard/clients/new"
-          className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-xl"
-          style={{ background: '#0062FF', color: '#fff', border: '1px solid #0062FF' }}>
-          <UserPlus size={15} /> Nuevo Cliente
+        <Link href="/dashboard/clients/new" className="flex-1">
+          <Button variant="primary" className="w-full h-11 rounded-xl text-[13px] font-bold"
+            leftIcon={<UserPlus size={15} />}>
+            {statusT('quickActions.newClient')}
+          </Button>
         </Link>
       </div>
 

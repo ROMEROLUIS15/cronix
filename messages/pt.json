@@ -275,7 +275,7 @@
       "title": "Sem agendamentos",
       "desc": "Não há agendamentos para este dia."
     },
-    "greeting": "Bom dia",
+    "greeting": "Olá",
     "greetingFallback": "Olá",
     "quickActions": {
       "newClient": "Novo Cliente",

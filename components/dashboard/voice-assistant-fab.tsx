@@ -95,10 +95,30 @@ export function VoiceAssistantFab() {
   const audioChunksRef     = useRef<Blob[]>([])
   const [volume, setVolume] = useState(0)
 
-  // ── Helper: show brief status message then clear ─────────────────────────
+  // ── Helper: show status message. Pass ms=0 to keep it visible until next action. ──
+  // Persistent statuses are used for critical errors (timeout, 429, no-response) so the
+  // user can actually read them instead of missing them in a 3-second flash.
   const showStatus = (msg: string, ms = 3000) => {
     setTranscript(msg)
-    setTimeout(() => setTranscript(''), ms)
+    if (ms > 0) setTimeout(() => setTranscript(''), ms)
+  }
+
+  // Hard failsafe: if the server returns neither audio nor text, vocalize a fallback
+  // via the Web Speech API so the FAB never sits silently after a request.
+  const vocalizeSilentFailsafe = (msg: string) => {
+    showStatus(msg, 0)
+    setState('speaking')
+    speakWithNativeFallback(msg) // sets state back to 'idle' via onend/onerror
+  }
+
+  // Fetch with a hard client-side timeout. Groq + TTS can take ~15-25s on slow paths;
+  // 45s is a generous ceiling that still catches a hung request instead of leaving
+  // the FAB stuck in 'processing' until the 30s UI safety timeout fires silently.
+  const FETCH_TIMEOUT_MS = 45000
+  const fetchWithTimeout = (url: string, opts: RequestInit): Promise<Response> => {
+    const controller = new AbortController()
+    const timer      = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer))
   }
 
   // ── Helper: Google masculine TTS fallback (activates when Deepgram fails) ─
@@ -213,12 +233,17 @@ export function VoiceAssistantFab() {
       formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
       formData.append('history',  JSON.stringify(chatHistory))
 
-      const res = await fetch('/api/assistant/voice', { method: 'POST', body: formData })
+      const res = await fetchWithTimeout('/api/assistant/voice', { method: 'POST', body: formData })
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
         logger.error('VoiceAssistantFab', `API error ${res.status}`, errData)
-        showStatus(res.status === 403 ? 'Sin acceso al asistente' : 'Error al contactar a Luis')
+        // Persistent status (ms=0) on critical errors — a 3-second toast is easy to miss
+        // after a long pause, and users re-try thinking nothing happened.
+        const errMsg = res.status === 403 ? 'Sin acceso al asistente'
+                     : res.status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
+                     : 'Error al contactar a Luis'
+        showStatus(errMsg, 0)
         setState('idle')
         return
       }
@@ -251,12 +276,26 @@ export function VoiceAssistantFab() {
         const streamUrl = `/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`
         await playAudio(streamUrl, data.text)
       } else {
-        setState('idle')
+        // Failsafe: server returned neither audio nor text. Vocalize + persistent status
+        // so the user never faces a silent FAB after a request. Especially important
+        // if a booking completed server-side but the confirmation was somehow lost.
+        logger.warn('VoiceAssistantFab', 'Server returned empty response — using vocal failsafe', { actionPerformed: data.actionPerformed })
+        vocalizeSilentFailsafe(
+          data.actionPerformed
+            ? 'La acción se completó. Verifica el tablero.'
+            : 'No recibí respuesta. Por favor intenta de nuevo.'
+        )
       }
 
     } catch (err: unknown) {
+      // AbortError from the 45s fetch timeout — distinguishes hangs from generic network errors
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        logger.warn('VoiceAssistantFab', 'Fetch aborted — server timeout exceeded 45s')
+        vocalizeSilentFailsafe('Tiempo de espera agotado. Intenta de nuevo.')
+        return
+      }
       logger.error('VoiceAssistantFab', 'Network error contacting assistant', err)
-      showStatus('Error de red — reintenta')
+      showStatus('Error de red — reintenta', 0)
       setState('idle')
     }
   }
@@ -264,14 +303,16 @@ export function VoiceAssistantFab() {
   // ── Core: send text to API (streaming mode) ──────────────────────────────
   const sendTextToAssistant = async (text: string) => {
     try {
-      const res = await fetch('/api/assistant/voice', {
+      const res = await fetchWithTimeout('/api/assistant/voice', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ text, history: chatHistory, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       })
 
       if (!res.ok) {
-        showStatus('Error al conectar con Luis')
+        const errMsg = res.status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
+                     : 'Error al conectar con Luis'
+        showStatus(errMsg, 0)
         setState('idle')
         return
       }
@@ -301,12 +342,23 @@ export function VoiceAssistantFab() {
         const streamUrl = `/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`
         await playAudio(streamUrl, data.text)
       } else {
-        setState('idle')
+        // Mirrors the audio-path failsafe — never leave the FAB silent after a request.
+        logger.warn('VoiceAssistantFab', 'Server returned empty response (text path) — using vocal failsafe', { actionPerformed: data.actionPerformed })
+        vocalizeSilentFailsafe(
+          data.actionPerformed
+            ? 'La acción se completó. Verifica el tablero.'
+            : 'No recibí respuesta. Por favor intenta de nuevo.'
+        )
       }
 
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        logger.warn('VoiceAssistantFab', 'Fetch aborted — server timeout exceeded 45s (text path)')
+        vocalizeSilentFailsafe('Tiempo de espera agotado. Intenta de nuevo.')
+        return
+      }
       logger.error('VoiceAssistantFab', 'Error sending text to assistant', err)
-      showStatus('Error de red — reintenta')
+      showStatus('Error de red — reintenta', 0)
       setState('idle')
     }
   }
@@ -500,10 +552,12 @@ export function VoiceAssistantFab() {
     if (state === 'listening') stopRecording()
   }
 
-  // Safety timeout: prevents getting stuck in processing/speaking
+  // Safety timeout: prevents getting stuck in processing/speaking.
+  // 30 min matches the server-side session TTL — if the FAB hasn't finished
+  // by then, the request is definitively lost and the UI must reset.
   useEffect(() => {
     if (state !== 'speaking' && state !== 'processing') return
-    const timer = setTimeout(() => setState('idle'), 30000)
+    const timer = setTimeout(() => setState('idle'), 30 * 60 * 1000)
     return () => clearTimeout(timer)
   }, [state])
 

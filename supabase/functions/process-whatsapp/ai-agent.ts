@@ -435,17 +435,20 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   // causing silent 400/422 failures on WhatsApp voice notes from Android devices.
   const cleanMimeType = mimeType.split(';')[0].trim()
 
-  // Map to Groq-supported file extensions (Groq uses the filename extension for format detection).
+  // Map to Groq-supported file extensions. Groq rejects anything outside
+  // [flac mp3 mp4 mpeg mpga m4a ogg opus wav webm] with a 400 invalid_request_error,
+  // using the FILENAME extension (not the MIME header) for format detection.
   const MIME_TO_EXT: Readonly<Record<string, string>> = {
-    'audio/ogg':  'oga',   // OGG Opus (WhatsApp Android PTT)
+    'audio/ogg':  'ogg',   // WhatsApp Android PTT (Opus in Ogg container) — must be 'ogg', not 'oga'
     'audio/mp4':  'm4a',   // WhatsApp iOS voice notes
     'audio/mpeg': 'mp3',
     'audio/wav':  'wav',
     'audio/webm': 'webm',
-    'audio/aac':  'm4a',
-    'audio/amr':  'amr',
+    'audio/aac':  'm4a',   // AAC reuses the m4a container (allowed by Groq)
   }
-  const ext      = MIME_TO_EXT[cleanMimeType] ?? (cleanMimeType.split('/')[1] ?? 'oga')
+  // Fallback to 'ogg' (WhatsApp default) instead of deriving from MIME — the derived
+  // extension (e.g. 'oga', 'amr') may not be in Groq's allowed list and will 400.
+  const ext      = MIME_TO_EXT[cleanMimeType] ?? 'ogg'
   const filename = `voice.${ext}`
 
   const form = new FormData()
