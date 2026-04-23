@@ -48,7 +48,7 @@ const testInputs = [
 
 // ── Load Test Scenario ───────────────────────────────────────────────────────
 
-export default function () {
+export default function voiceLoadTest() {
   const url = `${BASE_URL}/api/assistant/voice`
 
   // Pick a random test input

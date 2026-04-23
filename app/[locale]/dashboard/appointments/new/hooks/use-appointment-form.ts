@@ -293,7 +293,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     }, 400)
 
     return () => { clearTimeout(t); setValidation(v => ({ ...v, validating: false })) }
-  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services, runValidation])
+  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services, runValidation]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSubmit =
     !validation.validating &&
