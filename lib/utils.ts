@@ -16,7 +16,23 @@ export function formatDate(date: string | Date, fmt = 'd MMM yyyy'): string {
 
 export function formatTime(date: string | Date): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'HH:mm', { locale: es })
+  return format(d, 'h:mm a', { locale: es })
+}
+
+/**
+ * Transforms a "HH:mm" 24h string to "h:mm a.m./p.m." for display.
+ * Preserves the rest of the input string — used to reformat notification
+ * content stored in 24h without touching the persistence layer.
+ * Example: "el 2026-04-25 a las 16:00" → "el 2026-04-25 a las 4:00 p. m."
+ */
+export function displayTimeString(input: string): string {
+  if (!input) return input
+  return input.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g, (_, h: string, m: string) => {
+    const hour = Number(h)
+    const suffix = hour >= 12 ? 'p. m.' : 'a. m.'
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12
+    return `${hour12}:${m} ${suffix}`
+  })
 }
 
 export function formatRelative(date: string | Date): string {

@@ -162,7 +162,7 @@ export function ReportsView({ data }: ReportsViewProps) {
                         {apt.client?.name ?? '—'}
                       </p>
                       <p className="text-xs truncate" style={{ color: '#909098' }}>
-                        {apt.service?.name ?? '—'} · {formatDate(apt.start_at, 'd MMM, HH:mm')}
+                        {apt.service?.name ?? '—'} · {formatDate(apt.start_at, "d MMM, h:mm a")}
                       </p>
                     </div>
                     <span className="text-xs px-2 py-0.5 rounded-full font-semibold ml-2 flex-shrink-0"

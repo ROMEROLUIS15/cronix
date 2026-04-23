@@ -73,7 +73,7 @@ export default function TransactionsPage() {
                     {paymentMethodLabels[txn.method] || 'Transferencia'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {txn.paid_at ? formatDate(txn.paid_at, 'd MMM yyyy, HH:mm') : '—'}
+                    {txn.paid_at ? formatDate(txn.paid_at, "d MMM yyyy, h:mm a") : '—'}
                     {txn.notes && ` · ${txn.notes}`}
                   </p>
                 </div>

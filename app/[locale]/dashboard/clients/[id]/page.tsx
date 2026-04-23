@@ -204,7 +204,7 @@ export default async function ClientDetailPage({ params }: Props) {
                       {apt.service?.name ?? "—"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDate(apt.start_at, "d MMM yyyy, HH:mm")}
+                      {formatDate(apt.start_at, "d MMM yyyy, h:mm a")}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
