@@ -21,13 +21,6 @@ import { logInteraction }    from "./audit.ts"
 import { verifyQStash, sanitizeMessage } from "./security.ts"
 import { captureException, addBreadcrumb, setSentryTag, flushSentry } from "../_shared/sentry.ts"
 import { logToDLQ }          from "../_shared/supabase.ts"
-import { renderClientConfirmation } from "./prompt-builder.ts"
-
-type ToolTrace = {
-  tool:    string
-  success: boolean
-  result:  Record<string, string> | string | null
-}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -123,8 +116,12 @@ export async function handleMessage(req: Request): Promise<Response> {
           await flushSentry()
           return retryLater(30)
         }
-        captureException(err, { stage: 'voice_transcription', sender })
-        await sendWhatsAppMessage(sender, "No pude procesar tu audio. Por favor intenta de nuevo o escríbeme tu consulta.")
+          const groqErr = err instanceof Error ? err.message : String(err)
+        addBreadcrumb(`Voice transcription failed: ${groqErr.slice(0, 120)}`, 'llm', 'error')
+        captureException(err, { stage: 'voice_transcription', sender, groq_error: groqErr })
+        const isFormatError = groqErr.includes('400') || groqErr.includes('422') || groqErr.toLowerCase().includes('invalid')
+        const hint = isFormatError ? ' (formato no reconocido)' : ''
+        await sendWhatsAppMessage(sender, `No pude procesar tu audio${hint}. Por favor intenta de nuevo o escríbeme tu consulta.`)
         await flushSentry()
         return json({ success: true, message: 'Voice transcription failed — user notified' })
       }
@@ -312,20 +309,8 @@ export async function handleMessage(req: Request): Promise<Response> {
     addBreadcrumb('Agent loop finished', 'llm', 'info', { response_length: agentResult.text.length, tokens: agentResult.tokens })
 
     await sendWhatsAppMessage(sender, agentResult.text)
-
-    // ── Additional formal client confirmation (additive, never replaces above) ──
-    // Triggered when the last ReAct step was a successful confirm/reschedule/cancel.
-    const lastTrace = (agentResult.toolCallsTrace as ToolTrace[] | undefined)?.slice(-1)[0]
-    if (lastTrace && lastTrace.success && typeof lastTrace.result === 'object' && lastTrace.result) {
-      const formalText = renderClientConfirmation(lastTrace.tool, lastTrace.result, customerName)
-      if (formalText) {
-        try {
-          await sendWhatsAppMessage(sender, formalText)
-        } catch (err) {
-          captureException(err, { stage: 'client_formal_confirmation_send', tool: lastTrace.tool })
-        }
-      }
-    }
+    // Client receives a dedicated business-branded confirmation WA via
+    // sendClientBookingConfirmation() in tool-executor.ts (fired during tool execution).
 
     await logInteraction({
       business_id:  business.id,

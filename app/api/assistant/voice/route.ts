@@ -1,3 +1,8 @@
+// ── DASHBOARD AGENT ENDPOINT ──────────────────────────────────────────────────
+// Channel: web (owner/employee using the Cronix dashboard)
+// Agent:   lib/ai/agents/dashboard/ (prompt + tools + config)
+// DO NOT add WhatsApp handling here — WhatsApp lives in supabase/functions/process-whatsapp/
+// ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withErrorHandler } from '@/lib/api/with-error-handler'

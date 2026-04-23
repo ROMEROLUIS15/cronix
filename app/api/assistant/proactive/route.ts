@@ -34,7 +34,7 @@ export const GET = withErrorHandler(async (req, _context, supabase, user) => {
   const tts = new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
 
   // 1. Get Today Context (Raw)
-  const { get_today_summary } = await import('@/lib/ai/assistant-tools')
+  const { get_today_summary } = await import('@/lib/ai/tools/finance.tools')
   const { buildToolContext } = await import('@/lib/ai/tools/_context')
   const ctx = await buildToolContext()
   const summary = await get_today_summary({ business_id: businessId }, ctx)

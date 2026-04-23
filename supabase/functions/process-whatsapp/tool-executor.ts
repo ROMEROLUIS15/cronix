@@ -25,6 +25,7 @@ import {
   emitCreatedEvent,
   emitRescheduledEvent,
   emitCancelledEvent,
+  sendClientBookingConfirmation,
 } from "./notifications.ts"
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
@@ -208,13 +209,12 @@ export async function executeToolCall(
       return JSON.stringify({ success: false, error: result.error ?? 'SLOT_CONFLICT' })
     }
 
-    // Fire-and-forget: notificaciones al owner (pipeline unificado con event_id)
     const svcName = services.find(s => s.id === service_id)?.name ?? 'Servicio'
-    // `time` es HH:mm (24h) — consistente con el path web (RealToolExecutor).
-    // `formattedTime` solo es para el texto de respuesta al cliente, NO para el evento.
-    const formattedTime = formatLocalTime(time)
-    emitCreatedEvent(business, client?.name ?? customerName, svcName, date, time, result.appointment_id ?? '')
 
+    // Fire-and-forget: owner notification (dashboard + owner WA)
+    emitCreatedEvent(business, client?.name ?? customerName, svcName, date, time, result.appointment_id ?? '')
+    // Fire-and-forget: client confirmation WA (business-branded, separate from conversational reply)
+    void sendClientBookingConfirmation(sender, 'created', business.name, svcName, date, time)
 
     addBreadcrumb('Appointment created', 'agent', 'info', { appointment_id: result.appointment_id })
     return JSON.stringify({ success: true, appointment_id: result.appointment_id, date, time, service_name: svcName })
@@ -252,6 +252,7 @@ export async function executeToolCall(
     const clientName = aptDetails.clients?.name ?? customerName
 
     emitRescheduledEvent(business, clientName, svcName, appointment_id, new_date, new_time)
+    void sendClientBookingConfirmation(sender, 'rescheduled', business.name, svcName, new_date, new_time)
 
     addBreadcrumb('Appointment rescheduled', 'agent', 'info', { appointment_id })
     return JSON.stringify({ success: true, new_date, new_time, service_name: svcName })
@@ -278,12 +279,12 @@ export async function executeToolCall(
 
     const svcName    = aptDetails.services?.name ?? 'Servicio'
     const clientName = aptDetails.clients?.name ?? customerName
+    const { date: oldDate, time: oldTime } = utcToLocalParts(aptDetails.start_at, business.timezone)
 
     emitCancelledEvent(business, clientName, svcName, appointment_id, aptDetails.start_at)
+    void sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, oldDate, oldTime)
 
     addBreadcrumb('Appointment cancelled', 'agent', 'info', { appointment_id })
-    // Include old date/time (local tz) so downstream client-confirmation text has all data.
-    const { date: oldDate, time: oldTime } = utcToLocalParts(aptDetails.start_at, business.timezone)
     return JSON.stringify({ success: true, service_name: svcName, date: oldDate, time: oldTime })
   }
 

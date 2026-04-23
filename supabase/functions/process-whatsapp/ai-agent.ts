@@ -78,7 +78,7 @@ const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías 
 //    gather data, and propose a confirmation before any booking action runs.
 
 const CONFIRMATION_QUESTION_RE =
-  /¿\s*(Confirmo|Reagendo|Confirmas\s+que\s+cancele|Confirmas\s+la\s+cancelaci[óo]n)/i
+  /¿\s*(Confirmo|Reagendo|Procedo|Te\s+(?:confirmo|agendo|reagendo)|Confirma[rs]?\s+(?:que\s+(?:cancele|reagende|agende)|la\s+cancelaci[óo]n|el\s+reagendamiento|la\s+reserva|la\s+cita))/i
 
 // Broad Spanish/LatAm affirmative lexicon. Matches the first token(s) so the user
 // can append anything ("ok amiga gracias", "dale agenda"). Negations are filtered
@@ -452,7 +452,10 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   const filename = `voice.${ext}`
 
   const form = new FormData()
-  form.append('file', new Blob([buffer], { type: cleanMimeType }), filename)
+  // Use File (not Blob) so the multipart Content-Disposition includes filename= with the correct extension.
+  // Groq Whisper uses the filename extension for format detection; a bare Blob without an explicit
+  // name header causes silent 400/422 rejections on some Deno runtimes.
+  form.append('file', new File([buffer], filename, { type: cleanMimeType }))
   form.append('model', WHISPER_MODEL)
   form.append('language', 'es')
   form.append('response_format', 'text')
@@ -481,7 +484,7 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   if (!res.ok && res.status >= 500) {
     addBreadcrumb(`Whisper API ${res.status} on first attempt — retrying once`, 'llm', 'warning')
     const retryForm = new FormData()
-    retryForm.append('file', new Blob([buffer], { type: cleanMimeType }), filename)
+    retryForm.append('file', new File([buffer], filename, { type: cleanMimeType }))
     retryForm.append('model', WHISPER_MODEL)
     retryForm.append('language', 'es')
     retryForm.append('response_format', 'text')
@@ -499,8 +502,10 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   }
 
   if (!res.ok) {
+    const errBody = await res.text()
+    addBreadcrumb(`Whisper error ${res.status}: ${errBody.slice(0, 200)}`, 'llm', 'error', { status: res.status, model: WHISPER_MODEL, ext })
     if (res.status >= 500) await reportServiceFailure(serviceName)
-    throw new Error(`Whisper API error: ${await res.text()}`)
+    throw new Error(`Whisper ${res.status}: ${errBody}`)
   }
 
   await reportServiceSuccess(serviceName)

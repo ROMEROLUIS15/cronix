@@ -23,6 +23,7 @@ import { supabase }     from "./db-client.ts"
 import { captureException } from "../_shared/sentry.ts"
 import { utcToLocalParts } from "./time-utils.ts"
 import { formatLocalTime } from "./prompt-builder.ts"
+import { sendWhatsAppMessage } from "./whatsapp.ts"
 import type { BusinessRagContext } from "./types.ts"
 
 // ── AppointmentEvent contract (mirrors lib/ai/orchestrator/events.ts) ─────────
@@ -268,6 +269,78 @@ export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
 
   } catch (err) {
     captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })
+  }
+}
+
+// ── Client notification ───────────────────────────────────────────────────────
+// Sends a dedicated WA confirmation message directly to the client's phone.
+// Called fire-and-forget from tool-executor.ts after each successful booking action.
+// This is separate from the conversational reply the agent sends back — it provides
+// a formal, business-branded record the client can reference later.
+
+function buildClientWhatsAppMessage(
+  type:         AppointmentEventType,
+  businessName: string,
+  serviceName:  string,
+  date:         string,
+  time:         string,
+): string {
+  const prettyTime = /^\d{2}:\d{2}$/.test(time) ? formatLocalTime(time) : time
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number]
+  const dateStr   = new Date(Date.UTC(y, m - 1, d))
+    .toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+  switch (type) {
+    case 'appointment.created':
+      return (
+        `✅ ¡Listo! Tu cita en *${businessName}* ha sido agendada para el ${dateStr} ` +
+        `a las ${prettyTime} para el servicio de *${serviceName}*.\n\n¡Te esperamos! 🎉`
+      )
+    case 'appointment.rescheduled':
+      return (
+        `🔄 Tu cita en *${businessName}* ha sido reagendada al ${dateStr} ` +
+        `a las ${prettyTime} para el servicio de *${serviceName}*.\n\n¡Te esperamos en tu nuevo horario! 💪`
+      )
+    case 'appointment.cancelled':
+      return (
+        `❌ Tu cita de *${serviceName}* en *${businessName}*` +
+        (date ? ` del ${dateStr} a las ${prettyTime}` : '') +
+        ` ha sido cancelada.\n\nCuando quieras agendar de nuevo, aquí estamos. 😊`
+      )
+  }
+}
+
+/**
+ * Sends a WhatsApp booking confirmation to the client's phone.
+ * Fire-and-forget safe — never throws, non-blocking.
+ *
+ * @param clientPhone  WhatsApp sender number (digits only, no +)
+ * @param eventType    'created' | 'rescheduled' | 'cancelled'
+ * @param businessName Display name shown to the client
+ * @param serviceName  Service the appointment is for
+ * @param date         YYYY-MM-DD (local business timezone)
+ * @param time         HH:mm 24h (local business timezone)
+ */
+export async function sendClientBookingConfirmation(
+  clientPhone:  string,
+  eventType:    'created' | 'rescheduled' | 'cancelled',
+  businessName: string,
+  serviceName:  string,
+  date:         string,
+  time:         string,
+): Promise<void> {
+  if (!clientPhone) return
+  const message = buildClientWhatsAppMessage(
+    `appointment.${eventType}` as AppointmentEventType,
+    businessName,
+    serviceName,
+    date,
+    time,
+  )
+  try {
+    await sendWhatsAppMessage(clientPhone, message)
+  } catch (err) {
+    // Non-critical: booking already committed, client WA notification is best-effort
+    console.warn('[NOTIFICATION-WA] sendClientBookingConfirmation failed (non-critical):', err)
   }
 }
 

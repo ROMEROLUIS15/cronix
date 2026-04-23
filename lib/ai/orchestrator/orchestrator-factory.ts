@@ -20,6 +20,7 @@ import { RealToolExecutor } from './tool-adapter/RealToolExecutor'
 import { GroqProvider }     from '@/lib/ai/providers/groq-provider'
 import { getRepos }         from '@/lib/repositories'
 import { NotificationService } from '@/lib/notifications/notification-service'
+import { DASHBOARD_AGENT_CONFIG } from '@/lib/ai/agents/dashboard/config'
 
 export function createProductionOrchestrator(
   supabase: SupabaseClient<Database>,
@@ -39,6 +40,7 @@ export function createProductionOrchestrator(
       ),
       new LlmBridge(new GroqProvider(groqApiKey)),
       new NotificationService(supabase),
+      DASHBOARD_AGENT_CONFIG.maxReactIterations,
     ),
   )
 }

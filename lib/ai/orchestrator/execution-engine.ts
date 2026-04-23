@@ -310,6 +310,8 @@ export class ExecutionEngine implements IExecutionEngine {
      * el booking se completa independientemente.
      */
     private notificationService?: INotificationService,
+    /** Max ReAct loop iterations. Comes from the agent config (agents/dashboard/config.ts). */
+    private maxReactIterations: number = 3,
   ) {}
 
   async execute(
@@ -562,7 +564,7 @@ export class ExecutionEngine implements IExecutionEngine {
     input: AiInput,
     strategy: IUserStrategy,
   ): Promise<ExecutionResult> {
-    const MAX_STEPS = 3
+    const MAX_STEPS = this.maxReactIterations
     let step = 0
     let totalTokens = 0
     const traces: ToolTrace[] = []

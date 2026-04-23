@@ -62,6 +62,36 @@ const GetAvailableSlotsSchema = z.object({
   duration_min: z.number().int().min(5).max(480),
 })
 
+const SearchClientsSchema = z.object({
+  query: z.string().min(2).max(80),
+})
+
+/**
+ * Converts a local datetime (expressed in the given IANA timezone) to a UTC ISO string.
+ * Pure Intl — no external dependencies.
+ *
+ * Without this, naive strings like "2026-04-23T09:00:00" are interpreted as UTC by Postgres,
+ * causing a visible clock offset for businesses outside UTC (e.g. UTC-5 shows 9am stored as 9am UTC = 4am local).
+ *
+ * Algorithm:
+ *   1. Treat the local time as UTC (naive epoch)
+ *   2. Format that epoch in the target timezone → reveals how much it "drifts" from real local time
+ *   3. offsetMs = naive_epoch - drift_epoch
+ *   4. True UTC = local_naive_epoch + offsetMs
+ */
+function localToUTC(date: string, time: string, tz: string): string {
+  const naiveAsUTC       = new Date(`${date}T${time}:00Z`)
+  const tzStr            = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(naiveAsUTC)
+  const tzDisplayedAsUTC = new Date(tzStr.replace(' ', 'T') + 'Z')
+  const offsetMs         = naiveAsUTC.getTime() - tzDisplayedAsUTC.getTime()
+  return new Date(naiveAsUTC.getTime() + offsetMs).toISOString()
+}
+
 /**
  * Tool execution result.
  * Write-tools MUST populate `data` on success — it feeds AppointmentEvent
@@ -100,6 +130,7 @@ export class RealToolExecutor implements IToolExecutor {
         case 'get_services':             return this.getServices(p)
         case 'create_client':            return this.createClient(p)
         case 'get_available_slots':      return this.getAvailableSlots(p)
+        case 'search_clients':           return this.searchClients(p)
         default:
           return { success: false, result: `Tool "${p.toolName}" no implementada.`, error: 'TOOL_NOT_FOUND' }
       }
@@ -205,8 +236,22 @@ export class RealToolExecutor implements IToolExecutor {
       return { success: false, result: 'No encontré el servicio seleccionado.' }
     }
 
-    const startISO = `${date}T${time}:00`
+    // Convert business-local datetime to UTC before writing to DB.
+    // Bare strings like "2026-04-23T09:00:00" are stored as 9am UTC by Postgres,
+    // causing a visible clock offset for businesses in non-UTC timezones.
+    const startISO = localToUTC(date, time, p.timezone)
     const endISO   = this.buildEndISO(startISO, service.duration_min)
+
+    // Hard pre-validation: check for booking conflicts at the DB level.
+    // The LLM is instructed to call get_available_slots first, but this guard
+    // enforces slot availability even if that step was skipped.
+    const conflictsRes = await this.queryRepo.findConflicts(p.businessId, startISO, endISO)
+    if (!conflictsRes.error && conflictsRes.data && conflictsRes.data.length > 0) {
+      return {
+        success: false,
+        result:  `El horario ${time} del ${date} ya está ocupado. Llama get_available_slots para ver los horarios libres.`,
+      }
+    }
 
     const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:     p.businessId,
@@ -316,8 +361,19 @@ export class RealToolExecutor implements IToolExecutor {
       if (!clientRes.error && clientRes.data) clientName = clientRes.data.name
     }
 
-    const newStartISO = `${parsed.data.new_date}T${parsed.data.new_time}:00`
+    const newStartISO = localToUTC(parsed.data.new_date, parsed.data.new_time, p.timezone)
     const newEndISO   = this.buildEndISO(newStartISO, durationMin)
+
+    // Pre-validate new slot — exclude the appointment being rescheduled from the conflict check.
+    const conflictsRes = await this.queryRepo.findConflicts(
+      p.businessId, newStartISO, newEndISO, parsed.data.appointment_id,
+    )
+    if (!conflictsRes.error && conflictsRes.data && conflictsRes.data.length > 0) {
+      return {
+        success: false,
+        result:  `El horario ${parsed.data.new_time} del ${parsed.data.new_date} ya está ocupado. Llama get_available_slots para ver los horarios libres.`,
+      }
+    }
 
     const result = await new RescheduleAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:    p.businessId,
@@ -440,5 +496,39 @@ export class RealToolExecutor implements IToolExecutor {
 
     const lines = result.data.map((s) => `• ${s.name} (${s.duration_min} min, $${s.price})`)
     return { success: true, result: `Servicios disponibles:\n${lines.join('\n')}` }
+  }
+
+  private async searchClients(p: ToolExecuteParams): Promise<ExecResult> {
+    const parsed = SearchClientsSchema.safeParse(p.args)
+    if (!parsed.success) {
+      return { success: false, result: 'Necesito al menos 2 caracteres para buscar clientes.' }
+    }
+
+    const allRes = await this.clientRepo.findActiveForAI(p.businessId)
+    if (allRes.error || !allRes.data?.length) {
+      return { success: true, result: 'No hay clientes registrados aún.' }
+    }
+
+    const found = fuzzyFind(allRes.data, parsed.data.query)
+
+    if (found.status === 'found') {
+      return {
+        success: true,
+        result: `Cliente encontrado: ${found.match.name} (client_id: ${found.match.id}). Usa este client_id en confirm_booking.`,
+      }
+    }
+
+    if (found.status === 'ambiguous') {
+      const list = found.candidates.map((c) => `${c.name} (client_id: ${c.id})`).join(', ')
+      return {
+        success: true,
+        result: `Encontré varios clientes con ese nombre: ${list}. Pregunta al usuario cuál es el correcto antes de continuar.`,
+      }
+    }
+
+    return {
+      success: true,
+      result: `No encontré ningún cliente con el nombre "${parsed.data.query}". Puedes registrarlo con create_client.`,
+    }
   }
 }
