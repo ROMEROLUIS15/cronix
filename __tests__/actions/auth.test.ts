@@ -6,6 +6,17 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// ── Mock rate limiter (prevents Redis / in-memory state leaking between tests) ─
+const mockGetLoginFailures    = vi.fn()
+const mockIncrementFailures   = vi.fn()
+const mockResetFailures       = vi.fn()
+
+vi.mock('@/lib/rate-limit/redis-rate-limiter', () => ({
+  getLoginFailures:      mockGetLoginFailures,
+  incrementLoginFailures: mockIncrementFailures,
+  resetLoginFailures:    mockResetFailures,
+}))
+
 // ── Mock Supabase ────────────────────────────────────────────────────────────
 const mockSignIn = vi.fn()
 const mockSignOut = vi.fn()
@@ -46,6 +57,10 @@ import { redirect } from 'next/navigation'
 describe('Auth Server Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no prior failures, no lockout
+    mockGetLoginFailures.mockResolvedValue(null)
+    mockIncrementFailures.mockResolvedValue({ count: 1, firstFailAt: Date.now(), lastFailAt: Date.now() })
+    mockResetFailures.mockResolvedValue(undefined)
   })
 
   describe('login', () => {
@@ -59,11 +74,17 @@ describe('Auth Server Actions', () => {
       await login(formData)
 
       expect(redirect).toHaveBeenCalledWith('/dashboard')
+      expect(mockResetFailures).toHaveBeenCalledWith('test@example.com')
     })
 
-    it('returns generic error on wrong credentials', async () => {
+    it('returns invalid_credentials error on wrong password (first attempt)', async () => {
       mockSignIn.mockResolvedValue({
         error: { message: 'Invalid login credentials' },
+      })
+      mockIncrementFailures.mockResolvedValue({
+        count: 1,
+        firstFailAt: Date.now(),
+        lastFailAt: Date.now(),
       })
 
       const formData = new FormData()
@@ -72,7 +93,57 @@ describe('Auth Server Actions', () => {
 
       const result = await login(formData)
 
-      expect(result).toEqual({ error: 'Correo o contraseña incorrectos.' })
+      expect(result).toMatchObject({
+        error: 'invalid_credentials',
+        failedAttempts: 1,
+      })
+      expect(result?.lockoutEndsAt).toBeUndefined()
+    })
+
+    it('returns locked error after 3 failed attempts', async () => {
+      const now = Date.now()
+      mockSignIn.mockResolvedValue({
+        error: { message: 'Invalid login credentials' },
+      })
+      mockIncrementFailures.mockResolvedValue({
+        count: 3,
+        firstFailAt: now - 10_000,
+        lastFailAt: now,
+      })
+
+      const formData = new FormData()
+      formData.set('email', 'test@example.com')
+      formData.set('password', 'wrong')
+
+      const result = await login(formData)
+
+      expect(result).toMatchObject({
+        error: 'locked',
+        failedAttempts: 3,
+      })
+      expect(result?.lockoutEndsAt).toBeDefined()
+    })
+
+    it('blocks login immediately when account is already locked', async () => {
+      const now = Date.now()
+      mockGetLoginFailures.mockResolvedValue({
+        count: 3,
+        firstFailAt: now - 60_000,
+        lastFailAt: now - 30_000, // 30s ago → still inside 5-min window
+      })
+
+      const formData = new FormData()
+      formData.set('email', 'locked@example.com')
+      formData.set('password', 'any')
+
+      const result = await login(formData)
+
+      // Supabase should NOT be called when already locked
+      expect(mockSignIn).not.toHaveBeenCalled()
+      expect(result).toMatchObject({
+        error: 'locked',
+        failedAttempts: 3,
+      })
     })
 
     it('returns email verification error when not confirmed', async () => {
