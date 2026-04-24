@@ -11,6 +11,8 @@ import {
   Bell,
   BarChart3,
   Shield,
+  Lock,
+  Clock,
 } from "lucide-react";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { PwaInstallFloating } from "@/components/ui/pwa-install-floating";
@@ -18,7 +20,7 @@ import { PasskeyLoginButton } from "@/components/ui/passkey-login-button";
 import { loginSchema } from "@/lib/validations/auth";
 import { PasswordInput } from "@/components/ui/password-input";
 import { cn } from "@/lib/utils";
-import { login, signInWithGoogle } from "./actions";
+import { login, signInWithGoogle, type LoginResult } from "./actions";
 
 const getFeatures = (t: any) => [
   {
@@ -63,9 +65,33 @@ export default function LoginPage() {
     Record<string, string>
   >({});
   const [isPending, startTransition] = useTransition();
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutEndsAt, setLockoutEndsAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  // Max attempts before UI shows warning (mirrors server constant)
+  const MAX_ATTEMPTS = 3;
+
+  // Countdown ticker — runs every second while locked out
+  useEffect(() => {
+    if (!lockoutEndsAt) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((lockoutEndsAt - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+      if (remaining === 0) setLockoutEndsAt(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockoutEndsAt]);
+
+  const isLockedOut = lockoutEndsAt !== null && secondsLeft > 0;
+  const countdownMinutes = Math.floor(secondsLeft / 60);
+  const countdownSeconds = secondsLeft % 60;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isLockedOut) return;
     setError(null);
     setValidationErrors({});
     const formData = new FormData(e.currentTarget);
@@ -82,8 +108,58 @@ export default function LoginPage() {
     }
     startTransition(async () => {
       const res = await login(formData);
-      if (res?.error) setError(res.error);
+      if (!res) return; // redirect happened (success)
+      const { error: errCode, failedAttempts: attempts, lockoutEndsAt: until } = res;
+
+      if (until) {
+        setLockoutEndsAt(until);
+        setFailedAttempts(attempts ?? 0);
+        const isExtended = (attempts ?? 0) >= 6;
+        setError(isExtended ? 'lockedOutExtended' : 'locked');
+        return;
+      }
+
+      if (errCode === 'invalid_credentials') {
+        setFailedAttempts(attempts ?? 0);
+        setError('invalidCredentials');
+        return;
+      }
+
+      setError(errCode ?? null);
     });
+  };
+
+  // Attempt indicator dots (shown after first failure)
+  const AttemptDots = () => {
+    if (failedAttempts === 0) return null;
+    return (
+      <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem' }}>
+        {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => {
+          const filled = i < failedAttempts;
+          const color = filled
+            ? failedAttempts >= MAX_ATTEMPTS ? '#FF3B30' : '#FFD60A'
+            : 'rgba(255,255,255,0.12)';
+          return (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: color,
+                transition: 'background 0.3s',
+              }}
+            />
+          );
+        })}
+        {failedAttempts < MAX_ATTEMPTS && (
+          <span style={{ fontSize: '11px', color: '#FFD60A', marginLeft: '4px' }}>
+            {t('attemptsWarning', { current: failedAttempts, max: MAX_ATTEMPTS })}
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -529,72 +605,90 @@ export default function LoginPage() {
             onSubmit={handleSubmit}
             style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
           >
-            {/* ── Error banner estilo GitHub/Notion ── */}
+            {/* ── Error / Lockout banner ── */}
             {error && (
               <div
                 className="animate-fade-in"
                 style={{
                   padding: "0.875rem 1rem",
                   borderRadius: "12px",
-                  background: "rgba(255,59,48,0.08)",
-                  border: "1px solid rgba(255,59,48,0.2)",
+                  background: isLockedOut
+                    ? "rgba(255,59,48,0.12)"
+                    : "rgba(255,59,48,0.08)",
+                  border: isLockedOut
+                    ? "1px solid rgba(255,59,48,0.4)"
+                    : "1px solid rgba(255,59,48,0.2)",
                 }}
               >
                 <div
                   className="flex items-start gap-2.5"
                   style={{ marginBottom: "0.5rem" }}
                 >
-                  <AlertCircle
-                    size={16}
-                    style={{
-                      color: "#FF6B6B",
-                      marginTop: "1px",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#FF6B6B",
-                    }}
-                  >
-                    {error}
-                  </p>
+                  {isLockedOut ? (
+                    <Lock
+                      size={16}
+                      style={{ color: "#FF6B6B", marginTop: "1px", flexShrink: 0 }}
+                    />
+                  ) : (
+                    <AlertCircle
+                      size={16}
+                      style={{ color: "#FF6B6B", marginTop: "1px", flexShrink: 0 }}
+                    />
+                  )}
+                  <div>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "#FF6B6B" }}>
+                      {isLockedOut
+                        ? t(error === 'lockedOutExtended' ? 'lockedOutExtended' : 'lockedOut', {
+                            minutes: countdownMinutes,
+                            seconds: String(countdownSeconds).padStart(2, '0'),
+                          })
+                        : error === 'invalidCredentials'
+                          ? t('invalidCredentials')
+                          : error === 'locked'
+                            ? t('lockedOut', { minutes: 5, seconds: '00' })
+                            : error}
+                    </p>
+                    {isLockedOut && (
+                      <div
+                        className="flex items-center gap-1.5"
+                        style={{ marginTop: '6px' }}
+                      >
+                        <Clock size={11} style={{ color: 'rgba(255,107,107,0.7)' }} />
+                        <span style={{ fontSize: '11px', color: 'rgba(255,107,107,0.7)' }}>
+                          {t('tryAgainIn')} {countdownMinutes}:{String(countdownSeconds).padStart(2, '0')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {/* Caminos de salida — estilo GitHub */}
+                {/* Recovery links */}
                 <div
                   className="flex items-center gap-3"
                   style={{ paddingLeft: "1.5rem" }}
                 >
-                  <Link
-                    href="/register"
-                    className="hover:opacity-70 transition-opacity"
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      color: "#FF6B6B",
-                      textDecoration: "underline",
-                    }}
-                  >
-                    {t('noAccount')} {t('registerLink')}
-                  </Link>
-                  <span
-                    style={{ color: "rgba(255,107,107,0.3)", fontSize: "12px" }}
-                  >
-                    ·
-                  </span>
+                  {!isLockedOut && (
+                    <Link
+                      href="/register"
+                      className="hover:opacity-70 transition-opacity"
+                      style={{ fontSize: "12px", fontWeight: 700, color: "#FF6B6B", textDecoration: "underline" }}
+                    >
+                      {t('noAccount')} {t('registerLink')}
+                    </Link>
+                  )}
+                  {!isLockedOut && (
+                    <span style={{ color: "rgba(255,107,107,0.3)", fontSize: "12px" }}>·</span>
+                  )}
                   <Link
                     href="/forgot-password"
                     className="hover:opacity-70 transition-opacity"
                     style={{
-                      fontSize: "12px",
+                      fontSize: isLockedOut ? '13px' : '12px',
                       fontWeight: 700,
                       color: "#FF6B6B",
                       textDecoration: "underline",
                     }}
                   >
-                    {t('recoverPassword')}
+                    {isLockedOut ? t('recoverNow') : t('recoverPassword')}
                   </Link>
                 </div>
               </div>
@@ -703,46 +797,41 @@ export default function LoginPage() {
               )}
             </div>
 
+            {/* Attempt dots indicator */}
+            <AttemptDots />
+
             {/* Submit */}
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || isLockedOut}
               className="flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
               style={{
                 width: "100%",
                 padding: "0.875rem",
                 borderRadius: "12px",
-                background: "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
-                color: "#fff",
+                background: isLockedOut
+                  ? "rgba(255,59,48,0.15)"
+                  : "linear-gradient(135deg,#3884FF 0%,#1A5FDB 100%)",
+                color: isLockedOut ? '#FF6B6B' : '#fff',
                 fontSize: "14px",
                 fontWeight: 700,
-                border: "none",
-                cursor: "pointer",
-                boxShadow: isPending
+                border: isLockedOut ? '1px solid rgba(255,59,48,0.3)' : 'none',
+                cursor: isLockedOut ? 'not-allowed' : 'pointer',
+                boxShadow: isPending || isLockedOut
                   ? "none"
                   : "0 0 24px rgba(56,132,255,0.35),0 4px 12px rgba(56,132,255,0.2)",
               }}
             >
-              {isPending ? (
+              {isLockedOut ? (
                 <>
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
+                  <Lock size={15} />
+                  {countdownMinutes}:{String(countdownSeconds).padStart(2, '0')}
+                </>
+              ) : isPending ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   {t('submitting')}
                 </>

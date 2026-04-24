@@ -1,627 +1,452 @@
-# Cronix — AI-Powered Scheduling SaaS
+<div align="center">
 
-> Production-grade multi-tenant platform for service businesses. Voice-first AI orchestration, enterprise security, clean architecture.
+# 🕐 Cronix
 
-**Stack**: Next.js 15 · Supabase · Groq · Deepgram · Upstash Redis · Vercel  
-**Architecture**: App Router · Clean Architecture · CQRS · Repository Pattern · RLS
+**Plataforma SaaS de agendamiento inteligente para negocios de servicios**
 
----
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
+[![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-green?logo=supabase)](https://supabase.com)
+[![Groq](https://img.shields.io/badge/Groq-Llama%203-orange)](https://groq.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://typescriptlang.org)
+[![Vercel](https://img.shields.io/badge/Deployed-Vercel-black?logo=vercel)](https://vercel.com)
 
-## Platform Capabilities
-
-### Voice AI Assistant (Luis)
-- Full **ReAct orchestration loop** — reason → call tool → reason again until resolved
-- **7 production tools**: book, cancel, reschedule, list appointments, list services, check availability, register client
-- **Snake_case field contracts** — Zod schemas match LLM tool definitions exactly, zero silent mismatches
-- **Tool call history propagation** — full message chain preserved across turns, enabling multi-step reasoning
-- **Redis-persisted conversation state** — survives serverless cold starts, TTL-scoped per session
-- **RBAC strategy pattern** — owner/platform_admin execute directly; external/employee roles require confirmation
-- **Deterministic date/time normalization** — `lib/ai/utils/date-normalize.ts` resolves "mañana", "el lunes", "3pm" without LLM parsing
-- **Confirmation interception** — write tools intercepted for external/employee; structured summary presented before execution
-- **UUID state priority** — confirmed `service_id`/`client_id`/`appointment_id` from draft locks out LLM re-inference
-- **Availability & write-action claim guards** — LLM cannot assert bookings or availability without tool evidence
-- **Structured tool output** — write tools return `BookingEventData` typed object; zero string parsing for notifications
-- **Voice input validation** — empty or noise-only transcripts rejected before reaching the orchestrator
-- **Real token accounting** — Groq `usage.total_tokens` accumulated per turn, not estimated
-
-### Intelligent Scheduling
-- Conflict detection before every booking (CQRS query side)
-- Working hours enforcement — no bookings outside configured hours, closed-day protection
-- Available slots algorithm — subtracts booked intervals from working hours in 30-min increments
-- Timezone-aware throughout — all times stored as ISO 8601, displayed per business timezone
-
-### Multi-Tenant Security
-- **Row-Level Security (RLS)** on every table — zero cross-tenant data access at the DB layer
-- **Passkey / WebAuthn** — passwordless, phishing-proof authentication (SimpleWebAuthn)
-- **OAuth 2.0** — Google Sign-In with secure session management
-- **CSRF protection** — double-submit cookie pattern via middleware chain
-- **Rate limiting** — Redis token bucket at API layer + Supabase RLS quota
-- **CSP + COOP/CORP headers** — strict Content Security Policy, cross-origin isolation
-- **Middleware composition** — session, CSRF, rate-limit, user-status checks stacked cleanly
-
-### Financial Tracking
-- Idempotency keys on every transaction — no duplicate payments
-- Batch transaction inserts — atomic multi-service payment recording
-- Revenue aggregation pushed to DB — `SUM(net_amount)` in SQL, not in JS
-
-### Notifications
-- **Unified event pipeline** — all booking events (web + WhatsApp) route through `emitBookingEvent()` → single pipeline
-- **Idempotent delivery** — `UNIQUE(event_id)` on `notifications` table; QStash retries cannot produce duplicates
-- **WhatsApp owner alerts** — `notifications.ts` → `whatsapp-service` (`type: 'text'`) → Meta API → owner's personal number (set via `VINCULAR-slug`)
-- **Single WA transport** — `whatsapp-service` is the only Meta API call point: `type: 'text'` for owner alerts, `type: 'template'` for client reminders
-- **Transparent rate-limit retry** — Groq 429 → `503 + Retry-After` → QStash retries silently; client never sees an error message
-- **Web Push** — PWA-native, VAPID-signed, subscription management
-- **In-app** — real-time notification panel via Supabase Realtime broadcast
-- **Cron reminders** — Supabase `pg_cron` → Edge Function pipeline, tenant-aware scheduling
+</div>
 
 ---
 
-## Architecture
+## ¿Qué es Cronix?
 
-### High-Level Request Flow
+Cronix permite a negocios de servicios (peluquerías, clínicas, estudios, spas) recibir reservas 24/7 a través de **WhatsApp**, con un **agente de IA** que entiende lenguaje natural —incluyendo notas de voz—, gestiona conflictos de horario, y envía confirmaciones automáticas tanto al negocio como al cliente.
 
-```
-Browser / PWA
-    │
-    ▼ HTTPS
-Next.js Middleware Chain
-  [session] → [csrf] → [rate-limit] → [user-status] → [request-id]
-    │
-    ▼
-App Router (app/)
-  ├── Page Routes ([locale]/dashboard/...)
-  │     └── Server Components + Client Components
-  │           └── lib/actions/*.ts (Server Actions)
-  │
-  └── API Routes (app/api/)
-        ├── /assistant/voice      ← Voice AI entry point
-        ├── /passkey/...          ← WebAuthn ceremony
-        ├── /activity/ping        ← Audit log
-        ├── /admin/...            ← Admin operations
-        └── /health               ← System health check
-    │
-    ▼
-lib/ — Application Core
-  ├── ai/orchestrator/           ← AI orchestration layer
-  ├── domain/use-cases/          ← Business logic (pure)
-  ├── domain/repositories/       ← Repository interfaces (contracts)
-  ├── repositories/              ← Supabase implementations
-  └── middleware/                ← Composable middleware handlers
-    │
-    ▼
-Supabase (PostgreSQL + Edge Functions)
-  ├── RLS policies               ← Tenant isolation
-  ├── pg_cron                    ← Scheduled jobs
-  └── Edge Functions             ← WhatsApp, push, reminders, embeddings
-    │
-    ▼
-External Services
-  ├── Groq              ← LLM (llama) + STT (Whisper)
-  ├── Deepgram          ← TTS (Aura 2, Spanish)
-  └── Upstash Redis     ← Session state + rate limit counters
-```
+La plataforma incluye un **dashboard web** con su propio agente de IA para que el dueño gestione su agenda, clientes y finanzas desde el navegador.
 
-### AI Orchestrator Detail
+---
+
+## Stack Tecnológico
+
+| Capa | Tecnología | Versión |
+|---|---|---|
+| Frontend / SSR | Next.js (App Router) | 15 |
+| UI | React + TailwindCSS + Framer Motion | 19 / 3 / 12 |
+| Base de datos | Supabase (PostgreSQL + Realtime) | 2.98 |
+| Auth | Supabase Auth + Passkeys (WebAuthn) | — |
+| Edge Functions | Deno (Supabase Edge Functions) | — |
+| IA / LLM | Groq — `llama-3.1-8b-instant` / `llama-3.3-70b-versatile` | — |
+| STT / Audio | Groq Whisper — `whisper-large-v3-turbo` | — |
+| Rate Limiting / Cache | Upstash Redis + QStash | 1.37 / 2.10 |
+| Internacionalización | next-intl (6 idiomas) | 4.9 |
+| Monitoreo | Sentry + Helicone | — |
+| Testing | Vitest + Playwright | 3 / 1.59 |
+| PWA | next-pwa | 10.2 |
+
+**Idiomas soportados:** Español · English · Français · Deutsch · Italiano · Português
+
+---
+
+## Arquitectura General
 
 ```
-POST /api/assistant/voice
-    │
-    ├─ Groq Whisper → transcript
-    │
-    ├─ orchestrator-factory.ts → AiOrchestrator
-    │       │
-    │       ├─ RedisStateManager.load(sessionId)
-    │       │     └─ ConversationState { flow, turnCount, draft, history }
-    │       │
-    │       ├─ DecisionEngine.analyze(input, state)
-    │       │     ├─ [Guard] Services guard → reject if services=[]
-    │       │     ├─ [Normalize] extractEntities(text, tz) → date/time injected into prompt
-    │       │     ├─ Fast path: execute_immediately (confirmed action)
-    │       │     ├─ Fast path: reject (turn limit / rejection keyword)
-    │       │     └─ LLM path: reason_with_llm { messages, toolDefs }
-    │       │           ├─ buildSystemPrompt() — services (id+name), hours, today's appts,
-    │       │           │    resolved entities, voice format, tool chaining, security rules
-    │       │           └─ buildToolDefsForRole(strategy) — RBAC-filtered tool list
-    │       │
-    │       ├─ ExecutionEngine.execute(decision) — ReAct loop (max 5 steps)
-    │       │     ├─ [Guard] Confirmation interception: write tool → awaiting_confirmation
-    │       │     │    (external/employee only; owner/platform_admin bypass)
-    │       │     ├─ [Guard] UUID state priority: draft.service_id overrides LLM arg
-    │       │     ├─ LlmBridge → GroqProvider.chat(messages, toolDefs)
-    │       │     │     └─ returns: text | tool_call + real token count
-    │       │     ├─ [Guard] Availability claim guard: blocks "hay disponibilidad" without read tool
-    │       │     ├─ [Guard] Write-action claim guard: blocks "agendé" without write tool
-    │       │     └─ [tool_call] RealToolExecutor.execute(params)
-    │       │               ├─ Zod schema validation (snake_case, exact match)
-    │       │               ├─ UseCase → IRepository → Supabase
-    │       │               └─ returns { data: BookingEventData } — structured, no string parsing
-    │       │
-    │       ├─ emitBookingEvent(data) → NotificationService
-    │       │     ├─ DB insert (UNIQUE event_id → idempotent)
-    │       │     ├─ Supabase Realtime → UI
-    │       │     └─ WhatsApp owner alert
-    │       │
-    │       ├─ RedisStateManager.save(nextState)
-    │       │     └─ { flow, turnCount reset on action, history.slice(-20) }
-    │       │
-    │       └─ AiOutput { text, actionPerformed, tokens }
-    │
-    └─ Deepgram Aura 2 → audio/mpeg response
-```
-
-### Domain Layer (Clean Architecture)
-
-```
-lib/domain/
-├── repositories/                  ← Pure TypeScript interfaces (no Supabase)
-│   ├── IAppointmentQueryRepository  (CQRS read side)
-│   ├── IAppointmentCommandRepository (CQRS write side)
-│   ├── IClientRepository
-│   ├── IServiceRepository
-│   ├── IFinanceRepository
-│   ├── IBusinessRepository
-│   ├── IUserRepository
-│   ├── INotificationRepository
-│   └── IReminderRepository
-│
-└── use-cases/                     ← Business logic, depends only on interfaces
-    ├── CreateAppointmentUseCase     (conflict check → insert)
-    ├── CancelAppointmentUseCase
-    ├── RescheduleAppointmentUseCase (conflict check → update)
-    ├── GetAppointmentsByDateUseCase (filter + format)
-    ├── GetAvailableSlotsUseCase     (working hours − booked = free slots)
-    ├── CreateClientUseCase          (validate + insert → returns id)
-    ├── GetClientsUseCase
-    └── RegisterPaymentUseCase
+┌─────────────────────────────────────────────────────────────────┐
+│  Cliente Web (Next.js 15 / App Router)                          │
+│  ┌─────────────────────┐    ┌──────────────────────────────┐    │
+│  │  Dashboard (Owner)  │    │  Página de Login              │    │
+│  │  + Floating AI Chat │    │  Rate Limit UI (countdown)    │    │
+│  └────────┬────────────┘    └──────────────────────────────┘    │
+└───────────┼─────────────────────────────────────────────────────┘
+            │ Server Actions (Next.js)
+            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  lib/actions/auth.ts          lib/ai/orchestrator/              │
+│  ├─ Login + Rate Limit        ├─ AiOrchestrator (facade)        │
+│  ├─ Google OAuth              ├─ DecisionEngine                  │
+│  └─ Signout                   ├─ ExecutionEngine                 │
+│                               └─ StateManager                   │
+│  lib/ai/agents/dashboard/     lib/rate-limit/                   │
+│  ├─ config.ts (tier: quality) └─ redis-rate-limiter.ts          │
+│  ├─ prompt.ts                                                   │
+│  └─ tools.ts                                                    │
+└───────────┬─────────────────────────────────────────────────────┘
+            │ Supabase Client (SSR)
+            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Supabase (PostgreSQL + Realtime + Auth + Storage)              │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Edge Functions (Deno runtime)                             │ │
+│  │  ├─ process-whatsapp/   ← WhatsApp AI Agent               │ │
+│  │  ├─ whatsapp-webhook/   ← Meta webhook + QStash enqueue   │ │
+│  │  ├─ whatsapp-service/   ← WA transport layer              │ │
+│  │  ├─ cron-reminders/     ← Recordatorios automáticos       │ │
+│  │  ├─ push-notify/        ← Push notifications              │ │
+│  │  └─ embed-text/         ← Embeddings vectoriales          │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+            ▲
+            │
+┌───────────┴──────────────────────┐
+│  Upstash Redis                   │
+│  ├─ Login failure tracking       │
+│  ├─ Sliding window rate limiting │
+│  └─ QStash retry state           │
+└──────────────────────────────────┘
 ```
 
 ---
 
-## Full Project Tree
+## Módulos Principales
+
+### 1. Agente de IA para WhatsApp
+
+**Ubicación:** `supabase/functions/process-whatsapp/`
+
+Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por QStash y ejecuta un **bucle ReAct** con Groq para agendar, cancelar y reagendar citas.
+
+**Archivos clave:**
+
+| Archivo | Responsabilidad |
+|---|---|
+| `index.ts` | Entry point del Edge Function |
+| `message-handler.ts` | Pipeline completo de seguridad → contexto → agente |
+| `ai-agent.ts` | Bucle ReAct con `llama-3.1-8b-instant` + `llama-3.3-70b-versatile` |
+| `groq-client.ts` | Cliente HTTP de Groq + Whisper + Key Pooling |
+| `tool-executor.ts` | Ejecutor de herramientas: `confirm_booking`, `reschedule_booking`, `cancel_booking` |
+| `notifications.ts` | Doble notificación: dueño (WA + DB) y cliente (WA branded) |
+| `time-utils.ts` | Conversión UTC ↔ Local DST-aware con IANA timezones |
+| `prompt-builder.ts` | Construcción dinámica del system prompt con contexto RAG |
+| `business-router.ts` | Resolución multi-tenant: slug → sesión → fallback |
+| `guards.ts` | Rate limits, circuit breaker, token quota |
+| `security.ts` | Verificación QStash + sanitización anti-prompt-injection |
+
+### 2. Agente de IA del Dashboard
+
+**Ubicación:** `lib/ai/agents/dashboard/` + `lib/ai/orchestrator/`
+
+Agente web integrado en el dashboard del dueño. Comparte la arquitectura de orquestación pero opera en el runtime de Next.js (Node.js).
+
+**Archivos clave:**
+
+| Archivo | Responsabilidad |
+|---|---|
+| `lib/ai/agents/dashboard/config.ts` | `llmTier: 'quality'`, `maxReactIterations: 3` |
+| `lib/ai/agents/dashboard/prompt.ts` | System prompt del agente de dashboard |
+| `lib/ai/agents/dashboard/tools.ts` | Tool definitions para el dashboard |
+| `lib/ai/orchestrator/ai-orchestrator.ts` | Facade principal: estado → decisión → ejecución |
+| `lib/ai/orchestrator/decision-engine.ts` | Análisis de intent y extracción de entidades |
+| `lib/ai/orchestrator/execution-engine.ts` | Bucle ReAct + notificaciones + guards |
+| `lib/ai/orchestrator/state-manager.ts` | Persistencia del estado de conversación |
+| `lib/ai/providers/groq-provider.ts` | Wrapper de Groq: chat, stream, STT |
+
+### 3. Sistema de Rate Limiting de Login
+
+**Ubicación:** `lib/rate-limit/redis-rate-limiter.ts` + `lib/actions/auth.ts`
+
+Protección contra ataques de fuerza bruta a nivel de cuenta (por email, no por IP). Funciona distribuido entre todas las instancias de Vercel gracias a Upstash Redis.
+
+### 4. Notificaciones
+
+**Ubicación:** `lib/notifications/notification-service.ts`
+
+Pipeline de notificaciones para el dashboard. Garantiza idempotencia mediante `event_id` único, persiste en DB antes de cualquier canal de entrega.
+
+---
+
+## Flujos de Usuario
+
+### Agendamiento por WhatsApp (con voz)
+
+```
+Cliente envía mensaje (texto o nota de voz)
+    ↓
+Meta Webhook → whatsapp-webhook → QStash enqueue
+    ↓
+process-whatsapp (Deno Edge Function)
+    ↓ [Si es audio]
+Groq Whisper (whisper-large-v3-turbo) → texto transcrito
+    ↓
+Security: QStash signature + rate limit + sanitización
+    ↓
+Tenant routing: #slug → sesión DB → fallback landing
+    ↓
+Context fetch: servicios + cliente + citas activas + slots ocupados
+    ↓
+ReAct loop (llama-3.1-8b-instant):
+  Iteración 1: LLM analiza → llama tool confirm_booking
+  tool-executor:
+    - Valida UUID, fecha, hora
+    - localTimeToUTC() con DST correction
+    - checkBookingRateLimit()
+    - createAppointment() → Supabase DB
+  ↓ [Si hay SLOT_CONFLICT: propone alternativas]
+  Iteración 2 (si necesario): Respuesta empática (llama-3.3-70b-versatile)
+    ↓
+Notificaciones (fire-and-forget, idempotentes):
+  → DB notifications table (event_id único)
+  → Supabase Realtime broadcast → Dashboard owner
+  → WhatsApp al dueño (Meta Graph API directa)
+  → WhatsApp al cliente (branded confirmation)
+    ↓
+Respuesta conversacional al cliente
+```
+
+### Login con Rate Limiting
+
+```
+Usuario ingresa email + contraseña
+    ↓
+lib/actions/auth.ts (Server Action):
+    1. getLoginFailures(email) → Redis / memory
+    2. ¿count >= 3? → ¿lockoutEndsAt > now? → retorna { error:'locked', lockoutEndsAt }
+    3. supabase.auth.signInWithPassword()
+    4. ¿Error? → incrementLoginFailures(email)
+       - count 1-2 → retorna { error: 'invalid_credentials', failedAttempts }
+       - count >= 3 → retorna { error: 'locked', lockoutEndsAt: lastFailAt + 5min }
+       - count >= 6 → lockoutEndsAt: lastFailAt + 15min
+    5. ¿Éxito? → resetLoginFailures(email) → redirect('/dashboard')
+    ↓
+login/page.tsx (Client):
+    - Dots de intento (⚫→🟡→🔴) con attemptsWarning i18n
+    - Countdown setInterval cada 1s desde lockoutEndsAt
+    - Botón → 🔒 4:59 (disabled, cursor not-allowed)
+    - Link "Recuperar contraseña ahora" prominente durante bloqueo
+```
+
+---
+
+## Seguridad
+
+| Capa | Mecanismo |
+|---|---|
+| Login brute-force | Upstash Redis: 3 intentos = 5 min lockout, 6+ = 15 min |
+| WhatsApp webhook | QStash signature verification (HMAC-SHA256) |
+| Prompt injection | `sanitizeMessage()` en `security.ts` |
+| Multi-tenant | Todas las queries incluyen `business_id` explícito |
+| Output leak | `sanitizeOutput()` + `containsInternalSyntax()` en ExecutionEngine |
+| Booking duplicates | `parallel_tool_calls: false` + idempotency `event_id` |
+| Session | 30 min inactividad + 12h absoluto (`lib/middleware/with-session-timeout.ts`) |
+| RLS | Row Level Security habilitado en todas las tablas sensibles |
+
+---
+
+## Variables de Entorno
+
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Upstash Redis (rate limiting distribuido)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
+# Upstash QStash (cola de mensajes WhatsApp)
+QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=
+
+# IA
+LLM_API_KEY=                    # Groq API key(s), separados por coma para key pooling
+
+# WhatsApp (Meta)
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_VERIFY_TOKEN=
+
+# Opcional
+HELICONE_API_KEY=               # Proxy observability para Groq
+SENTRY_DSN=
+```
+
+---
+
+## Comandos de Desarrollo
+
+```bash
+# Instalar dependencias
+npm install
+
+# Desarrollo local
+npm run dev
+
+# TypeScript check
+npm run typecheck
+
+# Tests unitarios
+npm test
+
+# Tests E2E (Playwright)
+npm run test:e2e
+
+# Tests de integración
+npm run test:integration
+```
+
+---
+
+## Estructura del Proyecto
 
 ```
 cronix/
-│
 ├── app/
-│   ├── [locale]/
+│   ├── [locale]/                       # Rutas internacionalizadas (es, en, fr, de, it, pt)
+│   │   ├── page.tsx                    # Landing page
 │   │   ├── layout.tsx
-│   │   ├── page.tsx                        # Landing / redirect
-│   │   ├── login/                          # Passkey + Google OAuth
-│   │   ├── register/                       # Business onboarding
-│   │   ├── forgot-password/
-│   │   ├── reset-password/
-│   │   ├── terms/ & privacy/
-│   │   └── dashboard/
-│   │       ├── page.tsx                    # Main calendar view
-│   │       ├── layout.tsx                  # Sidebar + shell
-│   │       ├── appointments/               # List, new, edit
-│   │       ├── clients/                    # List, detail, edit, new
-│   │       ├── finances/                   # Dashboard, transactions, expenses
-│   │       ├── services/                   # Service manager
-│   │       ├── team/                       # Staff management
-│   │       ├── reports/                    # Revenue & analytics
-│   │       ├── settings/                   # Tenant branding + AI config
-│   │       ├── profile/                    # User profile
-│   │       ├── setup/                      # First-time business setup
-│   │       └── admin/
-│   │           └── pulse/                  # System health + dead-letter log
-│   │
-│   ├── api/
-│   │   ├── assistant/
-│   │   │   ├── voice/route.ts              # ★ Voice AI entry point (STT→AI→TTS)
-│   │   │   ├── tts/route.ts                # Standalone TTS endpoint
-│   │   │   ├── token/route.ts              # Session token for voice client
-│   │   │   └── proactive/route.ts          # Proactive AI messages
-│   │   ├── passkey/
-│   │   │   ├── authenticate/options/       # WebAuthn challenge
-│   │   │   └── authenticate/verify/        # WebAuthn verification
-│   │   ├── activity/ping/route.ts          # Audit event ingestion
-│   │   ├── admin/users/[id]/status/        # Admin user management
-│   │   └── health/route.ts                 # DB + Redis + external health
-│   │
-│   ├── auth/callback/route.ts              # OAuth callback handler
-│   ├── layout.tsx                          # Root layout + providers
-│   └── global-error.tsx
+│   │   ├── login/                      # Login + rate-limit UI + countdown
+│   │   ├── register/                   # Registro de nuevos usuarios
+│   │   ├── forgot-password/            # Recuperación de contraseña
+│   │   ├── reset-password/             # Reset con token
+│   │   ├── privacy/                    # Política de privacidad
+│   │   ├── terms/                      # Términos de servicio
+│   │   └── dashboard/                  # Área autenticada
+│   │       ├── page.tsx                # Dashboard home (resumen del día)
+│   │       ├── layout.tsx
+│   │       ├── appointments/           # Gestión de citas
+│   │       ├── clients/                # CRM de clientes
+│   │       ├── services/               # Catálogo de servicios
+│   │       ├── finances/               # Ingresos y reportes financieros
+│   │       ├── reports/                # Reportes detallados
+│   │       ├── settings/               # Configuración del negocio
+│   │       ├── profile/                # Perfil del usuario
+│   │       ├── team/                   # Gestión de equipo
+│   │       ├── admin/                  # Panel de administración
+│   │       ├── setup/                  # Onboarding inicial
+│   │       ├── _client/                # Client components del dashboard
+│   │       ├── _components/            # Server components del dashboard
+│   │       └── _hooks/                 # Hooks específicos del dashboard
+│   ├── api/                            # API routes de Next.js
+│   └── auth/                           # Callbacks OAuth (Google, passkeys)
 │
 ├── lib/
-│   │
+│   ├── actions/
+│   │   ├── auth.ts                     # login, signInWithGoogle, signUpWithGoogle, signout
+│   │   ├── voice-assistant.ts          # Server action del asistente de voz
+│   │   ├── rate-limit-action.ts        # Server action para rate limiting de API
+│   │   └── csrf-action.ts              # Generación de tokens CSRF
 │   ├── ai/
-│   │   ├── orchestrator/                   # ★ Production AI orchestration
-│   │   │   ├── ai-orchestrator.ts          # Public facade (AiOrchestrator)
-│   │   │   ├── decision-engine.ts          # analyze() → Decision + guards + entity normalization
-│   │   │   ├── execution-engine.ts         # ReAct loop + 4 runtime guardrails
-│   │   │   ├── LlmBridge.ts               # ExecutionEngine ↔ GroqProvider adapter
-│   │   │   ├── state-manager.ts            # IStateManager interface
-│   │   │   ├── RedisStateManager.ts        # Upstash Redis implementation
-│   │   │   ├── strategy.ts                 # RBAC strategies (Internal/External)
-│   │   │   ├── orchestrator-factory.ts     # Wires repos → RealToolExecutor → AiOrchestrator
-│   │   │   ├── types.ts                    # AiInput, AiOutput, ConversationState, Decision
-│   │   │   ├── index.ts                    # Barrel exports
-│   │   │   ├── example.ts                  # Dev/docs usage example
-│   │   │   └── tool-adapter/
-│   │   │       ├── RealToolExecutor.ts     # ★ Maps tool names → UseCases (7 tools, structured output)
-│   │   │       └── tool-adapter.ts         # IToolExecutor interface
-│   │   │
-│   │   ├── utils/                          # ★ AI utility functions (pure, no LLM)
-│   │   │   └── date-normalize.ts           # Deterministic date/time normalization (26 tests)
-│   │   │
+│   │   ├── agents/
+│   │   │   └── dashboard/
+│   │   │       ├── config.ts           # llmTier: 'quality', maxReactIterations: 3
+│   │   │       ├── prompt.ts           # System prompt del agente dashboard
+│   │   │       └── tools.ts            # Tool definitions para el dashboard
+│   │   ├── orchestrator/
+│   │   │   ├── ai-orchestrator.ts      # Facade: ÚNICO entry point de channel adapters
+│   │   │   ├── decision-engine.ts      # Análisis de intent → Decision
+│   │   │   ├── execution-engine.ts     # Bucle ReAct + guards + notificaciones
+│   │   │   ├── state-manager.ts        # Carga/persiste ConversationState
+│   │   │   ├── strategy.ts             # Permisos por rol (owner, employee, external)
+│   │   │   ├── event-dispatcher.ts     # Fire-and-forget de AppointmentEvents
+│   │   │   ├── events.ts               # Tipos de eventos tipados
+│   │   │   ├── orchestrator-factory.ts # Factory de producción
+│   │   │   └── types.ts                # AiInput, AiOutput, Decision, ConversationState
 │   │   ├── providers/
-│   │   │   ├── groq-provider.ts            # LLM + Whisper STT (function calling)
-│   │   │   ├── deepgram-provider.ts        # Aura 2 TTS
-│   │   │   ├── elevenlabs-provider.ts      # Legacy TTS (unused)
-│   │   │   └── types.ts                    # LlmResult, SttResult, TtsResult
-│   │   │
-│   │   ├── fuzzy-match.ts                  # Levenshtein client/service resolution
-│   │   ├── output-shield.ts                # LLM response safety filter
-│   │   ├── circuit-breaker.ts              # Resilience (open/half-open/closed)
-│   │   ├── resilience.ts                   # Retry + timeout wrappers
-│   │   ├── session-store.ts                # Legacy session (superseded by Redis)
-│   │   ├── memory.ts                       # RAG memory types
-│   │   ├── memory-service.ts               # pgvector embedding queries
-│   │   ├── assistant-prompt.ts             # Legacy prompt builder
-│   │   ├── assistant-service.ts            # Legacy orchestrator (superseded)
-│   │   ├── assistant-tools.ts              # Legacy tool definitions (superseded)
-│   │   ├── intent-router.ts                # Legacy intent classifier (superseded)
-│   │   ├── tool-registry.ts                # Legacy tool registry (superseded)
-│   │   ├── tool-definitions.read.ts        # Legacy read tool defs (superseded)
-│   │   ├── tool-definitions.write.ts       # Legacy write tool defs (superseded)
-│   │   ├── with-tenant-guard.ts            # Tenant validation wrapper
-│   │   ├── types.ts                        # Legacy AI types
-│   │   ├── prompts/luis.prompt.ts          # Legacy system prompt (superseded)
-│   │   └── tools/                          # Legacy tool implementations (superseded)
-│   │       ├── appointment.tools.ts
-│   │       ├── client.tools.ts
-│   │       ├── crm.tools.ts
-│   │       ├── finance.tools.ts
-│   │       └── index.ts
-│   │
+│   │   │   ├── groq-provider.ts        # ILlmProvider + ISttProvider → Groq
+│   │   │   ├── deepgram-provider.ts    # Proveedor alternativo STT
+│   │   │   ├── elevenlabs-provider.ts  # Text-to-speech
+│   │   │   └── types.ts                # Interfaces de providers
+│   │   ├── tools/
+│   │   │   ├── appointment.tools.ts    # confirm_booking, cancel, reschedule
+│   │   │   ├── client.tools.ts         # Búsqueda y gestión de clientes
+│   │   │   ├── finance.tools.ts        # Consultas financieras
+│   │   │   ├── crm.tools.ts            # Operaciones CRM
+│   │   │   └── index.ts
+│   │   ├── intent-router.ts            # Clasificación rápida de intents
+│   │   ├── fuzzy-match.ts              # Matching aproximado de nombres/servicios
+│   │   ├── session-store.ts            # Store de sesiones de conversación
+│   │   ├── memory-service.ts           # Memoria de entidades del agente
+│   │   ├── circuit-breaker.ts          # Circuit breaker para LLM
+│   │   ├── output-shield.ts            # Sanitización de output del LLM
+│   │   └── resilience.ts               # safeSTT(), safeLLM() con retry
+│   ├── application/                    # Casos de uso de aplicación
 │   ├── domain/
-│   │   ├── repositories/                   # ★ Pure interfaces (no infrastructure)
-│   │   │   ├── IAppointmentQueryRepository.ts
-│   │   │   ├── IAppointmentCommandRepository.ts
-│   │   │   ├── IAppointmentRepository.ts
-│   │   │   ├── IBusinessRepository.ts
-│   │   │   ├── IClientRepository.ts
-│   │   │   ├── IFinanceRepository.ts
-│   │   │   ├── INotificationRepository.ts
-│   │   │   ├── IReminderRepository.ts
-│   │   │   ├── IServiceRepository.ts
-│   │   │   ├── IUserRepository.ts
-│   │   │   └── index.ts
-│   │   ├── use-cases/                      # ★ Business logic layer
-│   │   │   ├── CreateAppointmentUseCase.ts
-│   │   │   ├── CancelAppointmentUseCase.ts
-│   │   │   ├── RescheduleAppointmentUseCase.ts
-│   │   │   ├── GetAppointmentsByDateUseCase.ts
-│   │   │   ├── GetAvailableSlotsUseCase.ts
-│   │   │   ├── CreateClientUseCase.ts
-│   │   │   ├── GetClientsUseCase.ts
-│   │   │   ├── RegisterPaymentUseCase.ts
-│   │   │   ├── types.ts
-│   │   │   └── index.ts
-│   │   └── errors/DomainError.ts
-│   │
-│   ├── repositories/                       # ★ Supabase implementations
-│   │   ├── SupabaseAppointmentRepository.ts
-│   │   ├── SupabaseBusinessRepository.ts
-│   │   ├── SupabaseClientRepository.ts
-│   │   ├── SupabaseFinanceRepository.ts
-│   │   ├── SupabaseNotificationRepository.ts
-│   │   ├── SupabaseReminderRepository.ts
-│   │   ├── SupabaseServiceRepository.ts
-│   │   └── SupabaseUserRepository.ts
-│   │
-│   ├── actions/                            # Next.js Server Actions
-│   │   ├── auth.ts
-│   │   ├── csrf-action.ts
-│   │   ├── rate-limit-action.ts
-│   │   └── voice-assistant.ts
-│   │
-│   ├── middleware/                         # Composable middleware chain
-│   │   ├── compose.ts                      # Chain builder
-│   │   ├── with-session.ts
-│   │   ├── with-csrf.ts
-│   │   ├── with-rate-limit.ts
-│   │   ├── with-session-timeout.ts
-│   │   ├── with-user-status.ts
-│   │   ├── with-request-id.ts
-│   │   ├── constants.ts
-│   │   ├── utils.ts
-│   │   └── index.ts
-│   │
+│   │   ├── errors/                     # Errores de dominio tipados
+│   │   ├── repositories/               # Interfaces de repositorios
+│   │   └── use-cases/                  # Casos de uso de dominio
+│   ├── middleware/
+│   │   ├── with-session-timeout.ts     # 30 min inactividad + 12h absoluto
+│   │   ├── with-session.ts             # Verificación de sesión activa
+│   │   ├── with-csrf.ts                # Validación CSRF
+│   │   ├── with-rate-limit.ts          # Rate limiting de rutas
+│   │   ├── with-user-status.ts         # Estado del usuario (activo/suspendido)
+│   │   ├── with-request-id.ts          # Request ID para trazabilidad
+│   │   └── compose.ts                  # Composición de middlewares
+│   ├── notifications/
+│   │   └── notification-service.ts     # Pipeline: DB → Realtime → WhatsApp
 │   ├── rate-limit/
-│   │   ├── redis-rate-limiter.ts           # Sliding window via Upstash
-│   │   └── token-quota.ts                  # Per-user AI token budget
-│   │
-│   ├── auth/
-│   │   ├── get-session.ts
-│   │   └── get-business-id.ts
-│   │
-│   ├── hooks/                              # Shared React hooks
-│   │   ├── use-business-context.ts
-│   │   ├── use-fetch.ts
-│   │   ├── use-in-app-notifications.ts
-│   │   ├── use-notifications.ts
-│   │   ├── use-pwa-install.ts
-│   │   ├── use-pwa-update.ts
-│   │   └── use-contact-picker.ts
-│   │
-│   ├── notifications/notify-owner-whatsapp.ts
-│   ├── appointments/validate-double-booking.ts
-│   ├── application/ai/                     # Application-layer AI planner/executor
-│   │   ├── planner.ts
-│   │   ├── executor.ts
-│   │   └── types.ts
-│   ├── container.ts                        # DI container (server)
-│   ├── browser-container.ts                # DI container (client)
-│   ├── cache.ts                            # In-memory cache helpers
-│   ├── logger.ts                           # Axiom structured logger
-│   ├── mock/data.ts                        # Test fixtures
-│   ├── i18n/date-locale.ts
-│   └── constants/
-│       ├── business.ts
-│       └── voice-agent.ts
-│
-├── components/
-│   ├── ui/                                 # Design system primitives
-│   │   ├── button.tsx, input.tsx, modal.tsx, card.tsx
-│   │   ├── badge.tsx, skeleton.tsx, avatar.tsx
-│   │   ├── date-time-picker.tsx
-│   │   ├── client-select.tsx
-│   │   ├── passkey-login-button.tsx
-│   │   ├── phone-input-flags.tsx
-│   │   ├── language-switcher.tsx
-│   │   ├── password-input.tsx
-│   │   └── pwa-install-banner.tsx / pwa-install-floating.tsx / pwa-update-toast.tsx
-│   ├── dashboard/
-│   │   ├── voice-assistant-fab.tsx         # Voice button + audio capture
-│   │   ├── voice-visualizer.tsx            # Waveform animation
-│   │   └── services-onboarding-banner.tsx
-│   ├── layout/
-│   │   ├── dashboard-shell.tsx
-│   │   ├── sidebar.tsx
-│   │   ├── topbar.tsx
-│   │   └── notification-panel.tsx
-│   ├── admin/
-│   │   ├── system-status-grid.tsx
-│   │   └── dead-letter-feed.tsx
-│   ├── providers.tsx                       # React context providers
-│   ├── session-timeout.tsx
-│   └── theme-toggle.tsx
+│   │   ├── redis-rate-limiter.ts       # Sliding window + login failure tracking
+│   │   └── token-quota.ts              # Cuota de tokens por negocio
+│   ├── repositories/                   # Implementaciones Supabase de repositorios
+│   │   ├── SupabaseAppointmentRepository.ts
+│   │   ├── SupabaseClientRepository.ts
+│   │   ├── SupabaseBusinessRepository.ts
+│   │   ├── SupabaseFinanceRepository.ts
+│   │   ├── SupabaseServiceRepository.ts
+│   │   ├── SupabaseUserRepository.ts
+│   │   ├── SupabaseNotificationRepository.ts
+│   │   └── SupabaseReminderRepository.ts
+│   ├── services/
+│   │   ├── whatsapp.service.ts         # Envío de mensajes WhatsApp (Next.js side)
+│   │   ├── push-notify.service.ts      # Web push notifications
+│   │   └── contact-picker.service.ts   # Selección de contactos del dispositivo
+│   ├── security/                       # Utilidades de seguridad
+│   ├── hooks/                          # React hooks compartidos
+│   ├── supabase/                       # Clientes Supabase (server/client/admin)
+│   ├── validations/                    # Schemas Zod
+│   ├── utils/                          # Utilidades generales
+│   ├── constants/                      # Constantes globales
+│   ├── container.ts                    # IoC container
+│   ├── cache.ts                        # Caching layer
+│   └── logger.ts                       # Logger estructurado (Sentry-aware)
 │
 ├── supabase/
-│   ├── migrations/                         # 45+ versioned SQL migrations
-│   └── functions/                          # Deno Edge Functions
-│       ├── _shared/
-│       │   ├── supabase.ts                 # Admin client factory
-│       │   ├── tenant-guard.ts             # Business ownership check
-│       │   ├── database.ts                 # Shared DB types
-│       │   └── sentry.ts                   # Error reporting
-│       ├── process-whatsapp/               # WhatsApp AI agent (Deno)
-│       │   ├── index.ts                    # Entry point + routing
-│       │   ├── ai-agent.ts                 # Groq LLM orchestration (ReAct)
-│       │   ├── prompt-builder.ts           # System prompt for WA context
-│       │   ├── tool-executor.ts            # WA tools → structured { data: BookingEventData }
-│       │   ├── notifications.ts            # ★ Unified event pipeline (emitBookingEvent)
-│       │   ├── context-fetcher.ts          # Load business/client/history context
-│       │   ├── business-router.ts          # Multi-tenant message routing
-│       │   ├── message-handler.ts          # Inbound message processor
-│       │   ├── appointment-repo.ts         # Appointment DB queries
-│       │   ├── security.ts                 # QStash signature verification
-│       │   ├── guards.ts                   # Rate limits + circuit breaker
-│       │   ├── audit.ts                    # Conversation history logging
-│       │   └── types.ts
-│       ├── whatsapp-webhook/               # Webhook receiver + queue dispatch
-│       │   ├── index.ts
-│       │   └── types.ts
-│       ├── whatsapp-service/               # ★ Single WA transport (text + template)
-│       │   └── index.ts
-│       ├── cron-reminders/                 # Appointment reminder pipeline
-│       │   ├── index.ts
-│       │   └── modules/
-│       │       ├── appointment-fetcher.ts
-│       │       ├── business-scheduler.ts
-│       │       ├── notification-builder.ts
-│       │       ├── whatsapp-sender.ts
-│       │       ├── cleanup.ts
-│       │       └── db.ts
-│       ├── push-notify/                    # Web push dispatcher
-│       │   ├── index.ts
-│       │   ├── vapid.ts
-│       │   └── modules/
-│       │       ├── push-sender.ts
-│       │       ├── subscription-manager.ts
-│       │       └── auth.ts
-│       └── embed-text/                     # pgvector embedding (RAG)
-│           └── index.ts
+│   ├── functions/
+│   │   ├── _shared/                    # Código compartido entre edge functions
+│   │   ├── process-whatsapp/           # WhatsApp AI Agent (Deno, 20 archivos)
+│   │   │   ├── ai-agent.ts             # runAgentLoop() + transcribeAudio()
+│   │   │   ├── groq-client.ts          # callLlm() + key pooling + circuit breaker
+│   │   │   ├── tool-executor.ts        # confirm/reschedule/cancel_booking
+│   │   │   ├── notifications.ts        # Doble notificación: dueño + cliente
+│   │   │   ├── time-utils.ts           # localTimeToUTC() + utcToLocalParts()
+│   │   │   ├── prompt-builder.ts       # System prompt dinámico con RAG
+│   │   │   ├── message-handler.ts      # Pipeline de 6 capas de seguridad
+│   │   │   ├── business-router.ts      # Resolución multi-tenant
+│   │   │   ├── context-fetcher.ts      # Queries paralelas de contexto
+│   │   │   ├── appointment-repo.ts     # CRUD de citas en Supabase
+│   │   │   ├── guards.ts               # Rate limits, circuit breaker, token quota
+│   │   │   └── security.ts             # QStash signature + anti-injection
+│   │   ├── whatsapp-webhook/           # Meta webhook receiver → QStash enqueue
+│   │   ├── whatsapp-service/           # Transport layer de WhatsApp
+│   │   ├── cron-reminders/             # Recordatorios automáticos (cron)
+│   │   ├── embed-text/                 # Generación de embeddings vectoriales
+│   │   └── push-notify/                # Web push notifications
+│   └── migrations/                     # Migraciones SQL versionadas
 │
-├── types/
-│   ├── database.types.ts                   # Auto-generated Supabase types
-│   ├── query-types.ts                      # Derived query return types
-│   ├── result.ts                           # Result<T> type (ok/fail)
-│   └── index.ts
+├── components/
+│   ├── ui/                             # Componentes base (botones, inputs, modals)
+│   ├── dashboard/                      # Componentes específicos del dashboard
+│   ├── layout/                         # Header, sidebar, footer
+│   ├── admin/                          # Componentes de administración
+│   └── hooks/                          # Hooks de componentes
 │
-├── __tests__/                              # Unit + integration tests (Vitest)
-│   ├── ai/
-│   │   ├── utils/
-│   │   │   └── date-normalize.test.ts      # ★ 26 tests — deterministic date/time normalization
-│   │   └── orchestrator/
-│   │       ├── ai-orchestrator.test.ts     # Facade integration tests
-│   │       ├── decision-engine.test.ts     # 35 tests — analysis, prompt, tool defs
-│   │       ├── decision-engine-hardening.test.ts  # ★ 16 tests — services guard, entity injection, confirmation summary
-│   │       ├── execution-engine.test.ts    # 14 tests — reject/immediate/ReAct paths
-│   │       ├── execution-engine-hardening.test.ts # ★ 13 tests — 4 runtime guardrails
-│   │       └── real-tool-executor.test.ts  # 38 tests — all 7 tools, Zod validation
-│   ├── domain/                             # Domain layer tests
-│   ├── use-cases/                          # UseCase tests
-│   ├── contracts/                          # Repository contract tests
-│   ├── rate-limit/                         # Rate limiter tests
-│   ├── middleware/                         # Middleware chain tests
-│   ├── security/                           # CSRF, auth tests
-│   ├── validations/                        # Zod schema tests
-│   └── components/                         # Component smoke tests
+├── messages/                           # Archivos i18n
+│   ├── es.json                         # Español (base)
+│   ├── en.json
+│   ├── fr.json
+│   ├── de.json
+│   ├── it.json
+│   └── pt.json
 │
-├── lib/repositories/__tests__/             # Supabase repository integration tests
-│
-├── playwright/                             # E2E tests (Playwright)
-│
-├── i18n/                                   # next-intl configuration
-│   ├── routing.ts
-│   ├── request.ts
-│   ├── navigation.ts
-│   └── middleware-interceptor.ts
-│
-├── docs/
-│   ├── architecture/
-│   │   ├── AI_MASTER_GUIDE.md              # ★ AI orchestrator deep dive
-│   │   ├── DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md
-│   │   ├── LUIS_IA_PROMPT_ENGINEERING.md   # ★ System prompt design guide
-│   │   ├── TECHNICAL_DOCUMENTATION.md
-│   │   ├── TECHNICAL_DOCUMENTATION_ES.md
-│   │   ├── FRONTEND_ARCHITECTURE_AND_STATE.md
-│   │   ├── RELIABILITY.md
-│   │   ├── UX_ENGINEERING.md
-│   │   ├── ADR-001-whatsapp-concurrency-queues.md
-│   │   ├── ADR_002_ACTION_TAGS_VS_JSON.md
-│   │   ├── ARCHITECTURE_DECISIONS.md
-│   │   ├── DATABASE_SECURITY_TESTING.md
-│   │   ├── PASSKEY_WEBAUTHN_IMPLEMENTATION.md
-│   │   ├── WEB_PUSH_STANDARDS_DEEP_DIVE.md
-│   │   └── WhatsApp-AI-Architecture-Details.md
-│   ├── api/
-│   │   └── ASSISTANT_TOOLS.md              # ★ All 7 AI tools reference
-│   ├── security/
-│   │   ├── SECURITY_AND_RATE_LIMITS.md
-│   │   └── dependency-policy.md
-│   ├── operations/
-│   │   ├── CI_CD_GATEKEEPER.md
-│   │   ├── DEPRECATED_APIS.md
-│   │   └── WHATSAPP_FIX_POSTMORTEM.md
-│   └── system-pulse.md
-│
-├── middleware.ts                            # Next.js middleware entry
-├── instrumentation.ts                       # Server startup (Sentry)
-├── instrumentation-client.ts               # Client startup (Sentry)
-├── next.config.ts
+├── types/                              # Tipos TypeScript globales
+├── i18n/                               # Configuración next-intl
+├── public/                             # Assets estáticos + PWA manifest
+├── __tests__/                          # Tests unitarios Vitest
+├── tests/                              # Tests adicionales
+├── middleware.ts                       # Composición de middlewares (auth + session + locale)
+├── next.config.js
 ├── tailwind.config.ts
-├── vitest.config.ts
-├── playwright.config.ts
-└── package.json
+└── tsconfig.json
 ```
 
 ---
 
-## Tech Stack
+## Licencia
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Framework** | Next.js 15 (App Router) | SSR, Server Actions, API routes |
-| **Language** | TypeScript (strict) | No `any`, no `console.log` |
-| **Database** | Supabase PostgreSQL | ACID, RLS, pg_cron, pgvector |
-| **Auth** | Supabase Auth + SimpleWebAuthn | Passkey, OAuth, JWT sessions |
-| **AI — LLM** | Groq (llama-3.x) | Function calling, fast inference |
-| **AI — STT** | Groq Whisper (whisper-large-v3-turbo) | Voice-to-text, <1s latency |
-| **AI — TTS** | Deepgram Aura 2 (aura-2-nestor-es) | Natural Spanish voice synthesis |
-| **Session State** | Upstash Redis | AI conversation state, rate limit counters |
-| **Job Queue** | Upstash QStash | Async WhatsApp message processing |
-| **Edge Functions** | Supabase Deno runtime | WhatsApp agent, push, reminders, embeddings |
-| **Monitoring** | Sentry + Axiom | Error tracking, structured logging |
-| **Hosting** | Vercel (global edge) | CI/CD, preview deploys, domain routing |
-| **Testing** | Vitest + Playwright | Unit, integration, E2E |
-
----
-
-## AI Tool Catalog
-
-| Tool | Access | Description |
-|------|--------|-------------|
-| `confirm_booking` | All | Create appointment. `service_id` + `date` + `time` + (`client_name` or `client_id`) |
-| `cancel_booking` | All | Cancel by `appointment_id` |
-| `reschedule_booking` | All | Move to new `date`/`time` by `appointment_id` |
-| `get_appointments_by_date` | All | List active appointments with IDs for a day |
-| `get_services` | All | List active services with prices and durations |
-| `get_available_slots` | All | Free slots for a day given service `duration_min` |
-| `create_client` | Internal only | Register new client → returns `client_id` for immediate chaining |
-
----
-
-## Developer Setup
-
-### Prerequisites
-- Node.js 18+
-- Docker (Supabase local dev)
-
-### Installation
-
-```bash
-git clone <repo>
-cd cronix
-npm install
-
-cp .env.example .env.local
-# Fill: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-#       GROQ_API_KEY, DEEPGRAM_API_KEY, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN
-#       CRON_SECRET (must match supabase/.env — used for process-whatsapp → whatsapp-service auth)
-
-cp supabase/.env.example supabase/.env
-# Fill: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET
-#       CRON_SECRET (same value as .env.local)
-
-npx supabase start
-npx supabase migration up
-
-npm run dev
-# → http://localhost:3000
-```
-
-### Commands
-
-```bash
-npm run dev          # Development server
-npm run build        # Production build
-npm run typecheck    # tsc --noEmit (strict, zero errors enforced)
-npm run lint         # ESLint + Prettier
-npm test             # Vitest (unit + integration)
-npm run test:e2e     # Playwright E2E
-npm run test:ui      # Vitest UI (watch mode)
-npm run test:coverage
-```
-
-### Code Standards
-
-- **No `any` types** — TypeScript strict mode throughout
-- **No `console.log`** — use `lib/logger.ts` (Axiom structured logging)
-- **Result<T> contract** — every repo/use-case returns `{ data, error }`, never throws
-- **Snake_case in tool schemas** — must match LLM tool definition field names exactly
-- **Dev/prod parity** — code runs identically in both environments
-
----
-
-## CI/CD
-
-```
-Push to develop → pre-push hook (Husky)
-  ├── ESLint + Prettier
-  ├── TypeScript (tsc --noEmit)
-  └── Vitest test suite
-
-PR to main → same checks + code review
-
-Merge to main → Vercel production deploy (2-3 min global rollout)
-```
-
----
-
-## Key Documentation
-
-| Document | Description |
-|----------|-------------|
-| [AI_MASTER_GUIDE.md](docs/architecture/AI_MASTER_GUIDE.md) | ★ Full AI orchestrator architecture, hardening guardrails, state machine, notification pipeline, test coverage |
-| [WHATSAPP_AI_ARCHITECTURE.md](docs/WHATSAPP_AI_ARCHITECTURE.md) | ★ WhatsApp agent architecture, unified notification pipeline, idempotency |
-| [ASSISTANT_TOOLS.md](docs/api/ASSISTANT_TOOLS.md) | All 7 tools: parameters, behavior, chaining patterns |
-| [LUIS_IA_PROMPT_ENGINEERING.md](docs/architecture/LUIS_IA_PROMPT_ENGINEERING.md) | System prompt design, section-by-section breakdown |
-| [DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md](docs/architecture/DASHBOARD_ASSISTANT_TECHNICAL_OVERVIEW.md) | Dashboard AI overview, RBAC, voice pipeline |
-| [SECURITY_AND_RATE_LIMITS.md](docs/security/SECURITY_AND_RATE_LIMITS.md) | Threat model, RLS, rate limiting |
-| [RELIABILITY.md](docs/architecture/RELIABILITY.md) | Circuit breaker, retry, resilience patterns |
-| [WhatsApp-AI-Architecture-Details.md](docs/architecture/WhatsApp-AI-Architecture-Details.md) | WhatsApp agent legacy architecture details |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | High-level system architecture, AI pipeline, notification pipeline |
+Propietario — © 2024-2026 Cronix. Todos los derechos reservados.

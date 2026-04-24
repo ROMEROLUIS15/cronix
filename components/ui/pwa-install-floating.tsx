@@ -5,21 +5,32 @@
  *
  * Visible without any scrolling. Hidden on lg+ screens where the inline
  * PwaInstallBanner in the CTA section is sufficient.
+ *
+ * Shows for:
+ *  - Android/Chrome with native beforeinstallprompt (one-tap install)
+ *  - iOS Safari (manual Add to Home Screen guide)
+ *  - Android without native prompt (browser-menu fallback instructions)
  */
 
 import { useState } from 'react'
 import { Download, Smartphone, Share, X } from 'lucide-react'
 import { usePwaInstall } from '@/lib/hooks/use-pwa-install'
+import { usePwaInstallFallback } from '@/lib/hooks/use-pwa-install-fallback'
 import { useTranslations } from 'next-intl'
 
 export function PwaInstallFloating() {
   const { canInstall, isIos, isInstalled, install } = usePwaInstall()
-  const [dismissed, setDismissed]       = useState(false)
-  const [showIosGuide, setShowIosGuide] = useState(false)
+  const fallback = usePwaInstallFallback()
+  const [dismissed,     setDismissed]     = useState(false)
+  const [showIosGuide,  setShowIosGuide]  = useState(false)
+  const [showFallback,  setShowFallback]  = useState(false)
   const t = useTranslations('pwa')
 
   if (isInstalled || dismissed) return null
-  if (!canInstall && !isIos)   return null
+
+  // Show for: native prompt, iOS, or Android-without-prompt (has manifest + SW)
+  const hasAndroidFallback = !isIos && fallback.hasManifest && fallback.hasSW
+  if (!canInstall && !isIos && !hasAndroidFallback) return null
 
   return (
     <div
@@ -73,10 +84,52 @@ export function PwaInstallFloating() {
           </div>
         )}
 
+        {/* Android fallback sheet */}
+        {showFallback && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 50000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
+            onClick={() => setShowFallback(false)}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', background: '#161619', borderRadius: '16px 16px 0 0', padding: '24px', boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, color: '#F2F2F2', fontSize: '16px', fontWeight: 700 }}>Instalar Cronix</h3>
+                <button onClick={() => setShowFallback(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  <X size={20} style={{ color: '#909098' }} />
+                </button>
+              </div>
+              <p style={{ color: '#909098', marginBottom: '12px', fontSize: '14px', lineHeight: 1.6 }}>
+                {fallback.instruction}
+              </p>
+              <div style={{ background: 'rgba(56,132,255,0.06)', border: '1px solid rgba(56,132,255,0.15)', borderRadius: '12px', padding: '12px', marginBottom: '20px' }}>
+                <p style={{ color: '#D1D1D6', fontSize: '13px', margin: 0, lineHeight: 1.7 }}>
+                  1. Toca el menú <strong style={{ color: '#F2F2F2' }}>⋮</strong> (tres puntos, arriba a la derecha)<br />
+                  2. Selecciona <strong style={{ color: '#F2F2F2' }}>&ldquo;Instalar aplicación&rdquo;</strong> o <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong><br />
+                  3. Confirma pulsando <strong style={{ color: '#F2F2F2' }}>&ldquo;Instalar&rdquo;</strong>
+                </p>
+              </div>
+              <button onClick={() => setShowFallback(false)} style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Main action row */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
           <button
-            onClick={canInstall ? install : () => setShowIosGuide(v => !v)}
+            id="pwa-floating-install-btn"
+            onClick={async () => {
+              if (canInstall) {
+                await install()
+              } else if (isIos) {
+                setShowIosGuide(v => !v)
+              } else {
+                setShowFallback(true)
+              }
+            }}
             style={{
               flex:            1,
               display:         'flex',
@@ -94,8 +147,8 @@ export function PwaInstallFloating() {
               cursor:          'pointer',
             }}
           >
-            {canInstall ? <Download size={18} /> : <Smartphone size={18} />}
-            {canInstall ? t('installFree') : t('getAppIos')}
+            {isIos ? <Smartphone size={18} /> : <Download size={18} />}
+            {canInstall ? t('installFree') : isIos ? t('getAppIos') : t('installFree')}
           </button>
 
           <button

@@ -1,127 +1,531 @@
-# Cronix — Arquitectura del Sistema
+# ARCHITECTURE.md — Cronix
 
-> Última actualización: 2026-04-18 (rev. notificaciones WA owner + QStash retry transparente).
-
-Este documento describe la arquitectura técnica de Cronix tras la refactorización a un modelo **Domain-Driven Repository** con **AI Orchestration Hardening**.
-
-## 1. Capas del Sistema
-
-Cronix sigue una arquitectura de diseño limpio separada en capas:
-
-### Capa de Presentación (UI)
-- **Tecnología**: Next.js 15 (App Router).
-- **Responsabilidad**: Renderizar la interfaz, manejar el estado local de la UI y capturar entradas del usuario.
-- **Acceso a Datos**: NUNCA llama a Supabase directamente. Usa el factory `getRepos(supabase)` o Server Actions.
-
-### Capa de Aplicación / Dominio
-- **Contratos (Interfaces)**: Ubicados en `lib/domain/repositories/`. Definen QUÉ operaciones se pueden hacer, no cómo.
-- **Manejo de Errores**: Patrón `Result<T>`: `{ data: T | null, error: string | null }`. Elimina `try/catch` dispersos en la UI.
-
-### Capa de Infraestructura
-- **Implementación**: `lib/repositories/` — Repositorios Supabase concretos.
-- **Aislamiento**: Cada repositorio asegura que todas las consultas incluyan `business_id` (Multi-tenancy).
+> Documento de referencia técnica para desarrolladores.
+> Todas las rutas y nombres de funciones fueron verificados contra el código real.
+> Última actualización: 2026-04-24
 
 ---
 
-## 2. Flujo de Datos de la IA (Web Assistant)
+## Índice
 
-El **AI Assistant** del dashboard utiliza una arquitectura de confianza cero con guardrails en tiempo de ejecución:
-
-```
-POST /api/assistant/voice
-       │
-       ▼
-route.ts → [Validation: reject empty/noise input]
-       │
-       ▼
-DecisionEngine.analyze(input, state)
-  ├── [Guard] Services guard (empty services → reject)
-  ├── [Normalize] extractEntities() → resolved date/time injected into prompt
-  ├── Fast path: reject / execute_immediately
-  └── LLM path: reason_with_llm + system prompt + RBAC tool defs
-       │
-       ▼
-ExecutionEngine.execute(Decision) — ReAct loop (max 5 steps)
-  ├── [Guard] Confirmation interception (write tool → awaiting_confirmation for external/employee)
-  ├── [Guard] UUID state priority (draft locks service_id, client_id, appointment_id)
-  ├── [Guard] Availability claim guard (LLM cannot claim slots without calling read tool)
-  ├── [Guard] Write-action claim guard (LLM cannot claim booking without calling write tool)
-  └── RealToolExecutor → UseCase → IRepository → Supabase
-         └── returns { data: BookingEventData } — structured, no string parsing
-       │
-       ▼
-emitBookingEvent() → NotificationService
-  ├── DB (notifications, UNIQUE event_id — idempotent)
-  ├── Supabase Realtime → UI
-  └── WhatsApp owner alert
-```
-
-### Utilitarios de IA
-- **`lib/ai/utils/date-normalize.ts`**: Normalización determinista de fechas/horas. Sin LLM. Cubierto por 26 tests unitarios.
-- **`lib/ai/orchestrator/decision-engine.ts`**: Exporta `buildConfirmationSummary()` para resumen estructurado pre-acción.
+1. [Principios de Diseño](#1-principios-de-diseño)
+2. [Separación de Runtimes](#2-separación-de-runtimes)
+3. [Capa de IA — Dashboard Agent](#3-capa-de-ia--dashboard-agent)
+4. [Capa de IA — WhatsApp Agent](#4-capa-de-ia--whatsapp-agent)
+5. [Comparativa de Agentes](#5-comparativa-de-agentes)
+6. [Pipeline de Notificaciones Dual](#6-pipeline-de-notificaciones-dual)
+7. [Sistema de Rate Limiting de Login](#7-sistema-de-rate-limiting-de-login)
+8. [Gestión de Sesiones](#8-gestión-de-sesiones)
+9. [Multi-tenancy y Seguridad](#9-multi-tenancy-y-seguridad)
+10. [Flujo de Datos Completo](#10-flujo-de-datos-completo)
+11. [Decisiones Arquitectónicas (ADRs)](#11-decisiones-arquitectónicas-adrs)
 
 ---
 
-## 3. Pipeline de Notificaciones (Unificado)
+## 1. Principios de Diseño
 
-Existe un **único pipeline** para todas las notificaciones de booking:
-
-| Origen | Mecanismo |
-|--------|-----------|
-| Web (Dashboard AI) | `emitBookingEvent()` → `NotificationService` |
-| WhatsApp agent | `emitBookingEvent()` → `notifications.ts` → `whatsapp-service` |
-
-**Flujo completo del agente WhatsApp:**
-```
-tool-executor.ts → emitCreatedEvent / emitRescheduledEvent / emitCancelledEvent
-  └─ emitBookingEvent({ businessId, businessName, clientName, serviceName, date, time })
-        ├─ INSERT notifications (UNIQUE event_id — idempotente)
-        ├─ Supabase Realtime → dashboard UI
-        └─ POST whatsapp-service { type: 'text', to: businesses.phone, message }
-              └─ Meta API → WhatsApp personal del dueño
-```
-
-**Transporte único**: `whatsapp-service` es el único punto de salida de mensajes WhatsApp en todo el sistema:
-- `type: 'text'` → alertas al dueño (agendado, reagendado, cancelado)
-- `type: 'template'` → recordatorios a clientes (vía `cron-reminders`)
-
-**Idempotencia garantizada**: `UNIQUE(event_id)` en tabla `notifications`. Reintentos de QStash no generan duplicados.
-
-**Resiliencia ante rate limits**: Groq 429 → `process-whatsapp` responde `503 + Retry-After: N` → QStash reintenta transparentemente sin notificar al cliente.
+| Principio | Aplicación en Cronix |
+|---|---|
+| **SoC estricta** | UI ↔ Lógica ↔ Datos nunca en el mismo archivo |
+| **Agnosticismo de runtime** | Cada agente de IA vive en su propio runtime (Node.js vs Deno) sin dependencias cruzadas |
+| **Fail-safe** | Notificaciones y rate limiting fallan abiertos (fail-open); el booking no se interrumpe |
+| **Idempotencia** | Cada evento tiene un `eventId` determinista; duplicados se descartan sin error |
+| **Type-First** | `noUncheckedIndexedAccess: true`; no hay `any`; todos los estados tienen tipo definido |
+| **SSOT** | Estado de conversación vive exclusivamente en `StateManager`; la UI deriva de él |
 
 ---
 
-## 4. Monitoreo y Hardening
+## 2. Separación de Runtimes
 
-- **Observabilidad**:
-  - **Sentry**: Rastreo de excepciones críticas en producción.
-  - **Axiom**: Logs estructurados para auditoría y depuración de alto volumen.
-- **Seguridad**:
-  - **RLS (Row Level Security)**: Políticas optimizadas en Supabase — aislamiento total entre negocios.
-  - **Guardrails de IA**: 4 guards en tiempo de ejecución en `ExecutionEngine` previenen alucinaciones del LLM.
-- **Calidad**:
-  - **Vitest**: Suite de pruebas unitarias e integración (orquestador de IA, repositorios, casos de uso).
-  - **Playwright**: Suite de pruebas E2E para flujos críticos de usuario.
+Cronix corre en **dos runtimes físicamente distintos** que nunca se importan entre sí:
+
+```
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
+│  RUNTIME A: Node.js (Vercel)        │     │  RUNTIME B: Deno (Supabase Edge)    │
+│                                     │     │                                     │
+│  Next.js App Router                 │     │  supabase/functions/                 │
+│  lib/ai/agents/dashboard/           │     │  process-whatsapp/                  │
+│  lib/ai/orchestrator/               │     │  whatsapp-webhook/                  │
+│  lib/ai/providers/groq-provider.ts  │     │  whatsapp-service/                  │
+│  lib/rate-limit/redis-rate-limiter  │     │  cron-reminders/                    │
+│  lib/notifications/                 │     │                                     │
+│                                     │     │  Sin imports de Next.js/Node.       │
+│  Usa: @upstash/redis, @supabase/ssr │     │  Usa: Deno.env, fetch nativo, Deno  │
+└─────────────────────────────────────┘     └─────────────────────────────────────┘
+            │                                             │
+            └──────────────── Supabase DB ────────────────┘
+                              (fuente de verdad compartida)
+```
+
+**¿Por qué esta separación?**
+- Las Edge Functions de Deno no pueden importar módulos Node.js (`next/server`, `@supabase/ssr`, etc.)
+- El código del agente WhatsApp (`groq-client.ts`, `tool-executor.ts`) usa `Deno.env` directamente
+- Cambiar un agente no puede romper el otro por construcción
 
 ---
 
-## 5. Estructura de Módulos de IA
+## 3. Capa de IA — Dashboard Agent
+
+### Archivos físicos
 
 ```
 lib/ai/
+├── agents/
+│   └── dashboard/
+│       ├── config.ts      ← Configuración del agente (tier, maxIterations)
+│       ├── prompt.ts      ← System prompt del dashboard
+│       └── tools.ts       ← Tool definitions para el owner
 ├── orchestrator/
-│   ├── ai-orchestrator.ts          # Facade pública
-│   ├── decision-engine.ts          # analyze() → Decision + normalización + guards
-│   ├── execution-engine.ts         # ReAct loop + 4 guardrails de hardening
-│   ├── strategy.ts                 # RBAC: InternalStrategy / ExternalStrategy
-│   ├── LlmBridge.ts               # Adapter → GroqProvider
-│   ├── RedisStateManager.ts        # Persistencia de estado
-│   └── tool-adapter/
-│       └── RealToolExecutor.ts     # 7 tools → UseCases (salida estructurada)
-└── utils/
-    └── date-normalize.ts           # Normalización determinista fecha/hora (sin LLM)
+│   ├── ai-orchestrator.ts ← Facade: ÚNICO entry point para channel adapters
+│   ├── decision-engine.ts ← Análisis de input → Decision
+│   ├── execution-engine.ts← Ejecuta Decision → ExecutionResult + ReAct loop
+│   ├── state-manager.ts   ← Carga/persiste ConversationState
+│   ├── strategy.ts        ← Permisos por rol (owner, employee, external)
+│   ├── event-dispatcher.ts← Fire-and-forget de AppointmentEvents
+│   ├── events.ts          ← Tipos de eventos tipados
+│   └── types.ts           ← AiInput, AiOutput, Decision, ConversationState
+├── providers/
+│   └── groq-provider.ts   ← ILlmProvider + ISttProvider → Groq
+└── tools/
+    ├── appointment.tools.ts
+    ├── client.tools.ts
+    ├── finance.tools.ts
+    └── crm.tools.ts
+```
+
+### Configuración del agente (`dashboard/config.ts`)
+
+```typescript
+export const DASHBOARD_AGENT_CONFIG = {
+  llmTier: 'quality' as const,  // 'quality' → llama-3.1-8b-instant + fallback llama-3.3-70b-versatile
+  maxReactIterations: 3,        // Máximo de round-trips LLM+tool por turno
+} as const
+```
+
+### Modelos por tier (`groq-provider.ts`)
+
+```typescript
+const MODEL_BY_TIER = {
+  quality: { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
+  fast:    { primary: 'llama-3.1-8b-instant', fallback: 'llama-3.3-70b-versatile' },
+}
+```
+
+> **Nota de diseño:** 8b como primario por estabilidad y rate limits. 70b es fallback cuando 8b falla,
+> NO primario. La mejora de precisión viene del prompt + memoria de entidades, no del modelo.
+
+### Flujo del Orchestrator Pattern
+
+```
+Channel Adapter (componente React / API route)
+    │
+    ▼
+AiOrchestrator.process(AiInput)          ← ÚNICO entry point
+    │
+    ├─► StateManager.load(userId, businessId)
+    │       └─► ConversationState { flow, draft, history, turnCount, lastAction }
+    │
+    ├─► DecisionEngine.analyze(input, state)
+    │       └─► Decision { type: 'execute_immediately' | 'reason_with_llm' | ... }
+    │
+    ├─► ExecutionEngine.execute(decision, state, input)
+    │       │
+    │       ├─ 'execute_immediately'  → ToolExecutor.execute() → DB
+    │       ├─ 'continue_collection' → Solicita datos faltantes
+    │       ├─ 'await_confirmation'  → Genera resumen y espera "sí"
+    │       ├─ 'answer_query'        → ToolExecutor.execute() → read-only
+    │       └─ 'reason_with_llm'    → Bucle ReAct (hasta maxReactIterations)
+    │               └─► LlmProvider.chat() → tool_calls → ToolExecutor → feed back
+    │
+    ├─► StateManager.persist(nextState)
+    │
+    └─► AiOutput { text, actionPerformed, toolTrace, tokens, history }
+```
+
+### Guards en el ExecutionEngine
+
+El `ExecutionEngine` implementa 4 capas de protección antes de enviar texto al usuario:
+
+1. **Authorization guard** — `strategy.canExecute(toolName)` verifica permisos por rol
+2. **Write-before-confirm guard** — Si `state.flow !== 'awaiting_confirmation'` y la estrategia requiere confirmación, intercepta y presenta resumen antes de ejecutar
+3. **UUID lock guard** — Campos UUID en `state.draft` no pueden ser sobreescritos por el LLM (previene substitución silenciosa de service_id)
+4. **Hallucination guards:**
+   - Si el LLM dice "agendé la cita" sin haber llamado `confirm_booking` → respuesta bloqueada
+   - Si el LLM dice "hay disponibilidad" sin haber llamado `get_available_slots` → respuesta bloqueada
+   - `sanitizeOutput()` + `containsInternalSyntax()` → último guard antes de devolver texto
+
+---
+
+## 4. Capa de IA — WhatsApp Agent
+
+### Archivos físicos (`supabase/functions/process-whatsapp/`)
+
+```
+process-whatsapp/
+├── index.ts             ← Entry point Deno Edge Function
+├── message-handler.ts   ← Pipeline completo (6 capas de seguridad)
+├── ai-agent.ts          ← runAgentLoop() + transcribeAudio()
+├── groq-client.ts       ← callLlm() + modelos + key pooling
+├── tool-executor.ts     ← executeToolCall() + BOOKING_TOOLS schema
+├── notifications.ts     ← emitBookingEvent() + sendClientBookingConfirmation()
+├── time-utils.ts        ← localTimeToUTC() + utcToLocalParts()
+├── prompt-builder.ts    ← buildSystemPrompt() con contexto RAG
+├── business-router.ts   ← Resolución multi-tenant (slug/sesión)
+├── context-fetcher.ts   ← Parallelized context queries
+├── appointment-repo.ts  ← createAppointment(), rescheduleAppointment(), cancelAppointmentById()
+├── guards.ts            ← Rate limits, circuit breaker, token quota
+├── security.ts          ← verifyQStash() + sanitizeMessage()
+├── business-router.ts   ← getBusinessBySlug(), getSessionBusiness()
+├── types.ts             ← BusinessRagContext, MetaWebhookPayload, etc.
+├── db-client.ts         ← Singleton Supabase client para Deno
+└── whatsapp.ts          ← sendWhatsAppMessage(), downloadMediaBuffer()
+```
+
+### Modelos usados
+
+```typescript
+// groq-client.ts
+export const SMALL_MODEL   = 'llama-3.1-8b-instant'     // decision loop + tool calling
+export const LARGE_MODEL   = 'llama-3.3-70b-versatile'  // respuesta empática final
+export const WHISPER_MODEL = 'whisper-large-v3-turbo'   // transcripción de notas de voz
+export const MAX_STEPS     = 3                           // máximo iteraciones ReAct
+```
+
+### Key Pooling
+
+`LLM_API_KEY` acepta múltiples claves separadas por coma. En caso de `HTTP 429` (rate limit), el sistema pasa automáticamente a la siguiente clave sin interrumpir la petición.
+
+```typescript
+const apiKeys = apiKeysStr.split(',').map(k => k.trim()).filter(Boolean)
+for (let i = 0; i < apiKeys.length; i++) {
+  // Si 429 y hay más keys → continue (siguiente key)
+  // Si 429 y no hay más → throw LlmRateLimitError → QStash reintenta
+}
+```
+
+### Pipeline de Seguridad (orden de ejecución)
+
+```
+Mensaje WhatsApp recibido
+    │
+    1. QStash signature (HMAC-SHA256)            ← verifyQStash()
+    2. Message rate limit (10 msg/60s/phone)     ← checkMessageRateLimit()
+    3. Business aggregate quota (50 msg/60s)     ← checkBusinessUsageLimit()
+    4. Daily token quota (configurable/negocio)  ← checkTokenQuota()
+    5. Message sanitization (anti-injection)     ← sanitizeMessage()
+    6. Booking rate limit (5 activos/24h/client) ← checkBookingRateLimit()
+```
+
+### Gestión de Timezone (`time-utils.ts`)
+
+El LLM siempre recibe y devuelve horas en **tiempo local del negocio** (IANA timezone almacenado en `businesses.timezone`). La conversión a UTC ocurre en `tool-executor.ts` justo antes de escribir en DB:
+
+```
+LLM dice: "15:00" (hora local Colombia)
+    ↓
+sanitizeTime("15:00") → "15:00" (HH:mm 24h validado)
+    ↓
+localTimeToUTC("2026-04-24", "15:00", "America/Bogota")
+    → Two-step DST-aware: Intl.DateTimeFormat → fallback iterativo
+    → "2026-04-24T20:00:00.000Z"
+    ↓
+DB stores UTC: start_at = "2026-04-24T20:00:00.000Z"
+    ↓
+Notificaciones: utcToLocalParts("...Z", "America/Bogota") → { date: "2026-04-24", time: "15:00" }
 ```
 
 ---
 
-*Cronix — Vibe + Solidez + Seguridad + Escalabilidad*
+## 5. Comparativa de Agentes
+
+| Aspecto | Dashboard Agent | WhatsApp Agent |
+|---|---|---|
+| **Runtime** | Node.js (Next.js/Vercel) | Deno (Supabase Edge) |
+| **Entry point** | `AiOrchestrator.process()` | `handleMessage()` en `message-handler.ts` |
+| **Modelo primario** | `llama-3.1-8b-instant` | `llama-3.1-8b-instant` |
+| **Modelo fallback** | `llama-3.3-70b-versatile` | `llama-3.3-70b-versatile` |
+| **Max iteraciones** | 3 (configurable en `config.ts`) | 3 (constante `MAX_STEPS`) |
+| **Audio/STT** | `GroqProvider.transcribe()` | `transcribeAudio()` con `whisper-large-v3-turbo` |
+| **Tenant routing** | `businessId` en `AiInput` | Slug → sesión → fallback |
+| **Confirmación** | Strategy pattern (rol del usuario) | Siempre explícita del cliente |
+| **Notificaciones** | `NotificationService` (Node.js) | `emitBookingEvent()` (Deno nativo) |
+| **Circuit breaker** | `lib/ai/resilience.ts` | `guards.ts` (Upstash Redis) |
+
+---
+
+## 6. Pipeline de Notificaciones Dual
+
+Cuando una cita es creada/modificada/cancelada, se disparan **dos notificaciones independientes y paralelas**, implementadas en `supabase/functions/process-whatsapp/notifications.ts`:
+
+### Notificación al Dueño
+
+```
+emitCreatedEvent() / emitRescheduledEvent() / emitCancelledEvent()
+    ↓
+emitBookingEvent(AppointmentEvent)
+    │
+    1. checkEventExists(eventId) → ¿Ya existe en DB? → abort (idempotencia)
+    2. saveNotificationToDB() → tabla `notifications` con event_id único
+    3. pushToRealtime() → canal `notifications:{businessId}` → Dashboard en tiempo real
+    4. sendOwnerWhatsApp() → Meta Graph API directa → WhatsApp del dueño
+```
+
+**ID determinista:** `${type}:${businessId}:${appointmentId}:${date}:${time}`
+Garantiza que reintentos de QStash o bugs del LLM nunca generen notificaciones duplicadas.
+
+### Notificación al Cliente
+
+```
+sendClientBookingConfirmation(clientPhone, 'created', businessName, serviceName, date, time)
+    ↓
+buildClientWhatsAppMessage() → Mensaje con branding del negocio
+    ↓
+sendWhatsAppMessage(clientPhone, message) → Meta Graph API
+```
+
+El cliente recibe un **mensaje formal separado** del reply conversacional del agente. Ejemplo:
+> ✅ ¡Listo! Tu cita en *Peluquería Ana* ha sido agendada para el 24 de abril a las 3:00 pm para el servicio de *Corte de cabello*. ¡Te esperamos! 🎉
+
+### Garantías del Pipeline
+
+- **Fail-safe:** Cada canal falla silenciosamente con log. El booking ya fue completado.
+- **Orden garantizado:** DB → Realtime → WhatsApp owner (WA solo si DB fue exitosa)
+- **No-blocking:** Todas las notificaciones son fire-and-forget
+
+---
+
+## 7. Sistema de Rate Limiting de Login
+
+**Archivos involucrados:**
+- `lib/rate-limit/redis-rate-limiter.ts` — funciones `getLoginFailures`, `incrementLoginFailures`, `resetLoginFailures`
+- `lib/actions/auth.ts` — Server Action `login()` con política completa
+- `app/[locale]/login/page.tsx` — UI con countdown y dots de intento
+
+### Política
+
+| Condición | Comportamiento |
+|---|---|
+| Intentos 1-2 | Error `invalid_credentials` + dot amarillo |
+| Intento 3 | Lockout 5 minutos (`LOCKOUT_DURATION_MS = 5 * 60 * 1000`) |
+| 6+ intentos | Lockout extendido 15 minutos (`EXTENDED_LOCKOUT_MS = 15 * 60 * 1000`) |
+| Login exitoso | `resetLoginFailures(email)` → limpia Redis |
+
+### Almacenamiento en Redis
+
+```
+Key format: lf:{email_lowercase}
+Value: JSON { count: number, firstFailAt: number, lastFailAt: number }
+TTL: 5 minutos (se renueva con cada fallo)
+```
+
+**Fallback en memoria:** Si Redis no está configurado (`UPSTASH_REDIS_REST_URL` ausente), el módulo usa un `Map` en memoria. Funciona en instancia única pero no es distribuido.
+
+### Flujo del Server Action
+
+```typescript
+// lib/actions/auth.ts — login()
+const existing = await getLoginFailures(email)
+if (existing && existing.count >= 3) {
+  const lockDuration = existing.count >= 6 ? 15min : 5min
+  const lockoutEndsAt = existing.lastFailAt + lockDuration
+  if (Date.now() < lockoutEndsAt) {
+    return { error: 'locked', failedAttempts: existing.count, lockoutEndsAt }
+  }
+  // Expired → allow attempt
+}
+
+const { error } = await supabase.auth.signInWithPassword({ email, password })
+if (error) {
+  const state = await incrementLoginFailures(email)
+  // ... retorna estado con count y lockoutEndsAt si aplica
+}
+// Success:
+await resetLoginFailures(email)
+redirect('/dashboard')
+```
+
+### UI (`app/[locale]/login/page.tsx`)
+
+```
+lockoutEndsAt (timestamp) recibido del Server Action
+    ↓
+useEffect → setInterval cada 1000ms
+    → secondsLeft = Math.ceil((lockoutEndsAt - Date.now()) / 1000)
+    → si secondsLeft === 0 → setLockoutEndsAt(null) → desbloqueo automático
+    ↓
+isLockedOut = lockoutEndsAt !== null && secondsLeft > 0
+    ↓
+<AttemptDots /> → 3 spans: ⚫→🟡 (1-2)→🔴 (3+)
+<button disabled={isLockedOut}>
+  {isLockedOut ? <><Lock /> 4:59</> : t('submit')}
+</button>
+```
+
+---
+
+## 8. Gestión de Sesiones
+
+**Archivo:** `lib/middleware/with-session-timeout.ts`
+
+Implementado como middleware de Next.js. Dos límites independientes:
+
+| Límite | Duración | Trigger |
+|---|---|---|
+| Inactividad | 30 minutos | Sin actividad (scroll, clicks, requests) |
+| Absoluto | 12 horas | Desde el último login, sin excepción |
+
+Ambos se almacenan en cookies `httpOnly` y se verifican en cada request.
+
+---
+
+## 9. Multi-tenancy y Seguridad
+
+### Aislamiento de datos
+
+Cada query a Supabase incluye `business_id` explícito. No existe ningún endpoint que devuelva datos de múltiples tenants.
+
+### Resolución de tenant (WhatsApp)
+
+```
+3-tier routing en business-router.ts:
+1. Slug en mensaje (#mi-negocio) → getBusinessBySlug()
+2. Sesión activa en DB → getSessionBusiness(senderPhone)
+3. No encontrado → Landing message con URL de Cronix
+```
+
+### Validación de propiedad en booking
+
+```typescript
+// tool-executor.ts — reschedule_booking y cancel_booking
+if (!aptDetails || aptDetails.business_id !== business.id) {
+  return { error: 'UNAUTHORIZED: appointment does not belong to this business' }
+}
+const aptClientPhone = aptDetails.clients?.phone ?? null
+if (aptClientPhone && !phoneMatches(aptClientPhone, sender)) {
+  return { error: 'UNAUTHORIZED: appointment does not belong to this client' }
+}
+```
+
+`phoneMatches()` maneja variantes de teléfono venezolano (58 0424 vs 58 424) y formatos internacionales.
+
+---
+
+## 10. Flujo de Datos Completo
+
+```
+CANAL WHATSAPP
+═══════════════
+Cliente → WhatsApp → Meta API
+    ↓
+whatsapp-webhook/index.ts
+    ↓ [verifica webhook token]
+QStash.publishJSON(process-whatsapp URL, body)
+    ↓
+process-whatsapp/index.ts → handleMessage(req)
+    ↓
+[6 capas de seguridad]
+    ↓ [si audio]
+Groq Whisper → texto
+    ↓
+business-router → tenant resuelto
+    ↓
+context-fetcher → [servicios, cliente, citas, slots] (paralelo)
+    ↓
+ai-agent.runAgentLoop(text, context)
+    │
+    ├── Iteration 1: SMALL_MODEL + BOOKING_TOOLS
+    │       LLM → tool_call: confirm_booking { service_id, date, time }
+    │       tool-executor:
+    │           sanitizeUUID/Date/Time()
+    │           localTimeToUTC(date, time, timezone)
+    │           createAppointment() → Supabase
+    │           emitCreatedEvent() → fire-and-forget
+    │           sendClientBookingConfirmation() → fire-and-forget
+    │
+    ├── [Si SLOT_CONFLICT] Iteration 2: propone alternativas
+    │
+    └── Iteration final: LARGE_MODEL (tool_choice:'none') → respuesta empática
+    ↓
+sendWhatsAppMessage(sender, agentResult.text)
+logInteraction() → audit table
+
+CANAL DASHBOARD
+═══════════════
+Owner → React Component → AiOrchestrator.process(AiInput)
+    ↓
+DecisionEngine.analyze() → Decision
+    ↓
+ExecutionEngine.execute()
+    │
+    ├─ Tools: appointment.tools.ts → lib/appointments/ → Supabase
+    ├─ Notificaciones: NotificationService → DB + Realtime
+    └─ LLM: GroqProvider.chat() (llama-3.1-8b-instant)
+    ↓
+AiOutput → UI Component
+```
+
+---
+
+## 11. Decisiones Arquitectónicas (ADRs)
+
+### ADR-001: Dos agentes de IA separados (no compartidos)
+
+**Decisión:** El agente de WhatsApp (`process-whatsapp/`) y el agente del Dashboard (`lib/ai/agents/dashboard/`) son implementaciones independientes con código propio, no un único agente reutilizado.
+
+**Razón:**
+- Runtimes incompatibles (Deno vs Node.js)
+- Contexto de negocio diferente: el agente WhatsApp hace RAG de servicios/slots/historial del cliente; el dashboard tiene acceso a datos financieros y CRM
+- Permisos y roles distintos
+- Estrategia de confirmación distinta
+
+**Trade-off:** Duplicación de lógica de prompts. Mitigado porque ambos usan el mismo LLM provider (Groq) y los mismos modelos.
+
+---
+
+### ADR-002: Upstash Redis como store de rate limiting (no Supabase)
+
+**Decisión:** El tracking de fallos de login y el sliding window rate limiting usan Upstash Redis, no una tabla de Supabase.
+
+**Razón:**
+- Supabase tiene latencia de ~100-200ms por query; Redis <5ms
+- Las Server Actions de login son hot-path crítico
+- Redis TTL nativo simplifica la limpieza de datos expirados
+- Funciona across Vercel instances (distribuido)
+
+**Trade-off:** Dependencia adicional. Mitigado con fallback en memoria.
+
+---
+
+### ADR-003: QStash como cola para mensajes WhatsApp (no procesamiento síncrono)
+
+**Decisión:** El webhook de Meta encola cada mensaje en QStash; el procesamiento ocurre de forma asíncrona en `process-whatsapp`.
+
+**Razón:**
+- Meta requiere respuesta HTTP en <5s; el agente ReAct puede tardar 8-15s
+- QStash maneja reintentos automáticos ante rate limits de Groq (503 + Retry-After)
+- Dead Letter Queue para mensajes que fallan definitivamente
+- Desacopla ingestión de procesamiento
+
+---
+
+### ADR-004: Modelos LLM — 8B primario, 70B fallback
+
+**Decisión:** `llama-3.1-8b-instant` es el modelo primario para tool calling; `llama-3.3-70b-versatile` es fallback y para respuestas empáticas finales.
+
+**Razón:**
+- 70B como primario causaba timeouts y rate limits en Groq free tier
+- 8B es más estable y rápido para tool calling estructurado
+- La calidad de respuesta mejora con mejor prompt + memoria, no con modelo más grande
+- 70B se reserva para el paso conversacional final (sin tools)
+
+---
+
+### ADR-005: Idempotencia por eventId determinista en notificaciones
+
+**Decisión:** Los `eventId` de notificaciones se construyen como `${type}:${businessId}:${appointmentId}:${date}:${time}` en lugar de `crypto.randomUUID()`.
+
+**Razón:**
+- QStash puede reintentar la misma petición múltiples veces
+- El bucle ReAct puede llamar el mismo tool en iteraciones diferentes
+- Con UUID aleatorio: el dueño recibía 2-3 WhatsApp por cada cita
+- Con ID determinista: exactamente UN mensaje por evento, sin importar reintentos
