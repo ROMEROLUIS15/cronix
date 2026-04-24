@@ -260,19 +260,29 @@ export async function executeToolCall(
 
   // ── cancel_booking ───────────────────────────────────────────────────────────
   if (name === 'cancel_booking') {
-    const { appointment_id } = args
+    let { appointment_id } = args
+    appointment_id = sanitizeUUID(appointment_id)
 
-    if (!isValidUUID(appointment_id)) return JSON.stringify({ success: false, error: 'INVALID_ARGS: appointment_id must be a valid UUID' })
+    if (!isValidUUID(appointment_id)) return JSON.stringify({
+      success: false,
+      error: 'INVALID_ARGS: appointment_id debe ser el UUID exacto del REF# en CITAS ACTIVAS. Usa solo el UUID sin el prefijo REF#.',
+    })
 
     const aptDetails = await getAppointmentDetails(appointment_id)
 
     // Ownership validation: ensure appointment belongs to this business and client
     if (!aptDetails || aptDetails.business_id !== business.id) {
-      return JSON.stringify({ success: false, error: 'UNAUTHORIZED: appointment does not belong to this business' })
+      return JSON.stringify({
+        success: false,
+        error: 'NOT_FOUND: Cita no encontrada en este negocio. Verifica que el UUID sea correcto del listado de CITAS ACTIVAS. Si no aparece en ese listado, la cita pudo haberse cancelado ya o no existir.',
+      })
     }
     const aptClientPhone = (aptDetails.clients as { phone?: string })?.phone ?? null
     if (aptClientPhone && !phoneMatches(aptClientPhone, sender)) {
-      return JSON.stringify({ success: false, error: 'UNAUTHORIZED: appointment does not belong to this client' })
+      return JSON.stringify({
+        success: false,
+        error: 'UNAUTHORIZED: Esta cita pertenece a otro cliente. Usa solo UUIDs del listado de CITAS ACTIVAS de este cliente.',
+      })
     }
 
     await cancelAppointmentById(appointment_id, business.id)

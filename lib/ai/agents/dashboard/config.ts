@@ -9,5 +9,5 @@ export const DASHBOARD_AGENT_CONFIG = {
    * Max ReAct loop iterations before forcing a fallback response.
    * Limits LLM + tool round-trips per user turn (latency guard).
    */
-  maxReactIterations: 3,
+  maxReactIterations: 5,
 } as const

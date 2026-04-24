@@ -2,55 +2,54 @@
 // Channel: web (owner/employee using the Cronix dashboard)
 // Agent:   lib/ai/agents/dashboard/ (prompt + tools + config)
 // DO NOT add WhatsApp handling here — WhatsApp lives in supabase/functions/process-whatsapp/
+//
+// Async flow:
+//   1. Validate input, run STT (fast, ~400ms)
+//   2. Create Redis job + publish to QStash
+//   3. Return { job_id, transcription } immediately (< 1s)
+//   4. Worker (/api/assistant/voice/worker) does LLM + TTS in background
+//   5. Frontend polls /api/assistant/voice/status?job_id=xxx for result
 // ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Client as QStashClient } from '@upstash/qstash'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { logger } from '@/lib/logger'
 import { redisRateLimit, isRedisAvailable, markRequestSeen } from '@/lib/rate-limit/redis-rate-limiter'
-import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
+import { checkTokenQuota } from '@/lib/rate-limit/token-quota'
 import { assistantRateLimiter } from '@/lib/api/rate-limit'
 import { GroqProvider } from '@/lib/ai/providers/groq-provider'
-import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
-import { shieldOutput } from '@/lib/ai/output-shield'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getRepos } from '@/lib/repositories'
-import { createProductionOrchestrator } from '@/lib/ai/orchestrator/orchestrator-factory'
-import { sessionStore } from '@/lib/ai/session-store'
-import type { AiInput, UserRole } from '@/lib/ai/orchestrator'
-import type { LlmMessage } from '@/lib/ai/providers/types'
+import { jobStore } from '@/lib/ai/job-store'
+import { randomUUID } from 'crypto'
 
 // ── SCHEMA ────────────────────────────────────────────────────────────────────
 
-const assistantPayloadSchema = z.object({
-  text: z.string().max(2000, 'Texto excede longitud máxima permitida').nullable().optional(),
+const submitPayloadSchema = z.object({
+  text:     z.string().max(2000, 'Texto excede longitud máxima permitida').nullable().optional(),
   timezone: z.string().min(2).max(50).default('UTC'),
-  history: z.array(
-    z.object({
-      role: z.enum(['user', 'assistant', 'system', 'tool']),
-      content: z.string().max(4000).nullable().optional(),
-      tool_call_id: z.string().optional(),
-      name: z.string().optional(),
-      tool_calls: z.any().optional(),
-    }).passthrough()
-  ).max(20, 'El historial excede los límites por seguridad').default([]),
 })
 
-// ── MODULE-LEVEL SINGLETONS ────────────────────────────────────────────────────
-// Only TTS and keys — no AssistantService.
+// ── MODULE-LEVEL SINGLETONS ───────────────────────────────────────────────────
 
-const GROQ_API_KEY     = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
+const GROQ_API_KEY = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 
-const ttsEngine = DEEPGRAM_API_KEY
-  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
+function getQStash(): QStashClient | null {
+  const token = process.env.QSTASH_TOKEN
+  if (!token) return null
+  return new QStashClient({ token })
+}
+
+const APP_URL = process.env.APP_URL ?? process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
   : null
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
 
 export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
 
-  // 1. Rate Limiting (Redis distributed → in-memory fallback)
+  // 1. Rate limiting (Redis distributed → in-memory fallback)
   const identifier = user.id
   if (isRedisAvailable()) {
     const rl = await redisRateLimit(identifier, 'assistant', 10, 60)
@@ -83,40 +82,19 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     }
   }
 
-  // 2. Business context
+  // 2. Minimum business context (just what we need to validate + enqueue)
   const admin = createAdminClient()
   const repos = getRepos(admin)
-  const { users: usersRepo, businesses: businessesRepo } = repos
 
-  const ctxResult  = await usersRepo.getUserContextById(user.id)
+  const ctxResult  = await repos.users.getUserContextById(user.id)
   const dbUser     = ctxResult.data
   const businessId = dbUser?.business_id
-  const userName   = dbUser?.name ?? 'Usuario'
-  const userRole   = (dbUser?.role as string) ?? 'employee'
-
-  // Fetch full business row: name + settings JSON (single call, no extra query)
-  let businessName = 'tu negocio'
-  let aiRules: string | undefined
-  let workingHours: Record<string, { open: string; close: string }> | undefined
-  if (businessId) {
-    const bizRes  = await businessesRepo.getById(businessId)
-    const bizData = bizRes.data
-    businessName  = bizData?.name ?? 'tu negocio'
-    const settings = (bizData?.settings ?? null) as Record<string, unknown> | null
-    aiRules      = typeof settings?.aiRules === 'string' ? settings.aiRules : undefined
-    workingHours = settings?.workingHours as Record<string, { open: string; close: string }> | undefined
-  }
 
   if (!businessId) {
     return NextResponse.json({ error: 'No business attached' }, { status: 403 })
   }
 
-  // 2b. Load session from Redis (server-side truth, not client-supplied history)
-  const session = await sessionStore.getSession(user.id)
-  const serverHistory = session.messages
-  const entityContext = session.entities as Record<string, unknown>
-
-  // 2c. Token quota
+  // 2b. Token quota gate — reject before even running STT
   const quota = await checkTokenQuota(businessId)
   if (!quota.allowed) {
     logger.warn('AI-ASSISTANT', `Token quota exceeded: ${quota.used}/${quota.limit}`, { businessId })
@@ -130,30 +108,23 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   let audioFile: Blob | null = null
   let text: string | null = null
   let timezone = 'UTC'
-  let clientHistory: unknown[] = []
 
   const contentType = req.headers.get('content-type') ?? ''
   if (contentType.includes('application/json')) {
-    const body = await req.json() as { text?: string; timezone?: string; history?: unknown[] }
-    text          = body.text ?? null
-    timezone      = body.timezone ?? 'UTC'
-    clientHistory = body.history ?? []
+    const body = await req.json() as { text?: string; timezone?: string }
+    text     = body.text ?? null
+    timezone = body.timezone ?? 'UTC'
   } else {
     const formData = await req.formData()
     audioFile = formData.get('audio') as Blob | null
     timezone  = (formData.get('timezone') as string | null) ?? 'UTC'
-    const histStr = formData.get('history') as string | null
-    if (histStr) {
-      try { clientHistory = JSON.parse(histStr) as unknown[] } catch { /* ignore */ }
-    }
   }
 
   // 4. Zod shield
   try {
-    const validated   = assistantPayloadSchema.parse({ text, timezone, history: clientHistory })
-    text          = validated.text ?? null
-    timezone      = validated.timezone
-    clientHistory = validated.history
+    const validated = submitPayloadSchema.parse({ text, timezone })
+    text     = validated.text ?? null
+    timezone = validated.timezone
   } catch (zodError: unknown) {
     const msg = zodError instanceof Error ? zodError.message : 'Payload inválido'
     logger.warn('AI-ASSISTANT-SHIELD', `Validation breach: ${msg}`)
@@ -171,9 +142,8 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     return NextResponse.json({ error: 'LLM API key not configured' }, { status: 500 })
   }
 
-  // 5. STT — audio transcription (stays in route, not orchestrator's job)
+  // 5. STT — audio transcription (synchronous: blob can't be serialized to QStash)
   let finalText = text ?? ''
-  let sttLatencyMs = 0
 
   if (audioFile) {
     const sttProvider = new GroqProvider(GROQ_API_KEY)
@@ -188,162 +158,59 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
         err:    sttErr instanceof Error ? sttErr.message : String(sttErr),
       })
       return NextResponse.json({
-        text:              'Tu audio no se pudo procesar. Por favor intenta de nuevo.',
-        audioUrl:          null,
-        useNativeFallback: true,
-        actionPerformed:   false,
-      })
+        error: 'Tu audio no se pudo procesar. Por favor intenta de nuevo.',
+      }, { status: 500 })
     }
 
-    sttLatencyMs = Date.now() - sttStart
+    const sttLatencyMs = Date.now() - sttStart
 
     if (!sttRes.text?.trim()) {
       logger.warn('AI-ASSISTANT', 'Empty transcription received', { userId: user.id })
       return NextResponse.json({
-        text: 'No logré captar lo que dijiste. ¿Podrías repetirlo un poco más claro?',
-        audioUrl: null,
-        useNativeFallback: true,
-        actionPerformed: false,
-      })
+        error: 'No logré captar lo que dijiste. ¿Podrías repetirlo un poco más claro?',
+      }, { status: 422 })
     }
 
     finalText = sttRes.text.trim()
     logger.info('AI-ASSISTANT-STT', `Escuchado: "${finalText}"`, { userId: user.id, latencyMs: sttLatencyMs })
   }
 
-  // TASK 6 — Voice/text input validation.
-  // Reject inputs that are too short, pure noise, or symbol-only strings.
-  // This prevents the LLM from receiving garbage input and producing incorrect responses.
+  // 6. Noise / gibberish guard
   const MEANINGFUL_TEXT = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
   if (finalText.length < 3 || !MEANINGFUL_TEXT.test(finalText)) {
     return NextResponse.json({
-      text: 'No entendí bien, ¿puedes repetirlo?',
-      audioUrl: null,
-      useNativeFallback: true,
-      actionPerformed: false,
-    })
+      error: 'No entendí bien, ¿puedes repetirlo?',
+    }, { status: 422 })
   }
-  // 6. Load business context for LLM
-  // Services: LLM needs names + UUIDs to resolve user-spoken service names.
-  // Today's appointments: LLM needs IDs to cancel/reschedule same-day bookings.
-  // Future appointments are fetched on-demand via get_appointments_by_date tool.
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: timezone })
-  const [servicesRes, todayApptRes] = await Promise.all([
-    repos.services.getActive(businessId),
-    repos.appointments.getDayAppointments(businessId, todayStr),
-  ])
 
-  const aiInput: AiInput = {
-    text:       finalText,
-    userId:     user.id,
+  // 7. Create job in Redis + publish to QStash
+  const jobId = randomUUID()
+
+  await jobStore.create(jobId, {
+    userId:    user.id,
     businessId,
-    userRole:   (userRole as UserRole),
     timezone,
-    channel:    'web',
-    history:    serverHistory,
-    requestId:  requestId ?? undefined,
-    userName,
-    entityContext,
-    context: {
-      businessId,
-      businessName,
-      timezone,
-      aiRules,
-      workingHours,
-      services: (servicesRes.data ?? []).map((s) => ({
-        id:           s.id,
-        name:         s.name,
-        duration_min: s.duration_min,
-        price:        s.price,
-      })),
-      activeAppointments: (todayApptRes.data ?? [])
-        .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
-        .map((a) => ({
-          id:          a.id,
-          serviceName: (a.service as { name: string } | null)?.name ?? '',
-          clientName:  (a.client as { name: string } | null)?.name ?? '',
-          startAt:     a.start_at,
-          endAt:       a.end_at,
-          status:      a.status ?? 'pending',
-        })),
-    },
-  }
-
-  const orchestrator = createProductionOrchestrator(admin, GROQ_API_KEY)
-  const output = await orchestrator.process(aiInput)
-
-  // Safety net: actions that completed MUST produce a non-empty response.
-  // Prevents "silent orphan booking" — the DB reflects the action but the user
-  // hears nothing and assumes it failed. If the orchestrator's internal fallbacks
-  // were bypassed and text is empty/whitespace while actionPerformed=true,
-  // force a generic confirmation so TTS and the client always have something to play.
-  const responseText = (output.actionPerformed && !output.text?.trim())
-    ? 'Listo, acción completada.'
-    : output.text
-
-  // 7. Persist session to Redis (messages + entities)
-  // CRITICAL: Strip tool_calls and tool messages from history before saving.
-  // Groq API rejects requests with orphaned tool_calls (when slice truncates
-  // the chain). Only save clean user/assistant text pairs — same shape the
-  // frontend was sending before, which was working.
-  const cleanHistory: LlmMessage[] = output.history
-    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
-    .map((m) => ({ role: m.role, content: m.content ?? '' }))
-  const updatedSession = {
-    messages: cleanHistory,
-    entities: entityContext,
-  }
-  const sessionSavePromise = sessionStore.saveSession(user.id, updatedSession)
-
-  // 8. Token usage (fire-and-forget)
-  void recordTokenUsage(businessId, output.tokens)
-
-  // 9. TTS (parallelized with session save)
-  let audioUrl: string | null = null
-  let ttsLatencyMs = 0
-
-  if (ttsEngine && responseText) {
-    // Shield before vocalizing — prevents jailbroken text from being spoken
-    const shielded = shieldOutput(responseText, user.id)
-
-    // Truncate to first ~220 chars at a sentence boundary for lower TTS latency
-    const ttsInput = (() => {
-      if (shielded.length <= 220) return shielded
-      const cut     = shielded.slice(0, 220)
-      const lastDot = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('?'), cut.lastIndexOf('!'))
-      return lastDot > 80 ? shielded.slice(0, lastDot + 1) : cut
-    })()
-
-    const ttsStart = Date.now()
-    // Parallelize TTS synthesis with session persistence
-    const [ttsRes] = await Promise.all([
-      ttsEngine.synthesize(ttsInput),
-      sessionSavePromise,
-    ])
-    ttsLatencyMs = Date.now() - ttsStart
-    audioUrl = ttsRes.audioUrl ?? null
-  } else {
-    // Even if no TTS, wait for session save to complete
-    await sessionSavePromise
-  }
-
-  logger.metric({
-    requestId:    requestId ?? 'unknown',
-    businessId,
-    userId:       user.id,
-    sttLatencyMs,
-    ttsLatencyMs,
-    llmSteps:     output.toolTrace.length,
-    intentSource: 'react',
-    toolsUsed:    output.toolTrace.map((t) => t.tool),
-    totalMs:      sttLatencyMs + ttsLatencyMs,
+    inputText: finalText,
   })
 
+  const qstash = getQStash()
+  if (!qstash || !APP_URL) {
+    logger.error('AI-ASSISTANT', 'QStash not configured — missing QSTASH_TOKEN or APP_URL', { businessId })
+    await jobStore.update(jobId, { status: 'failed', error: 'Queue service not configured' })
+    return NextResponse.json({ error: 'Servicio de cola no configurado' }, { status: 503 })
+  }
+
+  await qstash.publishJSON({
+    url:     `${APP_URL}/api/assistant/voice/worker`,
+    body:    { job_id: jobId, user_id: user.id, business_id: businessId, timezone, input_text: finalText },
+    retries: 4,
+  })
+
+  logger.info('AI-ASSISTANT', `Job enqueued`, { jobId, userId: user.id, businessId })
+
   return NextResponse.json({
-    text:              responseText,
-    audioUrl,
-    useNativeFallback: !audioUrl,
-    actionPerformed:   output.actionPerformed,
-    history:           output.history,
+    job_id:        jobId,
+    status:        'queued',
+    transcription: finalText,
   })
 })

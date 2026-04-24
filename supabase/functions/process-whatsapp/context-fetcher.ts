@@ -45,13 +45,16 @@ export async function getActiveAppointments(
   businessId: string,
   clientId:   string
 ): Promise<ActiveAppointmentRow[]> {
+  // Look back 4 hours so appointments that have already started today
+  // (but not yet ended) remain visible for same-day cancellation requests.
+  const since = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
   const { data } = await supabase
     .from('appointments')
     .select('id, start_at, end_at, status, services(name)')
     .eq('business_id', businessId)
     .eq('client_id', clientId)
     .in('status', ['pending', 'confirmed'])
-    .gte('start_at', new Date().toISOString())
+    .gte('start_at', since)
     .order('start_at', { ascending: true })
     .limit(5)
 

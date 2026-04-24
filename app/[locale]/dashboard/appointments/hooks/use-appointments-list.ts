@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { getBrowserContainer } from '@/lib/browser-container';
+import { createClient } from '@/lib/supabase/client';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case';
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types';
@@ -63,6 +64,19 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
       fetchAppointments();
     }
   }, [fetchAppointments, contextLoading]);
+
+  // Auto-refresh when WhatsApp AI creates or reschedules an appointment.
+  // The WA Edge Function broadcasts to notifications:{businessId} channel.
+  useEffect(() => {
+    if (!businessId) return
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`notifications:${businessId}`)
+      .on('broadcast', { event: 'appointment.created' }, () => void fetchAppointments())
+      .on('broadcast', { event: 'appointment.rescheduled' }, () => void fetchAppointments())
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [businessId, fetchAppointments]);
 
   const filteredApts = useMemo(
     () => appointments.filter(a =>

@@ -578,12 +578,26 @@ export class ExecutionEngine implements IExecutionEngine {
     const WRITE_TOOLS = new Set(['confirm_booking', 'cancel_booking', 'reschedule_booking'])
     /** Tracks the last successful write-tool payload for session memory ("cancela/reagenda lo último"). */
     let lastSuccessfulWriteData: BookingEventData | null = null
+    /** Tracks consecutive failures per read-tool — bails out after 2 failures of the same tool. */
+    const toolFailCounts = new Map<string, number>()
 
     while (step < MAX_STEPS) {
       step++
 
+      logger.info('EXECUTION-ENGINE', `ReAct step ${step}/${MAX_STEPS} — calling LLM`, {
+        businessId:  input.businessId,
+        flow:        state.flow,
+        messagesLen: messages.length,
+      })
+
       lastLlmResponse = await this.llmProvider.chat(messages, decision.toolDefs)
       totalTokens += lastLlmResponse.tokens ?? 0
+
+      logger.info('EXECUTION-ENGINE', `ReAct step ${step}/${MAX_STEPS} — LLM responded`, {
+        hasContent:    Boolean(lastLlmResponse.content),
+        toolCallCount: lastLlmResponse.tool_calls?.length ?? 0,
+        tokensDelta:   lastLlmResponse.tokens ?? 0,
+      })
 
       // ── Embedded function recovery ──────────────────────────────────────────
       // ROOT CAUSE: some LLM configurations serialize tool calls as raw text
@@ -775,6 +789,11 @@ export class ExecutionEngine implements IExecutionEngine {
           }
         }
 
+        logger.info('EXECUTION-ENGINE', `ReAct step ${step} — executing tool`, {
+          tool:     toolCall.function.name,
+          argsKeys: Object.keys(args),
+        })
+
         // Authorization check
         if (!strategy.canExecute(toolCall.function.name)) {
           messages.push({
@@ -857,6 +876,19 @@ export class ExecutionEngine implements IExecutionEngine {
             : ''
           responseText = `No pude completar la acción${errorDetail}. Por favor, verifica los datos e inténtalo nuevamente.`
           writeToolFailed = true
+        } else if (!result.success) {
+          // Read tool failed — track and bail out after 2 consecutive failures of the same tool
+          // to prevent the LLM from retrying a broken tool indefinitely.
+          const failCount = (toolFailCounts.get(toolCall.function.name) ?? 0) + 1
+          toolFailCounts.set(toolCall.function.name, failCount)
+          logger.warn('EXECUTION-ENGINE', `Read tool failed (${failCount}x)`, {
+            tool:   toolCall.function.name,
+            result: typeof result.result === 'string' ? result.result.slice(0, 120) : String(result.result),
+          })
+          if (failCount >= 2) {
+            responseText = 'No pude obtener la información necesaria. Por favor, inténtalo de nuevo.'
+            writeToolFailed = true
+          }
         }
       }
 
@@ -870,8 +902,14 @@ export class ExecutionEngine implements IExecutionEngine {
       if (actionPerformed && lastSuccessfulWriteData) {
         responseText = renderOwnerSuccessMessage(lastSuccessfulWriteData)
       } else {
-        responseText = 'Intenté procesar tu solicitud pero no pude completarla. Por favor, inténtalo de nuevo.'
+        responseText = 'Lo siento, estoy teniendo dificultades para procesar esta acción. ¿Podemos intentarlo de nuevo?'
       }
+      logger.warn('EXECUTION-ENGINE', 'ReAct loop exhausted without response', {
+        businessId: input.businessId,
+        steps:      step,
+        maxSteps:   MAX_STEPS,
+        flow:       state.flow,
+      })
     }
 
     // Sanitize: strip false-certainty phrases that appear when no tool was called.
