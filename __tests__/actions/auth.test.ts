@@ -6,15 +6,21 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── Mock rate limiter (prevents Redis / in-memory state leaking between tests) ─
-const mockGetLoginFailures    = vi.fn()
-const mockIncrementFailures   = vi.fn()
-const mockResetFailures       = vi.fn()
+// ── Hoisted mocks (vi.mock factories are hoisted to top — must use vi.hoisted) ─
+const {
+  mockGetLoginFailures,
+  mockIncrementFailures,
+  mockResetFailures,
+} = vi.hoisted(() => ({
+  mockGetLoginFailures:  vi.fn(),
+  mockIncrementFailures: vi.fn(),
+  mockResetFailures:     vi.fn(),
+}))
 
 vi.mock('@/lib/rate-limit/redis-rate-limiter', () => ({
-  getLoginFailures:      mockGetLoginFailures,
+  getLoginFailures:       mockGetLoginFailures,
   incrementLoginFailures: mockIncrementFailures,
-  resetLoginFailures:    mockResetFailures,
+  resetLoginFailures:     mockResetFailures,
 }))
 
 // ── Mock Supabase ────────────────────────────────────────────────────────────
