@@ -506,7 +506,10 @@ export class RealToolExecutor implements IToolExecutor {
 
     const allRes = await this.clientRepo.findActiveForAI(p.businessId)
     if (allRes.error || !allRes.data?.length) {
-      return { success: true, result: 'No hay clientes registrados aún.' }
+      return {
+        success: true,
+        result: `No hay clientes registrados aún. "${parsed.data.query}" es un cliente nuevo — llama create_client con name: "${parsed.data.query}" para registrarlo y obtener su client_id.`,
+      }
     }
 
     const found = fuzzyFind(allRes.data, parsed.data.query)
@@ -528,7 +531,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result: `No encontré ningún cliente con el nombre "${parsed.data.query}". Puedes registrarlo con create_client.`,
+      result: `No encontré ningún cliente con el nombre "${parsed.data.query}" — es un cliente nuevo. Llama create_client con name: "${parsed.data.query}" para registrarlo.`,
     }
   }
 }

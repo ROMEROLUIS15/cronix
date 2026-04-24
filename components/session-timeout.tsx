@@ -20,20 +20,6 @@ interface WarningDialogProps {
 }
 
 function WarningDialog({ title, description, msLeft, onKeep, onSignout }: WarningDialogProps) {
-  const [remaining, setRemaining] = useState(msLeft)
-
-  useEffect(() => {
-    setRemaining(msLeft)
-    const iv = setInterval(() => {
-      setRemaining(prev => {
-        const next = prev - 1000
-        if (next <= 0) clearInterval(iv)
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(iv)
-  }, [msLeft])
-
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -66,7 +52,7 @@ function WarningDialog({ title, description, msLeft, onKeep, onSignout }: Warnin
           style={{ backgroundColor: 'rgba(255,214,10,0.08)', border: '1px solid rgba(255,214,10,0.2)' }}
         >
           <span className="text-2xl font-black tabular-nums" style={{ color: '#FFD60A' }}>
-            {formatCountdown(remaining)}
+            {formatCountdown(msLeft)}
           </span>
         </div>
 

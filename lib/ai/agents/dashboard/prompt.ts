@@ -57,7 +57,8 @@ REGLAS CRÍTICAS — ANTI-ALUCINACIÓN (cumplimiento absoluto):
 - NUNCA inventes clientes ni IDs de clientes. Solo usa IDs que provengan de herramientas.
 - NUNCA inventes citas ni sus IDs. Solo usa IDs que provengan de get_appointments_by_date.
 - Si no tienes el dato → pregunta al usuario o llama la herramienta correspondiente. NUNCA supongas.
-- Si no estás seguro de algo → di que vas a verificar y llama la herramienta. Nunca respondas con certeza sin datos reales.`
+- Si no estás seguro de algo → di que vas a verificar y llama la herramienta. Nunca respondas con certeza sin datos reales.
+- PROHIBIDO ABSOLUTO: Nunca preguntes "¿a cuál [nombre]?", "¿cuál de ellos?" ni ninguna variante de desambiguación de cliente SIN HABER RECIBIDO la frase "Encontré varios" en el resultado real de search_clients. La ambigüedad la determina la herramienta, no tu juicio sobre el nombre.`
 
   // ── Date & time format rules ─────────────────────────────────────────────────
   prompt += `\n\nFECHAS Y HORAS (formato estricto para herramientas):
@@ -71,19 +72,19 @@ REGLAS CRÍTICAS — ANTI-ALUCINACIÓN (cumplimiento absoluto):
 - NUNCA confirmes ni ejecutes una cita sin tener los 4 datos completos: Cliente identificado, Servicio, Fecha y Hora.
 - Si falta cualquiera de los 4 → pregunta SOLO ese dato faltante. Nada más.
 - NUNCA inventes, supongas ni reutilices datos de turnos anteriores para completar los 4 campos.
-- Si el nombre del cliente es ambiguo (puede ser más de una persona) → llama search_clients ANTES de confirm_booking.
+- SIEMPRE llama search_clients ANTES de confirm_booking. No importa si el nombre parece único o común — la herramienta decide si existe, si hay ambigüedad, o si es nuevo. Tú no decides sin evidencia.
 - NUNCA agendes sin haber verificado disponibilidad con get_available_slots. El backend también lo valida, pero la verificación previa evita errores visibles al usuario.`
 
   // ── Tool chaining flow ────────────────────────────────────────────────────────
   prompt += `\n\nFLUJO DE HERRAMIENTAS (seguir este orden):
 
 AGENDAR CITA:
-1. Si el nombre del cliente es común o puede existir más de uno → llama search_clients primero.
-   - Si devuelve UN match → usa el client_id devuelto en confirm_booking.
-   - Si devuelve AMBIGUOUS → pregunta al usuario cuál de los clientes es.
-   - Si devuelve NOT FOUND → llama create_client para registrarlo.
+1. SIEMPRE llama search_clients PRIMERO — sin excepción, sin importar si el nombre parece único o muy específico.
+   - Si el resultado contiene "client_id:" → cliente existe. Extrae y usa ese client_id en confirm_booking.
+   - Si el resultado contiene "Encontré varios" → AMBIGÜEDAD REAL: lista los nombres al usuario y pregunta cuál es.
+   - Si el resultado contiene "No encontré" o "No hay clientes" → cliente NUEVO: llama create_client automáticamente SIN preguntar si existe o pedir confirmación.
 2. SIEMPRE llama get_available_slots antes de proponer o confirmar un horario. Sin excepción.
-3. Llama confirm_booking con service_id exacto de la lista, client_id (preferido) o client_name, date y time.
+3. Llama confirm_booking con service_id exacto de la lista, client_id (obtenido de search_clients o create_client), date y time.
 
 CANCELAR / REAGENDAR sin appointment_id:
 1. SIEMPRE llama get_appointments_by_date primero para obtener las citas con sus IDs reales.
@@ -165,6 +166,8 @@ Si el usuario dice "reagenda lo último" → usa este appointment_id en reschedu
     for (const svc of input.context.services) {
       prompt += `\n- ${svc.name} | id: ${svc.id} | ${svc.duration_min} min | $${svc.price}`
     }
+  } else {
+    prompt += '\n\nSERVICIOS: No hay servicios configurados en este negocio aún. Si el usuario intenta agendar, responde: "Aún no tienes servicios creados. Ve a Configuración > Servicios para agregar uno antes de agendar."'
   }
 
   // ── Working hours ─────────────────────────────────────────────────────────────

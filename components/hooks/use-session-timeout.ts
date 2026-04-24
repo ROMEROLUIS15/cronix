@@ -16,10 +16,15 @@ const ABSOLUTE_WARNING_MS   = 10 * 60 * 1000
 
 /** sessionStorage key that persists the login timestamp across page reloads */
 const SESSION_START_KEY = 'cronix_session_start'
-/** How often to re-check the absolute limit (ms) */
-const ABSOLUTE_POLL_MS = 30_000
+/** localStorage key that syncs activity timestamp across multiple tabs */
+const LOCAL_ACTIVITY_KEY = 'cronix_local_activity'
+
 /** Server ping throttle — max one ping per minute */
 const PING_THROTTLE_MS = 60_000
+/** Activity throttle — update local storage at most once per second */
+const ACTIVITY_THROTTLE_MS = 1_000
+/** How often to check the limits (ms) */
+const CHECK_INTERVAL_MS = 1_000
 
 const ACTIVITY_EVENTS = [
   'mousemove', 'mousedown', 'keydown', 'scroll', 'click', 'touchstart',
@@ -56,16 +61,16 @@ export function useSessionTimeout(): UseSessionTimeoutReturn {
     _setWarning(w)
   }, [])
 
-  const inactivityRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const inactivityWarningRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const absolutePollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const warningShownRef      = useRef<SessionWarningType>(null)
   const lastPingRef          = useRef<number>(0)
+  const lastActivityEventRef = useRef<number>(0)
+  const checkIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const [warningMsLeft, setWarningMsLeft] = useState(0)
 
   // ── Sign out ──────────────────────────────────────────────────────────────
   const doSignout = useCallback(async () => {
     sessionStorage.removeItem(SESSION_START_KEY)
+    localStorage.removeItem(LOCAL_ACTIVITY_KEY)
     await signout()
   }, [])
 
@@ -79,63 +84,99 @@ export function useSessionTimeout(): UseSessionTimeoutReturn {
     } catch { /* ignore */ }
   }, [])
 
-  // ── Inactivity timer ─────────────────────────────────────────────────────
-  const clearInactivityTimers = useCallback(() => {
-    if (inactivityRef.current) clearTimeout(inactivityRef.current)
-    if (inactivityWarningRef.current) clearTimeout(inactivityWarningRef.current)
-  }, [])
+  // ── Activity tracking ──────────────────────────────────────────────────────
+  const handleActivity = useCallback(() => {
+    const now = Date.now()
+    // Throttle DOM event processing to avoid flooding
+    if (now - lastActivityEventRef.current < ACTIVITY_THROTTLE_MS) return
+    lastActivityEventRef.current = now
 
-  const resetInactivity = useCallback(() => {
-    clearInactivityTimers()
+    localStorage.setItem(LOCAL_ACTIVITY_KEY, String(now))
     pingServer()
 
+    // If we became active, hide inactivity warning
     if (warningRef.current === 'inactivity') {
       setWarning(null)
       warningShownRef.current = null
     }
+  }, [pingServer, setWarning])
 
-    inactivityWarningRef.current = setTimeout(() => {
+  // ── Periodic Check ────────────────────────────────────────────────────────
+  const checkLimits = useCallback(() => {
+    const now = Date.now()
+    
+    // 1. Check absolute limit
+    const sessionStart = getOrCreateSessionStart()
+    const absoluteElapsed = now - sessionStart
+    const absoluteRemaining = ABSOLUTE_TIMEOUT_MS - absoluteElapsed
+
+    if (absoluteRemaining <= 0) { 
+      doSignout()
+      return 
+    }
+
+    if (absoluteRemaining <= ABSOLUTE_WARNING_MS && warningShownRef.current !== 'absolute') {
+      warningShownRef.current = 'absolute'
+      setWarningMsLeft(absoluteRemaining)
+      setWarning('absolute')
+      return // prioritize absolute warning over inactivity
+    }
+    
+    if (warningShownRef.current === 'absolute') {
+      setWarningMsLeft(absoluteRemaining)
+      return
+    }
+
+    // 2. Check inactivity limit
+    const storedActivity = localStorage.getItem(LOCAL_ACTIVITY_KEY)
+    let lastActivity = storedActivity ? parseInt(storedActivity, 10) : NaN
+    
+    // Initialize if empty
+    if (isNaN(lastActivity)) {
+      lastActivity = now
+      localStorage.setItem(LOCAL_ACTIVITY_KEY, String(now))
+    }
+
+    const inactivityElapsed = now - lastActivity
+    const inactivityRemaining = INACTIVITY_TIMEOUT_MS - inactivityElapsed
+
+    if (inactivityRemaining <= 0) {
+      doSignout()
+      return
+    }
+
+    if (inactivityRemaining <= INACTIVITY_WARNING_MS) {
       if (warningShownRef.current !== 'inactivity') {
         warningShownRef.current = 'inactivity'
-        setWarningMsLeft(INACTIVITY_WARNING_MS)
         setWarning('inactivity')
       }
-    }, INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS)
-
-    inactivityRef.current = setTimeout(() => { doSignout() }, INACTIVITY_TIMEOUT_MS)
-  }, [clearInactivityTimers, doSignout, pingServer, setWarning])
-
-  // ── Absolute timer ───────────────────────────────────────────────────────
-  const checkAbsoluteLimit = useCallback(() => {
-    const sessionStart = getOrCreateSessionStart()
-    const elapsed = Date.now() - sessionStart
-    const remaining = ABSOLUTE_TIMEOUT_MS - elapsed
-
-    if (remaining <= 0) { doSignout(); return }
-
-    if (remaining <= ABSOLUTE_WARNING_MS && warningShownRef.current !== 'absolute') {
-      warningShownRef.current = 'absolute'
-      setWarningMsLeft(remaining)
-      setWarning('absolute')
+      setWarningMsLeft(inactivityRemaining)
+    } else {
+      // If activity happened in another tab, clear warning here
+      if (warningShownRef.current === 'inactivity') {
+        warningShownRef.current = null
+        setWarning(null)
+      }
     }
   }, [doSignout, setWarning])
 
   // ── Setup ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    resetInactivity()
+    // Initialize
+    handleActivity()
     getOrCreateSessionStart()
-    checkAbsoluteLimit()
-    absolutePollRef.current = setInterval(checkAbsoluteLimit, ABSOLUTE_POLL_MS)
+    
+    // Run interval instead of setTimeout to avoid background throttling issues
+    checkIntervalRef.current = setInterval(checkLimits, CHECK_INTERVAL_MS)
 
     ACTIVITY_EVENTS.forEach(event =>
-      window.addEventListener(event, resetInactivity, { passive: true })
+      window.addEventListener(event, handleActivity, { passive: true })
     )
 
     return () => {
-      clearInactivityTimers()
-      if (absolutePollRef.current) clearInterval(absolutePollRef.current)
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current)
       ACTIVITY_EVENTS.forEach(event =>
-        window.removeEventListener(event, resetInactivity)
+        window.removeEventListener(event, handleActivity)
       )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,8 +188,9 @@ export function useSessionTimeout(): UseSessionTimeoutReturn {
     onKeepSession: useCallback(() => {
       setWarning(null)
       warningShownRef.current = null
-      resetInactivity()
-    }, [setWarning, resetInactivity]),
+      handleActivity()
+    }, [setWarning, handleActivity]),
     onSignout: doSignout,
   }
 }
+
