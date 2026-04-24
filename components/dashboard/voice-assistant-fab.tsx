@@ -593,7 +593,7 @@ export function VoiceAssistantFab() {
         <motion.button
           whileTap={{ scale: 0.9 }}
           type="button"
-          data-testid="voice-assistant-fab"
+          data-testid="voice-assistant-fab-mobile"
           aria-label="Abrir asistente de voz Luis IA"
           // stopPropagation prevents Framer Motion drag layer from eating the click
           onPointerDown={(e) => e.stopPropagation()}
