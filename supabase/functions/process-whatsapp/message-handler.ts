@@ -119,9 +119,9 @@ export async function handleMessage(req: Request): Promise<Response> {
           const groqErr = err instanceof Error ? err.message : String(err)
         addBreadcrumb(`Voice transcription failed: ${groqErr.slice(0, 120)}`, 'llm', 'error')
         captureException(err, { stage: 'voice_transcription', sender, groq_error: groqErr })
-        const isFormatError = groqErr.includes('400') || groqErr.includes('422') || groqErr.toLowerCase().includes('invalid')
-        const hint = isFormatError ? ' (formato no reconocido)' : ''
-        await sendWhatsAppMessage(sender, `No pude procesar tu audio${hint}. Por favor intenta de nuevo o escríbeme tu consulta.`)
+        
+        await sendWhatsAppMessage(sender, `No pude procesar tu audio. Por favor intenta de nuevo o escríbeme tu consulta.`)
+        
         await flushSentry()
         return json({ success: true, message: 'Voice transcription failed — user notified' })
       }

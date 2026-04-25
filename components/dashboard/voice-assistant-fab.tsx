@@ -92,7 +92,35 @@ export function VoiceAssistantFab() {
   const idleCheckRef       = useRef<ReturnType<typeof setInterval> | null>(null)
   const onlineListenerRef  = useRef<(() => void) | null>(null)
   const currentJobIdRef    = useRef<string | null>(null)
+  const audioUnlockedRef   = useRef<boolean>(false)
+  const unlockPrimerRef    = useRef<HTMLAudioElement | null>(null)
   const [volume, setVolume] = useState(0)
+
+  // ── Audio unlock ──────────────────────────────────────────────────────────
+  // Browsers block Audio.play() outside a user-gesture window. The polling
+  // result arrives 5–40s after the click, so we prime a muted audio element
+  // synchronously inside the click handler. Once primed, subsequent
+  // programmatic playback is allowed on the same origin.
+  const unlockAudioPlayback = () => {
+    if (audioUnlockedRef.current) return
+    try {
+      const primer = new Audio()
+      primer.muted     = true
+      primer.loop      = false
+      primer.autoplay  = false
+      primer.src       = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhOvUAAAIAADSDuAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+      const p = primer.play()
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          audioUnlockedRef.current = true
+          primer.pause()
+        }).catch(() => { /* will retry on next click */ })
+      } else {
+        audioUnlockedRef.current = true
+      }
+      unlockPrimerRef.current = primer
+    } catch { /* ignore */ }
+  }
 
   // ── Fetch with client-side timeout ───────────────────────────────────────
   const FETCH_TIMEOUT_MS = 45_000
@@ -102,18 +130,7 @@ export function VoiceAssistantFab() {
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer))
   }
 
-  // ── Play audio URL — silent on error (Deepgram-only, no browser TTS fallback) ──
-  const playAudio = async (src: string, _fallbackText?: string) => {
-    return new Promise<void>((resolve) => {
-      const audio = new Audio(src)
-      currentAudioRef.current = audio
-      audio.onended = () => { setState('idle'); resolve() }
-      audio.onerror = () => { setState('idle'); resolve() }
-      audio.play().catch(() => { setState('idle'); resolve() })
-    })
-  }
-
-  // ── Vocalize error via Deepgram TTS endpoint — silent if that also fails ─
+  // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
     const audio = new Audio(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`)
@@ -121,6 +138,24 @@ export function VoiceAssistantFab() {
     audio.onended = () => setState('idle')
     audio.onerror = () => setState('idle')
     audio.play().catch(() => setState('idle'))
+  }
+
+  // ── Play audio URL — on any failure, fall back to 'No te entendí bien' via TTS ─
+  const playAudio = async (src: string, fallbackText?: string) => {
+    return new Promise<void>((resolve) => {
+      const audio = new Audio(src)
+      currentAudioRef.current = audio
+      let fallbackFired = false
+      const fireFallback = () => {
+        if (fallbackFired) return
+        fallbackFired = true
+        vocalizeSilentFailsafe(fallbackText ?? 'No te entendí bien, ¿puedes repetir?')
+        resolve()
+      }
+      audio.onended = () => { setState('idle'); resolve() }
+      audio.onerror = () => { fireFallback() }
+      audio.play().catch(() => { fireFallback() })
+    })
   }
 
   // ── Polling: stop + cleanup ───────────────────────────────────────────────
@@ -150,14 +185,14 @@ export function VoiceAssistantFab() {
 
     setState('speaking')
 
+    const fallback = data.actionPerformed ? 'Listo.' : 'No te entendí bien, ¿puedes repetir?'
+
     if (data.audioUrl) {
-      await playAudio(data.audioUrl, data.text ?? '')
-    } else if (data.text) {
+      await playAudio(data.audioUrl, data.text || fallback)
+    } else if (data.text?.trim()) {
       await playAudio(`/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`, data.text)
     } else {
-      vocalizeSilentFailsafe(
-        data.actionPerformed ? 'Listo.' : 'No recibí respuesta. Por favor intenta de nuevo.'
-      )
+      vocalizeSilentFailsafe(fallback)
     }
   }
 
@@ -175,8 +210,10 @@ export function VoiceAssistantFab() {
     } catch { /* storage unavailable — polling still works */ }
 
     let consecutiveErrors = 0
-    let lastServerContact = Date.now()
-    const isCurrent = () => currentJobIdRef.current === jobId
+    let notFoundCount     = 0
+    const pollStart       = Date.now()
+    const POLL_BUDGET_MS  = 45_000
+    const isCurrent       = () => currentJobIdRef.current === jobId
 
     const scheduleNext = (delayMs: number) => {
       if (!isCurrent()) return
@@ -185,15 +222,28 @@ export function VoiceAssistantFab() {
 
     const doPoll = async () => {
       if (!isCurrent()) return
+      if (Date.now() - pollStart > POLL_BUDGET_MS) {
+        stopPolling()
+        setState('speaking')
+        vocalizeSilentFailsafe('El asistente tardó demasiado en responder. Por favor intenta de nuevo.')
+        return
+      }
       if (typeof navigator !== 'undefined' && !navigator.onLine) { scheduleNext(2000); return }
 
       try {
         const res = await fetch(`/api/assistant/voice/status?job_id=${encodeURIComponent(jobId)}`)
         if (!isCurrent()) return
 
+        // 404 tolerance: Redis eventual consistency — job may not be visible on
+        // the very first polls. Give it up to ~10s of 404s before giving up.
         if (res.status === 404) {
-          stopPolling()
-          vocalizeSilentFailsafe('No recibí respuesta del asistente. Por favor intenta de nuevo.')
+          notFoundCount++
+          if (notFoundCount >= 14) {
+            stopPolling()
+            vocalizeSilentFailsafe('No recibí respuesta del asistente. Por favor intenta de nuevo.')
+            return
+          }
+          scheduleNext(750)
           return
         }
 
@@ -204,7 +254,7 @@ export function VoiceAssistantFab() {
         }
 
         consecutiveErrors = 0
-        lastServerContact = Date.now()
+        notFoundCount     = 0
 
         const data = await res.json() as {
           status: string
@@ -221,11 +271,12 @@ export function VoiceAssistantFab() {
           stopPolling()
           setState('speaking')
           if (data.audioUrl) {
-            await playAudio(data.audioUrl, 'Hubo un problema. Por favor intenta de nuevo.')
+            await playAudio(data.audioUrl, 'No te entendí bien, ¿puedes repetir?')
           } else {
-            vocalizeSilentFailsafe('Hubo un problema al procesar tu solicitud. Por favor intenta de nuevo.')
+            vocalizeSilentFailsafe('No te entendí bien, ¿puedes repetir?')
           }
         } else {
+          // queued / processing — keep asking until completed or budget elapses
           scheduleNext(750)
         }
       } catch {
@@ -243,15 +294,6 @@ export function VoiceAssistantFab() {
     }
     onlineListenerRef.current = onOnline
     window.addEventListener('online', onOnline)
-
-    // Idle watchdog: 50s from last successful server contact
-    idleCheckRef.current = setInterval(() => {
-      if (!isCurrent()) return
-      if (Date.now() - lastServerContact > 50_000) {
-        stopPolling()
-        vocalizeSilentFailsafe('El asistente tardó demasiado. Por favor intenta de nuevo.')
-      }
-    }, 5000)
 
     void doPoll()
   }
@@ -471,6 +513,10 @@ export function VoiceAssistantFab() {
   }
 
   const handleClick = () => {
+    // Prime audio pipeline on every click — the initial one unlocks Audio.play()
+    // so the deferred result audio (arriving long after the gesture) can play.
+    unlockAudioPlayback()
+
     if (state === 'speaking') {
       currentAudioRef.current?.pause()
       currentAudioRef.current = null

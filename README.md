@@ -32,7 +32,7 @@ La plataforma incluye un **dashboard web** con su propio agente de IA para que e
 | Auth | Supabase Auth + Passkeys (WebAuthn) | — |
 | Edge Functions | Deno (Supabase Edge Functions) | — |
 | IA / LLM | Groq — `llama-3.1-8b-instant` / `llama-3.3-70b-versatile` | — |
-| STT / Audio | Groq Whisper — `whisper-large-v3-turbo` | — |
+| STT / Audio | Deepgram Nova-2 (WhatsApp STT) / Groq Whisper (Web STT) | — |
 | Rate Limiting / Cache | Upstash Redis + QStash | 1.37 / 2.10 |
 | Internacionalización | next-intl (6 idiomas) | 4.9 |
 | Monitoreo | Sentry + Helicone | — |
@@ -98,7 +98,7 @@ La plataforma incluye un **dashboard web** con su propio agente de IA para que e
 
 **Ubicación:** `supabase/functions/process-whatsapp/`
 
-Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por QStash y ejecuta un **bucle ReAct** con Groq para agendar, cancelar y reagendar citas.
+Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por QStash, transcribe audios de forma ultra-rápida con **Deepgram Nova-2** (soporte nativo para WhatsApp OGG/Opus), y ejecuta un **bucle ReAct** con **Llama 3 (Groq)** para agendar, cancelar y reagendar citas.
 
 **Archivos clave:**
 
@@ -107,7 +107,7 @@ Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por QS
 | `index.ts` | Entry point del Edge Function |
 | `message-handler.ts` | Pipeline completo de seguridad → contexto → agente |
 | `ai-agent.ts` | Bucle ReAct con `llama-3.1-8b-instant` + `llama-3.3-70b-versatile` |
-| `groq-client.ts` | Cliente HTTP de Groq + Whisper + Key Pooling |
+| `groq-client.ts` | Cliente HTTP de Groq + Key Pooling + Circuit Breaker |
 | `tool-executor.ts` | Ejecutor de herramientas: `confirm_booking`, `reschedule_booking`, `cancel_booking` |
 | `notifications.ts` | Doble notificación: dueño (WA + DB) y cliente (WA branded) |
 | `time-utils.ts` | Conversión UTC ↔ Local DST-aware con IANA timezones |
@@ -189,7 +189,7 @@ Meta Webhook → whatsapp-webhook → QStash enqueue
     ↓
 process-whatsapp (Deno Edge Function)
     ↓ [Si es audio]
-Groq Whisper (whisper-large-v3-turbo) → texto transcrito
+Deepgram Nova-2 (STT nativo OGG/Opus) → texto transcrito
     ↓
 Security: QStash signature + rate limit + sanitización
     ↓

@@ -33,7 +33,7 @@ const GROQ_API_KEY     = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
 
 const ttsEngine = DEEPGRAM_API_KEY
-  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-arcas-es')
+  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
   : null
 
 // ── QStash signature verifier ─────────────────────────────────────────────────
@@ -42,6 +42,11 @@ const SIGNING_KEY     = process.env.QSTASH_CURRENT_SIGNING_KEY
 const NEXT_SIGNING_KEY = process.env.QSTASH_NEXT_SIGNING_KEY
 
 async function verifySignature(req: Request, rawBody: string): Promise<boolean> {
+  // Local dev bypass: the voice route fires a direct fetch (no QStash signature).
+  if (process.env.NODE_ENV === 'development') {
+    logger.warn('VOICE-WORKER', 'NODE_ENV=development — skipping QStash signature verification')
+    return true
+  }
   if (!SIGNING_KEY || !NEXT_SIGNING_KEY) {
     logger.warn('VOICE-WORKER', 'QStash signing keys not set — skipping signature verification (dev mode)')
     return true

@@ -8,7 +8,7 @@ import { safeDeepgramTTS } from '../resilience'
 export class DeepgramProvider implements ITtsProvider {
   constructor(
     private apiKey: string, 
-    private model: string = 'aura-arcas-es'
+    private model: string = 'aura-2-nestor-es'
   ) {}
 
   async synthesize(text: string): Promise<TtsResult> {

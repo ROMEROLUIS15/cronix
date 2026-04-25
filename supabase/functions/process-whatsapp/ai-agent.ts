@@ -33,8 +33,6 @@ import {
   CircuitBreakerError,
   SMALL_MODEL,
   LARGE_MODEL,
-  WHISPER_MODEL,
-  WHISPER_API_URL,
   MAX_STEPS,
 } from "./groq-client.ts"
 import type { AgentMessage } from "./groq-client.ts"
@@ -423,56 +421,27 @@ export async function runAgentLoop(
  */
 export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<{ text: string | null; tokens: number }> {
   // @ts-ignore — Deno runtime global
-  const apiKeysStr = Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY')
-  if (!apiKeysStr) throw new Error('LLM_API_KEY no configurada')
-  // Mirror callLlm() key pooling: accept comma-separated keys, use the first.
-  // Single-key configs still produce a 1-element array, so behavior is unchanged.
-  const apiKey = apiKeysStr.split(',').map(k => k.trim()).filter(Boolean)[0]
-  if (!apiKey) throw new Error('LLM_API_KEY no configurada correctamente')
+  const apiKey = Deno.env.get('DEEPGRAM_AURA_API_KEY') ?? Deno.env.get('DEEPGRAM_API_KEY')
+  if (!apiKey) throw new Error('DEEPGRAM_AURA_API_KEY no configurada')
 
-  // Normalize MIME: strip codec suffix (e.g. 'audio/ogg; codecs=opus' → 'audio/ogg').
-  // Groq Whisper rejects the codec suffix in the Content-Type header of the multipart part,
-  // causing silent 400/422 failures on WhatsApp voice notes from Android devices.
-  const cleanMimeType = mimeType.split(';')[0].trim()
-
-  // Map to Groq-supported file extensions. Groq rejects anything outside
-  // [flac mp3 mp4 mpeg mpga m4a ogg opus wav webm] with a 400 invalid_request_error,
-  // using the FILENAME extension (not the MIME header) for format detection.
-  const MIME_TO_EXT: Readonly<Record<string, string>> = {
-    'audio/ogg':  'ogg',   // WhatsApp Android PTT (Opus in Ogg container) — must be 'ogg', not 'oga'
-    'audio/mp4':  'm4a',   // WhatsApp iOS voice notes
-    'audio/mpeg': 'mp3',
-    'audio/wav':  'wav',
-    'audio/webm': 'webm',
-    'audio/aac':  'm4a',   // AAC reuses the m4a container (allowed by Groq)
-  }
-  // Fallback to 'ogg' (WhatsApp default) instead of deriving from MIME — the derived
-  // extension (e.g. 'oga', 'amr') may not be in Groq's allowed list and will 400.
-  const ext      = MIME_TO_EXT[cleanMimeType] ?? 'ogg'
-  const filename = `voice.${ext}`
-
-  const form = new FormData()
-  // FIX: Forzamos la extensión .ogg y el MIME type audio/ogg para evitar rechazos de formato en Groq Whisper
-  form.append('file', new File([buffer], 'voice.ogg', { type: 'audio/ogg' }))
-  form.append('model', WHISPER_MODEL)
-  form.append('language', 'es')
-  form.append('response_format', 'text')
-
-  addBreadcrumb('Calling Whisper API', 'llm', 'info', { model: WHISPER_MODEL, mimeType })
-
-  const serviceName = 'GROQ_WHISPER'
+  const serviceName = 'DEEPGRAM_STT'
   if (!(await checkCircuitBreaker(serviceName))) {
     throw new CircuitBreakerError(serviceName)
   }
 
-  const whisperHeaders = {
-    'Authorization': `Bearer ${apiKey}`,
-    ...heliconeHeaders({ type: 'audio-transcription' }),
-  }
+  addBreadcrumb('Calling Deepgram Nova-2 API for STT', 'llm', 'info', { mimeType, byteLength: buffer.byteLength })
 
+  // Deepgram supports raw binary payloads via fetch natively.
   let res: Response
   try {
-    res = await fetch(WHISPER_API_URL, { method: 'POST', headers: whisperHeaders, body: form })
+    res = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&language=es&smart_format=true', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': mimeType,
+      },
+      body: buffer
+    })
   } catch (err) {
     await reportServiceFailure(serviceName)
     throw err
@@ -480,14 +449,16 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
 
   // Single retry for transient 5xx server errors. Rate-limit (429) and client errors (4xx) are not retried.
   if (!res.ok && res.status >= 500) {
-    addBreadcrumb(`Whisper API ${res.status} on first attempt — retrying once`, 'llm', 'warning')
-    const retryForm = new FormData()
-    retryForm.append('file', new File([buffer], 'voice.ogg', { type: 'audio/ogg' }))
-    retryForm.append('model', WHISPER_MODEL)
-    retryForm.append('language', 'es')
-    retryForm.append('response_format', 'text')
+    addBreadcrumb(`Deepgram API ${res.status} on first attempt — retrying once`, 'llm', 'warning')
     try {
-      res = await fetch(WHISPER_API_URL, { method: 'POST', headers: whisperHeaders, body: retryForm })
+      res = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&language=es&smart_format=true', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${apiKey}`,
+          'Content-Type': mimeType,
+        },
+        body: buffer
+      })
     } catch (retryErr) {
       await reportServiceFailure(serviceName)
       throw retryErr
@@ -501,15 +472,19 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
 
   if (!res.ok) {
     const errBody = await res.text()
-    addBreadcrumb(`Whisper error ${res.status}: ${errBody.slice(0, 200)}`, 'llm', 'error', { status: res.status, model: WHISPER_MODEL, ext })
+    addBreadcrumb(`Deepgram STT error ${res.status}: ${errBody.slice(0, 200)}`, 'llm', 'error', { status: res.status })
     if (res.status >= 500) await reportServiceFailure(serviceName)
-    throw new Error(`Whisper ${res.status}: ${errBody}`)
+    const err = new Error(`Deepgram ${res.status}: ${errBody}`);
+    (err as any).bufferData = `Len: ${buffer.byteLength}`;
+    throw err
   }
 
   await reportServiceSuccess(serviceName)
 
-  const transcript      = (await res.text()).trim()
+  const data = await res.json()
+  const transcript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() ?? ''
   const estimatedTokens = transcript ? 50 + transcript.split(/\s+/).length : 0
 
   return { text: transcript || null, tokens: estimatedTokens }
 }
+

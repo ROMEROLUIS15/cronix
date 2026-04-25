@@ -30,18 +30,16 @@ const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
     type: 'function',
     function: {
       name: 'confirm_booking',
-      description: 'Crea una cita nueva. Requiere service_id, date, time y uno de: client_name (búsqueda fuzzy) o client_id (UUID exacto si lo conoces de create_client).',
+      description: 'Crea una cita nueva. Pasa el nombre del servicio y del cliente tal como los dijo el usuario; el sistema los resuelve internamente.',
       parameters: {
         type: 'object',
         properties: {
-          service_id:  { type: 'string', description: 'UUID del servicio (usar el id exacto de la lista de servicios)' },
-          client_name: { type: 'string', description: 'Nombre del cliente para búsqueda. Omitir si ya tienes client_id.' },
-          client_id:   { type: 'string', description: 'UUID del cliente. Usar cuando venga de create_client. Tiene prioridad sobre client_name.' },
+          service_id:  { type: 'string', description: 'Nombre del servicio tal como lo dijo el usuario (ej. "Manicura").' },
+          client_name: { type: 'string', description: 'Nombre del cliente tal como lo dijo el usuario.' },
           date:        { type: 'string', description: 'Fecha YYYY-MM-DD' },
           time:        { type: 'string', description: 'Hora HH:mm en formato 24h' },
-          staff_id:    { type: 'string', description: 'UUID del empleado asignado (opcional)' },
         },
-        required: ['service_id', 'date', 'time'],
+        required: ['service_id', 'client_name', 'date', 'time'],
         additionalProperties: false,
       },
     },
@@ -50,13 +48,15 @@ const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
     type: 'function',
     function: {
       name: 'cancel_booking',
-      description: 'Cancela una cita existente. Requiere appointment_id.',
+      description: 'Cancela una cita. Pasa client_name (y opcionalmente date y time) — el sistema localiza la cita.',
       parameters: {
         type: 'object',
         properties: {
-          appointment_id: { type: 'string', description: 'UUID de la cita' },
+          client_name: { type: 'string', description: 'Nombre del cliente cuya cita se cancela.' },
+          date:        { type: 'string', description: 'Fecha YYYY-MM-DD (opcional, default = hoy).' },
+          time:        { type: 'string', description: 'Hora HH:mm 24h (opcional, para desambiguar si hay varias del mismo cliente).' },
         },
-        required: ['appointment_id'],
+        required: ['client_name'],
         additionalProperties: false,
       },
     },
@@ -65,15 +65,17 @@ const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
     type: 'function',
     function: {
       name: 'reschedule_booking',
-      description: 'Reagenda una cita. Requiere appointment_id, new_date, new_time.',
+      description: 'Reagenda una cita. Pasa client_name (+ date/time de la cita actual si hay ambigüedad) y la nueva fecha/hora.',
       parameters: {
         type: 'object',
         properties: {
-          appointment_id: { type: 'string', description: 'UUID de la cita' },
-          new_date: { type: 'string', description: 'Nueva fecha YYYY-MM-DD' },
-          new_time: { type: 'string', description: 'Nueva hora HH:mm 24h' },
+          client_name: { type: 'string', description: 'Nombre del cliente cuya cita se reagenda.' },
+          date:        { type: 'string', description: 'Fecha actual YYYY-MM-DD (opcional, default = hoy).' },
+          time:        { type: 'string', description: 'Hora actual HH:mm 24h (opcional, para desambiguar).' },
+          new_date:    { type: 'string', description: 'Nueva fecha YYYY-MM-DD' },
+          new_time:    { type: 'string', description: 'Nueva hora HH:mm 24h' },
         },
-        required: ['appointment_id', 'new_date', 'new_time'],
+        required: ['client_name', 'new_date', 'new_time'],
         additionalProperties: false,
       },
     },
@@ -142,7 +144,7 @@ const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
     type: 'function',
     function: {
       name: 'search_clients',
-      description: 'Busca clientes por nombre antes de agendar. Úsala cuando el nombre del cliente puede ser ambiguo o para verificar si ya existe y obtener su client_id.',
+      description: 'Busca clientes por nombre antes de agendar. Tolera transcripciones imperfectas (fuzzy match). Devuelve solo nombres legibles.',
       parameters: {
         type: 'object',
         properties: {

@@ -24,7 +24,7 @@ import { RescheduleAppointmentUseCase } from '@/lib/domain/use-cases/RescheduleA
 import { GetAppointmentsByDateUseCase } from '@/lib/domain/use-cases/GetAppointmentsByDateUseCase'
 import { CreateClientUseCase }          from '@/lib/domain/use-cases/CreateClientUseCase'
 import { GetAvailableSlotsUseCase }     from '@/lib/domain/use-cases/GetAvailableSlotsUseCase'
-import { fuzzyFind }                    from '@/lib/ai/fuzzy-match'
+import { fuzzyFind, similarity, normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
 import { logger }                       from '@/lib/logger'
 
 // ── Schemas (snake_case — matches LLM tool definitions exactly) ────────────────
@@ -38,15 +38,29 @@ const ConfirmBookingSchema = z.object({
   staff_id:    z.string().uuid().optional(),
 })
 
-const CancelBookingSchema = z.object({
-  appointment_id: z.string().uuid(),
-})
+const CancelBookingSchema = z
+  .object({
+    appointment_id: z.string().uuid().optional(),
+    client_name:    z.string().min(1).optional(),
+    date:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    time:           z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  })
+  .refine((v) => v.appointment_id || v.client_name, {
+    message: 'Necesito el nombre del cliente o el ID de la cita.',
+  })
 
-const RescheduleBookingSchema = z.object({
-  appointment_id: z.string().uuid(),
-  new_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  new_time:       z.string().regex(/^\d{2}:\d{2}$/),
-})
+const RescheduleBookingSchema = z
+  .object({
+    appointment_id: z.string().uuid().optional(),
+    client_name:    z.string().min(1).optional(),
+    date:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    time:           z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    new_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    new_time:       z.string().regex(/^\d{2}:\d{2}$/),
+  })
+  .refine((v) => v.appointment_id || v.client_name, {
+    message: 'Necesito el nombre del cliente o el ID de la cita.',
+  })
 
 const GetByDateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -196,6 +210,57 @@ export class RealToolExecutor implements IToolExecutor {
     return new Date(new Date(startISO).getTime() + durationMin * 60_000).toISOString()
   }
 
+  /**
+   * Resolves an appointment_id when the LLM only knows a client_name (+ optional date/time).
+   * Avoids the LLM ever needing to handle UUIDs in its responses.
+   */
+  private async resolveAppointmentId(
+    p: ToolExecuteParams,
+    args: { appointment_id?: string; client_name?: string; date?: string; time?: string },
+  ): Promise<{ id: string } | { error: string }> {
+    if (args.appointment_id) return { id: args.appointment_id }
+    if (!args.client_name)   return { error: 'Necesito el nombre del cliente o la cita.' }
+
+    const todayISO  = new Date().toLocaleDateString('en-CA', { timeZone: p.timezone })
+    const targetDay = args.date ?? todayISO
+
+    const dayRes = await new GetAppointmentsByDateUseCase(this.queryRepo).execute({
+      businessId: p.businessId,
+      date:       targetDay,
+      timezone:   p.timezone,
+    })
+    if (dayRes.error || !dayRes.data?.length) {
+      return { error: `No hay citas activas el ${targetDay}.` }
+    }
+
+    // Fuzzy-match by client name across all appointments on this day.
+    const needle = normalizeForFuzzy(args.client_name!)
+    const matches = dayRes.data
+      .map((a) => ({ appt: a, score: similarity(normalizeForFuzzy(a.clientName), needle) }))
+      .filter((x) => x.score >= 0.45 || normalizeForFuzzy(x.appt.clientName).includes(needle))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.appt)
+
+    if (matches.length === 0) {
+      return { error: `No encontré una cita de ${args.client_name} el ${targetDay}.` }
+    }
+
+    // Narrow by time if provided (summary.time is "h:mm a" e.g. "3:00 p. m.")
+    if (args.time && matches.length > 1) {
+      const [hh, mm] = args.time.split(':')
+      const hour24 = parseInt(hh!, 10)
+      const hour12 = ((hour24 + 11) % 12) + 1
+      const needleTime = `${hour12}:${mm}`
+      const refined = matches.filter((m) => m.time.includes(needleTime))
+      if (refined.length >= 1) return { id: refined[0]!.id }
+    }
+
+    if (matches.length === 1) return { id: matches[0]!.id }
+
+    const list = matches.slice(0, 3).map((m) => `${m.time} ${m.clientName}`).join(', ')
+    return { error: `Hay varias: ${list}. ¿Cuál?` }
+  }
+
   // ── Tools ────────────────────────────────────────────────────────────────────
 
   private async confirmBooking(p: ToolExecuteParams): Promise<ExecResult> {
@@ -292,12 +357,16 @@ export class RealToolExecutor implements IToolExecutor {
   private async cancelBooking(p: ToolExecuteParams): Promise<ExecResult> {
     const parsed = CancelBookingSchema.safeParse(p.args)
     if (!parsed.success) {
-      return { success: false, result: 'Necesito el ID de la cita para cancelarla.' }
+      return { success: false, result: 'Necesito el nombre del cliente y la hora para cancelar.' }
     }
+
+    const resolved = await this.resolveAppointmentId(p, parsed.data)
+    if ('error' in resolved) return { success: false, result: resolved.error }
+    const appointmentId = resolved.id
 
     // Fetch appointment details BEFORE cancelling to populate structured event data.
     // getForEdit returns client_id, service_id, start_at — enough to resolve names.
-    const appt = await this.queryRepo.getForEdit(parsed.data.appointment_id, p.businessId)
+    const appt = await this.queryRepo.getForEdit(appointmentId, p.businessId)
     if (appt.error || !appt.data) {
       return { success: false, result: 'No encontré la cita a cancelar.' }
     }
@@ -323,7 +392,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     const result = await new CancelAppointmentUseCase(this.commandRepo).execute({
       businessId:    p.businessId,
-      appointmentId: parsed.data.appointment_id,
+      appointmentId,
     })
 
     if (result.error) return { success: false, result: result.error }
@@ -332,7 +401,7 @@ export class RealToolExecutor implements IToolExecutor {
       success: true,
       result:  `Listo. La cita de ${clientName} (${serviceName}) ha sido cancelada.`,
       data: {
-        appointmentId: parsed.data.appointment_id,
+        appointmentId,
         clientName,
         serviceName,
         date:   startDate,
@@ -345,10 +414,14 @@ export class RealToolExecutor implements IToolExecutor {
   private async rescheduleBooking(p: ToolExecuteParams): Promise<ExecResult> {
     const parsed = RescheduleBookingSchema.safeParse(p.args)
     if (!parsed.success) {
-      return { success: false, result: 'Necesito la cita, la nueva fecha y hora para reagendar.' }
+      return { success: false, result: 'Necesito el cliente, la cita actual y la nueva fecha/hora.' }
     }
 
-    const appt = await this.queryRepo.getForEdit(parsed.data.appointment_id, p.businessId)
+    const resolved = await this.resolveAppointmentId(p, parsed.data)
+    if ('error' in resolved) return { success: false, result: resolved.error }
+    const appointmentId = resolved.id
+
+    const appt = await this.queryRepo.getForEdit(appointmentId, p.businessId)
     if (appt.error || !appt.data) {
       return { success: false, result: 'No encontré la cita.' }
     }
@@ -377,7 +450,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     // Pre-validate new slot — exclude the appointment being rescheduled from the conflict check.
     const conflictsRes = await this.queryRepo.findConflicts(
-      p.businessId, newStartISO, newEndISO, parsed.data.appointment_id,
+      p.businessId, newStartISO, newEndISO, appointmentId,
     )
     if (!conflictsRes.error && conflictsRes.data && conflictsRes.data.length > 0) {
       return {
@@ -388,7 +461,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     const result = await new RescheduleAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:    p.businessId,
-      appointmentId: parsed.data.appointment_id,
+      appointmentId,
       newStartAt:    newStartISO,
       newEndAt:      newEndISO,
     })
@@ -399,7 +472,7 @@ export class RealToolExecutor implements IToolExecutor {
       success: true,
       result:  `Listo. La cita de ${clientName} fue reagendada para el ${parsed.data.new_date} a las ${parsed.data.new_time}.`,
       data: {
-        appointmentId: parsed.data.appointment_id,
+        appointmentId,
         clientName,
         serviceName,
         date:   parsed.data.new_date,
@@ -496,7 +569,7 @@ export class RealToolExecutor implements IToolExecutor {
 
     return {
       success: true,
-      result: `Cliente "${result.data.name}" registrado (client_id: ${result.data.id}). Usa client_id: ${result.data.id} al llamar confirm_booking.`,
+      result: `Cliente "${result.data.name}" registrado.`,
     }
   }
 
@@ -519,30 +592,27 @@ export class RealToolExecutor implements IToolExecutor {
     if (allRes.error || !allRes.data?.length) {
       return {
         success: true,
-        result: `No hay clientes registrados aún. "${parsed.data.query}" es un cliente nuevo — llama create_client con name: "${parsed.data.query}" para registrarlo y obtener su client_id.`,
+        result: `No encontré "${parsed.data.query}". Llama confirm_booking con client_name="${parsed.data.query}"; se creará automáticamente.`,
       }
     }
 
     const found = fuzzyFind(allRes.data, parsed.data.query)
 
     if (found.status === 'found') {
-      return {
-        success: true,
-        result: `Cliente encontrado: ${found.match.name} (client_id: ${found.match.id}). Usa este client_id en confirm_booking.`,
-      }
+      return { success: true, result: `Cliente encontrado: ${found.match.name}.` }
     }
 
     if (found.status === 'ambiguous') {
-      const list = found.candidates.map((c) => `${c.name} (client_id: ${c.id})`).join(', ')
+      const list = found.candidates.map((c) => c.name).join(', ')
       return {
         success: true,
-        result: `Encontré varios clientes con ese nombre: ${list}. Pregunta al usuario cuál es el correcto antes de continuar.`,
+        result: `Encontré varios: ${list}. Pregunta al usuario cuál es.`,
       }
     }
 
     return {
       success: true,
-      result: `No encontré ningún cliente con el nombre "${parsed.data.query}" — es un cliente nuevo. Llama create_client con name: "${parsed.data.query}" para registrarlo.`,
+      result: `No encontré "${parsed.data.query}". Llama confirm_booking con client_name="${parsed.data.query}"; se creará automáticamente.`,
     }
   }
 }

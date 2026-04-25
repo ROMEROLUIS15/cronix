@@ -142,22 +142,40 @@ export async function safeLLM(
       attemptError = err
       aiCircuit.reportFailure('LLM', err.text)
       logger.warn('AI-LLM', `Primary model failed on key ${attempt + 1}/${keys.length}`, err.text)
-      
+
       if (err.status === 429 && attempt < keys.length - 1) {
         logger.info('AI-LLM', `Rate limit hit, fast rotating to next API Key...`)
         continue // Rotar key inmediatamente
       }
-      
+
       try {
         const data = await execute(fallbackModel, currentKey)
         return { data, latency: Date.now() - start, retries: attempt + 1, modelUsed: fallbackModel }
       } catch (fallbackErr: any) {
+        attemptError = fallbackErr
         if (fallbackErr.status === 429 && attempt < keys.length - 1) {
           logger.info('AI-LLM', `Fallback model rate limit hit, rotating to next API Key...`)
           continue // Fallback erró por 429, probamos la siguiente llave desde cero
         }
-        return { data: null, error: fallbackErr.text, latency: Date.now() - start, retries: attempt + 1 }
+        // No more keys to try and we have a 429 — fall through to the post-loop retry
+        if (fallbackErr.status !== 429) {
+          return { data: null, error: fallbackErr.text, latency: Date.now() - start, retries: attempt + 1 }
+        }
       }
+    }
+  }
+
+  // All keys exhausted on 429 → sleep 2s and retry once on primary key + primary model.
+  // Groq's TPM bucket usually refills within 2s for short responses.
+  if (attemptError?.status === 429) {
+    logger.warn('AI-LLM', 'All keys hit 429 — sleeping 2s and retrying once before giving up')
+    await sleep(2000)
+    try {
+      const data = await execute(primaryModel, keys[0]!)
+      aiCircuit.reportSuccess('LLM')
+      return { data, latency: Date.now() - start, retries: keys.length, modelUsed: primaryModel }
+    } catch (finalErr: any) {
+      return { data: null, error: finalErr.text || '429 after retry', latency: Date.now() - start, retries: keys.length + 1 }
     }
   }
 

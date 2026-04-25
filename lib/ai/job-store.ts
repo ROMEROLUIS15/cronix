@@ -26,8 +26,9 @@ function getRedis(): Redis | null {
   return _redis
 }
 
-const jobKey      = (id: string) => `ai:job:${id}`
-const attemptsKey = (id: string) => `ai:job:${id}:attempts`
+const jobKey      = (id: string)     => `ai:job:${id}`
+const attemptsKey = (id: string)     => `ai:job:${id}:attempts`
+const userJobKey  = (userId: string) => `ai:user-job:${userId}`
 
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -49,9 +50,32 @@ export const jobStore = {
     if (!redis) return
     const job: AiJob = { status: 'queued', ...data }
     await Promise.all([
-      redis.set(jobKey(jobId), job, { ex: JOB_TTL }),
-      redis.set(attemptsKey(jobId), 0,   { ex: JOB_TTL }),
+      redis.set(jobKey(jobId),       job, { ex: JOB_TTL }),
+      redis.set(attemptsKey(jobId),  0,   { ex: JOB_TTL }),
+      redis.set(userJobKey(data.userId), jobId, { ex: JOB_TTL }),
     ])
+  },
+
+  /**
+   * Purge any stale job tracked for this user. Prevents zombie jobs from a previous
+   * recording session blocking a new request.
+   */
+  async clearUserJobs(userId: string): Promise<void> {
+    const redis = getRedis()
+    if (!redis) return
+    try {
+      const prevJobId = await redis.get<string>(userJobKey(userId))
+      const tasks: Promise<unknown>[] = [redis.del(userJobKey(userId))]
+      if (prevJobId) {
+        tasks.push(redis.del(jobKey(prevJobId)))
+        tasks.push(redis.del(attemptsKey(prevJobId)))
+      }
+      await Promise.all(tasks)
+    } catch (err) {
+      logger.warn('JOB-STORE', `clearUserJobs failed for ${userId}`, {
+        err: err instanceof Error ? err.message : String(err),
+      })
+    }
   },
 
   async update(jobId: string, updates: Partial<AiJob>): Promise<void> {

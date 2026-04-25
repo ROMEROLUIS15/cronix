@@ -38,12 +38,15 @@ const GROQ_API_KEY = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 function getQStash(): QStashClient | null {
   const token = process.env.QSTASH_TOKEN
   if (!token) return null
-  return new QStashClient({ token })
+  // Use QSTASH_URL as-is from env if present; otherwise SDK default (https://qstash.upstash.io).
+  // Do not derive regional URLs — trust the configured value.
+  const baseUrl = process.env.QSTASH_URL?.trim() || undefined
+  return new QStashClient(baseUrl ? { token, baseUrl } : { token })
 }
 
-const APP_URL = process.env.APP_URL ?? process.env.VERCEL_URL
+const APP_URL = process.env.APP_URL || (process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : null
+  : null)
 
 // ── HANDLER ───────────────────────────────────────────────────────────────────
 
@@ -184,6 +187,9 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   }
 
   // 7. Create job in Redis + publish to QStash
+  // Purge any zombie job from a prior recording for this user before enqueueing a new one.
+  await jobStore.clearUserJobs(user.id)
+
   const jobId = randomUUID()
 
   await jobStore.create(jobId, {
@@ -193,20 +199,48 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     inputText: finalText,
   })
 
-  const qstash = getQStash()
-  if (!qstash || !APP_URL) {
-    logger.error('AI-ASSISTANT', 'QStash not configured — missing QSTASH_TOKEN or APP_URL', { businessId })
-    await jobStore.update(jobId, { status: 'failed', error: 'Queue service not configured' })
-    return NextResponse.json({ error: 'Servicio de cola no configurado' }, { status: 503 })
+  const workerPayload = {
+    job_id:      jobId,
+    user_id:     user.id,
+    business_id: businessId,
+    timezone,
+    input_text:  finalText,
   }
 
-  await qstash.publishJSON({
-    url:     `${APP_URL}/api/assistant/voice/worker`,
-    body:    { job_id: jobId, user_id: user.id, business_id: businessId, timezone, input_text: finalText },
-    retries: 4,
-  })
+  // ── DEV BYPASS ─────────────────────────────────────────────────────────────
+  // QStash cannot reach localhost, so in development we fire-and-forget a
+  // direct fetch to the local worker. In production the QStash path below runs.
+  if (process.env.NODE_ENV === 'development') {
+    const workerUrl = 'http://localhost:3000/api/assistant/voice/worker'
+    // Intentionally not awaited — this is fire-and-forget. The POST returns
+    // immediately while the worker runs in parallel, matching the QStash flow.
+    void fetch(workerUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(workerPayload),
+    }).catch((err) => {
+      logger.error('AI-ASSISTANT', 'Dev worker fetch failed', {
+        jobId,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
+    logger.info('AI-ASSISTANT', `Job dispatched (dev bypass)`, { jobId, userId: user.id, businessId })
+  } else {
+    const qstash = getQStash()
+    if (!qstash || !APP_URL) {
+      logger.error('AI-ASSISTANT', 'QStash not configured — missing QSTASH_TOKEN or APP_URL', { businessId })
+      await jobStore.update(jobId, { status: 'failed', error: 'Queue service not configured' })
+      return NextResponse.json({ error: 'Servicio de cola no configurado' }, { status: 503 })
+    }
 
-  logger.info('AI-ASSISTANT', `Job enqueued`, { jobId, userId: user.id, businessId })
+    await qstash.publishJSON({
+      url:     `${APP_URL}/api/assistant/voice/worker`,
+      body:    workerPayload,
+      retries: 4,
+    })
+
+    logger.info('AI-ASSISTANT', `Job enqueued`, { jobId, userId: user.id, businessId })
+  }
 
   return NextResponse.json({
     job_id:        jobId,
