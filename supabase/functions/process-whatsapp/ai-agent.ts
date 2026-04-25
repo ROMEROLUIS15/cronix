@@ -452,10 +452,8 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   const filename = `voice.${ext}`
 
   const form = new FormData()
-  // Use File (not Blob) so the multipart Content-Disposition includes filename= with the correct extension.
-  // Groq Whisper uses the filename extension for format detection; a bare Blob without an explicit
-  // name header causes silent 400/422 rejections on some Deno runtimes.
-  form.append('file', new File([buffer], filename, { type: cleanMimeType }))
+  // FIX: Forzamos la extensión .ogg y el MIME type audio/ogg para evitar rechazos de formato en Groq Whisper
+  form.append('file', new File([buffer], 'voice.ogg', { type: 'audio/ogg' }))
   form.append('model', WHISPER_MODEL)
   form.append('language', 'es')
   form.append('response_format', 'text')
@@ -484,7 +482,7 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
   if (!res.ok && res.status >= 500) {
     addBreadcrumb(`Whisper API ${res.status} on first attempt — retrying once`, 'llm', 'warning')
     const retryForm = new FormData()
-    retryForm.append('file', new File([buffer], filename, { type: cleanMimeType }))
+    retryForm.append('file', new File([buffer], 'voice.ogg', { type: 'audio/ogg' }))
     retryForm.append('model', WHISPER_MODEL)
     retryForm.append('language', 'es')
     retryForm.append('response_format', 'text')
