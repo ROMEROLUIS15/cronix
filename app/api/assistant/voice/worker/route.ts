@@ -33,7 +33,7 @@ const GROQ_API_KEY     = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
 
 const ttsEngine = DEEPGRAM_API_KEY
-  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
+  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-arcas-es')
   : null
 
 // ── QStash signature verifier ─────────────────────────────────────────────────

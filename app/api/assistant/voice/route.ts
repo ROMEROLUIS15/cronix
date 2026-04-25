@@ -52,7 +52,7 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   // 1. Rate limiting (Redis distributed → in-memory fallback)
   const identifier = user.id
   if (isRedisAvailable()) {
-    const rl = await redisRateLimit(identifier, 'assistant', 10, 60)
+    const rl = await redisRateLimit(identifier, 'assistant', 30, 60)
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Demasiadas solicitudes. Reintenta en ${rl.retryAfter}s.` },

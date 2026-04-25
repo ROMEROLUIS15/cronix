@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   const decodedText = decodeURIComponent(text).slice(0, 500)
 
   try {
-    const dgRes = await fetch('https://api.deepgram.com/v1/speak?model=aura-2-nestor-es', {
+    const dgRes = await fetch('https://api.deepgram.com/v1/speak?model=aura-arcas-es', {
       method:  'POST',
       headers: { Authorization: `Token ${apiKey}`, 'Content-Type': 'application/json' },
       body:    JSON.stringify({ text: decodedText }),

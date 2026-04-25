@@ -147,6 +147,35 @@ Protección contra ataques de fuerza bruta a nivel de cuenta (por email, no por 
 
 Pipeline de notificaciones para el dashboard. Garantiza idempotencia mediante `event_id` único, persiste en DB antes de cualquier canal de entrega.
 
+### 5. Voice Assistant Asíncrono (Dashboard)
+
+**Ubicación:** `app/api/assistant/voice/` + `lib/ai/job-store.ts` + `components/dashboard/voice-assistant-fab.tsx`
+
+Asistente de voz flotante en el Dashboard que usa **QStash para orquestación asíncrona**, **Redis para persistencia de estado**, y **Deepgram Aura para síntesis de voz**.
+
+**Archivos clave:**
+
+| Archivo | Responsabilidad |
+|---|---|
+| `app/api/assistant/voice/route.ts` | HTTP POST: recibe audio → STT (Groq Whisper) → enqueue QStash |
+| `app/api/assistant/voice/worker/route.ts` | QStash worker: ejecuta LLM orchestration + TTS (Deepgram) |
+| `app/api/assistant/voice/status/route.ts` | HTTP GET: polling endpoint que retorna job status desde Redis |
+| `lib/ai/job-store.ts` | Redis wrapper: CRUD de jobs con TTL 24h |
+| `components/dashboard/voice-assistant-fab.tsx` | UI: draggable FAB, recording, polling, audio playback |
+
+**Flujo:**
+1. Usuario pulsa FAB → abre recorder
+2. `route.ts`: STT + enqueue a QStash → responde con `job_id`
+3. FAB polling: GET `/api/assistant/voice/status?job_id=XXX` cada 500ms
+4. QStash ejecuta `worker/route.ts`: LLM orchestration → TTS → jobStore update
+5. Polling recibe `status: 'completed'` → muestra texto + reproduce audio
+
+**Resilience:**
+- QStash retries automáticos (max 4 intentos)
+- Si TTS falla → texto-only response
+- Token quota compartida con Dashboard agent
+- Max attempts → audible error message
+
 ---
 
 ## Flujos de Usuario
@@ -313,6 +342,10 @@ cronix/
 │   │       ├── _components/            # Server components del dashboard
 │   │       └── _hooks/                 # Hooks específicos del dashboard
 │   ├── api/                            # API routes de Next.js
+│   │   └── assistant/voice/
+│   │       ├── route.ts                # POST: STT + QStash enqueue
+│   │       ├── worker/route.ts         # QStash worker: orchestration + TTS
+│   │       └── status/route.ts         # GET: polling endpoint (job status)
 │   └── auth/                           # Callbacks OAuth (Google, passkeys)
 │
 ├── lib/
@@ -352,6 +385,7 @@ cronix/
 │   │   ├── fuzzy-match.ts              # Matching aproximado de nombres/servicios
 │   │   ├── session-store.ts            # Store de sesiones de conversación
 │   │   ├── memory-service.ts           # Memoria de entidades del agente
+│   │   ├── job-store.ts                # Redis-backed job store (voice assistant async)
 │   │   ├── circuit-breaker.ts          # Circuit breaker para LLM
 │   │   ├── output-shield.ts            # Sanitización de output del LLM
 │   │   └── resilience.ts               # safeSTT(), safeLLM() con retry

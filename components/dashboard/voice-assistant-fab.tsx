@@ -102,81 +102,25 @@ export function VoiceAssistantFab() {
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer))
   }
 
-  // ── Native TTS fallback (when Deepgram audio is unavailable) ─────────────
-  // Priority: Google español → any Google Spanish → named male → any non-female Spanish → pitch floor
-  const speakWithNativeFallback = (text: string) => {
-    if (!('speechSynthesis' in window)) { setState('idle'); return }
-
-    const FEMALE_MARKERS = [
-      'helena', 'sabina', 'paulina', 'conchita', 'female', 'mujer',
-      'feminin', 'mónica', 'monica', 'lucia', 'lucía', 'microsoft laura',
-      'microsoft sabina',
-    ]
-    const MALE_MARKERS = [
-      'raul', 'raúl', 'pablo', 'diego', 'carlos', 'jorge', 'miguel',
-      'david', 'jose', 'juan', 'antonio', 'daniel', 'male',
-    ]
-
-    const utterance  = new SpeechSynthesisUtterance(text)
-    utterance.lang   = 'es-MX'
-    utterance.rate   = 0.9
-    utterance.pitch  = 0.1
-
-    const selectVoice = () => {
-      const voices = window.speechSynthesis.getVoices()
-      const n = (v: SpeechSynthesisVoice) => v.name.toLowerCase()
-
-      let chosen: SpeechSynthesisVoice | undefined = voices.find(v => n(v) === 'google español')
-      if (!chosen) chosen = voices.find(v => n(v).includes('google') && v.lang.startsWith('es'))
-      if (!chosen) chosen = voices.find(v =>
-        v.lang.startsWith('es') &&
-        MALE_MARKERS.some(m => n(v).includes(m)) &&
-        !FEMALE_MARKERS.some(f => n(v).includes(f))
-      )
-      if (!chosen) chosen = voices.find(v =>
-        v.lang.startsWith('es') && !FEMALE_MARKERS.some(f => n(v).includes(f))
-      )
-      if (!chosen) chosen = voices.find(v =>
-        n(v).includes('google') && v.lang.startsWith('en') && !FEMALE_MARKERS.some(f => n(v).includes(f))
-      )
-      if (!chosen) chosen = voices[0]
-
-      if (chosen) utterance.voice = chosen
-      utterance.onend   = () => setState('idle')
-      utterance.onerror = () => setState('idle')
-      window.speechSynthesis.speak(utterance)
-    }
-
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = selectVoice
-    } else {
-      selectVoice()
-    }
-  }
-
-  // ── Play audio URL — falls back to native TTS on any error ───────────────
-  const playAudio = async (src: string, fallbackText: string) => {
+  // ── Play audio URL — silent on error (Deepgram-only, no browser TTS fallback) ──
+  const playAudio = async (src: string, _fallbackText?: string) => {
     return new Promise<void>((resolve) => {
       const audio = new Audio(src)
       currentAudioRef.current = audio
-
       audio.onended = () => { setState('idle'); resolve() }
-      audio.onerror = () => {
-        logger.error('VoiceAssistantFab', 'Audio playback failed — activating Google TTS fallback')
-        speakWithNativeFallback(fallbackText)
-        resolve()
-      }
-      audio.play().catch(() => {
-        speakWithNativeFallback(fallbackText)
-        resolve()
-      })
+      audio.onerror = () => { setState('idle'); resolve() }
+      audio.play().catch(() => { setState('idle'); resolve() })
     })
   }
 
-  // ── Vocalize error and reset to idle ─────────────────────────────────────
+  // ── Vocalize error via Deepgram TTS endpoint — silent if that also fails ─
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
-    speakWithNativeFallback(msg)
+    const audio = new Audio(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`)
+    currentAudioRef.current = audio
+    audio.onended = () => setState('idle')
+    audio.onerror = () => setState('idle')
+    audio.play().catch(() => setState('idle'))
   }
 
   // ── Polling: stop + cleanup ───────────────────────────────────────────────
@@ -319,7 +263,11 @@ export function VoiceAssistantFab() {
       formData.append('audio',    audioBlob, 'audio.webm')
       formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
 
-      const res = await fetchWithTimeout('/api/assistant/voice', { method: 'POST', body: formData })
+      const res = await fetchWithTimeout('/api/assistant/voice', {
+        method:  'POST',
+        headers: { 'x-request-id': crypto.randomUUID() },
+        body:    formData,
+      })
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
@@ -353,7 +301,7 @@ export function VoiceAssistantFab() {
     try {
       const res = await fetchWithTimeout('/api/assistant/voice', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-request-id': crypto.randomUUID() },
         body:    JSON.stringify({ text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       })
 
@@ -526,7 +474,6 @@ export function VoiceAssistantFab() {
     if (state === 'speaking') {
       currentAudioRef.current?.pause()
       currentAudioRef.current = null
-      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel()
       setState('idle')
       return
     }

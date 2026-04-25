@@ -1,6 +1,6 @@
 # WhatsApp AI System Architecture (Backend)
 
-> Last updated: 2026-04-18. Reflects unified notification pipeline, AI hardening guardrails, owner WA notification fix, and QStash transparent rate-limit retry.
+> Last updated: **2026-04-24**. Reflects calendar visibility (Dashboard Realtime), cancellation precision (single vs multiple citas), 4h lookback for same-day cancel, and unified notification pipeline.
 
 This document details the end-to-end operation of the AI agent deployed on Supabase Edge Functions to process WhatsApp messages. This architecture is completely decoupled from the Next.js frontend and operates asynchronously.
 
@@ -33,7 +33,9 @@ This document details the end-to-end operation of the AI agent deployed on Supab
 2. **`guards.ts`:** Rate limits, token quotas, Circuit Breaker pattern.
 3. **`context-fetcher.ts`:** Loads from PostgreSQL:
    - Business profile, services, working hours, AI rules
-   - Active appointments (next 14 days)
+   - Active appointments: **4 hours in the past** + 14 days forward (extended since 2026-04-24)
+     - Rationale: Same-day cancellations (client calls at 3:15 PM wanting to cancel the 3:00 PM appointment)
+     - Query: `start_at >= now() - 4h AND status IN ('pending', 'confirmed')`
    - Conversation history (last 4 turns from `wa_audit_logs`)
    - → Produces `BusinessRagContext`
 
@@ -76,12 +78,18 @@ tool-executor.ts (write success)
 
 ## 2. Hardening Guardrails
 
-The WhatsApp agent (as of 2026-04-19) implements robust prompt-based constraints:
+The WhatsApp agent (as of 2026-04-24) implements robust prompt-based constraints:
 
 - The WhatsApp flow uses a single-model ReAct loop heavily anchored by contextual constraints.
-- Confirmation is mostly handled conversationally — the LLM asks "¿Confirmas?" before calling write tools, except for direct 1-to-1 cancellations to optimize response tokens.
+- **Confirmation flow:** Two-turn confirmation pattern. LLM proposes action with details → client must confirm explicitly ("sí", "dale", "ok", "confirmo") → only then does LLM call write tool.
+- **Cancellation precision:** Explicit distinction between single vs multiple active appointments:
+  - **One active cita:** Identify it, propose directly: "¿Confirmas que la cancele?"
+  - **Two or more citas:** List all options, never assume. "Tienes estas citas: [list]. ¿Cuál deseas cancelar?" → after client picks → propose confirmation.
+  - **Always requires confirmation** before executing `cancel_booking` tool call.
+- **Active appointment lookback:** Extended from "now" to **4 hours in the past** to catch same-day cancellations (citas that have already started but not yet ended).
 - The structured `data` return from `tool-executor.ts` eliminates all string parsing for notification dispatch.
 - **Empty Output Fallbacks:** If the LLM returns an empty string, the Agent Loop enforces an `INTERNAL_SYNTAX_FALLBACK` instead of crashing the upstream Meta API connection.
+- **Dashboard Realtime sync:** When WA agent creates/reschedules a cita, it broadcasts to Supabase Realtime channel `notifications:{businessId}` → Dashboard hook (`use-appointments-list.ts`) auto-refreshes calendar without manual F5.
 
 ---
 

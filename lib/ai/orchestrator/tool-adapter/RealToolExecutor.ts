@@ -30,7 +30,7 @@ import { logger }                       from '@/lib/logger'
 // ── Schemas (snake_case — matches LLM tool definitions exactly) ────────────────
 
 const ConfirmBookingSchema = z.object({
-  service_id:  z.string().uuid(),
+  service_id:  z.string().min(1), // accepts UUID or name — resolved fuzzy in resolveService
   date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time:        z.string().regex(/^\d{2}:\d{2}$/),
   client_name: z.string().optional(),
@@ -174,11 +174,22 @@ export class RealToolExecutor implements IToolExecutor {
   private async resolveService(
     businessId: string,
     serviceId: string,
-  ): Promise<{ duration_min: number; name: string } | null> {
+  ): Promise<{ id: string; duration_min: number; name: string } | null> {
     const res = await this.serviceRepo.getActive(businessId)
     if (res.error || !res.data) return null
-    const svc = res.data.find((s) => s.id === serviceId)
-    return svc ? { duration_min: svc.duration_min, name: svc.name } : null
+
+    // 1. Exact UUID match (normal path)
+    const exact = res.data.find((s) => s.id === serviceId)
+    if (exact) return { id: exact.id, duration_min: exact.duration_min, name: exact.name }
+
+    // 2. Fuzzy name fallback — LLM sent spoken name instead of UUID
+    const fuzzyResult = fuzzyFind(res.data, serviceId)
+    if (fuzzyResult.status === 'found') {
+      const m = fuzzyResult.match
+      return { id: m.id, duration_min: m.duration_min, name: m.name }
+    }
+
+    return null
   }
 
   private buildEndISO(startISO: string, durationMin: number): string {
@@ -256,7 +267,7 @@ export class RealToolExecutor implements IToolExecutor {
     const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
       businessId:     p.businessId,
       clientId:       clientFinal.id,
-      serviceIds:     [service_id],
+      serviceIds:     [service.id],  // use resolved canonical ID (handles fuzzy name→UUID)
       startAt:        startISO,
       endAt:          endISO,
       assignedUserId: staff_id ?? null,

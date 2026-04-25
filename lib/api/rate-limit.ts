@@ -72,7 +72,7 @@ class MemoryRateLimiter {
 }
 
 // Singletons for common limits
-export const assistantRateLimiter = new MemoryRateLimiter(10, 60 * 1000)  // 10 per min
+export const assistantRateLimiter = new MemoryRateLimiter(30, 60 * 1000)  // 30 per min
 export const generalRateLimiter   = new MemoryRateLimiter(30, 60 * 1000)  // 30 per min
 
 // WRITE operations rate limiter: more strict than general.

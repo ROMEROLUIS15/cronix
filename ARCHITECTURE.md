@@ -2,7 +2,7 @@
 
 > Documento de referencia técnica para desarrolladores.
 > Todas las rutas y nombres de funciones fueron verificados contra el código real.
-> Última actualización: 2026-04-24
+> Última actualización: **2026-04-24** — Cambios: Calendar Visibility + Cancellation Precision + Voice Assistant
 
 ---
 
@@ -19,6 +19,7 @@
 9. [Multi-tenancy y Seguridad](#9-multi-tenancy-y-seguridad)
 10. [Flujo de Datos Completo](#10-flujo-de-datos-completo)
 11. [Decisiones Arquitectónicas (ADRs)](#11-decisiones-arquitectónicas-adrs)
+12. [Voice Assistant Asíncrono (Dashboard)](#12-voice-assistant-asíncrono-dashboard)
 
 ---
 
@@ -166,16 +167,17 @@ process-whatsapp/
 ├── message-handler.ts   ← Pipeline completo (6 capas de seguridad)
 ├── ai-agent.ts          ← runAgentLoop() + transcribeAudio()
 ├── groq-client.ts       ← callLlm() + modelos + key pooling
-├── tool-executor.ts     ← executeToolCall() + BOOKING_TOOLS schema
+├── tool-executor.ts     ← executeToolCall() + BOOKING_TOOLS schema (validación mejorada)
 ├── notifications.ts     ← emitBookingEvent() + sendClientBookingConfirmation()
 ├── time-utils.ts        ← localTimeToUTC() + utcToLocalParts()
-├── prompt-builder.ts    ← buildSystemPrompt() con contexto RAG
+├── prompt-builder.ts    ← buildSystemPrompt() con contexto RAG + cancelación explícita
 ├── business-router.ts   ← Resolución multi-tenant (slug/sesión)
-├── context-fetcher.ts   ← Parallelized context queries
+├── context-fetcher.ts   ← Parallelized context queries (4h lookback para same-day cancel)
 ├── appointment-repo.ts  ← createAppointment(), rescheduleAppointment(), cancelAppointmentById()
 ├── guards.ts            ← Rate limits, circuit breaker, token quota
 ├── security.ts          ← verifyQStash() + sanitizeMessage()
-├── business-router.ts   ← getBusinessBySlug(), getSessionBusiness()
+├── audit.ts             ← Escribe eventos en wa_audit_logs (conversación history)
+├── database.ts          ← Helper functions para DB access
 ├── types.ts             ← BusinessRagContext, MetaWebhookPayload, etc.
 ├── db-client.ts         ← Singleton Supabase client para Deno
 └── whatsapp.ts          ← sendWhatsAppMessage(), downloadMediaBuffer()
@@ -216,6 +218,41 @@ Mensaje WhatsApp recibido
     6. Booking rate limit (5 activos/24h/client) ← checkBookingRateLimit()
 ```
 
+### Contexto de Citas Activas — Lookback Extendido (`context-fetcher.ts`)
+
+Desde 2026-04-24, `getActiveAppointments()` incluye un **lookback de 4 horas** para detectar citas que ya han iniciado:
+
+```typescript
+const since = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
+```
+
+**Motivo:** Permite al cliente cancelar citas que ya pasaron la hora de inicio (casos reales: "quiero cancelar la que tengo ahora en 20 min", "la cita de hace poco"). Sin este lookback, solo se veían citas futuras.
+
+**Impacto:** La lógica de cancelación ahora puede preguntar "¿Cancelo tu cita del 24 de abril a las 3:00 pm?" incluso si ya son las 3:15 pm (si la cita de 1 hora aún no terminó).
+
+---
+
+### Lógica de Cancelación — Criterios Explícitos (desde 2026-04-24)
+
+El prompt del sistema ahora distingue explícitamente entre dos escenarios:
+
+**1. Cita única (exactamente 1 activa):**
+```
+Identifica la cita y propone:
+"¿Confirmas que la cancele?"
+```
+
+**2. Múltiples citas (2 o más activas):**
+```
+NUNCA asumas cuál cancelar.
+Lista todas: "Tienes estas citas: [lista]. ¿Cuál deseas cancelar?"
+Cuando cliente indique → propón: "¿Confirmas?"
+```
+
+Esto previene cancelaciones accidentales de la cita equivocada.
+
+---
+
 ### Gestión de Timezone (`time-utils.ts`)
 
 El LLM siempre recibe y devuelve horas en **tiempo local del negocio** (IANA timezone almacenado en `businesses.timezone`). La conversión a UTC ocurre en `tool-executor.ts` justo antes de escribir en DB:
@@ -253,7 +290,7 @@ Notificaciones: utcToLocalParts("...Z", "America/Bogota") → { date: "2026-04-2
 
 ---
 
-## 6. Pipeline de Notificaciones Dual
+## 6. Pipeline de Notificaciones Dual y Dashboard Realtime
 
 Cuando una cita es creada/modificada/cancelada, se disparan **dos notificaciones independientes y paralelas**, implementadas en `supabase/functions/process-whatsapp/notifications.ts`:
 
@@ -291,6 +328,36 @@ El cliente recibe un **mensaje formal separado** del reply conversacional del ag
 - **Fail-safe:** Cada canal falla silenciosamente con log. El booking ya fue completado.
 - **Orden garantizado:** DB → Realtime → WhatsApp owner (WA solo si DB fue exitosa)
 - **No-blocking:** Todas las notificaciones son fire-and-forget
+
+### Dashboard Auto-Refresh via Realtime (desde 2026-04-24)
+
+Desde 2026-04-24, el Dashboard **auto-refresca el calendario** cuando el agente de WhatsApp crea o reagenda citas.
+
+**Implementación:**
+- `app/[locale]/dashboard/appointments/hooks/use-appointments-list.ts`
+  - useEffect suscribe a `supabase.channel('notifications:{businessId}')`
+  - Escucha `broadcast` eventos: `appointment.created`, `appointment.rescheduled`
+  - Dispara `fetchAppointments()` para refrescar la lista visible
+
+**Flujo:**
+```
+WhatsApp Agent crea cita
+    ↓
+notifications.ts → emitCreatedEvent()
+    ↓
+supabase.from('notifications').insert({ event_id, type: 'created', businessId, ... })
+    ↓
+Supabase Realtime broadcast → canal 'notifications:{businessId}'
+    ↓
+Dashboard hook escucha evento
+    ↓
+fetchAppointments() → refrescar lista visible
+```
+
+**Beneficios:**
+- Sincronización en tiempo real sin polling manual
+- Sin necesidad de F5 para ver citas creadas por WhatsApp
+- Baseline para futuras features Realtime
 
 ---
 
@@ -529,3 +596,113 @@ AiOutput → UI Component
 - El bucle ReAct puede llamar el mismo tool en iteraciones diferentes
 - Con UUID aleatorio: el dueño recibía 2-3 WhatsApp por cada cita
 - Con ID determinista: exactamente UN mensaje por evento, sin importar reintentos
+
+---
+
+## 12. Voice Assistant Asíncrono (Dashboard)
+
+El Dashboard incluye un **asistente de voz flotante** que usa **QStash para orquestación asíncrona**, **Redis para persistencia de estado**, y **Deepgram Aura para síntesis de voz**.
+
+### Arquitectura de alto nivel
+
+```
+┌──────────────────────────────────┐
+│  FAB (Floating Action Button)    │
+│  └─ click → open recording       │
+└───────────┬──────────────────────┘
+            │ [User speaks]
+            ↓
+    ┌───────────────────────┐
+    │ Groq Whisper STT      │
+    │ (whisper-large-v3)    │
+    └───────┬───────────────┘
+            │ transcript
+            ↓
+    ┌───────────────────────┐
+    │ app/api/assistant/    │
+    │   voice/route.ts      │
+    │                       │
+    │ 1. Validate input     │
+    │ 2. jobStore.create()  │
+    │ 3. QStash.publish()   │
+    │ 4. Return job_id      │
+    └───────┬───────────────┘
+            │ HTTP 200 { job_id, status: 'pending' }
+            ↓
+    ┌───────────────────────┐
+    │ FAB polling loop      │
+    │ Every 500ms:          │
+    │ GET /api/assistant/   │
+    │   voice/status/       │
+    │   ?job_id=XXX         │
+    └───────┬───────────────┘
+            │ [Mientras status = 'pending']
+            │
+            │ [QStash ejecuta worker]
+            │ ↓
+            │ ┌───────────────────────────┐
+            │ │ app/api/assistant/voice/  │
+            │ │   worker/route.ts         │
+            │ │                           │
+            │ │ 1. Load business context  │
+            │ │ 2. AI Orchestrator        │
+            │ │ 3. Execute tools          │
+            │ │ 4. Deepgram TTS           │
+            │ │ 5. jobStore.update()      │
+            │ │    (status: 'completed')  │
+            │ └───────────────────────────┘
+            │
+            │ [Polling recibe status: 'completed']
+            ↓
+    ┌───────────────────────┐
+    │ FAB displays result   │
+    │ - Show text response  │
+    │ - Play audioUrl       │
+    └───────────────────────┘
+```
+
+### Archivos involucrados
+
+| Archivo | Responsabilidad |
+|---|---|
+| `app/api/assistant/voice/route.ts` | HTTP POST: recibe audio → STT → enqueue QStash |
+| `app/api/assistant/voice/worker/route.ts` | QStash worker: orchestration + TTS → Redis update |
+| `app/api/assistant/voice/status/route.ts` | HTTP GET: polling → jobStore.get(job_id) |
+| `lib/ai/job-store.ts` | Redis wrapper: job CRUD + TTL 24h |
+| `components/dashboard/voice-assistant-fab.tsx` | UI: drag FAB, recording, polling, audio playback |
+
+### Estado de Job en Redis
+
+```javascript
+// jobStore key format: "voice-job:{job_id}"
+{
+  "job_id": "uuid-12345",
+  "user_id": "user-xyz",
+  "business_id": "biz-abc",
+  "status": "completed" | "processing" | "failed" | "pending",
+  "resultText": "string (la respuesta del agente)",
+  "resultAudioUrl": "https://... (MP3 de TTS)",
+  "error": "null | error message",
+  "actionPerformed": boolean,
+  "createdAt": "ISO timestamp",
+  "attempts": 1-3 (counter para reintentos QStash)
+}
+```
+
+### Retry Resilience (QStash)
+
+| Escenario | Comportamiento |
+|---|---|
+| Orchestrator falla en attempt 1-2 | QStash espera backoff → reintentos automáticos (máx 4 total) |
+| Max attempts (3) excedido | jobStore.update({ status: 'failed', error: 'max_attempts_exceeded' }) + audio error |
+| LLM API key no configurado | Respuesta: "El servicio de IA no está configurado" |
+| TTS falla | Text-only result (sin audioUrl) |
+| Database/Redis indisponible | Audible error "Hubo un problema procesando tu solicitud" |
+
+### Tokenización y Cuota
+
+- Cada sesión voice comparte la **cuota diaria de tokens** del negocio
+- `checkTokenQuota(business_id)` ejecuta **antes** de comenzar orchestration
+- Si excede → error: "Has alcanzado el límite diario del asistente"
+
+---
