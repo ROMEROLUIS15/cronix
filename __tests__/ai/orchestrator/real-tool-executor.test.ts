@@ -376,10 +376,9 @@ describe('RealToolExecutor', () => {
       }))
 
       expect(result.success).toBe(true)
-      // Must expose UUID for LLM to chain to confirm_booking
-      expect(result.result).toContain(CLI_NEW)
-      expect(result.result).toContain('client_id')
+      // We no longer expose UUIDs to the user in the conversational output
       expect(result.result).toContain('Pedro López')
+      expect(result.result).toContain('registrado')
     })
 
     it('fails when name is empty', async () => {

@@ -223,17 +223,17 @@ describe('DecisionEngine', () => {
       expect(names).toContain('confirm_booking')
     })
 
-    it('confirm_booking required fields do NOT include client_name', () => {
+    it('confirm_booking required fields include client_name', () => {
       const state = makeState()
       const input = makeInput({ userRole: 'owner' })
       const decision = engine.analyze(input, state)
-
+ 
       expect(decision.type).toBe('reason_with_llm')
       if (decision.type !== 'reason_with_llm') return
-
+ 
       const bookingTool = decision.toolDefs.find((t) => t.function.name === 'confirm_booking')
       expect(bookingTool).toBeDefined()
-      expect(bookingTool!.function.parameters.required).not.toContain('client_name')
+      expect(bookingTool!.function.parameters.required).toContain('client_name')
       expect(bookingTool!.function.parameters.required).toContain('service_id')
       expect(bookingTool!.function.parameters.required).toContain('date')
       expect(bookingTool!.function.parameters.required).toContain('time')
@@ -255,17 +255,18 @@ describe('DecisionEngine', () => {
       expect(systemMsg?.content).toContain('Barbería Test')
     })
 
-    it('injects service name and id into system prompt', () => {
+    it('injects service name into system prompt', () => {
       const state = makeState()
       const input = makeInput()
       const decision = engine.analyze(input, state)
-
+ 
       expect(decision.type).toBe('reason_with_llm')
       if (decision.type !== 'reason_with_llm') return
-
+ 
       const systemMsg = decision.messages.find((m) => m.role === 'system')
       expect(systemMsg?.content).toContain('Corte')
-      expect(systemMsg?.content).toContain('svc-uuid-1')
+      // UUIDs are no longer exposed to the user/LLM
+      expect(systemMsg?.content).not.toContain('svc-uuid-1')
     })
 
     it('injects working hours into system prompt when configured', () => {
@@ -288,7 +289,7 @@ describe('DecisionEngine', () => {
       const systemMsg = decision.messages.find((m) => m.role === 'system')
       expect(systemMsg?.content).toContain('09:00')
       expect(systemMsg?.content).toContain('18:00')
-      expect(systemMsg?.content).toContain('Lunes')
+      expect(systemMsg?.content).toContain('Lun')
     })
 
     it('includes today date in system prompt', () => {
@@ -300,7 +301,7 @@ describe('DecisionEngine', () => {
       if (decision.type !== 'reason_with_llm') return
 
       const systemMsg = decision.messages.find((m) => m.role === 'system')
-      const todayISO = new Date().toISOString().split('T')[0]!
+      const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
       expect(systemMsg?.content).toContain(todayISO)
     })
 
