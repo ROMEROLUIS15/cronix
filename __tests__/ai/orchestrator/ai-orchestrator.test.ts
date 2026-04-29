@@ -15,6 +15,7 @@ import { InMemoryStateManager } from '@/lib/ai/orchestrator/state-manager'
 import { DecisionEngine } from '@/lib/ai/orchestrator/decision-engine'
 import { ExecutionEngine, type IToolExecutor, type IMockLlmProvider } from '@/lib/ai/orchestrator/execution-engine'
 import type { AiInput, ConversationState } from '@/lib/ai/orchestrator/types'
+import { dashboardAgent } from '@/lib/ai/agents/dashboard'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ describe('AiOrchestrator', () => {
     const userId     = `user-test-${id}`
     const businessId = `biz-test-${id}`
     const sm         = new InMemoryStateManager()
-    const de         = new DecisionEngine()
+    const de         = new DecisionEngine(dashboardAgent)
     const ee         = new ExecutionEngine(
       options.tool ?? new AlwaysSucceedTool(),
       options.llm  ?? new FixedTextLlm('Entendido.'),

@@ -14,7 +14,13 @@ const ABSOLUTE_TIMEOUT_MS   = 12 * 60 * 60 * 1000
 /** Show warning this many ms before the absolute limit */
 const ABSOLUTE_WARNING_MS   = 10 * 60 * 1000
 
-/** sessionStorage key that persists the login timestamp across page reloads */
+/**
+ * Non-httpOnly cookie written by the server so client JS can read the real
+ * session-start timestamp and stay in sync with server enforcement.
+ * Cookie name must match SESSION_START_UI_COOKIE in middleware/constants.ts.
+ */
+const SESSION_START_UI_COOKIE = 'cronix_session_start_ui'
+/** Fallback key when the UI cookie is not yet present (e.g. first page load) */
 const SESSION_START_KEY = 'cronix_session_start'
 /** localStorage key that syncs activity timestamp across multiple tabs */
 const LOCAL_ACTIVITY_KEY = 'cronix_local_activity'
@@ -30,13 +36,40 @@ const ACTIVITY_EVENTS = [
   'mousemove', 'mousedown', 'keydown', 'scroll', 'click', 'touchstart',
 ] as const
 
-// ── Helper ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Read a non-httpOnly cookie value by name from document.cookie */
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
+  return match ? decodeURIComponent(match[1]!) : null
+}
+
+/**
+ * Returns the session start timestamp.
+ * Prefers the server-written UI cookie (synced with real login time)
+ * and falls back to sessionStorage so new tabs inherit the real clock.
+ */
 function getOrCreateSessionStart(): number {
+  // 1. Try the non-httpOnly cookie written by the server
+  const cookieVal = readCookie(SESSION_START_UI_COOKIE)
+  if (cookieVal) {
+    const ts = parseInt(cookieVal, 10)
+    if (!isNaN(ts)) {
+      // Keep sessionStorage in sync so it survives cookie absence
+      sessionStorage.setItem(SESSION_START_KEY, cookieVal)
+      return ts
+    }
+  }
+
+  // 2. Fallback: sessionStorage (persists across page reloads within tab)
   const stored = sessionStorage.getItem(SESSION_START_KEY)
   if (stored) {
     const ts = parseInt(stored, 10)
     if (!isNaN(ts)) return ts
   }
+
+  // 3. Last resort: record now as session start
   const now = Date.now()
   sessionStorage.setItem(SESSION_START_KEY, String(now))
   return now
@@ -65,14 +98,23 @@ export function useSessionTimeout(): UseSessionTimeoutReturn {
   const lastPingRef          = useRef<number>(0)
   const lastActivityEventRef = useRef<number>(0)
   const checkIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null)
+  const signingOutRef        = useRef(false)
   const [warningMsLeft, setWarningMsLeft] = useState(0)
 
   // ── Sign out ──────────────────────────────────────────────────────────────
   const doSignout = useCallback(async () => {
+    if (signingOutRef.current) return
+    signingOutRef.current = true
+    // Clear interval so checkLimits stops firing while navigation is in progress
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current)
+      checkIntervalRef.current = null
+    }
+    setWarning(null)
     sessionStorage.removeItem(SESSION_START_KEY)
     localStorage.removeItem(LOCAL_ACTIVITY_KEY)
     await signout()
-  }, [])
+  }, [setWarning])
 
   // ── Server ping (throttled) ───────────────────────────────────────────────
   const pingServer = useCallback(async () => {

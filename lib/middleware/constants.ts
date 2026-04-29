@@ -8,10 +8,12 @@ export const INACTIVITY_LIMIT_MS  = 30 * 60 * 1000        // 30 minutes
 export const MAX_SESSION_MS       = 12 * 60 * 60 * 1000   // 12 hours
 
 // ── Cookie names ─────────────────────────────────────────────────────────────
-export const ACTIVITY_COOKIE      = 'cronix_last_activity'
-export const SESSION_START_COOKIE = 'cronix_session_start'
-export const STATUS_CACHE_COOKIE  = 'cronix_user_status'
-export const STATUS_CACHE_TTL_S   = 5 * 60                 // 5 minutes
+export const ACTIVITY_COOKIE          = 'cronix_last_activity'
+export const SESSION_START_COOKIE     = 'cronix_session_start'
+/** Non-httpOnly mirror of SESSION_START_COOKIE — readable by client JS for warning UI */
+export const SESSION_START_UI_COOKIE  = 'cronix_session_start_ui'
+export const STATUS_CACHE_COOKIE      = 'cronix_user_status'
+export const STATUS_CACHE_TTL_S       = 5 * 60                 // 5 minutes
 
 // ── Rate limit settings ──────────────────────────────────────────────────────
 export const AUTH_RATE_LIMIT_MS   = 60 * 1000              // 1 minute window

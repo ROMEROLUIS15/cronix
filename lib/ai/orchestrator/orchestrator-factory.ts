@@ -20,7 +20,7 @@ import { RealToolExecutor } from './tool-adapter/RealToolExecutor'
 import { GroqProvider }     from '@/lib/ai/providers/groq-provider'
 import { getRepos }         from '@/lib/repositories'
 import { NotificationService } from '@/lib/notifications/notification-service'
-import { DASHBOARD_AGENT_CONFIG } from '@/lib/ai/agents/dashboard/config'
+import { dashboardAgent }   from '@/lib/ai/agents/dashboard'
 
 export function createProductionOrchestrator(
   supabase: SupabaseClient<Database>,
@@ -30,7 +30,7 @@ export function createProductionOrchestrator(
 
   return new AiOrchestrator(
     stateManager,
-    new DecisionEngine(),
+    new DecisionEngine(dashboardAgent),
     new ExecutionEngine(
       new RealToolExecutor(
         repos.appointments, // IAppointmentQueryRepository
@@ -40,7 +40,7 @@ export function createProductionOrchestrator(
       ),
       new LlmBridge(new GroqProvider(groqApiKey)),
       new NotificationService(supabase),
-      DASHBOARD_AGENT_CONFIG.maxReactIterations,
+      dashboardAgent.config.maxReactIterations,
     ),
   )
 }

@@ -20,7 +20,7 @@ import { getRepos } from '@/lib/repositories'
 import { createProductionOrchestrator } from '@/lib/ai/orchestrator/orchestrator-factory'
 import { sessionStore } from '@/lib/ai/session-store'
 import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
-import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
+import { createTtsProvider } from '@/lib/ai/providers/tts-factory'
 import { shieldOutput } from '@/lib/ai/output-shield'
 import type { AiInput, UserRole } from '@/lib/ai/orchestrator'
 import type { LlmMessage } from '@/lib/ai/providers/types'
@@ -32,9 +32,7 @@ const MAX_ATTEMPTS = 3
 const GROQ_API_KEY     = process.env.LLM_API_KEY ?? process.env.GROQ_API_KEY
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
 
-const ttsEngine = DEEPGRAM_API_KEY
-  ? new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
-  : null
+const ttsEngine = createTtsProvider(DEEPGRAM_API_KEY)
 
 // ── QStash signature verifier ─────────────────────────────────────────────────
 // If signing keys are missing (local dev without QStash), verification is skipped.

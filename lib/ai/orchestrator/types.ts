@@ -15,8 +15,10 @@ import type { LlmMessage, ToolCall } from '@/lib/ai/providers/types'
 export type UserRole = 'owner' | 'employee' | 'platform_admin' | 'external'
 
 // ── Channel ───────────────────────────────────────────────────────────────────
+// Known values listed for IDE autocomplete. The `string & {}` intersection
+// accepts any additional channel (e.g. 'telegram') without modifying this file.
 
-export type AiChannel = 'whatsapp' | 'web'
+export type AiChannel = 'whatsapp' | 'web' | (string & {})
 
 // ── Business Context ──────────────────────────────────────────────────────────
 // Read-only context injected by the channel adapter. Contains data the AI

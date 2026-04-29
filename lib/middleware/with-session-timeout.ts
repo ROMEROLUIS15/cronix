@@ -13,7 +13,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import type { MiddlewareFn } from './compose'
-import { INACTIVITY_LIMIT_MS, MAX_SESSION_MS, ACTIVITY_COOKIE, SESSION_START_COOKIE } from './constants'
+import { INACTIVITY_LIMIT_MS, MAX_SESSION_MS, ACTIVITY_COOKIE, SESSION_START_COOKIE, SESSION_START_UI_COOKIE } from './constants'
 import { stripLocalePrefix, clearSessionCookies, redirectToLogin } from './utils'
 
 export const withSessionTimeout: MiddlewareFn = async (req, baseRes, next) => {
@@ -27,16 +27,12 @@ export const withSessionTimeout: MiddlewareFn = async (req, baseRes, next) => {
 
   // 1. Hard 12-hour absolute limit
   if (isMaxSessionExpired(req)) {
-    const response = await signOutAndRedirect(req, 'session_expired')
-    copyCookies(baseRes, response)
-    return response
+    return signOutAndRedirect(req, 'session_expired')
   }
 
   // 2. 30-minute inactivity limit
   if (isInactive(req)) {
-    const response = await signOutAndRedirect(req, 'inactivity')
-    copyCookies(baseRes, response)
-    return response
+    return signOutAndRedirect(req, 'inactivity')
   }
 
   // 3. Active session — refresh activity timestamp
@@ -69,37 +65,55 @@ function isMaxSessionExpired(request: NextRequest): boolean {
 function stampActivity(response: NextResponse, request: NextRequest): void {
   response.cookies.set(ACTIVITY_COOKIE, String(Date.now()), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // ✅ Prevent cookie theft over HTTP
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
     maxAge: INACTIVITY_LIMIT_MS / 1000,
   })
 
   if (!request.cookies.get(SESSION_START_COOKIE)?.value) {
-    response.cookies.set(SESSION_START_COOKIE, String(Date.now()), {
+    const sessionStart = String(Date.now())
+    const maxAge = (MAX_SESSION_MS / 1000) + 3600 // +1h buffer
+
+    // httpOnly cookie — authoritative for server-side enforcement
+    response.cookies.set(SESSION_START_COOKIE, sessionStart, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // ✅ Prevent cookie theft over HTTP
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: (MAX_SESSION_MS / 1000) + 3600, // +1h buffer
+      maxAge,
+    })
+
+    // Non-httpOnly mirror — client JS reads this to show accurate 12h warning UI
+    response.cookies.set(SESSION_START_UI_COOKIE, sessionStart, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge,
     })
   }
 }
 
 async function signOutAndRedirect(request: NextRequest, reason: string): Promise<NextResponse> {
+  const redirect = redirectToLogin(request, reason)
+  clearSessionCookies(redirect)
+
+  // Use real request cookies so signOut() can write sb-* clearing cookies onto the redirect response.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll() { return [] }, setAll() {} } },
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            redirect.cookies.set(name, value, options),
+          )
+        },
+      },
+    },
   )
   await supabase.auth.signOut()
-  const redirect = redirectToLogin(request, reason)
-  clearSessionCookies(redirect)
   return redirect
-}
-
-function copyCookies(from: NextResponse, to: NextResponse): void {
-  for (const cookie of from.headers.getSetCookie()) {
-    to.headers.append('set-cookie', cookie)
-  }
 }

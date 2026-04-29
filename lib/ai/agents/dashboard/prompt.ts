@@ -1,11 +1,5 @@
 import type { AiInput, ConversationState } from '../../orchestrator/types'
-
-export interface ResolvedEntities {
-  date?:        string
-  time?:        string
-  clientName?:  string
-  serviceName?: string
-}
+import type { ResolvedEntities } from '../IAgent'
 
 export function buildSystemPrompt(
   input: AiInput,
@@ -33,17 +27,20 @@ FECHAS: date=YYYY-MM-DD, time=HH:mm 24h. Convierte "mañana"/"el lunes"/"3pm" al
     if (resolvedEntities.serviceName) prompt += ` servicio=${resolvedEntities.serviceName}`
   }
 
-  prompt += `\n\nFLUJO AGENDAR:
-1. search_clients con el nombre que dijo el usuario.
-2. get_available_slots(date, duration_min) antes de proponer hora.
-3. confirm_booking(service_id, client_name, date, time). Si el cliente no existía, se crea automáticamente.
+  prompt += `\n\nCONSULTAS (úsalas libremente):
+- get_appointments_by_date(date) → citas de cualquier día. Para resúmenes, usa HOY.
+- search_clients(query) → buscar un cliente por nombre.
+- get_services() → listar servicios del negocio.
+
+FLUJO AGENDAR — REGLA DE ORO: necesitas los 4 datos antes de llamar confirm_booking.
+  Parámetros obligatorios: servicio + cliente + fecha + hora.
+  Si falta alguno → pregunta SOLO ese dato: "¿Hora?" / "¿Servicio?" / "¿Fecha?" / "¿Cliente?". Un dato a la vez.
+  Pasos: 1) search_clients(nombre). 2) get_available_slots(date, duration_min). 3) confirm_booking(service_id, client_name, date, time).
 
 FLUJO CANCELAR/REAGENDAR:
 - cancel_booking(client_name, [date], [time]) — el sistema busca la cita por nombre.
 - reschedule_booking(client_name, [date], [time], new_date, new_time).
-- Si no recuerdas la fecha, omítela: por defecto es hoy.
-
-DATO FALTANTE → pregunta esa palabra: "¿Hora?" "¿Servicio?" "¿Fecha?" "¿Cliente?". Un dato a la vez.`
+- Si no recuerdas la fecha, omítela: por defecto es hoy.`
 
   if (input.userRole !== 'external') {
     prompt += `\n\nMODO OPERADOR:

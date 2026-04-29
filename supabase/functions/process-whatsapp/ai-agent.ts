@@ -38,6 +38,7 @@ import {
 import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
+import { toolsAllowedThisTurn, lastAssistantWasConfirmation, isAffirmative } from "./confirmation-gate.ts"
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -67,43 +68,7 @@ function containsInternalSyntax(text: string): boolean {
 
 const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
 
-// ── Tool-gating (deterministic 2-turn enforcement) ───────────────────────────
-// The 8B model is prone to hallucinating tool args on the first user message.
-// Instead of relying on the prompt alone, we gate tool availability:
-//  - If the immediately prior assistant turn was a confirmation question AND
-//    the current user message is an affirmative → allow tools (tool_choice: 'auto').
-//  - Otherwise → forbid tools (tool_choice: 'none') so the model must converse,
-//    gather data, and propose a confirmation before any booking action runs.
-
-const CONFIRMATION_QUESTION_RE =
-  /¿\s*(Confirmo|Reagendo|Procedo|Te\s+(?:confirmo|agendo|reagendo)|Confirma[rs]?\s+(?:que\s+(?:cancele|reagende|agende)|la\s+cancelaci[óo]n|el\s+reagendamiento|la\s+reserva|la\s+cita))/i
-
-// Broad Spanish/LatAm affirmative lexicon. Matches the first token(s) so the user
-// can append anything ("ok amiga gracias", "dale agenda"). Negations are filtered
-// separately so "no" / "no quiero" never pass even if followed by an affirmative word.
-const AFFIRMATIVE_RE =
-  /^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\s+supuesto|as[íi]\s+es|est[áa]\s+bien|todo\s+bien|me\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\s+acuerdo|de\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)\b/i
-
-const NEGATIVE_RE =
-  /^(no+|nop[ea]?|nada|para\s+nada|todav[íi]a\s+no|a[úu]n\s+no|mejor\s+no|cancela\s+eso)\b/i
-
-function lastAssistantWasConfirmation(history: { role: string; text: string }[]): boolean {
-  for (let i = history.length - 1; i >= 0; i--) {
-    const h = history[i]
-    if (!h) continue
-    if (h.role === 'model' || h.role === 'assistant') {
-      return CONFIRMATION_QUESTION_RE.test(h.text ?? '')
-    }
-  }
-  return false
-}
-
-function isAffirmative(text: string): boolean {
-  const t = (text ?? '').trim().toLowerCase().replace(/[.,!¡?¿]+/g, ' ').replace(/\s+/g, ' ').trim()
-  if (!t || t.length > 60) return false
-  if (NEGATIVE_RE.test(t)) return false
-  return AFFIRMATIVE_RE.test(t)
-}
+// Tool-gating helpers are in confirmation-gate.ts (imported above).
 
 // ── Deterministic intent fallback ─────────────────────────────────────────────
 // Used ONLY when the 8B produces empty/unusable output while the gate is blocked.
@@ -193,7 +158,7 @@ export async function runAgentLoop(
   // assistant turn was a "¿Confirmo...?" and the user answered affirmatively.
   // When blocked, we pass an empty tools array so the model does not see the
   // tool schemas at all — removes the hallucination surface entirely.
-  const toolsAllowed       = lastAssistantWasConfirmation(cappedHistory) && isAffirmative(userText)
+  const toolsAllowed       = toolsAllowedThisTurn(cappedHistory, userText)
   const activeTools        = toolsAllowed ? BOOKING_TOOLS : []
   const toolChoice: 'auto' | 'none' = 'auto'
 

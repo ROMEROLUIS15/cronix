@@ -72,5 +72,5 @@ export interface AppointmentEvent {
   userId: string
 
   /** Canal desde el que se originó la acción */
-  channel: 'web' | 'whatsapp'
+  channel: 'web' | 'whatsapp' | (string & {})
 }

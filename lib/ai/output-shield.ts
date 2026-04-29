@@ -42,7 +42,8 @@ const INJECTION_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: 'uuid_leak',            pattern: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
   // Matches phone-like digit sequences (10-15 digits with phone separators: spaces/hyphens/parens).
   // Deliberately excludes '.' to avoid false positives on currency amounts like "$15.000.000".
-  { name: 'phone_leak',           pattern: /\b\+?\d[\d\s\-()]{8,}\d\b/ },
+  // Negative lookahead (?!\d{4}-\d{2}-\d{2}\b) prevents false-positives on ISO dates (YYYY-MM-DD).
+  { name: 'phone_leak',           pattern: /\b(?!\d{4}-\d{2}-\d{2}\b)\+?\d[\d\s\-()]{8,}\d\b/ },
 
   // ── Tool name leakage — complete list of all registered tools ────────────
   {
