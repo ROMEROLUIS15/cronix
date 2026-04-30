@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getAuthUser, getAuthUserProfile } from '@/lib/supabase/server-cache'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers, ServerBusinessContextProvider } from '@/components/providers'
@@ -10,23 +10,12 @@ import { VoiceAssistantFab } from '@/components/dashboard/voice-assistant-fab'
 interface DashboardLayoutProps { children: React.ReactNode }
 
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
-  const supabase = await createClient()
-
-  // ── Auth check — server-side, no client round trip ────────────────────────
-  const { data: { user } } = await supabase.auth.getUser()
+  // ── Auth check — React.cache() deduplicates across layout + page ──────────
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  // ── User profile via admin client — bypasses RLS ──────────────────────────
-  // The users table has an RLS policy with infinite recursion that causes the
-  // regular client query to fail (returns null) for some users, including
-  // platform_admin. Since this layout runs server-side and only reads the
-  // authenticated user's own row (WHERE id = user.id), the admin client is safe.
-  const admin = createAdminClient()
-  const { data: dbUser } = await admin
-    .from('users')
-    .select('name, role, business_id, avatar_url, color, businesses(name, category)')
-    .eq('id', user.id)
-    .single()
+  // ── User profile — React.cache() deduplicates across layout + page ────────
+  const dbUser = await getAuthUserProfile(user.id)
 
   const isPlatformAdmin = dbUser?.role === 'platform_admin'
 
