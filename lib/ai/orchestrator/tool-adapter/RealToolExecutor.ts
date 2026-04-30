@@ -609,27 +609,33 @@ export class RealToolExecutor implements IToolExecutor {
     if (allRes.error || !allRes.data?.length) {
       return {
         success: true,
-        result: `No encontré "${parsed.data.query}". Llama confirm_booking con client_name="${parsed.data.query}"; se creará automáticamente.`,
+        result: `CLIENT_NOT_FOUND: "${parsed.data.query}" no existe en el sistema. Procede con confirm_booking usando client_name="${parsed.data.query}"; se registrará automáticamente.`,
       }
     }
 
     const found = fuzzyFind(allRes.data, parsed.data.query)
 
     if (found.status === 'found') {
-      return { success: true, result: `Cliente encontrado: ${found.match.name}.` }
-    }
-
-    if (found.status === 'ambiguous') {
-      const list = found.candidates.map((c) => c.name).join(', ')
+      // Single unambiguous match — LLM must use this name directly, no clarification needed
       return {
         success: true,
-        result: `Encontré varios: ${list}. Pregunta al usuario cuál es.`,
+        result: `CLIENT_FOUND: ${found.match.name}. Usa este nombre exacto en confirm_booking. NO preguntes al usuario cuál es.`,
       }
     }
 
+    if (found.status === 'ambiguous') {
+      // Only report ambiguity when the DB actually has multiple distinct candidates
+      const list = found.candidates.map((c) => c.name).join(', ')
+      return {
+        success: true,
+        result: `MULTIPLE_CLIENTS: ${list}. Pregunta al usuario cuál de estos prefiere antes de continuar.`,
+      }
+    }
+
+    // No match above threshold
     return {
       success: true,
-      result: `No encontré "${parsed.data.query}". Llama confirm_booking con client_name="${parsed.data.query}"; se creará automáticamente.`,
+      result: `CLIENT_NOT_FOUND: "${parsed.data.query}" no existe en el sistema. Procede con confirm_booking usando client_name="${parsed.data.query}"; se registrará automáticamente.`,
     }
   }
 }
