@@ -65,8 +65,8 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     }
   }, [fetchAppointments, contextLoading]);
 
-  // Auto-refresh when WhatsApp AI creates or reschedules an appointment.
-  // The WA Edge Function broadcasts to notifications:{businessId} channel.
+  // Auto-refresh when any appointment is created or rescheduled.
+  // postgres_changes covers web form submissions; broadcast covers the WhatsApp AI agent.
   useEffect(() => {
     if (!businessId) return
     const supabase = createClient()
@@ -74,6 +74,11 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
       .channel(`notifications:${businessId}`)
       .on('broadcast', { event: 'appointment.created' }, () => void fetchAppointments())
       .on('broadcast', { event: 'appointment.rescheduled' }, () => void fetchAppointments())
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'appointments', filter: `business_id=eq.${businessId}` },
+        () => void fetchAppointments(),
+      )
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [businessId, fetchAppointments]);

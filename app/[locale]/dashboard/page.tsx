@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { getAuthUser, getAuthUserProfile } from "@/lib/supabase/server-cache"
 import { getRepos } from "@/lib/repositories"
 import { DashboardClient } from "./_client/dashboard-client"
 
@@ -9,12 +10,9 @@ import { DashboardClient } from "./_client/dashboard-client"
  * Hydration then activates the client layer for interactivity.
  */
 export default async function DashboardPage() {
-  // This runs on the server — we need to get the business context
-  // The layout already sets up ServerBusinessContextProvider, but we're
-  // inside it so we can access it via a server-side equivalent.
-  // Since this is an RSC, we fetch directly from Supabase server client.
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // React.cache() deduplicates these calls — layout already ran them in the same
+  // request, so no extra network round-trips happen here.
+  const user = await getAuthUser()
 
   if (!user) {
     return (
@@ -26,12 +24,7 @@ export default async function DashboardPage() {
     )
   }
 
-  // Get user + business data
-  const { data: dbUser } = await supabase
-    .from('users')
-    .select('name, business_id')
-    .eq('id', user.id)
-    .single()
+  const dbUser = await getAuthUserProfile(user.id)
 
   if (!dbUser?.business_id) {
     return (
@@ -43,6 +36,7 @@ export default async function DashboardPage() {
     )
   }
 
+  const supabase = await createClient()
   const repos = getRepos(supabase)
   const businessId = dbUser.business_id
   const userName = dbUser.name
