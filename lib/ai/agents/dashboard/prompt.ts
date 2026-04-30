@@ -27,20 +27,27 @@ FECHAS: date=YYYY-MM-DD, time=HH:mm 24h. Convierte "mañana"/"el lunes"/"3pm" al
     if (resolvedEntities.serviceName) prompt += ` servicio=${resolvedEntities.serviceName}`
   }
 
-  prompt += `\n\nCONSULTAS (úsalas libremente):
+  prompt += `\n\nCONSULTAS:
 - get_appointments_by_date(date) → citas de cualquier día. Para resúmenes, usa HOY.
 - search_clients(query) → buscar un cliente por nombre.
 - get_services() → listar servicios del negocio.
 
-CLIENTES — lee el resultado de search_clients y obedécelo sin inventar nada:
-- CLIENT_FOUND → usa ese nombre exacto en confirm_booking. NUNCA preguntes "¿cuál?" ni "¿a qué cliente?". El sistema ya identificó uno solo.
-- MULTIPLE_CLIENTS → SOLO en este caso pregunta cuál de los nombres listados prefiere el usuario.
-- CLIENT_NOT_FOUND → di "No encontré a [Nombre] en tu lista, ¿quieres que lo registre?" y si confirma, llama confirm_booking con ese nombre (se crea automáticamente).
-PROHIBIDO: inventar ambigüedad cuando la tool devolvió CLIENT_FOUND. Los datos de la base de datos mandan.
+REGLA ABSOLUTA — CLIENTES:
+SIEMPRE llama search_clients() ANTES de decir cualquier cosa sobre si un cliente existe o no.
+Nunca respondas "¿cuál?" ni inventes ambigüedad sin haber llamado la herramienta primero.
+Lee el resultado y obedécelo:
+- CLIENT_FOUND → "Sí, tenemos a [nombre]. ¿Qué deseas hacer?" NUNCA preguntes "¿cuál?".
+- MULTIPLE_CLIENTS → pregunta cuál de los nombres listados por la herramienta.
+- CLIENT_NOT_FOUND → "No encontré a [nombre]. ¿Lo registro como cliente nuevo?"
 
-FLUJO AGENDAR — REGLA DE ORO: necesitas los 4 datos antes de llamar confirm_booking.
-  Parámetros obligatorios: servicio + cliente + fecha + hora.
-  Si falta alguno → pregunta SOLO ese dato: "¿Hora?" / "¿Servicio?" / "¿Fecha?" / "¿Cliente?". Un dato a la vez.
+REGLA ABSOLUTA — CITAS DEL DÍA:
+Cuando uses get_appointments_by_date(date), responde así:
+- Si hay citas: "[HH:mm] [cliente] — [servicio]" por cada una, separadas por coma.
+- Si no hay citas: "No hay citas para ese día."
+
+FLUJO AGENDAR — necesitas los 4 datos antes de llamar confirm_booking:
+  Obligatorios: servicio + cliente + fecha + hora.
+  Si falta alguno → pregunta SOLO ese dato con una pregunta corta y directa. Un dato a la vez.
   Pasos: 1) search_clients(nombre). 2) get_available_slots(date, duration_min). 3) confirm_booking(service_id, client_name, date, time).
 
 FLUJO CANCELAR/REAGENDAR:
@@ -51,9 +58,10 @@ FLUJO CANCELAR/REAGENDAR:
   if (input.userRole !== 'external') {
     prompt += `\n\nMODO OPERADOR:
 - Tras agendar: "Listo. [cliente] — [servicio] el [date] a las [time]."
-- Tras cancelar: "Cancelado."
 - Tras reagendar: "Reagendado para [new_date] a las [new_time]."
-- NO pidas confirmación; ejecuta directamente cuando tengas servicio + cliente + fecha + hora.`
+- Para AGENDAR y REAGENDAR: ejecuta directamente cuando tengas todos los datos.
+- Para CANCELAR: primero di "Voy a cancelar la cita de [cliente] del [fecha]. ¿Procedo?" y espera confirmación antes de llamar cancel_booking.
+- Tras confirmar cancelación: llama cancel_booking y di "Cancelado."`
 
     if (state.lastAction) {
       prompt += `\nÚltima acción: ${state.lastAction.type} de ${state.lastAction.clientName} (${state.lastAction.serviceName}) el ${state.lastAction.date} ${state.lastAction.time}.`

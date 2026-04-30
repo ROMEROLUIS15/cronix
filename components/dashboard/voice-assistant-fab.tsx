@@ -323,9 +323,6 @@ export function VoiceAssistantFab() {
 
       const data = await res.json() as { job_id: string; status: string }
 
-      // Audible confirmation — fire-and-forget, does not affect polling
-      new Audio(`/api/assistant/tts?t=${encodeURIComponent('Procesando tu solicitud...')}`).play().catch(() => {})
-
       startJobPolling(data.job_id)
 
     } catch (err: unknown) {
@@ -356,8 +353,6 @@ export function VoiceAssistantFab() {
       }
 
       const data = await res.json() as { job_id: string; status: string }
-
-      new Audio(`/api/assistant/tts?t=${encodeURIComponent('Procesando tu solicitud...')}`).play().catch(() => {})
 
       startJobPolling(data.job_id)
 

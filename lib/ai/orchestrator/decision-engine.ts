@@ -583,23 +583,31 @@ export class DecisionEngine implements IDecisionEngine {
     }
 
     // ── 5. Default: delegate to LLM for reasoning ────────────────────────────
-    // Build messages array with system prompt context
     const systemPrompt = this.agent.buildSystemPrompt(input, state, resolved)
 
     const intent = classifyIntent(input.text)
 
+    // In idle state, cap history to the last 4 messages (2 turns).
+    // This prevents context from a previous unrelated query (e.g. "Alan Romero")
+    // from bleeding into a new independent query (e.g. "¿tenemos a Carlos?").
+    // Active flows (collecting_booking, etc.) keep their full history.
+    const historyForLLM = state.flow === 'idle'
+      ? input.history.slice(-4)
+      : input.history
+
     logger.info('DECISION-ENGINE', 'Routing to LLM', {
-      userId: input.userId,
-      flow:   state.flow,
+      userId:      input.userId,
+      flow:        state.flow,
       intent,
-      text:   input.text.slice(0, 80),
+      historyUsed: historyForLLM.length,
+      text:        input.text.slice(0, 80),
     })
 
     return {
       type: 'reason_with_llm',
       messages: [
         { role: 'system', content: systemPrompt },
-        ...input.history,
+        ...historyForLLM,
         { role: 'user', content: input.text },
       ],
       toolDefs: this.agent.buildToolDefs(strategy, state.flow),
