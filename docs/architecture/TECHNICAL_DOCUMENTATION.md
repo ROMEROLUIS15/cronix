@@ -1328,3 +1328,58 @@ To ensure the "Executive Assistant" experience feels premium and lag-free:
 - **AbortController UX**: The dashboard voice greeting handles component unmounting professionally to avoid resource leaks.
 
 ---
+
+## 10. B2B Crypto Payments Integration (NOWPayments)
+
+### Architecture Diagram
+
+The SaaS billing architecture is completely isolated from the final customer's transactions to ensure data purity. It uses Upstash QStash to guarantee webhook delivery and idempotency.
+
+```text
+Dashboard UI -> Select Plan ($6 / $10)
+  ↓
+Server Action (createInvoice)
+  ├─ Calls NOWPayments API
+  └─ Returns checkout URL
+  ↓
+Business Owner pays via Crypto Wallet
+  ↓
+NOWPayments IPN Webhook (POST /api/webhooks/nowpayments)
+  ├─ Validates HMAC SHA-512 Signature
+  ├─ Publishes to QStash Queue (Deduplication-Id = np_payment_id)
+  └─ Returns 200 OK immediately
+  ↓
+QStash Worker (POST /api/queue/process-saas-payment)
+  ├─ Normalizes Status (waiting, confirming, finished, partially_paid)
+  ├─ Updates `saas_invoices` table
+  ├─ If finished: Updates `businesses.plan` & `subscription_ends_at`
+  └─ Inserts in-app Notification (Billing Success / Alert)
+```
+
+### Database Isolation
+
+We strictly avoid polluting the `transactions` table (which is meant for B2C).
+- **`saas_invoices`**: A dedicated table handling only NOWPayments B2B invoices.
+- **`businesses.subscription_ends_at`**: A timestamp managing the SaaS lifecycle.
+
+### Resilience & Idempotency (Vercel-Safe)
+
+To prevent double-provisioning or race conditions in serverless environments:
+1. **QStash Deduplication**: Every webhook payload from NOWPayments generates an `Upstash-Deduplication-Id` header based on the unique `payment_id`. QStash guarantees that duplicate webhooks (common in crypto networks) are rejected before hitting the worker.
+2. **Asynchronous Processing**: Webhooks return `200 OK` in <50ms. All heavy DB logic and notifications happen in the background queue.
+3. **Partial Payments (Crypto Chaos)**: If a business sends less crypto than required (`partially_paid`), the system creates a database alert but does *not* provision the plan.
+
+### Lifecycle Management (CRON)
+
+A daily CRON job (`/api/cron/check-subscriptions`) polls the `businesses` table:
+```sql
+UPDATE businesses
+SET plan = 'free', subscription_ends_at = NULL
+WHERE subscription_ends_at < NOW() AND plan != 'free';
+```
+This automatically degrades businesses that did not renew their crypto-subscription, requiring no manual intervention.
+
+### UI & Realtime
+
+- The `PlanManager` component subscribes to `saas_invoices` changes via **Supabase Realtime**.
+- The dashboard automatically updates the active plan and displays a success state without requiring a page refresh, offering a seamless UX despite the asynchronous nature of blockchains.

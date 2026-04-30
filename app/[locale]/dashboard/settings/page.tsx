@@ -23,6 +23,7 @@ import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useTranslations } from "next-intl";
 import { useSettingsForm, type DayHours } from "./hooks/use-settings-form";
+import { PlanManager } from "./plan-manager";
 
 export default function SettingsPage() {
   const t = useTranslations("settings");
@@ -650,21 +651,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <Card style={{ border: "1px solid rgba(0,98,255,0.2)" }}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold" style={{ color: "#F2F2F2" }}>
-              {t('plan.current', { plan: biz?.plan ?? "free" })}
-            </p>
-            <p className="text-xs" style={{ color: "#909098" }}>
-              {t('plan.fullAccess')}
-            </p>
-          </div>
-          <Button variant="secondary" className="w-full sm:w-auto flex-shrink-0">
-            {t('plan.managePlan')}
-          </Button>
-        </div>
-      </Card>
+      <PlanManager currentPlan={biz?.plan} />
     </div>
   );
 }

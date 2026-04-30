@@ -246,6 +246,7 @@ export type Database = {
           plan: Database["public"]["Enums"]["business_plan"] | null
           settings: Json | null
           slug: string | null
+          subscription_ends_at: string | null
           timezone: string | null
           updated_at: string | null
         }
@@ -262,6 +263,7 @@ export type Database = {
           plan?: Database["public"]["Enums"]["business_plan"] | null
           settings?: Json | null
           slug?: string | null
+          subscription_ends_at?: string | null
           timezone?: string | null
           updated_at?: string | null
         }
@@ -278,6 +280,7 @@ export type Database = {
           plan?: Database["public"]["Enums"]["business_plan"] | null
           settings?: Json | null
           slug?: string | null
+          subscription_ends_at?: string | null
           timezone?: string | null
           updated_at?: string | null
         }
@@ -525,6 +528,56 @@ export type Database = {
           status?: string
         }
         Relationships: []
+      }
+      saas_invoices: {
+        Row: {
+          amount_usd: number
+          business_id: string
+          created_at: string
+          crypto_amount: number | null
+          crypto_currency: string | null
+          id: string
+          np_invoice_id: string
+          np_payment_id: string | null
+          plan_purchased: Database["public"]["Enums"]["business_plan"]
+          status: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount_usd: number
+          business_id: string
+          created_at?: string
+          crypto_amount?: number | null
+          crypto_currency?: string | null
+          id?: string
+          np_invoice_id: string
+          np_payment_id?: string | null
+          plan_purchased: Database["public"]["Enums"]["business_plan"]
+          status?: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount_usd?: number
+          business_id?: string
+          created_at?: string
+          crypto_amount?: number | null
+          crypto_currency?: string | null
+          id?: string
+          np_invoice_id?: string
+          np_payment_id?: string | null
+          plan_purchased?: Database["public"]["Enums"]["business_plan"]
+          status?: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saas_invoices_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       services: {
         Row: {
@@ -1156,6 +1209,14 @@ export type Database = {
         | "equipment"
         | "other"
       payment_method: "cash" | "card" | "transfer" | "qr" | "other"
+      saas_invoice_status:
+        | "waiting"
+        | "confirming"
+        | "finished"
+        | "partially_paid"
+        | "failed"
+        | "expired"
+        | "refunded"
       user_role: "owner" | "employee" | "platform_admin"
       user_status: "pending" | "active" | "rejected"
     }

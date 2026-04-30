@@ -16,30 +16,35 @@
 
 ## ¿Qué es Cronix?
 
-Cronix permite a negocios de servicios (peluquerías, clínicas, estudios, spas) recibir reservas 24/7 a través de **WhatsApp**, con un **agente de IA** que entiende lenguaje natural —incluyendo notas de voz—, gestiona conflictos de horario, y envía confirmaciones automáticas tanto al negocio como al cliente.
+Cronix permite a negocios de servicios (peluquerías, clínicas, estudios, spas)
+recibir reservas 24/7 a través de **WhatsApp**, con un **agente de IA** que
+entiende lenguaje natural —incluyendo notas de voz—, gestiona conflictos de
+horario, y envía confirmaciones automáticas tanto al negocio como al cliente.
 
-La plataforma incluye un **dashboard web** con su propio agente de IA para que el dueño gestione su agenda, clientes y finanzas desde el navegador.
+La plataforma incluye un **dashboard web** con su propio agente de IA para que
+el dueño gestione su agenda, clientes y finanzas desde el navegador.
 
 ---
 
 ## Stack Tecnológico
 
-| Capa | Tecnología | Versión |
-|---|---|---|
-| Frontend / SSR | Next.js (App Router) | 15 |
-| UI | React + TailwindCSS + Framer Motion | 19 / 3 / 12 |
-| Base de datos | Supabase (PostgreSQL + Realtime) | 2.98 |
-| Auth | Supabase Auth + Passkeys (WebAuthn) | — |
-| Edge Functions | Deno (Supabase Edge Functions) | — |
-| IA / LLM | Groq — `llama-3.1-8b-instant` / `llama-3.3-70b-versatile` | — |
-| STT / Audio | Deepgram Nova-2 (WhatsApp STT) / Groq Whisper (Web STT) | — |
-| Rate Limiting / Cache | Upstash Redis + QStash | 1.37 / 2.10 |
-| Internacionalización | next-intl (6 idiomas) | 4.9 |
-| Monitoreo | Sentry + Helicone | — |
-| Testing | Vitest + Playwright | 3 / 1.59 |
-| PWA | next-pwa | 10.2 |
+| Capa                  | Tecnología                                                | Versión     |
+| --------------------- | --------------------------------------------------------- | ----------- |
+| Frontend / SSR        | Next.js (App Router)                                      | 15          |
+| UI                    | React + TailwindCSS + Framer Motion                       | 19 / 3 / 12 |
+| Base de datos         | Supabase (PostgreSQL + Realtime)                          | 2.98        |
+| Auth                  | Supabase Auth + Passkeys (WebAuthn)                       | —           |
+| Edge Functions        | Deno (Supabase Edge Functions)                            | —           |
+| IA / LLM              | Groq — `llama-3.1-8b-instant` / `llama-3.3-70b-versatile` | —           |
+| STT / Audio           | Deepgram Nova-2 (WhatsApp STT) / Groq Whisper (Web STT)   | —           |
+| Rate Limiting / Cache | Upstash Redis + QStash                                    | 1.37 / 2.10 |
+| Internacionalización  | next-intl (6 idiomas)                                     | 4.9         |
+| Monitoreo             | Sentry + Helicone                                         | —           |
+| Testing               | Vitest + Playwright                                       | 3 / 1.59    |
+| PWA                   | next-pwa                                                  | 10.2        |
 
-**Idiomas soportados:** Español · English · Français · Deutsch · Italiano · Português
+**Idiomas soportados:** Español · English · Français · Deutsch · Italiano ·
+Português
 
 ---
 
@@ -98,72 +103,83 @@ La plataforma incluye un **dashboard web** con su propio agente de IA para que e
 
 **Ubicación:** `supabase/functions/process-whatsapp/`
 
-Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por QStash, transcribe audios de forma ultra-rápida con **Deepgram Nova-2** (soporte nativo para WhatsApp OGG/Opus), y ejecuta un **bucle ReAct** con **Llama 3 (Groq)** para agendar, cancelar y reagendar citas.
+Agente autónomo que corre en Deno. Recibe mensajes de WhatsApp encolados por
+QStash, transcribe audios de forma ultra-rápida con **Deepgram Nova-2** (soporte
+nativo para WhatsApp OGG/Opus), y ejecuta un **bucle ReAct** con **Llama 3
+(Groq)** para agendar, cancelar y reagendar citas.
 
 **Archivos clave:**
 
-| Archivo | Responsabilidad |
-|---|---|
-| `index.ts` | Entry point del Edge Function |
-| `message-handler.ts` | Pipeline completo de seguridad → contexto → agente |
-| `ai-agent.ts` | Bucle ReAct con `llama-3.1-8b-instant` + `llama-3.3-70b-versatile` |
-| `groq-client.ts` | Cliente HTTP de Groq + Key Pooling + Circuit Breaker |
-| `tool-executor.ts` | Ejecutor de herramientas: `confirm_booking`, `reschedule_booking`, `cancel_booking` |
-| `notifications.ts` | Doble notificación: dueño (WA + DB) y cliente (WA branded) |
-| `time-utils.ts` | Conversión UTC ↔ Local DST-aware con IANA timezones |
-| `prompt-builder.ts` | Construcción dinámica del system prompt con contexto RAG |
-| `business-router.ts` | Resolución multi-tenant: slug → sesión → fallback |
-| `guards.ts` | Rate limits, circuit breaker, token quota |
-| `security.ts` | Verificación QStash + sanitización anti-prompt-injection |
+| Archivo              | Responsabilidad                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `index.ts`           | Entry point del Edge Function                                                       |
+| `message-handler.ts` | Pipeline completo de seguridad → contexto → agente                                  |
+| `ai-agent.ts`        | Bucle ReAct con `llama-3.1-8b-instant` + `llama-3.3-70b-versatile`                  |
+| `groq-client.ts`     | Cliente HTTP de Groq + Key Pooling + Circuit Breaker                                |
+| `tool-executor.ts`   | Ejecutor de herramientas: `confirm_booking`, `reschedule_booking`, `cancel_booking` |
+| `notifications.ts`   | Doble notificación: dueño (WA + DB) y cliente (WA branded)                          |
+| `time-utils.ts`      | Conversión UTC ↔ Local DST-aware con IANA timezones                                 |
+| `prompt-builder.ts`  | Construcción dinámica del system prompt con contexto RAG                            |
+| `business-router.ts` | Resolución multi-tenant: slug → sesión → fallback                                   |
+| `guards.ts`          | Rate limits, circuit breaker, token quota                                           |
+| `security.ts`        | Verificación QStash + sanitización anti-prompt-injection                            |
 
 ### 2. Agente de IA del Dashboard
 
 **Ubicación:** `lib/ai/agents/dashboard/` + `lib/ai/orchestrator/`
 
-Agente web integrado en el dashboard del dueño. Comparte la arquitectura de orquestación pero opera en el runtime de Next.js (Node.js).
+Agente web integrado en el dashboard del dueño. Comparte la arquitectura de
+orquestación pero opera en el runtime de Next.js (Node.js).
 
 **Archivos clave:**
 
-| Archivo | Responsabilidad |
-|---|---|
-| `lib/ai/agents/dashboard/config.ts` | `llmTier: 'quality'`, `maxReactIterations: 3` |
-| `lib/ai/agents/dashboard/prompt.ts` | System prompt del agente de dashboard |
-| `lib/ai/agents/dashboard/tools.ts` | Tool definitions para el dashboard |
-| `lib/ai/orchestrator/ai-orchestrator.ts` | Facade principal: estado → decisión → ejecución |
-| `lib/ai/orchestrator/decision-engine.ts` | Análisis de intent y extracción de entidades |
-| `lib/ai/orchestrator/execution-engine.ts` | Bucle ReAct + notificaciones + guards |
-| `lib/ai/orchestrator/state-manager.ts` | Persistencia del estado de conversación |
-| `lib/ai/providers/groq-provider.ts` | Wrapper de Groq: chat, stream, STT |
+| Archivo                                   | Responsabilidad                                 |
+| ----------------------------------------- | ----------------------------------------------- |
+| `lib/ai/agents/dashboard/config.ts`       | `llmTier: 'quality'`, `maxReactIterations: 3`   |
+| `lib/ai/agents/dashboard/prompt.ts`       | System prompt del agente de dashboard           |
+| `lib/ai/agents/dashboard/tools.ts`        | Tool definitions para el dashboard              |
+| `lib/ai/orchestrator/ai-orchestrator.ts`  | Facade principal: estado → decisión → ejecución |
+| `lib/ai/orchestrator/decision-engine.ts`  | Análisis de intent y extracción de entidades    |
+| `lib/ai/orchestrator/execution-engine.ts` | Bucle ReAct + notificaciones + guards           |
+| `lib/ai/orchestrator/state-manager.ts`    | Persistencia del estado de conversación         |
+| `lib/ai/providers/groq-provider.ts`       | Wrapper de Groq: chat, stream, STT              |
 
 ### 3. Sistema de Rate Limiting de Login
 
 **Ubicación:** `lib/rate-limit/redis-rate-limiter.ts` + `lib/actions/auth.ts`
 
-Protección contra ataques de fuerza bruta a nivel de cuenta (por email, no por IP). Funciona distribuido entre todas las instancias de Vercel gracias a Upstash Redis.
+Protección contra ataques de fuerza bruta a nivel de cuenta (por email, no por
+IP). Funciona distribuido entre todas las instancias de Vercel gracias a Upstash
+Redis.
 
 ### 4. Notificaciones
 
 **Ubicación:** `lib/notifications/notification-service.ts`
 
-Pipeline de notificaciones para el dashboard. Garantiza idempotencia mediante `event_id` único, persiste en DB antes de cualquier canal de entrega.
+Pipeline de notificaciones para el dashboard. Garantiza idempotencia mediante
+`event_id` único, persiste en DB antes de cualquier canal de entrega.
 
 ### 5. Voice Assistant Asíncrono (Dashboard)
 
-**Ubicación:** `app/api/assistant/voice/` + `lib/ai/job-store.ts` + `components/dashboard/voice-assistant-fab.tsx`
+**Ubicación:** `app/api/assistant/voice/` + `lib/ai/job-store.ts` +
+`components/dashboard/voice-assistant-fab.tsx`
 
-Asistente de voz flotante en el Dashboard que usa **QStash para orquestación asíncrona**, **Redis para persistencia de estado**, y **Deepgram Aura para síntesis de voz**.
+Asistente de voz flotante en el Dashboard que usa **QStash para orquestación
+asíncrona**, **Redis para persistencia de estado**, y **Deepgram Aura para
+síntesis de voz**.
 
 **Archivos clave:**
 
-| Archivo | Responsabilidad |
-|---|---|
-| `app/api/assistant/voice/route.ts` | HTTP POST: recibe audio → STT (Groq Whisper) → enqueue QStash |
-| `app/api/assistant/voice/worker/route.ts` | QStash worker: ejecuta LLM orchestration + TTS (Deepgram) |
-| `app/api/assistant/voice/status/route.ts` | HTTP GET: polling endpoint que retorna job status desde Redis |
-| `lib/ai/job-store.ts` | Redis wrapper: CRUD de jobs con TTL 24h |
-| `components/dashboard/voice-assistant-fab.tsx` | UI: draggable FAB, recording, polling, audio playback |
+| Archivo                                        | Responsabilidad                                               |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| `app/api/assistant/voice/route.ts`             | HTTP POST: recibe audio → STT (Groq Whisper) → enqueue QStash |
+| `app/api/assistant/voice/worker/route.ts`      | QStash worker: ejecuta LLM orchestration + TTS (Deepgram)     |
+| `app/api/assistant/voice/status/route.ts`      | HTTP GET: polling endpoint que retorna job status desde Redis |
+| `lib/ai/job-store.ts`                          | Redis wrapper: CRUD de jobs con TTL 24h                       |
+| `components/dashboard/voice-assistant-fab.tsx` | UI: draggable FAB, recording, polling, audio playback         |
 
 **Flujo:**
+
 1. Usuario pulsa FAB → abre recorder
 2. `route.ts`: STT + enqueue a QStash → responde con `job_id`
 3. FAB polling: GET `/api/assistant/voice/status?job_id=XXX` cada 500ms
@@ -171,6 +187,7 @@ Asistente de voz flotante en el Dashboard que usa **QStash para orquestación as
 5. Polling recibe `status: 'completed'` → muestra texto + reproduce audio
 
 **Resilience:**
+
 - QStash retries automáticos (max 4 intentos)
 - Si TTS falla → texto-only response
 - Token quota compartida con Dashboard agent
@@ -242,16 +259,16 @@ login/page.tsx (Client):
 
 ## Seguridad
 
-| Capa | Mecanismo |
-|---|---|
-| Login brute-force | Upstash Redis: 3 intentos = 5 min lockout, 6+ = 15 min |
-| WhatsApp webhook | QStash signature verification (HMAC-SHA256) |
-| Prompt injection | `sanitizeMessage()` en `security.ts` |
-| Multi-tenant | Todas las queries incluyen `business_id` explícito |
-| Output leak | `sanitizeOutput()` + `containsInternalSyntax()` en ExecutionEngine |
-| Booking duplicates | `parallel_tool_calls: false` + idempotency `event_id` |
-| Session | 30 min inactividad + 12h absoluto (`lib/middleware/with-session-timeout.ts`) |
-| RLS | Row Level Security habilitado en todas las tablas sensibles |
+| Capa               | Mecanismo                                                                    |
+| ------------------ | ---------------------------------------------------------------------------- |
+| Login brute-force  | Upstash Redis: 3 intentos = 5 min lockout, 6+ = 15 min                       |
+| WhatsApp webhook   | QStash signature verification (HMAC-SHA256)                                  |
+| Prompt injection   | `sanitizeMessage()` en `security.ts`                                         |
+| Multi-tenant       | Todas las queries incluyen `business_id` explícito                           |
+| Output leak        | `sanitizeOutput()` + `containsInternalSyntax()` en ExecutionEngine           |
+| Booking duplicates | `parallel_tool_calls: false` + idempotency `event_id`                        |
+| Session            | 30 min inactividad + 12h absoluto (`lib/middleware/with-session-timeout.ts`) |
+| RLS                | Row Level Security habilitado en todas las tablas sensibles                  |
 
 ---
 
@@ -342,10 +359,13 @@ cronix/
 │   │       ├── _components/            # Server components del dashboard
 │   │       └── _hooks/                 # Hooks específicos del dashboard
 │   ├── api/                            # API routes de Next.js
-│   │   └── assistant/voice/
-│   │       ├── route.ts                # POST: STT + QStash enqueue
-│   │       ├── worker/route.ts         # QStash worker: orchestration + TTS
-│   │       └── status/route.ts         # GET: polling endpoint (job status)
+│   │   ├── assistant/voice/
+│   │   │   ├── route.ts                # POST: STT + QStash enqueue
+│   │   │   ├── worker/route.ts         # QStash worker: orchestration + TTS
+│   │   │   └── status/route.ts         # GET: polling endpoint (job status)
+│   │   ├── cron/check-subscriptions/   # CRON: Degradación de planes vencidos
+│   │   ├── queue/process-saas-payment/ # QStash worker: Pagos B2B Crypto
+│   │   └── webhooks/nowpayments/       # IPN Receiver: NOWPayments
 │   └── auth/                           # Callbacks OAuth (Google, passkeys)
 │
 ├── lib/
@@ -404,6 +424,9 @@ cronix/
 │   │   └── compose.ts                  # Composición de middlewares
 │   ├── notifications/
 │   │   └── notification-service.ts     # Pipeline: DB → Realtime → WhatsApp
+│   ├── payments/                       # Facturación B2B SaaS
+│   │   ├── nowpayments.ts              # NOWPayments API Wrapper
+│   │   └── nowpayments.test.ts         # HMAC y tests unitarios
 │   ├── rate-limit/
 │   │   ├── redis-rate-limiter.ts       # Sliding window + login failure tracking
 │   │   └── token-quota.ts              # Cuota de tokens por negocio
