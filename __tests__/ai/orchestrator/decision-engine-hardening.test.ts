@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest'
 import { DecisionEngine, buildConfirmationSummary } from '@/lib/ai/orchestrator/decision-engine'
 import type { AiInput, ConversationState } from '@/lib/ai/orchestrator/types'
+import { dashboardAgent } from '@/lib/ai/agents/dashboard'
 
 // ── Pin time to Wednesday 2026-04-22 ─────────────────────────────────────────
 const FIXED_NOW = new Date('2026-04-22T12:00:00-05:00').getTime()
@@ -50,7 +51,7 @@ function makeInput(overrides: Partial<AiInput> = {}): AiInput {
 describe('DecisionEngine — Hardening Guards', () => {
   let engine: DecisionEngine
 
-  beforeEach(() => { engine = new DecisionEngine() })
+  beforeEach(() => { engine = new DecisionEngine(dashboardAgent) })
 
   // ── Task 7: services guard ──────────────────────────────────────────────────
 

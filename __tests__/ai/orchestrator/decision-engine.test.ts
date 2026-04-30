@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { DecisionEngine } from '@/lib/ai/orchestrator/decision-engine'
 import type { AiInput, ConversationState } from '@/lib/ai/orchestrator/types'
+import { dashboardAgent } from '@/lib/ai/agents/dashboard'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ describe('DecisionEngine', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   // ── Turn limit ──────────────────────────────────────────────────────────────

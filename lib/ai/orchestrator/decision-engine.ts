@@ -23,10 +23,7 @@ import { StrategyFactory } from './strategy'
 import { logger } from '@/lib/logger'
 import { normalizeDateInput, normalizeTimeInput } from '@/lib/ai/utils/date-normalize'
 import { similarity, normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
-import { buildSystemPrompt } from '@/lib/ai/agents/dashboard/prompt'
-import type { ResolvedEntities } from '@/lib/ai/agents/dashboard/prompt'
-import { buildToolDefsForRole, TOOLS_BY_FLOW } from '@/lib/ai/agents/dashboard/tools'
-import type { ToolDefEntry } from '@/lib/ai/agents/dashboard/tools'
+import type { IAgent, ResolvedEntities, ToolDefEntry } from '@/lib/ai/agents/IAgent'
 
 
 // ── Confirmation keywords (Spanish) ──────────────────────────────────────────
@@ -102,8 +99,8 @@ function detectBookingIntent(text: string): boolean {
 // Matched against RAW input text (not normalized) using the `i` flag.
 // Short-circuit the LLM entirely for zero-latency owner operations.
 
-/** "qué tengo hoy", "citas de hoy", "agenda de hoy", "mis citas" */
-const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\s+d[e]?\s+hoy|mis\s+citas/i
+/** "qué tengo hoy", "citas de hoy", "agenda de hoy", "mis citas", "resumen de hoy", "cómo va hoy" */
+const TODAY_QUERY_PATTERN    = /qu[eé]\s+tengo\s+hoy|citas?\s+de?\s+hoy|agenda\s+d[e]?\s+hoy|mis\s+citas|resumen\s+de\s+hoy|c[oó]mo\s+(?:va|qued[oó])\s+hoy/i
 /** "qué tengo mañana", "citas de mañana", "agenda de mañana" */
 const TOMORROW_QUERY_PATTERN = /qu[eé]\s+tengo\s+ma[nñ]ana|citas?\s+de\s+ma[nñ]ana|agenda\s+d[e]?\s+ma[nñ]ana/i
 /** "cancela la última", "cancela lo último", "cancela eso", "elimina la cita" */
@@ -143,8 +140,6 @@ function extractEntities(text: string, timezone: string): ExtractedEntities {
 
   return entities
 }
-
-// TOOLS_BY_FLOW and buildToolDefsForRole live in lib/ai/agents/dashboard/tools.ts
 
 // ── Intent classifier (observability + logging only) ──────────────────────────
 function classifyIntent(text: string): 'booking' | 'cancellation' | 'reschedule' | 'query' | 'unknown' {
@@ -344,19 +339,10 @@ function isDraftComplete(draft: ConversationState['draft']): boolean {
 // ── Implementation ────────────────────────────────────────────────────────────
 
 export class DecisionEngine implements IDecisionEngine {
+  constructor(private readonly agent: IAgent) {}
+
   analyze(input: AiInput, state: ConversationState): Decision {
     const strategy = StrategyFactory.forRole(input.userRole)
-
-    // ── TASK 7: Guard — no services configured ────────────────────────────────
-    // Allow through if services list is missing (undefined) — it may be loading.
-    // Block only if explicitly empty (business has no active services in DB).
-    if (input.context.services !== undefined && input.context.services.length === 0) {
-      logger.warn('DECISION-ENGINE', 'No services configured — blocking flow', { businessId: input.businessId })
-      return {
-        type: 'reject',
-        reason: 'No hay servicios configurados en este negocio. Por favor, agrega servicios desde el panel antes de recibir citas.',
-      }
-    }
 
     // ── 1. Handle turn exhaustion ───────────────────────────────────────────
     if (state.flow !== 'idle' && state.turnCount >= state.maxTurns) {
@@ -366,13 +352,11 @@ export class DecisionEngine implements IDecisionEngine {
       }
     }
 
-    // ── Owner fast-paths: zero-LLM execution for common operations ────────────────
-    // Bypass the LLM entirely for latency-sensitive admin/staff actions.
-    // These run before the awaiting_confirmation check so they always fire,
-    // even if the owner/staff was mid-flow (signals intent to start a new operation).
+    // ── Owner READ-ONLY fast-paths (run BEFORE service guard — no services needed) ──
+    // Queries about appointments/clients work even when no services are configured.
     if (input.userRole !== 'external') {
 
-      // Fast path A — "¿qué tengo hoy?" → direct date query, no LLM
+      // Fast path A — "¿qué tengo hoy?" / "resumen de hoy" → direct date query, no LLM
       if (TODAY_QUERY_PATTERN.test(input.text)) {
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: input.timezone })
         logger.info('DECISION-ENGINE', 'Owner fast-path: today query', { userId: input.userId, date: todayStr })
@@ -387,6 +371,21 @@ export class DecisionEngine implements IDecisionEngine {
         logger.info('DECISION-ENGINE', 'Owner fast-path: tomorrow query', { userId: input.userId, date: tomorrowStr })
         return { type: 'answer_query', toolName: 'get_appointments_by_date', args: { date: tomorrowStr } }
       }
+    }
+
+    // ── Guard — no services configured ────────────────────────────────────────
+    // Queries above already ran. Only block booking/write attempts when no services.
+    // Allow through if services list is missing (undefined) — it may still be loading.
+    if (input.context.services !== undefined && input.context.services.length === 0) {
+      logger.warn('DECISION-ENGINE', 'No services configured — blocking booking flow', { businessId: input.businessId })
+      return {
+        type: 'reject',
+        reason: 'No hay servicios configurados en este negocio. Por favor, agrega servicios desde el panel antes de recibir citas.',
+      }
+    }
+
+    // ── Owner WRITE fast-paths (after service guard) ──────────────────────────
+    if (input.userRole !== 'external') {
 
       // Fast path C — "cancela la última" + session has appointmentId → direct cancel
       // Only fires if state.lastAction is populated (i.e. a write-action was performed
@@ -435,7 +434,7 @@ export class DecisionEngine implements IDecisionEngine {
               ...input.history,
               { role: 'user', content: input.text },
             ],
-            toolDefs: buildToolDefsForRole(strategy, 'collecting_reschedule'),
+            toolDefs: this.agent.buildToolDefs(strategy, 'collecting_reschedule'),
           }
         }
       }
@@ -549,7 +548,7 @@ export class DecisionEngine implements IDecisionEngine {
 
       const entities = extractEntities(input.text, input.timezone)
       const resolved = mergeResolvedEntities(entities, state.draft, input.context.services)
-      const systemPrompt = buildSystemPrompt(input, state, resolved)
+      const systemPrompt = this.agent.buildSystemPrompt(input, state, resolved)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -557,7 +556,7 @@ export class DecisionEngine implements IDecisionEngine {
           ...input.history,
           { role: 'user', content: input.text },
         ],
-        toolDefs: buildToolDefsForRole(strategy, state.flow),
+        toolDefs: this.agent.buildToolDefs(strategy, state.flow),
       }
     }
 
@@ -571,7 +570,7 @@ export class DecisionEngine implements IDecisionEngine {
     // The LLM receives context.services with UUIDs and resolves all fields.
     // No hybrid regex+LLM collection — single responsibility.
     if (detectBookingIntent(input.text)) {
-      const systemPrompt = buildSystemPrompt(input, state, resolved)
+      const systemPrompt = this.agent.buildSystemPrompt(input, state, resolved)
       return {
         type: 'reason_with_llm',
         messages: [
@@ -579,13 +578,13 @@ export class DecisionEngine implements IDecisionEngine {
           ...input.history,
           { role: 'user', content: input.text },
         ],
-        toolDefs: buildToolDefsForRole(strategy, 'collecting_booking'),
+        toolDefs: this.agent.buildToolDefs(strategy, 'collecting_booking'),
       }
     }
 
     // ── 5. Default: delegate to LLM for reasoning ────────────────────────────
     // Build messages array with system prompt context
-    const systemPrompt = buildSystemPrompt(input, state, resolved)
+    const systemPrompt = this.agent.buildSystemPrompt(input, state, resolved)
 
     const intent = classifyIntent(input.text)
 
@@ -603,13 +602,13 @@ export class DecisionEngine implements IDecisionEngine {
         ...input.history,
         { role: 'user', content: input.text },
       ],
-      toolDefs: buildToolDefsForRole(strategy, state.flow),
+      toolDefs: this.agent.buildToolDefs(strategy, state.flow),
     }
   }
 }
 
-// ── Helpers: System prompt and tool definitions ───────────────────────────────
-
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 /**
  * Fuses current-turn extracted entities with surviving draft fields so the

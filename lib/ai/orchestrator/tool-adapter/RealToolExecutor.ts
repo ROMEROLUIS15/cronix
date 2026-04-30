@@ -81,6 +81,21 @@ const SearchClientsSchema = z.object({
 })
 
 /**
+ * Converts a YYYY-MM-DD date to a human-readable Spanish label (e.g. "29 de abril").
+ * Used in tool results that may go directly to TTS — avoids phone_leak false-positives
+ * and sounds natural when spoken aloud.
+ */
+function humanizeDate(dateISO: string, timezone: string): string {
+  const [yearStr, monthStr, dayStr] = dateISO.split('-')
+  const year  = parseInt(yearStr  ?? '2000', 10)
+  const month = parseInt(monthStr ?? '1',    10)
+  const day   = parseInt(dayStr   ?? '1',    10)
+  return new Intl.DateTimeFormat('es', {
+    day: 'numeric', month: 'long', timeZone: timezone,
+  }).format(new Date(year, month - 1, day))
+}
+
+/**
  * Converts a local datetime (expressed in the given IANA timezone) to a UTC ISO string.
  * Pure Intl — no external dependencies.
  *
@@ -496,12 +511,14 @@ export class RealToolExecutor implements IToolExecutor {
 
     if (result.error || !result.data) return { success: false, result: result.error ?? 'Error al consultar citas.' }
 
+    const dateLabel = humanizeDate(parsed.data.date, p.timezone)
+
     if (!result.data.length) {
-      return { success: true, result: `No hay citas para el ${parsed.data.date}.` }
+      return { success: true, result: `No hay citas para el ${dateLabel}.` }
     }
 
-    const lines = result.data.map((s) => `• ${s.time} — ${s.clientName} (${s.serviceName})`)
-    return { success: true, result: `Citas del ${parsed.data.date}:\n${lines.join('\n')}` }
+    const lines = result.data.map((s) => `${s.time} — ${s.clientName} (${s.serviceName})`)
+    return { success: true, result: `Citas del ${dateLabel}: ${lines.join('. ')}.` }
   }
 
   private async getAvailableSlots(p: ToolExecuteParams): Promise<ExecResult> {

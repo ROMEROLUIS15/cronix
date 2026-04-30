@@ -83,7 +83,8 @@ export function redirectToLogin(request: NextRequest, reason?: string): NextResp
  * Clear all session cookies from the response.
  */
 export function clearSessionCookies(response: NextResponse): void {
-  response.cookies.set('cronix_last_activity', '', { maxAge: 0, path: '/' })
-  response.cookies.set('cronix_session_start', '', { maxAge: 0, path: '/' })
-  response.cookies.set('cronix_user_status', '', { maxAge: 0, path: '/' })
+  response.cookies.set('cronix_last_activity',    '', { maxAge: 0, path: '/' })
+  response.cookies.set('cronix_session_start',    '', { maxAge: 0, path: '/' })
+  response.cookies.set('cronix_session_start_ui', '', { maxAge: 0, path: '/' })
+  response.cookies.set('cronix_user_status',      '', { maxAge: 0, path: '/' })
 }

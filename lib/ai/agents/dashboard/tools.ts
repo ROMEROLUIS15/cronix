@@ -1,19 +1,8 @@
 import type { ConversationFlow } from '../../orchestrator/types'
 import type { IUserStrategy } from '../../orchestrator/strategy'
+import type { ToolDefEntry } from '../IAgent'
 
-export type ToolDefEntry = {
-  type: 'function'
-  function: {
-    name: string
-    description: string
-    parameters: {
-      type: 'object'
-      properties: Record<string, { type: string; description?: string; enum?: string[] }>
-      required: string[]
-      additionalProperties: false
-    }
-  }
-}
+export type { ToolDefEntry }
 
 // State machine: tools allowed per conversational flow.
 // Prevents the LLM from calling off-flow tools (e.g. cancel_booking while collecting a booking).

@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { DecisionEngine, buildConfirmationSummary } from '../decision-engine'
 import type { AiInput, ConversationState } from '../types'
+import { dashboardAgent } from '@/lib/ai/agents/dashboard'
 
 // ── Test Fixtures ────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ describe('DecisionEngine — Intent Detection', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   it('[D1] Booking intent detected → routes to LLM', () => {
@@ -118,7 +119,7 @@ describe('DecisionEngine — Owner Fast-Paths', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   it('[D5] Owner: "qué tengo hoy" → query today (zero-LLM)', () => {
@@ -195,7 +196,7 @@ describe('DecisionEngine — Draft Completeness', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   it('[D9] Collecting booking with complete draft → fast-path to await_confirmation', () => {
@@ -241,7 +242,7 @@ describe('DecisionEngine — Turn Management', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   it('[D11] Turn count exhausted → reject with guidance', () => {
@@ -266,7 +267,7 @@ describe('DecisionEngine — Service Guards', () => {
   let engine: DecisionEngine
 
   beforeEach(() => {
-    engine = new DecisionEngine()
+    engine = new DecisionEngine(dashboardAgent)
   })
 
   it('[D12] No services configured → reject with setup guidance', () => {

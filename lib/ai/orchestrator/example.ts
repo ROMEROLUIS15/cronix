@@ -14,9 +14,10 @@ import { AiOrchestrator } from './ai-orchestrator'
 import { stateManager } from './state-manager'
 import { DecisionEngine } from './decision-engine'
 import { ExecutionEngine } from './execution-engine'
+import { dashboardAgent } from '@/lib/ai/agents/dashboard'
 
 // Local mock instance for dev/demo use only — NOT for production
-const orchestrator = new AiOrchestrator(stateManager, new DecisionEngine(), new ExecutionEngine())
+const orchestrator = new AiOrchestrator(stateManager, new DecisionEngine(dashboardAgent), new ExecutionEngine())
 import type { AiInput, BusinessContext } from './types'
 
 // ── Shared mock context ──────────────────────────────────────────────────────
