@@ -22,6 +22,7 @@ export const mockBusiness: Business = {
   locale: 'es-CO',
   timezone: 'America/Bogota',
   plan: 'pro',
+  subscription_ends_at: null,
   settings: {
     notifications: {
       whatsapp: true,

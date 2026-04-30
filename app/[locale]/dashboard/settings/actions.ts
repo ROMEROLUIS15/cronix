@@ -5,7 +5,7 @@ import { nowpayments } from '@/lib/payments/nowpayments';
 
 export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
