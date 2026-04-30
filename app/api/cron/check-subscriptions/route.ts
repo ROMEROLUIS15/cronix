@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { verifySignatureAppRouter } from '@upstash/qstash/dist/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database.types';
 
@@ -55,6 +54,12 @@ async function handler(req: Request) {
   }
 }
 
-// verifySignatureAppRouter asegura que SÓLO QStash (el CRON programado) pueda llamar a esta ruta
-export const GET = verifySignatureAppRouter(handler);
-export const POST = verifySignatureAppRouter(handler);
+// Dynamic import defers Receiver creation to request time so the build
+// doesn't fail when QSTASH_* env vars are absent in CI.
+async function verifiedRoute(req: Request): Promise<Response> {
+  const { verifySignatureAppRouter } = await import('@upstash/qstash/dist/nextjs')
+  return verifySignatureAppRouter(handler)(req)
+}
+
+export const GET = verifiedRoute;
+export const POST = verifiedRoute;
