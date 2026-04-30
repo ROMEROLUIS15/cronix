@@ -6,6 +6,74 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/) y es
 
 ---
 
+## [0.4.0] — 2026-04-29
+
+### Corregido
+
+#### Fix 1: Session Timeout — Enforcement Real del Signout en el Servidor
+
+El middleware `withSessionTimeout` ahora **cierra sesión correctamente en Supabase** cuando expira el tiempo, eliminando las cookies `sb-*` del browser.
+
+**Problema raíz:** `signOutAndRedirect()` creaba el cliente Supabase con un cookie store vacío, por lo que `supabase.auth.signOut()` era un no-op. Las cookies de sesión permanecían en el browser y el usuario podía acceder rutas protegidas.
+
+**Cambios técnicos:**
+- `lib/middleware/with-session-timeout.ts` — `signOutAndRedirect` ahora usa `request.cookies.getAll()` como fuente y escribe las cookies de clearing via `setAll` en el response de redirect.
+- Eliminada la llamada `copyCookies(baseRes, response)` en las rutas de signout (que re-agregaba las cookies recién eliminadas).
+
+---
+
+#### Fix 2: Output Shield — Falso Positivo en Fechas ISO
+
+El patrón `phone_leak` del Output Shield bloqueaba cualquier respuesta TTS que contuviera una fecha `YYYY-MM-DD` (ej. `2026-04-29`), silenciando al agente.
+
+**Cambios técnicos:**
+- `lib/ai/output-shield.ts` — Patrón `phone_leak` actualizado con negative lookahead `(?!\d{4}-\d{2}-\d{2}\b)` para excluir fechas ISO.
+
+---
+
+#### Fix 3: Services Guard — Read Queries Bloqueadas Sin Servicios
+
+Las consultas de lectura ("¿qué tengo hoy?", "resumen de hoy") fallaban cuando el negocio no tenía servicios configurados, porque el services guard corría antes que los fast-paths de lectura.
+
+**Cambios técnicos:**
+- `lib/ai/orchestrator/decision-engine.ts` — Fast-paths READ-only (A/B: today/tomorrow) movidos **antes** del services guard. Fast-paths WRITE (C/C2/D) permanecen después del guard.
+- `TODAY_QUERY_PATTERN` extendido: ahora captura `"resumen de hoy"` y `"cómo va hoy"`.
+
+---
+
+#### Fix 4: Alucinación de search_clients — "¿Cuál [nombre]?" con resultado único
+
+El LLM inventaba ambigüedad ("¿Cuál Alan Romero quieres decir?") incluso cuando `search_clients` devolvía exactamente un cliente.
+
+**Cambios técnicos:**
+- `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts` — `searchClients` ahora devuelve prefijos estructurados:
+  - `CLIENT_FOUND: <name>. Usa este nombre exacto…`
+  - `MULTIPLE_CLIENTS: <name1>, <name2>…`
+  - `CLIENT_NOT_FOUND: "<query>" no existe…`
+- `lib/ai/agents/dashboard/prompt.ts` — Nueva sección `CLIENTES` que prohíbe explícitamente inventar ambigüedad cuando la tool devolvió `CLIENT_FOUND`.
+
+---
+
+### Agregado
+
+#### Refactoring SOLID — Capa de IA del Dashboard
+
+**Archivos nuevos:**
+- `lib/ai/agents/IAgent.ts` — Interface `IAgent`, `ResolvedEntities`, `ToolDefEntry`, `AgentConfig`
+- `lib/ai/agents/dashboard/index.ts` — `dashboardAgent`: implementación concreta de `IAgent`
+- `lib/ai/providers/tts-factory.ts` — `createTtsProvider(apiKey?, model)`: factory TTS (OCP)
+- `supabase/functions/process-whatsapp/confirmation-gate.ts` — `lastAssistantWasConfirmation()`, `isAffirmative()`, `toolsAllowedThisTurn()` (SRP)
+
+**Principios aplicados:**
+- **DIP**: `DecisionEngine` recibe `IAgent` via constructor injection
+- **OCP**: `AiChannel` y `AppointmentEvent.channel` son `'web' | 'whatsapp' | (string & {})` — extensibles sin modificación
+- **SRP**: Lógica de confirmation gate extraída de `message-handler.ts`
+
+#### humanizeDate para TTS
+- `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts` — Nueva función `humanizeDate(dateISO, timezone)` que convierte `YYYY-MM-DD` → `"29 de abril"` via `Intl.DateTimeFormat`. Usada en respuestas de `get_appointments_by_date` para output natural en voz.
+
+---
+
 ## [0.3.0] — 2026-04-24
 
 ### Agregado

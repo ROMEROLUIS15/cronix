@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npx jest *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git merge develop --no-ff -m ' *)"
     ]
   }
 }

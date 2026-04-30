@@ -1,6 +1,6 @@
 # Luis IA — Assistant Tools Reference
 
-> Current tool catalog as of 2026-04-14. All tool definitions live in `lib/ai/orchestrator/decision-engine.ts` (`buildToolDefsForRole`). Execution logic lives in `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts`.
+> Current tool catalog as of 2026-04-29. All tool definitions live in `lib/ai/orchestrator/decision-engine.ts` (`buildToolDefsForRole`). Execution logic lives in `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts`.
 
 ---
 
@@ -119,6 +119,28 @@ Cliente "María García" registrado (client_id: <uuid>). Usa client_id: <uuid> a
 **Chaining**: after `create_client`, pass the returned `client_id` to `confirm_booking` instead of `client_name` to avoid fuzzy matching and ensure the correct client is linked.
 
 **Access**: internal users only (`owner` / `staff`). Not available to external callers.
+
+---
+
+## `search_clients`
+
+Searches for a client by name using fuzzy matching. Returns a structured, machine-readable prefix so the LLM can act without ambiguity.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | `string` | yes | Client name as spoken by the user. Do not correct transcription errors — the tool handles fuzzy matching. |
+
+**Response format** — always one of three prefixes:
+
+| Prefix | Meaning | LLM Action |
+|--------|---------|------------|
+| `CLIENT_FOUND: <name>. Usa este nombre…` | Exactly one match found | Use that name in `confirm_booking`. NEVER ask "which one?" |
+| `MULTIPLE_CLIENTS: <name1>, <name2>…` | Two or more candidates | Ask the user which name to use, then proceed |
+| `CLIENT_NOT_FOUND: "<query>" no existe…` | No match found | Offer to register; if confirmed, call `confirm_booking` with the original query string |
+
+**Critical rule**: when the response starts with `CLIENT_FOUND`, the system has already resolved the client. The LLM must not invent ambiguity or ask for clarification.
+
+**Access**: all roles (owner, employee, external).
 
 ---
 

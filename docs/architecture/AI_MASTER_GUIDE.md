@@ -1,6 +1,6 @@
 # Luis IA — Master Architecture Guide
 
-> Last updated: 2026-04-18. Prior versions (V8.0 / AssistantService) are fully retired.
+> Last updated: 2026-04-29. Prior versions (V8.0 / AssistantService) are fully retired.
 
 ---
 
@@ -33,11 +33,13 @@ AiOrchestrator.process(AiInput)
   ▼
 DecisionEngine.analyze(input, state)
   │
-  ├── [Guard] Services guard: reject if services=[] (business not configured)
+  ├── [Fast paths A/B] Owner read-only queries (TODAY/TOMORROW patterns) — run BEFORE services guard
+  ├── [Guard] Services guard: reject if services=[] (business not configured) — write paths only
   ├── [Normalize] extractEntities(text, timezone) → resolved date + time
-  │     → injects "ENTIDADES YA RESUELTAS" into system prompt (no LLM parsing)
+  │     → injects "YA RESUELTO" into system prompt (no LLM parsing)
   ├── Fast path: reject (turn limit / rejection keyword)
   ├── Fast path: execute_immediately (awaiting_confirmation + "sí")
+  ├── [Fast paths C/C2/D] Owner write shortcuts (cancel-last, anaphora, direct booking) — AFTER guard
   └── LLM path: reason_with_llm { messages, toolDefs }
         ├── buildSystemPrompt() — services (id+name), hours, appointments,
         │    resolved entities, AI rules, voice format, security rules
@@ -96,8 +98,9 @@ route.ts: TTS (Deepgram Aura 2) + HTTP response
 
 ### `DecisionEngine` (`lib/ai/orchestrator/decision-engine.ts`)
 - Pure function: `analyze(input, state) → Decision`.
-- **Services guard**: returns `reject` if `context.services` is an empty array (business not configured). Does not reject if `services` is `undefined` (loading state).
-- **Entity normalization**: calls `extractEntities(text, timezone)` (from `lib/ai/utils/date-normalize.ts`) to deterministically resolve dates and times. Injects resolved values into system prompt as `ENTIDADES YA RESUELTAS` — eliminates LLM date parsing.
+- **Fast-path ordering**: READ-only fast paths (today/tomorrow summaries, pattern: `TODAY_QUERY_PATTERN` / `TOMORROW_QUERY_PATTERN`) run **before** the services guard. This means `get_appointments_by_date` can answer "¿qué tengo hoy?" even when no services are configured. WRITE fast paths (cancel-last, direct booking) run **after** the guard.
+- **Services guard**: returns `reject` if `context.services` is an empty array (business not configured). Does not reject if `services` is `undefined` (loading state). Applied only to write-path and LLM-path decisions.
+- **Entity normalization**: calls `extractEntities(text, timezone)` (from `lib/ai/utils/date-normalize.ts`) to deterministically resolve dates and times. Injects resolved values into system prompt as `YA RESUELTO` — eliminates LLM date parsing.
 - Detects booking intent, confirmation/rejection signals, and turn limits.
 - Builds system prompt with: services list (id + name + price + duration), working hours, today's appointments, AI rules, voice format instructions, tool chaining flow, security rules, resolved entities.
 - Builds `toolDefs` filtered by user role strategy (`IUserStrategy`).
@@ -129,6 +132,12 @@ route.ts: TTS (Deepgram Aura 2) + HTTP response
 - All Zod schemas use **snake_case** — must match LLM tool definition field names exactly.
 - Write tools (`confirm_booking`, `cancel_booking`, `reschedule_booking`) return `{ success, result, data: BookingEventData }` — structured payload for event dispatch. No string parsing required downstream.
 - Client resolution: `clientId` takes priority → fuzzy match on `client_name` fallback.
+- **`search_clients` structured output**: returns one of three machine-readable prefixes:
+  - `CLIENT_FOUND: <name>. Usa este nombre exacto…` — exactly one match; LLM must not ask for clarification.
+  - `MULTIPLE_CLIENTS: <name1>, <name2>…` — ambiguous; LLM must ask user which to use.
+  - `CLIENT_NOT_FOUND: "<query>" no existe…` — no match; LLM offers to register client.
+  This protocol eliminates the hallucination pattern where the LLM fabricated ambiguity despite a single fuzzy match.
+- **`humanizeDate(dateISO, timezone)`**: internal helper that converts `YYYY-MM-DD` to Spanish "29 de abril" via `Intl.DateTimeFormat`. Used in `getByDate` so TTS output contains natural date phrasing, not ISO strings.
 
 ### `RedisStateManager` (`lib/ai/orchestrator/RedisStateManager.ts`)
 - Persists `ConversationState` in Upstash Redis (TTL: 2 hours).
@@ -143,9 +152,9 @@ route.ts: TTS (Deepgram Aura 2) + HTTP response
 
 | Role | Strategy | Allowed Tools | `requiresConfirmation()` |
 |------|----------|--------------|--------------------------|
-| `owner` / `platform_admin` | `InternalUserStrategy` | All 7 tools | `false` — executes directly |
-| `employee` | `EmployeeUserStrategy` | All 7 tools | `true` — confirmation required |
-| `external` | `ExternalUserStrategy` | 6 tools (no `create_client`) | `true` — confirmation required |
+| `owner` / `platform_admin` | `InternalUserStrategy` | All 8 tools | `false` — executes directly |
+| `employee` | `EmployeeUserStrategy` | All 8 tools | `true` — confirmation required |
+| `external` | `ExternalUserStrategy` | 7 tools (no `create_client`) | `true` — confirmation required |
 
 `create_client` is internal-only — external callers must already be registered clients.
 
@@ -238,11 +247,24 @@ Client (browser)
     ├─ [Validation] Reject empty / noise-only transcripts (< 2 words after trim)
     ├─ Groq Whisper (whisper-large-v3-turbo) → transcript
     ├─ AiOrchestrator.process() → response text
+    ├─ shieldOutput(responseText, userId) → validate before TTS
     └─ Deepgram Aura 2 (aura-2-nestor-es) → audio Buffer
          │
          ▼
   Audio response (audio/mpeg)
 ```
+
+### Output Shield (`lib/ai/output-shield.ts`)
+
+`shieldOutput(text, userId)` is applied to every LLM response **before** it reaches TTS synthesis. It validates the response against a set of regex patterns and returns a safe fallback (`"Lo siento, no pude formular una respuesta adecuada"`) if any match.
+
+**Patterns blocked:**
+- Prompt injection / jailbreak (`ignore all instructions`, `actúa ahora como`, multilingual variants)
+- Unicode/encoding bypasses (zero-width chars, HTML entities, URL-encoded sequences)
+- Data exfiltration (UUID leak, phone numbers, tool name leak, JSON tool-call structure)
+- Code injection (SQL, XSS, large code blocks, long base64 strings)
+
+**`phone_leak` pattern note**: The regex uses a negative lookahead `(?!\d{4}-\d{2}-\d{2}\b)` to exclude ISO dates (`YYYY-MM-DD`) from matching. Without this, any TTS response containing a date (e.g., "el 29 de abril") would be silenced because the date digits satisfied the 8+ digit pattern. This was a production bug fixed in 2026-04-29.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Documento de referencia técnica para desarrolladores.
 > Todas las rutas y nombres de funciones fueron verificados contra el código real.
-> Última actualización: **2026-04-24** — Cambios: Calendar Visibility + Cancellation Precision + Voice Assistant
+> Última actualización: **2026-04-29** — Cambios: SOLID Refactoring + Session Timeout Fix + Output Shield + search_clients Hallucination Fix
 
 ---
 
@@ -33,6 +33,7 @@
 | **Idempotencia** | Cada evento tiene un `eventId` determinista; duplicados se descartan sin error |
 | **Type-First** | `noUncheckedIndexedAccess: true`; no hay `any`; todos los estados tienen tipo definido |
 | **SSOT** | Estado de conversación vive exclusivamente en `StateManager`; la UI deriva de él |
+| **SOLID (AI layer)** | `IAgent` interface (DIP), extensible channel types (OCP), confirmation gate extraction (SRP) |
 
 ---
 
@@ -72,9 +73,11 @@ Cronix corre en **dos runtimes físicamente distintos** que nunca se importan en
 ```
 lib/ai/
 ├── agents/
+│   ├── IAgent.ts          ← Interface: IAgent, ResolvedEntities, ToolDefEntry, AgentConfig
 │   └── dashboard/
+│       ├── index.ts       ← dashboardAgent: concrete IAgent implementation
 │       ├── config.ts      ← Configuración del agente (tier, maxIterations)
-│       ├── prompt.ts      ← System prompt del dashboard
+│       ├── prompt.ts      ← System prompt del dashboard (buildSystemPrompt)
 │       └── tools.ts       ← Tool definitions para el owner
 ├── orchestrator/
 │   ├── ai-orchestrator.ts ← Facade: ÚNICO entry point para channel adapters
@@ -86,7 +89,9 @@ lib/ai/
 │   ├── events.ts          ← Tipos de eventos tipados
 │   └── types.ts           ← AiInput, AiOutput, Decision, ConversationState
 ├── providers/
-│   └── groq-provider.ts   ← ILlmProvider + ISttProvider → Groq
+│   ├── groq-provider.ts   ← ILlmProvider + ISttProvider → Groq
+│   └── tts-factory.ts     ← createTtsProvider(apiKey?, model) — TTS factory (OCP)
+├── output-shield.ts       ← shieldOutput(): regex guard before TTS synthesis
 └── tools/
     ├── appointment.tools.ts
     ├── client.tools.ts
@@ -443,6 +448,19 @@ Implementado como middleware de Next.js. Dos límites independientes:
 
 Ambos se almacenan en cookies `httpOnly` y se verifican en cada request.
 
+### Enforcement del signout del lado servidor (fix 2026-04-29)
+
+Para que el timeout server-side realmente cierre la sesión Supabase (y no solo redirija), `signOutAndRedirect` debe:
+1. Crear el cliente Supabase con `getAll() { return request.cookies.getAll() }` — lee las cookies reales del request entrante.
+2. Llamar `supabase.auth.signOut()` — Supabase escribe las cookies de clearing (`sb-*`) via `setAll` al response de redirect.
+3. No copiar cookies del response base al redirect (evita re-agregar las cookies de sesión que Supabase acaba de eliminar).
+
+Sin este patrón, `signOut()` opera sobre un store vacío y no genera las cookies de clearing — el browser retiene los tokens `sb-*` y el usuario puede acceder rutas protegidas hasta que expire el JWT naturalmente.
+
+### Mirror cookie para sincronización cliente-servidor
+
+La cookie `cronix_session_start_ui` (no-httpOnly, misma expiración que `cronix_session_start`) permite al hook del lado cliente (`use-session-timeout.ts`) leer el timestamp de inicio sin un round-trip al servidor, garantizando coherencia de reloj entre el countdown del UI y la lógica del middleware.
+
 ---
 
 ## 9. Multi-tenancy y Seguridad
@@ -584,6 +602,23 @@ AiOutput → UI Component
 - 8B es más estable y rápido para tool calling estructurado
 - La calidad de respuesta mejora con mejor prompt + memoria, no con modelo más grande
 - 70B se reserva para el paso conversacional final (sin tools)
+
+---
+
+### ADR-006: SOLID refactoring de la capa de IA del Dashboard
+
+**Decisión:** La capa de IA del Dashboard fue refactorizada para seguir principios SOLID:
+- `IAgent` interface en `lib/ai/agents/IAgent.ts` — `DecisionEngine` depende de ella, no de `dashboardAgent` directamente (DIP).
+- `AiChannel` y `AppointmentEvent.channel` usan `'web' | 'whatsapp' | (string & {})` — extensible sin modificación (OCP).
+- Confirmation gate logic extraída de `message-handler.ts` a `confirmation-gate.ts` (SRP).
+- `createTtsProvider()` factory en `tts-factory.ts` para inyección del proveedor TTS (DIP).
+
+**Razón:**
+- La clase original mezclaba configuración de agente, prompt building, y tool definitions en un solo módulo.
+- El acoplamiento directo a `dashboardAgent` impedía pruebas unitarias del `DecisionEngine` en aislamiento.
+- El tipo `AiChannel` cerrado bloqueaba extensión para nuevos canales (SMS, email, etc.) sin modificar tipos existentes.
+
+**Trade-off:** Mayor número de archivos. Compensado por mejor testeabilidad y extensibilidad.
 
 ---
 

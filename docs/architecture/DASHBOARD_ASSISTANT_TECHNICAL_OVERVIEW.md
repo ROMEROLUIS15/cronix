@@ -1,6 +1,6 @@
 # Dashboard AI Assistant — Technical Overview
 
-> Current architecture as of 2026-04-14. Replaces v6.5 (AssistantService, tool-registry.ts, book_appointment, 7 old tools).
+> Current architecture as of 2026-04-29. Replaces v6.5 (AssistantService, tool-registry.ts, book_appointment, 7 old tools).
 
 ---
 
@@ -14,7 +14,7 @@ The Dashboard AI Assistant ("Luis") is a voice-first executive assistant for bus
 
 Luis uses **OpenAI-compatible Function Calling** via the Groq API. The LLM receives a structured system prompt and a set of tool definitions, then decides which tool to call based on user intent. Tool calls are executed server-side by `RealToolExecutor`, which maps each tool name to a domain UseCase.
 
-### Tool Catalog (7 tools)
+### Tool Catalog (8 tools)
 
 | Tool | Type | Description |
 |------|------|-------------|
@@ -24,6 +24,7 @@ Luis uses **OpenAI-compatible Function Calling** via the Groq API. The LLM recei
 | `get_appointments_by_date` | READ | Returns all active appointments for a given `date`. Includes appointment IDs for cancel/reschedule chaining. |
 | `get_services` | READ | Lists all active services with name, price, and duration. |
 | `get_available_slots` | READ | Returns free time slots for a given `date` and `duration_min`. Subtracts booked intervals from working hours. |
+| `search_clients` | READ | Searches a client by name via fuzzy match. Returns a structured prefix (`CLIENT_FOUND`, `MULTIPLE_CLIENTS`, or `CLIENT_NOT_FOUND`) that the LLM must follow without inventing ambiguity. |
 | `create_client` | WRITE | Registers a new client. Returns the new `client_id` so the LLM can immediately chain to `confirm_booking`. |
 
 ### Tool Parameter Format
@@ -41,8 +42,25 @@ app/api/assistant/voice/route.ts
   ├── AiOrchestrator.process(AiInput)
   │     ├── DecisionEngine → Decision (reason_with_llm / execute_immediately / reject)
   │     └── ExecutionEngine → ReAct loop → RealToolExecutor → UseCases → Supabase
-  └── Deepgram Aura 2 (TTS) → audio/mpeg response
+  └── Deepgram Aura 2 (TTS) → audio/mpeg response (shieldOutput guard applied before TTS)
 ```
+
+### SOLID Architecture (as of 2026-04-29)
+
+The Dashboard Agent follows SOLID principles through a set of abstractions in `lib/ai/agents/`:
+
+| File | Role |
+|------|------|
+| `lib/ai/agents/IAgent.ts` | Interface: `IAgent`, `ResolvedEntities`, `ToolDefEntry`, `AgentConfig` |
+| `lib/ai/agents/dashboard/index.ts` | `dashboardAgent` — concrete implementation of `IAgent` |
+| `lib/ai/providers/tts-factory.ts` | `createTtsProvider(apiKey?, model)` — TTS provider factory (OCP) |
+| `supabase/functions/process-whatsapp/confirmation-gate.ts` | `lastAssistantWasConfirmation()`, `isAffirmative()`, `toolsAllowedThisTurn()` (SRP extraction) |
+
+**DIP**: `DecisionEngine` receives an `IAgent` via constructor injection — it depends on the abstraction, not the concrete `dashboardAgent`.
+
+**OCP**: `AiChannel` type (`'web' | 'whatsapp' | (string & {})`) and `AppointmentEvent.channel` are open for extension without modification.
+
+**SRP**: Confirmation gate logic extracted from `message-handler.ts` into its own module.
 
 ### State Management
 - `ConversationState` is persisted in **Upstash Redis** (TTL: 30 mins) via `RedisStateManager`.
@@ -62,12 +80,22 @@ app/api/assistant/voice/route.ts
 
 ## Fuzzy Matching Engine
 
-Located at `lib/ai/fuzzy-match.ts`. Used by `RealToolExecutor.resolveClient()` when `client_id` is not provided.
+Located at `lib/ai/fuzzy-match.ts`. Used by `RealToolExecutor.resolveClient()` when `client_id` is not provided, and also as the backend of the `search_clients` tool.
 
 Resolution priority:
 1. If `client_id` is present → direct DB lookup (no fuzzy match needed).
 2. If `client_name` only → `fuzzyFind()` against all active clients for the business.
 3. `create_client` tool response includes the new `client_id` — subsequent `confirm_booking` calls use it directly, bypassing fuzzy match.
+
+### `search_clients` — Structured Output Protocol
+
+Before calling `confirm_booking`, the LLM should call `search_clients(query)`. The executor returns one of three machine-readable prefixes:
+
+- `CLIENT_FOUND: <name>. Usa este nombre exacto…` — exactly one match. LLM must use that name directly, **no clarification question**.
+- `MULTIPLE_CLIENTS: <name1>, <name2>…` — two or more candidates. LLM must ask the user which to use.
+- `CLIENT_NOT_FOUND: "<query>" no existe…` — no match. LLM offers to register; if confirmed, calls `confirm_booking` with the original name (auto-creates the client).
+
+This eliminates LLM hallucination of ambiguity ("¿Te refieres a cuál?") when only one client matches.
 
 ---
 
@@ -84,8 +112,8 @@ Resolution priority:
 
 | Role | Available Tools |
 |------|----------------|
-| `owner` / `staff` | All 7 tools including `create_client` |
-| `external` | `confirm_booking`, `cancel_booking`, `reschedule_booking`, `get_appointments_by_date`, `get_services`, `get_available_slots` |
+| `owner` / `staff` | All 8 tools including `create_client` |
+| `external` | `confirm_booking`, `cancel_booking`, `reschedule_booking`, `get_appointments_by_date`, `get_services`, `get_available_slots`, `search_clients` |
 
 `create_client` is reserved for internal users only. External callers must already be registered in the system.
 
