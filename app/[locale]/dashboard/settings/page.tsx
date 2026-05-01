@@ -651,7 +651,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <PlanManager currentPlan={biz?.plan} />
+      <PlanManager currentPlan={biz?.plan} businessId={biz?.id} />
     </div>
   );
 }

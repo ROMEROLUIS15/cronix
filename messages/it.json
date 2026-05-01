@@ -325,7 +325,8 @@
       "cancelApt": "Annulla",
       "editFullApt": "Modifica",
       "backToDay": "Torna al giorno"
-    }
+    },
+    "moreAppts": "+{count} altri"
   },
   "appointments": {
     "title": "Nuovo Appuntamento",
@@ -434,6 +435,7 @@
     "addFirstClient": "Aggiungi il primo cliente",
     "visits": "visite",
     "count": "{count, plural, =0 {Nessun cliente} one {# cliente} other {# clienti}}",
+    "limitBadge": "{current}/{limit} clienti",
     "notFoundQuery": "Nessun risultato per \"{query}\"",
     "debt": {
       "pendingDebt": "Debito pendente",
@@ -867,7 +869,39 @@
     "plan": {
       "fullAccess": "Accesso completo incluso",
       "managePlan": "Gestisci piano",
-      "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}"
+      "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}",
+      "modalTitle": "Piani Cronix",
+      "currentPlanLabel": "Piano attuale:",
+      "freeLimitNote": "Limite di 20 clienti, 1 dipendente e 30 appuntamenti/mese",
+      "limitErrors": {
+        "clients": "Hai raggiunto il limite di {limit} clienti del piano gratuito. Aggiorna il tuo piano in Impostazioni > Fatturazione.",
+        "employees": "Hai raggiunto il limite di {limit} {limit, plural, one {dipendente} other {dipendenti}} del piano {plan}. Aggiorna il tuo piano in Impostazioni > Fatturazione.",
+        "appointments": "Hai raggiunto il limite di {limit} appuntamenti/mese del piano gratuito. Aggiorna il tuo piano in Impostazioni > Fatturazione."
+      },
+      "tableFeature": "Funzionalità",
+      "tableClients": "Clienti",
+      "tableEmployees": "Dipendenti",
+      "tableAppts": "Appuntamenti / mese",
+      "tableAiAssistant": "Assistente IA Luis",
+      "tableCalendar": "Agenda e servizi",
+      "tableFinance": "Finanze",
+      "tableReports": "Rapporti",
+      "tableWhatsapp": "WhatsApp",
+      "tableBranches": "Filiali",
+      "tableUpTo20": "Fino a 20",
+      "tableUpTo3": "Fino a 3",
+      "tableUpTo30": "Fino a 30",
+      "tableOwnerOnly": "1 (titolare)",
+      "tableUnlimited": "Illimitati",
+      "tableUnlimitedAppts": "Illimitati",
+      "tableComingSoon": "Prossimamente",
+      "tablePricePerMonth": "Prezzo / mese",
+      "activatePro": "Attiva Pro — $6 USDT",
+      "activateEnterprise": "Attiva Enterprise — $10 USDT",
+      "proActive": "Piano Pro attivo",
+      "enterpriseActive": "Piano Enterprise attivo",
+      "paymentNote": "Pagamento in USDT TRC-20 tramite NOWPayments. L'abbonamento si attiva automaticamente entro 1–3 minuti dalla conferma sulla blockchain. Durata: 30 giorni.",
+      "errorInternal": "Errore interno. Riprova."
     }
   },
   "profile": {
@@ -1267,5 +1301,12 @@
     "employeeAdded": "Dipendente aggiunto",
     "employeeDeleted": "Dipendente rimosso",
     "passwordChanged": "Password aggiornata con successo"
+  },
+  "datePicker": {
+    "title": "Data e ora",
+    "time": "Ora",
+    "cancel": "Annulla",
+    "confirm": "Conferma",
+    "placeholder": "Seleziona data e ora"
   }
 }

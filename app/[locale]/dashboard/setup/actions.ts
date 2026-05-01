@@ -75,7 +75,7 @@ export async function createBusiness(
     name,
     category,
     timezone,
-    plan: 'pro',
+    plan: 'free',
   })
 
   if (businessResult.error) {

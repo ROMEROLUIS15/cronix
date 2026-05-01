@@ -6,6 +6,8 @@ import { getContainer } from '@/lib/container'
 import { revalidatePath } from 'next/cache'
 import type { Client } from '@/types'
 import type { BatchTransactionItem } from '@/lib/domain/repositories/IFinanceRepository'
+import { getClientLimit } from '@/lib/plans/plan-limits'
+import { getTranslations } from 'next-intl/server'
 
 // ── Data fetching (container pattern) ──────────────────────────────────────
 
@@ -82,6 +84,27 @@ export async function createNewClient(input: {
 
   if (existing) {
     return { error: `El número ya está registrado para el cliente "${existing.name}".` }
+  }
+
+  // Plan limit check
+  const { data: biz } = await supabase
+    .from('businesses')
+    .select('plan')
+    .eq('id', input.businessId)
+    .single()
+
+  const limit = getClientLimit(biz?.plan ?? 'free')
+  if (isFinite(limit)) {
+    const { count } = await supabase
+      .from('clients')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', input.businessId)
+      .is('deleted_at', null)
+
+    if ((count ?? 0) >= limit) {
+      const t = await getTranslations('settings.plan.limitErrors')
+      return { error: t('clients', { limit }) }
+    }
   }
 
   const container = await getContainer()

@@ -16,7 +16,8 @@
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(Object.keys\\(p.dependencies || {}\\).filter\\(d => d.includes\\('pg'\\) || d.includes\\('postgres'\\)\\)\\)\")",
       "Bash(supabase --version)",
       "Bash(node -e ' *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(git diff *)"
     ]
   }
 }

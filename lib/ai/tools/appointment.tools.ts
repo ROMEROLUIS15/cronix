@@ -21,6 +21,7 @@ import {
   fireToolNotification,
   formatForSpeech,
 } from './_helpers'
+import { getAppointmentMonthLimit } from '@/lib/plans/plan-limits'
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,24 @@ export async function book_appointment(
 
     const dateError = validateApptDate(date)
     if (dateError) return dateError
+
+    // Plan limit: max appointments per month on free plan
+    const bizResult = await ctx.businessRepo.getById(business_id)
+    if (!bizResult.error && bizResult.data) {
+      const limit = getAppointmentMonthLimit(bizResult.data.plan ?? 'free')
+      if (isFinite(limit)) {
+        const now = new Date()
+        const countResult = await ctx.appointmentRepo.findByDateRange(
+          business_id,
+          startOfMonth(now).toISOString(),
+          endOfMonth(now).toISOString(),
+          ['confirmed', 'pending', 'completed'],
+        )
+        if (!countResult.error && (countResult.data?.length ?? 0) >= limit) {
+          return `Has alcanzado el límite de ${limit} citas por mes del plan gratuito. Actualiza tu plan en Configuración > Facturación para agendar más citas.`
+        }
+      }
+    }
 
     const [clientsResult, servicesResult] = await Promise.all([
       ctx.clientRepo.findActiveForAI(business_id),

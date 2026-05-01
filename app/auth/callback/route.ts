@@ -129,7 +129,7 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
     owner_id: user.id,
     category: bizCategory ?? 'General',
     timezone: bizTimezone ?? 'America/Caracas',
-    plan:     'pro',
+    plan:     'free',
   })
 
   if (bizError || !bizData) {
