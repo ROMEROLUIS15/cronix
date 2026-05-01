@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
 import { createSaaSCheckoutSession } from './actions';
-import { Loader2, Zap, Crown } from 'lucide-react';
+import { Loader2, Zap, Crown, Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export function PlanManager({
@@ -57,18 +57,25 @@ export function PlanManager({
     }
   };
 
-  // ── Table rows (computed outside JSX so t() calls are plain function calls) ──
+  // ── Feature rows for comparison ──
   const rows = [
     { label: t('tableClients'),     free: t('tableUpTo20'),      pro: t('tableUnlimited'),      ent: t('tableUnlimited') },
     { label: t('tableEmployees'),   free: t('tableOwnerOnly'),   pro: t('tableUpTo3'),           ent: t('tableUnlimited') },
     { label: t('tableAppts'),       free: t('tableUpTo30'),      pro: t('tableUnlimitedAppts'),  ent: t('tableUnlimitedAppts') },
-    { label: t('tableAiAssistant'), free: '✓',                   pro: '✓',                       ent: '✓' },
-    { label: t('tableCalendar'),    free: '✓',                   pro: '✓',                       ent: '✓' },
-    { label: t('tableFinance'),     free: '✓',                   pro: '✓',                       ent: '✓' },
-    { label: t('tableReports'),     free: '✓',                   pro: '✓',                       ent: '✓' },
-    { label: t('tableWhatsapp'),    free: '✓',                   pro: '✓',                       ent: '✓' },
-    { label: t('tableBranches'),    free: '—',                   pro: '—',                       ent: t('tableComingSoon') },
+    { label: t('tableAiAssistant'), free: true,                  pro: true,                      ent: true },
+    { label: t('tableCalendar'),    free: true,                  pro: true,                      ent: true },
+    { label: t('tableFinance'),     free: true,                  pro: true,                      ent: true },
+    { label: t('tableReports'),     free: true,                  pro: true,                      ent: true },
+    { label: t('tableWhatsapp'),    free: true,                  pro: true,                      ent: true },
+    { label: t('tableBranches'),    free: false,                 pro: false,                     ent: t('tableComingSoon') },
   ];
+
+  // Helper to render table cell values
+  const renderCell = (val: string | boolean) => {
+    if (val === true)  return <Check size={15} className="mx-auto text-emerald-400" />;
+    if (val === false) return <X size={15} className="mx-auto text-[#4A4A50]" />;
+    return <span>{val}</span>;
+  };
 
   return (
     <>
@@ -90,18 +97,24 @@ export function PlanManager({
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/70 animate-in fade-in duration-200"
           onClick={() => setIsOpen(false)}
         >
+          {/* Modal panel — bottom-sheet on mobile, centered on sm+ */}
           <div
-            className="bg-[#1C1C21] border border-[#2E2E33] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            className="bg-[#1C1C21] border border-[#2E2E33] rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Drag handle (mobile only) */}
+            <div className="sm:hidden flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-[#3E3E44]" />
+            </div>
+
             {/* Header */}
-            <div className="p-5 border-b border-[#2E2E33] flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold text-white">{t('modalTitle')}</h2>
-                <p className="text-xs text-[#909098]">
+            <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-[#2E2E33] flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-white leading-tight">{t('modalTitle')}</h2>
+                <p className="text-xs text-[#909098] mt-0.5 leading-snug">
                   {t('currentPlanLabel')}{' '}
                   <span className="font-semibold text-white capitalize">{currentPlan ?? 'free'}</span>
                   {currentPlan === 'free' && (
@@ -111,21 +124,78 @@ export function PlanManager({
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-[#909098] hover:text-white text-2xl leading-none"
+                className="text-[#909098] hover:text-white text-2xl leading-none flex-shrink-0 mt-0.5"
+                aria-label="Close"
               >
                 &times;
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6">
+            {/* Scrollable body */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto space-y-4 sm:space-y-6">
               {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Plan comparison table */}
-              <div className="overflow-x-auto rounded-xl border border-[#2E2E33]">
+              {/* ── Mobile: stacked plan cards ── */}
+              <div className="sm:hidden space-y-3">
+                {[
+                  {
+                    name: 'Free',
+                    price: '$0',
+                    color: '#909098',
+                    bg: 'rgba(144,144,152,0.08)',
+                    border: 'rgba(144,144,152,0.2)',
+                    values: rows.map(r => ({ label: r.label, val: r.free })),
+                  },
+                  {
+                    name: 'Pro',
+                    price: '$6 USDT/mo',
+                    color: '#0062FF',
+                    bg: 'rgba(0,98,255,0.08)',
+                    border: 'rgba(0,98,255,0.25)',
+                    values: rows.map(r => ({ label: r.label, val: r.pro })),
+                  },
+                  {
+                    name: 'Enterprise',
+                    price: '$10 USDT/mo',
+                    color: '#A855F7',
+                    bg: 'rgba(168,85,247,0.08)',
+                    border: 'rgba(168,85,247,0.25)',
+                    values: rows.map(r => ({ label: r.label, val: r.ent })),
+                  },
+                ].map((plan) => (
+                  <div
+                    key={plan.name}
+                    className="rounded-xl overflow-hidden"
+                    style={{ background: plan.bg, border: `1px solid ${plan.border}` }}
+                  >
+                    {/* Plan header */}
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-sm font-bold" style={{ color: plan.color }}>{plan.name}</span>
+                      <span className="text-xs font-semibold" style={{ color: plan.color }}>{plan.price}</span>
+                    </div>
+                    {/* Feature list */}
+                    <div className="divide-y divide-[#2E2E33]">
+                      {plan.values.map(({ label, val }) => (
+                        <div key={label} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                          <span className="text-xs text-[#C0C0C8] flex-1 min-w-0">{label}</span>
+                          <span className="text-xs font-medium flex-shrink-0" style={{ color: plan.color }}>
+                            {val === true  ? <Check size={14} className="text-emerald-400" /> :
+                             val === false ? <X size={14} className="text-[#4A4A50]" /> :
+                             val}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Desktop: comparison table ── */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-[#2E2E33]">
                 <table className="w-full text-sm min-w-[420px]">
                   <thead>
                     <tr className="bg-[#16161A] text-xs font-semibold uppercase tracking-wider">
@@ -142,9 +212,9 @@ export function PlanManager({
                         className={`border-t border-[#2E2E33] ${i % 2 === 0 ? 'bg-[#1C1C21]' : 'bg-[#191919]'}`}
                       >
                         <td className="p-3 text-[#F2F2F2]">{row.label}</td>
-                        <td className="p-3 text-center text-[#909098]">{row.free}</td>
-                        <td className="p-3 text-center text-[#F2F2F2]">{row.pro}</td>
-                        <td className="p-3 text-center text-[#F2F2F2]">{row.ent}</td>
+                        <td className="p-3 text-center text-[#909098]">{renderCell(row.free)}</td>
+                        <td className="p-3 text-center text-[#F2F2F2]">{renderCell(row.pro)}</td>
+                        <td className="p-3 text-center text-[#F2F2F2]">{renderCell(row.ent)}</td>
                       </tr>
                     ))}
                     <tr className="border-t border-[#2E2E33] bg-[#16161A] font-semibold">
@@ -158,9 +228,9 @@ export function PlanManager({
               </div>
 
               {/* CTA buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <Button
-                  className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white"
+                  className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-11 text-xs sm:text-sm font-semibold"
                   onClick={() => handleUpgrade('pro')}
                   disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
                 >
@@ -173,7 +243,7 @@ export function PlanManager({
                   )}
                 </Button>
                 <Button
-                  className="w-full"
+                  className="w-full h-11 text-xs sm:text-sm font-semibold"
                   style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
                   onClick={() => handleUpgrade('enterprise')}
                   disabled={loading !== null || currentPlan === 'enterprise'}
@@ -188,7 +258,7 @@ export function PlanManager({
                 </Button>
               </div>
 
-              <p className="text-xs text-center text-[#606068]">
+              <p className="text-xs text-center text-[#606068] pb-1">
                 {t('paymentNote')}
               </p>
             </div>
