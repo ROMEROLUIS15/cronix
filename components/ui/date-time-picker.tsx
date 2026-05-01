@@ -11,10 +11,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { DayPicker } from 'react-day-picker'
-import { format, isValid, parse } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { format, isValid } from 'date-fns'
+import { es, enUS, ptBR, fr, de, it } from 'date-fns/locale'
+import { useLocale, useTranslations } from 'next-intl'
 import { CalendarDays, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import 'react-day-picker/dist/style.css'
+
+const DFNS_LOCALES = { es, en: enUS, pt: ptBR, fr, de, it } as const
+type SupportedLocale = keyof typeof DFNS_LOCALES
 
 interface Props {
   value: string                    // "YYYY-MM-DDTHH:mm"
@@ -47,6 +51,10 @@ const HOURS   = Array.from({ length: 12 }, (_, i) => i + 1)
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5)
 
 export function DateTimePicker({ value, onChange, min, required }: Props) {
+  const locale = useLocale()
+  const dfnsLocale = DFNS_LOCALES[(locale as SupportedLocale)] ?? es
+  const t = useTranslations('datePicker')
+
   const parsed = parseValue(value)
   const [open,     setOpen]     = useState(false)
   const [selDate,  setSelDate]  = useState<Date | undefined>(parsed.date)
@@ -81,7 +89,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
     setOpen(true)
   }
 
-  // Display label
+  // Display label — use Intl for locale-aware full date formatting
   const display = (() => {
     if (!value) return ''
     const d = new Date(value.length === 16 ? value + ':00' : value)
@@ -89,8 +97,8 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
     const h = d.getHours()
     const hr = h === 0 ? 12 : h > 12 ? h - 12 : h
     const mn = d.getMinutes()
-    const pd = h >= 12 ? 'p. m.' : 'a. m.'
-    const dateStr = format(d, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })
+    const pd = h >= 12 ? 'PM' : 'AM'
+    const dateStr = format(d, 'PPPP', { locale: dfnsLocale })
     return `${dateStr} · ${pad(hr)}:${pad(mn)} ${pd}`
   })()
 
@@ -104,7 +112,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
       >
         <CalendarDays size={15} style={{ color: '#606068', flexShrink: 0 }} />
         <span className="truncate" style={{ color: display ? '#F2F2F2' : '#606068', fontSize: '0.875rem' }}>
-          {display || 'Seleccionar fecha y hora'}
+          {display || t('placeholder')}
         </span>
       </button>
 
@@ -131,7 +139,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-2">
               <p className="text-base font-semibold" style={{ color: '#F2F2F2' }}>
-                Fecha y hora
+                {t('title')}
               </p>
               <button
                 onClick={() => setOpen(false)}
@@ -148,7 +156,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
                 mode="single"
                 selected={selDate}
                 onSelect={setSelDate}
-                locale={es}
+                locale={dfnsLocale}
                 fromDate={minDate}
                 showOutsideDays={false}
                 fixedWeeks
@@ -185,7 +193,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
             {/* Time picker */}
             <div className="px-5 py-4">
               <p className="text-xs font-semibold mb-3" style={{ color: '#606068', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                Hora
+                {t('time')}
               </p>
               <div className="flex items-center gap-2">
                 {/* Hours */}
@@ -258,7 +266,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
                 className="flex-1 py-3 rounded-2xl text-sm font-semibold transition-all"
                 style={{ background: 'rgba(255,255,255,0.06)', color: '#8A8A90', border: '1px solid rgba(255,255,255,0.08)' }}
               >
-                Cancelar
+                {t('cancel')}
               </button>
               <button
                 type="button"
@@ -273,7 +281,7 @@ export function DateTimePicker({ value, onChange, min, required }: Props) {
                 }}
               >
                 <Check size={16} />
-                Confirmar
+                {t('confirm')}
               </button>
             </div>
           </div>

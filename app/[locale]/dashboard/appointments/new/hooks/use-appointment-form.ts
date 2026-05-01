@@ -14,6 +14,8 @@ import {
   checkClientConflict,
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
+import { checkAppointmentLimit } from '@/lib/actions/check-appointment-limit'
+import { useTranslations } from 'next-intl'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { logger } from '@/lib/logger'
 
@@ -104,6 +106,7 @@ interface UseAppointmentFormReturn {
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useAppointmentForm(): UseAppointmentFormReturn {
+  const tPlan           = useTranslations('settings.plan.limitErrors')
   const router          = useRouter()
   const searchParams    = useSearchParams()
   const { businessId, loading: contextLoading } = useBusinessContext()
@@ -326,6 +329,14 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
 
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
+
+    // Plan limit: max appointments per month on free plan
+    const limitCheck = await checkAppointmentLimit(businessId)
+    if (!limitCheck.allowed) {
+      setMsg({ type: 'error', text: tPlan('appointments', { limit: limitCheck.limit }) })
+      setSaving(false)
+      return
+    }
 
     const container = getBrowserContainer()
 

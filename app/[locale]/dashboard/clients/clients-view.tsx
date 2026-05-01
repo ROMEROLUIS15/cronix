@@ -64,9 +64,11 @@ function ClientRow({ client }: { client: Client }) {
 
 interface ClientsViewProps {
   initialClients: Client[]
+  plan?: string
+  clientLimit?: number
 }
 
-export function ClientsView({ initialClients }: ClientsViewProps) {
+export function ClientsView({ initialClients, plan = 'free', clientLimit = Infinity }: ClientsViewProps) {
   const [query, setQuery] = useState('')
   const t = useTranslations('clients')
 
@@ -86,6 +88,10 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
     ? initialClients.reduce((s, c) => s + (c.total_spent ?? 0), 0) / initialClients.length
     : 0
 
+  const isFreePlan = plan === 'free' && isFinite(clientLimit)
+  const atLimit = isFreePlan && initialClients.length >= clientLimit
+  const pct = isFreePlan ? Math.min((initialClients.length / clientLimit) * 100, 100) : 0
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -95,9 +101,24 @@ export function ClientsView({ initialClients }: ClientsViewProps) {
             {t('count', { count: initialClients.length })}
           </p>
         </div>
-        <Link href="/dashboard/clients/new">
-          <Button leftIcon={<Plus size={16} />}>{t('newClient')}</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          {isFreePlan && (
+            <div className="flex flex-col items-end gap-1 min-w-[120px]">
+              <span className={`text-xs font-medium ${atLimit ? 'text-red-400' : 'text-muted-foreground'}`}>
+                {t('limitBadge', { current: initialClients.length, limit: clientLimit })}
+              </span>
+              <div className="w-full h-1.5 rounded-full bg-border overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${atLimit ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-brand-500'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )}
+          <Link href="/dashboard/clients/new">
+            <Button leftIcon={<Plus size={16} />} disabled={atLimit}>{t('newClient')}</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="relative group max-w-2xl">

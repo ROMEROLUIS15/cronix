@@ -1,8 +1,12 @@
 "use client"
 
 import { format }    from "date-fns"
-import { es }        from "date-fns/locale"
+import { es, enUS, ptBR, fr, de, it } from "date-fns/locale"
+import { useLocale } from "next-intl"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+
+const DFNS_LOCALES = { es, en: enUS, pt: ptBR, fr, de, it } as const
+type SupportedLocale = keyof typeof DFNS_LOCALES
 
 interface MonthNavigatorProps {
   currentMonth: Date
@@ -12,6 +16,9 @@ interface MonthNavigatorProps {
 
 /** MonthNavigator — prev/next month controls with centered month+year display. */
 export function MonthNavigator({ currentMonth, onPrev, onNext }: MonthNavigatorProps) {
+  const locale = useLocale()
+  const dfnsLocale = DFNS_LOCALES[(locale as SupportedLocale)] ?? es
+
   const btnStyle = {
     background: "rgba(255,255,255,0.05)",
     color:      "#8A8A90",
@@ -33,7 +40,7 @@ export function MonthNavigator({ currentMonth, onPrev, onNext }: MonthNavigatorP
 
       <div className="text-center">
         <p className="text-base sm:text-lg font-black capitalize" style={{ color: "#F0F0F5", letterSpacing: "-0.03em" }}>
-          {format(currentMonth, "MMMM", { locale: es })}
+          {format(currentMonth, "MMMM", { locale: dfnsLocale })}
         </p>
         <p className="text-xs font-bold tracking-widest" style={{ color: "#3884FF", opacity: 0.9 }}>
           {format(currentMonth, "yyyy")}

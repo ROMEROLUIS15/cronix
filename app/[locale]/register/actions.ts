@@ -73,7 +73,7 @@ export async function register(formData: FormData) {
     category: bizCategory,
     owner_id: user.id,
     timezone,
-    plan: 'pro',
+    plan: 'free',
   })
 
   if (businessResult.error) {

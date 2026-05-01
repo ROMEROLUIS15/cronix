@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { getRepos } from '@/lib/repositories'
 import { withActionRateLimit } from '@/lib/actions/rate-limit-action'
 import type { TeamMember, UpdateEmployeePayload } from '@/lib/domain/repositories/IUserRepository'
+import { getEmployeeLimit } from '@/lib/plans/plan-limits'
+import { getTranslations } from 'next-intl/server'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,23 @@ export async function createEmployeeAction(
   return await withActionRateLimit('team-create', 10, 60, async () => {
     const admin = createAdminClient()
     const { users: usersRepoInstance } = getRepos(admin)
+
+    // Plan limit check
+    const { data: biz } = await admin
+      .from('businesses')
+      .select('plan')
+      .eq('id', businessId)
+      .single()
+
+    const limit = getEmployeeLimit(biz?.plan ?? 'free')
+    if (isFinite(limit)) {
+      const teamResult = await usersRepoInstance.getTeamMembers(businessId)
+      const currentCount = teamResult.data?.length ?? 0
+      if (currentCount >= limit) {
+        const t = await getTranslations('settings.plan.limitErrors')
+        throw new Error(t('employees', { limit, plan: (biz?.plan ?? 'free').toUpperCase() }))
+      }
+    }
 
     const result = await usersRepoInstance.createEmployee(businessId, payload)
     if (result.error) throw new Error(result.error)

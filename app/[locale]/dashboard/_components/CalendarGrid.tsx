@@ -119,7 +119,7 @@ export function CalendarGrid({
                     })}
                     {apts.length > 3 && (
                       <div className="text-[9px] font-bold px-1 mt-0.5" style={{ color: "#6A6A72" }}>
-                        +{apts.length - 3} más
+                        {t('moreAppts', { count: apts.length - 3 })}
                       </div>
                     )}
                   </div>

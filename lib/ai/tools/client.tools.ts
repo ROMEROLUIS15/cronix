@@ -8,6 +8,7 @@ import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
 import type { ToolContext } from './_context'
 import { fmtUserDate, formatForSpeech } from './_helpers'
+import { getClientLimit } from '@/lib/plans/plan-limits'
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,15 @@ export async function create_client(
   if (duplicate.status === 'found') {
     const d = duplicate.match
     return `El cliente "${d.name}"${d.phone ? ` (Tel: ${d.phone})` : ''} ya está registrado. No se creó un duplicado.`
+  }
+
+  // Plan limit check
+  const bizResult = await ctx.businessRepo.getById(business_id)
+  if (!bizResult.error && bizResult.data) {
+    const limit = getClientLimit(bizResult.data.plan ?? 'free')
+    if (isFinite(limit) && existingResult.data.length >= limit) {
+      return `Has alcanzado el límite de ${limit} clientes del plan gratuito. Actualiza tu plan en Configuración > Facturación para agregar más.`
+    }
   }
 
   const insertResult = await ctx.clientRepo.insert({

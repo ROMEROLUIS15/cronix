@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { nowpayments } from '@/lib/payments/nowpayments';
 
 export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
@@ -26,12 +26,15 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
     const amountUsd = plan === 'pro' ? 6.00 : 10.00;
 
     // Call NOWPayments
+    // order_id must be unique per invoice — append timestamp to avoid NOWPayments rejecting duplicates
+    const orderId = `${business.id}-${Date.now()}`;
+
     const res = await nowpayments.createInvoice({
       price_amount: amountUsd,
       price_currency: 'usd',
-      pay_currency: 'usdttrc20', // Obligar pago en USDT Tron para evitar comisiones altas
-      order_id: business.id,
-      order_description: plan,
+      pay_currency: 'usdttrc20',
+      order_id: orderId,
+      order_description: `cronix-${plan}`,
       success_url: `${process.env.APP_URL}/es/dashboard/settings?payment=success`,
       cancel_url: `${process.env.APP_URL}/es/dashboard/settings?payment=cancel`
     });
@@ -40,8 +43,10 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
       return { error: res.error || 'Could not generate payment link' };
     }
 
-    // Guardar el pre-registro de la factura
-    const { error: insertError } = await supabase
+    // Guardar el pre-registro de la factura usando el cliente admin (service role)
+    // para evitar restricciones de RLS en saas_invoices que solo permiten INSERT al service role.
+    const supabaseAdmin = createAdminClient();
+    const { error: insertError } = await supabaseAdmin
       .from('saas_invoices')
       .insert({
         business_id: business.id,
