@@ -469,7 +469,7 @@ export async function get_monthly_forecast(
   if (txsResult.error     || !txsResult.data)     return 'Error al calcular la proyección mensual.'
 
   const projectedRevenue = apptsResult.data.reduce((acc, a) => {
-    const svc = servicesResult.data!.find(s => s.id === a.id)
+    const svc = servicesResult.data!.find(s => s.id === a.service_id)
     return acc + Number(svc?.price ?? 0)
   }, 0)
 
