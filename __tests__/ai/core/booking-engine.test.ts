@@ -221,9 +221,10 @@ describe('BookingEngine.createAppointment', () => {
       client_name: 'Cliente Nuevo',
     })
     expect(result.success).toBe(true)
+    // CreateClientUseCase llama repo.insert con snake_case (columnas de Supabase)
     expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
-      name:       'Cliente Nuevo',
-      businessId: 'biz-1',
+      name:        'Cliente Nuevo',
+      business_id: 'biz-1',
     }))
   })
 
@@ -358,14 +359,18 @@ describe('BookingEngine.cancelAppointment', () => {
   it('cancela exitosamente por appointment_id', async () => {
     const engine = makeEngine({
       query: {
-        findUpcomingByClient: vi.fn().mockResolvedValue({
-          data: [{
-            id: APT_UUID,
-            start_at: '2026-05-03T15:00:00.000Z',
-            end_at:   '2026-05-03T15:45:00.000Z',
-            status:   'pending',
-            service_id: SVC_UUID,
-          }],
+        // resolveAppointmentId llama getForEdit para verificar que la cita existe en este negocio
+        getForEdit: vi.fn().mockResolvedValue({
+          data: {
+            id:         APT_UUID,
+            business_id: 'biz-1',
+            client_id:   CLI_UUID,
+            service_id:  SVC_UUID,
+            start_at:   '2026-05-03T15:00:00.000Z',
+            end_at:     '2026-05-03T15:45:00.000Z',
+            status:     'pending',
+            appointment_services: [{ service_id: SVC_UUID }],
+          },
           error: null,
         }),
       },
