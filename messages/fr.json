@@ -902,8 +902,40 @@
       "proActive": "Forfait Pro actif",
       "enterpriseActive": "Forfait Enterprise actif",
       "paymentNote": "Paiement en USDT TRC-20 via NOWPayments. L'abonnement s'active automatiquement dans 1 à 3 minutes après confirmation sur la blockchain. Durée : 30 jours.",
-      "errorInternal": "Erreur interne. Veuillez réessayer."
+      "errorInternal": "Erreur interne. Veuillez réessayer.",
+      "paymentModal": {
+        "selectMethod": "Sélectionnez votre mode de paiement :",
+        "continueBtn": "Continuer",
+        "backBtn": "Retour",
+        "sendRef": "Envoyer la référence",
+        "copy": "Copier",
+        "copied": "Copié !",
+        "registered": "Paiement enregistré !",
+        "successTitle": "Référence reçue !",
+        "successMsg": "Votre paiement est en cours de vérification. Dans un délai de 24 heures ouvrables, notre équipe vérifiera la transaction et activera votre forfait {plan}.",
+        "successNote": "Vous recevrez une notification dans le tableau de bord lorsque ce sera prêt.",
+        "successBtn": "Compris",
+        "openBinance": "Ouvrir Binance Pay",
+        "methods": {
+          "nowpayments": { "label": "Cryptomonnaie (Automatique)", "subtitle": "USDT sur réseau BSC. Activation automatique après confirmation blockchain (1–3 min).", "badge": "Automatique" },
+          "pago_movil":     { "label": "Pago Móvil (Venezuela)", "subtitle": "Transférez en Bs. au numéro enregistré. Activation manuelle sous 24h ouvrables." },
+          "binance_manual": { "label": "Binance Pay (Manuel)", "subtitle": "Envoyez USDT avec votre Pay ID Binance. Activation manuelle sous 24h ouvrables." }
+        },
+        "pagoMovil": {
+          "title": "Coordonnées Pago Móvil",
+          "bank": "Banque", "phone": "Téléphone", "cedula": "Pièce d'identité", "concept": "Concept",
+          "refLabel": "Votre numéro de référence Pago Móvil",
+          "refHint": "Le numéro de référence apparaît dans votre application bancaire après l'envoi."
+        },
+        "binance": {
+          "title": "Coordonnées Binance Pay",
+          "payId": "ID Binance Pay", "currency": "Devise", "currencyValue": "USDT (BEP-20 / BSC)", "exactAmount": "Montant exact",
+          "refLabel": "ID de transaction ou 6 derniers chiffres de la référence",
+          "refHint": "Retrouvez-le dans l'historique Binance Pay après l'envoi."
+        }
+      }
     }
+
   },
   "profile": {
     "title": "Mon Profil",
