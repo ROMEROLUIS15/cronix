@@ -262,9 +262,9 @@ function extractClientNameFromOwnerText(text: string): string | null {
   const toTitle = (s: string) =>
     s.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 
-  // "a [Name]" followed by a date/service/time signal
+  // "a [Name]" followed by a date/service/time signal — supports up to 3-word names
   const afterA = n.match(
-    /\ba\s+([a-z]+(?:\s+[a-z]+)?)\s+(?:hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|el\s+\d|para|\d)/,
+    /\ba\s+([a-z]+(?:\s+[a-z]+){0,2})\s+(?:hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|el\s+\d|para|\d)/,
   )
   if (afterA?.[1]) {
     const candidate = afterA[1].trim()
@@ -272,11 +272,11 @@ function extractClientNameFromOwnerText(text: string): string | null {
   }
 
   // "a nombre de [Name]"
-  const nombreDe = n.match(/\ba\s+nombre\s+de\s+([a-z]+(?:\s+[a-z]+)?)/)
+  const nombreDe = n.match(/\ba\s+nombre\s+de\s+([a-z]+(?:\s+[a-z]+){0,2})/)
   if (nombreDe?.[1]) return toTitle(nombreDe[1].trim())
 
   // "cita de/para [Name]"
-  const citaDe = n.match(/\bcita\s+(?:de|para)\s+([a-z]+(?:\s+[a-z]+)?)/)
+  const citaDe = n.match(/\bcita\s+(?:de|para)\s+([a-z]+(?:\s+[a-z]+){0,2})/)
   if (citaDe?.[1]) return toTitle(citaDe[1].trim())
 
   return null
@@ -452,16 +452,16 @@ export class DecisionEngine implements IDecisionEngine {
           hasClient: Boolean(parsed.clientName),
         })
 
-        if (parsed.date && parsed.time && parsed.serviceId) {
+        if (parsed.date && parsed.time && parsed.serviceId && parsed.clientName) {
           // All required fields present → execute immediately, zero LLM calls
           return {
             type:   'execute_immediately',
             intent: 'confirm_booking',
             args: {
-              service_id: parsed.serviceId,
-              date:       parsed.date,
-              time:       parsed.time,
-              ...(parsed.clientName ? { client_name: parsed.clientName } : {}),
+              service_id:  parsed.serviceId,
+              date:        parsed.date,
+              time:        parsed.time,
+              client_name: parsed.clientName,
             },
           }
         }
@@ -477,11 +477,13 @@ export class DecisionEngine implements IDecisionEngine {
           const missingField = !parsed.serviceId ? 'service_id'
             : !parsed.date                       ? 'date'
             : !parsed.time                       ? 'time'
+            : !parsed.clientName                 ? 'client_name'
             : null
 
           if (missingField) {
-            const prompt = missingField === 'service_id' ? '¿Para qué servicio?'
-              : missingField === 'date'                  ? '¿Para qué día?'
+            const prompt = missingField === 'service_id'  ? '¿Para qué servicio?'
+              : missingField === 'date'                   ? '¿Para qué día?'
+              : missingField === 'client_name'            ? '¿Para qué cliente?'
               : '¿A qué hora?'
             return {
               type:          'continue_collection',
