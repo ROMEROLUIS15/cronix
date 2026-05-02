@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
-import { createSaaSCheckoutSession } from './actions';
-import { Loader2, Zap, Crown, Check, X } from 'lucide-react';
+import { Zap, Crown, Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { PaymentMethodModal } from './payment-method-modal';
+
 
 export function PlanManager({
   currentPlan,
@@ -16,10 +17,10 @@ export function PlanManager({
   businessId?: string;
 }) {
   const t = useTranslations('settings.plan');
-  const [isOpen, setIsOpen]   = useState(false);
-  const [loading, setLoading] = useState<'pro' | 'enterprise' | null>(null);
-  const [error, setError]     = useState<string | null>(null);
+  const [isOpen, setIsOpen]         = useState(false);
+  const [paymentPlan, setPaymentPlan] = useState<'pro' | 'enterprise' | null>(null);
   const supabase = createClient();
+
 
   useEffect(() => {
     if (!isOpen || !businessId) return;
@@ -39,23 +40,12 @@ export function PlanManager({
     return () => { supabase.removeChannel(channel); };
   }, [isOpen, currentPlan, businessId, supabase]);
 
-  const handleUpgrade = async (plan: 'pro' | 'enterprise') => {
-    setLoading(plan);
-    setError(null);
-    try {
-      const res = await createSaaSCheckoutSession(plan);
-      if (res.error) {
-        setError(res.error);
-        setLoading(null);
-      } else if (res.invoice_url) {
-        window.open(res.invoice_url, '_blank', 'noopener,noreferrer');
-        setLoading(null);
-      }
-    } catch {
-      setError(t('errorInternal'));
-      setLoading(null);
-    }
+  const openPayment = (plan: 'pro' | 'enterprise') => {
+    setIsOpen(false);      // cierra la tabla comparativa primero
+    setPaymentPlan(plan);  // luego abre el modal de pago
   };
+
+
 
   // ── Feature rows for comparison ──
   const rows = [
@@ -95,6 +85,14 @@ export function PlanManager({
         </div>
       </Card>
 
+      {/* Payment method modal (opens when user clicks Activar) */}
+      {paymentPlan && (
+        <PaymentMethodModal
+          plan={paymentPlan}
+          onClose={() => setPaymentPlan(null)}
+        />
+      )}
+
       {isOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/70 animate-in fade-in duration-200"
@@ -133,11 +131,6 @@ export function PlanManager({
 
             {/* Scrollable body */}
             <div className="px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto space-y-4 sm:space-y-6">
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
 
               {/* ── Mobile: stacked plan cards ── */}
               <div className="sm:hidden space-y-3">
@@ -149,6 +142,7 @@ export function PlanManager({
                     bg: 'rgba(144,144,152,0.08)',
                     border: 'rgba(144,144,152,0.2)',
                     values: rows.map(r => ({ label: r.label, val: r.free })),
+                    upgradePlan: null as null | 'pro' | 'enterprise',
                   },
                   {
                     name: 'Pro',
@@ -157,6 +151,7 @@ export function PlanManager({
                     bg: 'rgba(0,98,255,0.08)',
                     border: 'rgba(0,98,255,0.25)',
                     values: rows.map(r => ({ label: r.label, val: r.pro })),
+                    upgradePlan: 'pro' as const,
                   },
                   {
                     name: 'Enterprise',
@@ -165,6 +160,7 @@ export function PlanManager({
                     bg: 'rgba(168,85,247,0.08)',
                     border: 'rgba(168,85,247,0.25)',
                     values: rows.map(r => ({ label: r.label, val: r.ent })),
+                    upgradePlan: 'enterprise' as const,
                   },
                 ].map((plan) => (
                   <div
@@ -190,16 +186,16 @@ export function PlanManager({
                         </div>
                       ))}
                     </div>
-                    {plan.name === 'Pro' && (
+                    {/* CTA buttons inside mobile card */}
+                    {plan.upgradePlan === 'pro' && (
                       <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
                         <Button
+                          id="mobile-activate-pro"
                           className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-11 text-xs font-semibold"
-                          onClick={() => handleUpgrade('pro')}
-                          disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
+                          onClick={() => openPayment('pro')}
+                          disabled={currentPlan === 'pro' || currentPlan === 'enterprise'}
                         >
-                          {loading === 'pro' ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : currentPlan === 'pro' ? (
+                          {currentPlan === 'pro' ? (
                             <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
                           ) : (
                             <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
@@ -207,17 +203,16 @@ export function PlanManager({
                         </Button>
                       </div>
                     )}
-                    {plan.name === 'Enterprise' && (
+                    {plan.upgradePlan === 'enterprise' && (
                       <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
                         <Button
+                          id="mobile-activate-enterprise"
                           className="w-full h-11 text-xs font-semibold"
                           style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
-                          onClick={() => handleUpgrade('enterprise')}
-                          disabled={loading !== null || currentPlan === 'enterprise'}
+                          onClick={() => openPayment('enterprise')}
+                          disabled={currentPlan === 'enterprise'}
                         >
-                          {loading === 'enterprise' ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : currentPlan === 'enterprise' ? (
+                          {currentPlan === 'enterprise' ? (
                             <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
                           ) : (
                             <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
@@ -263,13 +258,12 @@ export function PlanManager({
                       <td className="p-3 text-center"></td>
                       <td className="p-3 text-center">
                         <Button
+                          id="desktop-activate-pro"
                           className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-10 text-xs font-semibold"
-                          onClick={() => handleUpgrade('pro')}
-                          disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
+                          onClick={() => openPayment('pro')}
+                          disabled={currentPlan === 'pro' || currentPlan === 'enterprise'}
                         >
-                          {loading === 'pro' ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : currentPlan === 'pro' ? (
+                          {currentPlan === 'pro' ? (
                             <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
                           ) : (
                             <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
@@ -278,14 +272,13 @@ export function PlanManager({
                       </td>
                       <td className="p-3 text-center">
                         <Button
+                          id="desktop-activate-enterprise"
                           className="w-full h-10 text-xs font-semibold"
                           style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
-                          onClick={() => handleUpgrade('enterprise')}
-                          disabled={loading !== null || currentPlan === 'enterprise'}
+                          onClick={() => openPayment('enterprise')}
+                          disabled={currentPlan === 'enterprise'}
                         >
-                          {loading === 'enterprise' ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : currentPlan === 'enterprise' ? (
+                          {currentPlan === 'enterprise' ? (
                             <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
                           ) : (
                             <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
