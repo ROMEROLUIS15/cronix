@@ -537,11 +537,14 @@ export type Database = {
           crypto_amount: number | null
           crypto_currency: string | null
           id: string
-          np_invoice_id: string
+          np_invoice_id: string | null
           np_payment_id: string | null
           plan_purchased: Database["public"]["Enums"]["business_plan"]
           status: Database["public"]["Enums"]["saas_invoice_status"]
           updated_at: string
+          payment_method: string
+          reference_number: string | null
+          admin_notes: string | null
         }
         Insert: {
           amount_usd: number
@@ -550,11 +553,14 @@ export type Database = {
           crypto_amount?: number | null
           crypto_currency?: string | null
           id?: string
-          np_invoice_id: string
+          np_invoice_id?: string | null
           np_payment_id?: string | null
           plan_purchased: Database["public"]["Enums"]["business_plan"]
           status?: Database["public"]["Enums"]["saas_invoice_status"]
           updated_at?: string
+          payment_method?: string
+          reference_number?: string | null
+          admin_notes?: string | null
         }
         Update: {
           amount_usd?: number
@@ -563,11 +569,14 @@ export type Database = {
           crypto_amount?: number | null
           crypto_currency?: string | null
           id?: string
-          np_invoice_id?: string
+          np_invoice_id?: string | null
           np_payment_id?: string | null
           plan_purchased?: Database["public"]["Enums"]["business_plan"]
           status?: Database["public"]["Enums"]["saas_invoice_status"]
           updated_at?: string
+          payment_method?: string
+          reference_number?: string | null
+          admin_notes?: string | null
         }
         Relationships: [
           {
@@ -579,6 +588,7 @@ export type Database = {
           }
         ]
       }
+
       services: {
         Row: {
           business_id: string

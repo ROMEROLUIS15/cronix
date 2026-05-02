@@ -17,6 +17,7 @@ import {
 } from '@/lib/domain/repositories/IAppointmentRepository'
 import type { AppointmentWithRelations, SlotCheckAppointment } from '@/types'
 import cache, { TTL, TTL_SEC } from '@/lib/cache'
+import { logger } from '@/lib/logger'
 
 type Client = SupabaseClient<Database>
 
@@ -197,10 +198,14 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
     // ---- Auto-Facturación / Checkout ----
     if (status === 'completed') {
       try {
-        // Fetch to calculate total revenue AND any previous partial payments (abonos)
+        // Fetch appointment data for billing — ALWAYS filter by both id AND business_id.
+        // The business_id filter here is an explicit ownership assertion, not just a
+        // convenience: if apt is null, billing is skipped entirely, preventing cross-tenant
+        // data reads and idempotency key poisoning even when using an admin client.
         const { data: apt } = await this.supabase
           .from('appointments')
           .select(`
+            business_id,
             appointment_services (
               service:services(price, name)
             ),
@@ -209,43 +214,73 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
             )
           `)
           .eq('id', appointmentId)
+          .eq('business_id', businessId)
           .single()
 
-        let totalAmount = 0
-        let notes = 'Cobro automático (completada)'
+        // Hard ownership check: if the appointment doesn't belong to this business,
+        // apt will be null (row not found). Skip billing entirely — do NOT fall through
+        // to a default totalAmount of 0, which would silently hide the mismatch.
+        if (!apt) {
+          logger.error('AUTO-BILLING', 'Billing skipped — appointment not found for business', {
+            appointmentId,
+            businessId,
+            reason: 'APPOINTMENT_NOT_FOUND_OR_CROSS_TENANT',
+          })
+          // Fall through to the UPDATE — it will also find 0 rows and return an error.
+        } else {
+          // Invariant: the fetched row must belong to this business.
+          // This catches future regressions where the query filter is accidentally removed.
+          if (apt.business_id !== businessId) {
+            throw new Error(
+              `[updateStatus] Ownership mismatch: appointment ${appointmentId} belongs to ` +
+              `${apt.business_id}, not ${businessId}. Billing aborted.`
+            )
+          }
 
-        if (apt?.appointment_services && Array.isArray(apt.appointment_services)) {
-           totalAmount = apt.appointment_services.reduce((sum: number, relation: any) => sum + Number(relation.service?.price ?? 0), 0)
-           const serviceNames = apt.appointment_services.map((r: any) => r.service?.name).filter(Boolean).join(', ')
-           if (serviceNames) notes = `Cobro: ${serviceNames}`
-        }
+          let totalAmount = 0
+          let notes = 'Cobro automático (completada)'
 
-        // Subtract what was already paid (if they made partial payments before completion)
-        const alreadyPaid = apt?.transactions && Array.isArray(apt.transactions)
-          ? apt.transactions.reduce((sum: number, t: any) => sum + Number(t.net_amount ?? 0), 0)
-          : 0
+          if (apt.appointment_services && Array.isArray(apt.appointment_services)) {
+            totalAmount = apt.appointment_services.reduce(
+              (sum: number, relation: any) => sum + Number(relation.service?.price ?? 0), 0
+            )
+            const serviceNames = apt.appointment_services
+              .map((r: any) => r.service?.name)
+              .filter(Boolean)
+              .join(', ')
+            if (serviceNames) notes = `Cobro: ${serviceNames}`
+          }
 
-        const debt = totalAmount - alreadyPaid
+          // Subtract what was already paid (if they made partial payments before completion)
+          const alreadyPaid = apt.transactions && Array.isArray(apt.transactions)
+            ? apt.transactions.reduce((sum: number, t: any) => sum + Number(t.net_amount ?? 0), 0)
+            : 0
 
-        if (debt > 0) {
-          // Attempt upsert with idempotency key ONLY for the remaining debt
-          await this.supabase
-            .from('transactions')
-            .upsert({
-              business_id: businessId,
-              appointment_id: appointmentId,
-              amount: debt,
-              net_amount: debt,
-              discount: 0,
-              tip: 0,
-              method: 'cash', // Default to cash for leftover auto-checkout
-              notes: alreadyPaid > 0 ? `Liquidación de saldo. ${notes}` : notes,
-              paid_at: new Date().toISOString(),
-              idempotency_key: `checkout_${appointmentId}`
-            }, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+          const debt = totalAmount - alreadyPaid
+
+          if (debt > 0) {
+            await this.supabase
+              .from('transactions')
+              .upsert({
+                business_id:     businessId,
+                appointment_id:  appointmentId,
+                amount:          debt,
+                net_amount:      debt,
+                discount:        0,
+                tip:             0,
+                method:          'cash',
+                notes:           alreadyPaid > 0 ? `Liquidación de saldo. ${notes}` : notes,
+                paid_at:         new Date().toISOString(),
+                idempotency_key: `checkout_${appointmentId}`,
+              }, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+          }
         }
       } catch (err) {
-        console.error('Error in auto-billing hook:', err)
+        logger.error('AUTO-BILLING', 'Exception in auto-billing hook', {
+          appointmentId,
+          businessId,
+          error: err instanceof Error ? err.message : String(err),
+        })
       }
     }
 
@@ -339,7 +374,7 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
   ): Promise<Result<AppointmentDateRange[]>> {
     let query = this.supabase
       .from('appointments')
-      .select('id, start_at, end_at, status')
+      .select('id, start_at, end_at, status, service_id')
       .eq('business_id', businessId)
       .gte('start_at', from)
       .lte('start_at', to)
@@ -356,7 +391,8 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
       id: row.id,
       start_at: row.start_at,
       end_at: row.end_at,
-      status: (row.status ?? 'pending') as string
+      status: (row.status ?? 'pending') as string,
+      service_id: (row as Record<string, unknown>)['service_id'] as string | null ?? null,
     })))
   }
 

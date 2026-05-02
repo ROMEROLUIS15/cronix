@@ -24,6 +24,7 @@ export type AppointmentDateRange = {
   start_at: string
   end_at: string
   status: string
+  service_id?: string | null
 }
 
 export type DashboardStats = {
