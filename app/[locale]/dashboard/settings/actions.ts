@@ -31,10 +31,8 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
 
     const res = await nowpayments.createInvoice({
       price_amount: amountUsd,
-      price_currency: 'usd',
-      pay_currency: 'usdtbsc',  // NOWPayments code for USDT on Binance Smart Chain (BEP-20)
-      is_fixed_rate: true,          // Locks crypto amount at invoice creation — no floating decimals
-      is_fee_paid_by_user: false,   // Merchant absorbs the gateway fee — client sees exact $10/$15, enables Binance Pay button
+      price_currency: 'usdtbsc', // Mirror currency: same as pay_currency → exact amount, no conversion
+      pay_currency: 'usdtbsc',
       ipn_callback_url: `${process.env.APP_URL}/api/webhooks/nowpayments`,
       order_id: orderId,
       order_description: `cronix-${plan}`,

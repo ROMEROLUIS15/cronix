@@ -64,8 +64,6 @@ export class NOWPaymentsAPI {
         return { error: data.message || 'Failed to create invoice' };
       }
 
-      console.log('[NOWPayments] Invoice created OK — full response:', JSON.stringify(data, null, 2));
-
       const resData = data as NOWPaymentsInvoiceResponse;
       return {
         invoice_url: resData.invoice_url,
