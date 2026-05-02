@@ -16,6 +16,7 @@ import {
   UsersRound,
   Activity,
   ShieldCheck,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/lib/actions/auth";
@@ -40,8 +41,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/reports",     labelKey: "reports",   icon: BarChart3 },
   { href: "/dashboard/settings",    labelKey: "settings",  icon: Settings },
   // Admin-only tools: labels kept in English — internal, locale-agnostic
-  { href: "/dashboard/admin/pulse", labelKey: "__pulse",      icon: Activity,     adminOnly: true },
-  { href: "/dashboard/admin/users", labelKey: "__adminUsers", icon: ShieldCheck,  adminOnly: true },
+  { href: "/dashboard/admin/pulse",    labelKey: "__pulse",        icon: Activity,     adminOnly: true },
+  { href: "/dashboard/admin/users",    labelKey: "__adminUsers",   icon: ShieldCheck,  adminOnly: true },
+  { href: "/dashboard/admin/payments", labelKey: "__adminPayments",icon: CreditCard,   adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -181,8 +183,9 @@ export function Sidebar({
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
               const ADMIN_LABELS: Record<string, string> = {
-                '__pulse':      'System Pulse',
-                '__adminUsers': 'User Management',
+                '__pulse':          'System Pulse',
+                '__adminUsers':     'User Management',
+                '__adminPayments':  'Payments',
               };
               const label = ADMIN_LABELS[item.labelKey] ?? t(item.labelKey as Parameters<typeof t>[0]);
               return (

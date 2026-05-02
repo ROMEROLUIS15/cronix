@@ -902,8 +902,40 @@
       "proActive": "Plano Pro ativo",
       "enterpriseActive": "Plano Enterprise ativo",
       "paymentNote": "Pagamento em USDT TRC-20 via NOWPayments. A assinatura é ativada automaticamente em 1–3 minutos após a confirmação na blockchain. Duração: 30 dias.",
-      "errorInternal": "Erro interno. Tente novamente."
+      "errorInternal": "Erro interno. Tente novamente.",
+      "paymentModal": {
+        "selectMethod": "Selecione como deseja pagar:",
+        "continueBtn": "Continuar",
+        "backBtn": "Voltar",
+        "sendRef": "Enviar referência",
+        "copy": "Copiar",
+        "copied": "Copiado!",
+        "registered": "Pagamento Registrado!",
+        "successTitle": "Referência recebida!",
+        "successMsg": "Seu pagamento está em análise. Em até 24 horas úteis, nossa equipe verificará a transação e ativará seu plano {plan}.",
+        "successNote": "Você receberá uma notificação no dashboard quando estiver pronto.",
+        "successBtn": "Entendido",
+        "openBinance": "Abrir Binance Pay",
+        "methods": {
+          "nowpayments": { "label": "Criptomoeda (Automático)", "subtitle": "USDT na rede BSC. Ativa automaticamente após confirmação blockchain (1–3 min).", "badge": "Automático" },
+          "pago_movil":     { "label": "Pago Móvil (Venezuela)", "subtitle": "Transfira em Bs. para o número registrado. Ativação manual em até 24 horas úteis." },
+          "binance_manual": { "label": "Binance Pay (Manual)", "subtitle": "Envie USDT com seu Pay ID da Binance. Ativação manual em até 24 horas úteis." }
+        },
+        "pagoMovil": {
+          "title": "Dados para Pago Móvil",
+          "bank": "Banco", "phone": "Telefone", "cedula": "Cédula", "concept": "Conceito",
+          "refLabel": "Número de referência do seu Pago Móvil",
+          "refHint": "O número de referência aparece no seu app bancário após o envio."
+        },
+        "binance": {
+          "title": "Dados para Binance Pay",
+          "payId": "Binance Pay ID", "currency": "Moeda", "currencyValue": "USDT (BEP-20 / BSC)", "exactAmount": "Valor exato",
+          "refLabel": "ID da Transação ou últimos 6 dígitos da referência",
+          "refHint": "Encontre no histórico de transações do Binance Pay."
+        }
+      }
     }
+
   },
   "profile": {
     "title": "Meu Perfil",

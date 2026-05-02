@@ -3,6 +3,9 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { nowpayments } from '@/lib/payments/nowpayments';
 
+export type ManualPaymentMethod = 'pago_movil' | 'binance_manual';
+
+
 export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
   try {
     const supabase = await createClient();
@@ -66,5 +69,60 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
   } catch (error) {
     console.error('Checkout Error:', error);
     return { error: 'Internal server error' };
+  }
+}
+
+/**
+ * Registers a manual payment (Pago Móvil / Binance) pending admin approval.
+ * Returns { success: true } on success or { error: string } on failure.
+ */
+export async function submitManualPayment({
+  plan,
+  method,
+  referenceNumber,
+}: {
+  plan: 'pro' | 'enterprise';
+  method: ManualPaymentMethod;
+  referenceNumber: string;
+}): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Unauthorized' };
+
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single();
+    if (!business) return { error: 'Business not found' };
+
+    const ref = referenceNumber.trim();
+    if (!ref || ref.length < 4) return { error: 'Ingresa un número de referencia válido (mínimo 4 caracteres).' };
+
+    const amountUsd = plan === 'pro' ? 10.00 : 15.00;
+
+    const supabaseAdmin = createAdminClient();
+    const { error: insertError } = await supabaseAdmin
+      .from('saas_invoices')
+      .insert({
+        business_id: business.id,
+        np_invoice_id: null,
+        amount_usd: amountUsd,
+        plan_purchased: plan,
+        status: 'confirming',        // signals "awaiting manual review"
+        payment_method: method,
+        reference_number: ref,
+      });
+
+    if (insertError) {
+      console.error('[ManualPayment] Insert error:', insertError);
+      return { error: 'Error al registrar el pago. Inténtalo de nuevo.' };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[ManualPayment] Unexpected error:', err);
+    return { error: 'Error interno. Inténtalo de nuevo.' };
   }
 }
