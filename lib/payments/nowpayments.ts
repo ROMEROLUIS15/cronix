@@ -6,6 +6,8 @@ export type NOWPaymentsInvoiceRequest = {
   price_amount: number;
   price_currency: string;
   pay_currency?: string;
+  is_fixed_rate?: boolean;
+  is_fee_paid_by_user?: boolean;
   order_id: string;
   order_description?: string;
   ipn_callback_url?: string;
@@ -52,22 +54,20 @@ export class NOWPaymentsAPI {
           'x-api-key': this.apiKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...params,
-          // If no specific coin is selected, let the user choose on their UI,
-          // but we can enforce 'usdttrc20' if we only want that.
-        }),
+        body: JSON.stringify(params),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('NOWPayments API Error:', data);
+        console.error('[NOWPayments] Invoice creation failed:', JSON.stringify(data));
         return { error: data.message || 'Failed to create invoice' };
       }
 
+      console.log('[NOWPayments] Invoice created OK — full response:', JSON.stringify(data, null, 2));
+
       const resData = data as NOWPaymentsInvoiceResponse;
-      return { 
+      return {
         invoice_url: resData.invoice_url,
         invoice_id: resData.id?.toString()
       };

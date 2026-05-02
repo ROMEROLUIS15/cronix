@@ -23,7 +23,7 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
       return { error: 'Business not found' };
     }
 
-    const amountUsd = plan === 'pro' ? 6.00 : 10.00;
+    const amountUsd = plan === 'pro' ? 10.00 : 15.00;
 
     // Call NOWPayments
     // order_id must be unique per invoice — append timestamp to avoid NOWPayments rejecting duplicates
@@ -32,11 +32,14 @@ export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
     const res = await nowpayments.createInvoice({
       price_amount: amountUsd,
       price_currency: 'usd',
-      pay_currency: 'usdttrc20',
+      pay_currency: 'usdtbsc',  // NOWPayments code for USDT on Binance Smart Chain (BEP-20)
+      is_fixed_rate: true,          // Locks crypto amount at invoice creation — no floating decimals
+      is_fee_paid_by_user: false,   // Merchant absorbs the gateway fee — client sees exact $10/$15, enables Binance Pay button
+      ipn_callback_url: `${process.env.APP_URL}/api/webhooks/nowpayments`,
       order_id: orderId,
       order_description: `cronix-${plan}`,
-      success_url: `${process.env.APP_URL}/es/dashboard/settings?payment=success`,
-      cancel_url: `${process.env.APP_URL}/es/dashboard/settings?payment=cancel`
+      success_url: `${process.env.APP_URL}/dashboard/settings?payment=success`,
+      cancel_url: `${process.env.APP_URL}/dashboard/settings?payment=cancel`,
     });
 
     if (res.error || !res.invoice_url || !res.invoice_id) {
