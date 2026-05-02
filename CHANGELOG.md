@@ -6,7 +6,45 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/) y es
 
 ---
 
-## [0.4.0] — 2026-04-29
+## [0.5.0] — 2026-05-02
+
+### Cambiado
+
+#### Refactor UI: Botones de Pago Responsivos en Gestión de Planes
+
+La interfaz de gestión de planes (`plan-manager.tsx`) fue reorganizada para mejorar la experiencia en móvil y escritorio.
+
+**Cambios técnicos:**
+- **Móvil**: Los botones "Activar Pro" y "Activar Enterprise" se movieron al interior de la tarjeta de cada plan, justo debajo de su lista de características. Se eliminaron los botones unificados que aparecían al final de la pantalla.
+- **Escritorio**: Se añadió una fila de acción al final de la tabla comparativa con un botón por columna de plan de pago (Pro / Enterprise), eliminando los botones globales inferiores.
+
+---
+
+#### Estrategia de Monetización — Plan Pro (Opción 2)
+
+Se ajustaron los límites del Plan Pro para crear un embudo de ventas más efectivo hacia el Plan Enterprise.
+
+**Nueva estrategia:**
+- **Plan Free ($0):** Límite de 1 miembro (solo el dueño), 20 clientes y 30 citas/mes. Actúa como gancho para forzar el pago de $10.
+- **Plan Pro ($10/mes):** Reducido a **2 miembros en total** (Dueño + 1 asistente) y **150 citas/mes**. Diseñado para profesionales independientes con un asistente (ej. odontólogo + secretaria). El límite de empleados y de citas obliga al salto a Enterprise al crecer.
+- **Plan Enterprise ($15/mes):** Sin límites de equipo ni citas.
+
+**Cambios técnicos:**
+- `lib/plans/plan-limits.ts` — Única fuente de verdad actualizada: Pro `employees: 3 → 2`, `appointmentsPerMonth: Infinity → 150`. Las validaciones en `createEmployeeAction` y `checkAppointmentLimit` recogen el cambio automáticamente.
+- `app/[locale]/dashboard/settings/plan-manager.tsx` — Tabla comparativa actualizada para usar las nuevas claves de traducción.
+
+---
+
+#### i18n — Actualización de Textos de Planes (6 idiomas)
+
+- Clave `freeLimitNote`: Texto actualizado de "1 empleado" a "1 dueño de negocio" en todos los idiomas.
+- Claves nuevas `tableUpTo2` y `tableUpTo150`: Añadidas en `es`, `en`, `pt`, `it`, `fr`, `de`.
+  - `tableUpTo2` usa formato descriptivo: "Dueño + 1" / "Owner + 1" / "Dono + 1", etc.
+  - `tableUpTo150`: "Hasta 150" / "Up to 150" / etc.
+
+---
+
+
 
 ### Corregido
 

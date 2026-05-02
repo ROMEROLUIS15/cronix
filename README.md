@@ -42,6 +42,7 @@ el dueño gestione su agenda, clientes y finanzas desde el navegador.
 | Monitoreo             | Sentry + Helicone                                         | —           |
 | Testing               | Vitest + Playwright                                       | 3 / 1.59    |
 | PWA                   | next-pwa                                                  | 10.2        |
+| Pagos (B2B SaaS)      | NOWPayments API (Crypto)                                  | —           |
 
 **Idiomas soportados:** Español · English · Français · Deutsch · Italiano ·
 Português
@@ -192,6 +193,30 @@ síntesis de voz**.
 - Si TTS falla → texto-only response
 - Token quota compartida con Dashboard agent
 - Max attempts → audible error message
+
+### 6. Pagos B2B SaaS (NOWPayments)
+
+**Ubicación:** `app/api/webhooks/nowpayments/` + `lib/payments/nowpayments.ts`
+
+Pasarela de pagos en criptomonedas (USDT/USDC) para que los negocios paguen su suscripción a Cronix (Planes Pro y Enterprise).
+
+**Características:**
+- Generación dinámica de facturas (`createInvoice`).
+- Recepción de Webhooks (IPN) con validación de firmas HMAC-SHA256 (`verifySignature`).
+- Manejo asíncrono con QStash (`process-saas-payment`) para garantizar idempotencia y resiliencia en la actualización de base de datos.
+- CRON diario (`check-subscriptions`) para detectar planes vencidos y aplicar *downgrade* automático al plan gratuito si no hay renovación.
+
+### 7. Gestión de Límites de Planes (Monetización)
+
+**Ubicación:** `lib/plans/plan-limits.ts`
+
+Single Source of Truth (SSOT) para la estrategia de monetización. Define los límites estables (hard-coded) para cada nivel:
+
+- **Free ($0):** 1 miembro (el dueño), 20 clientes, 30 citas/mes.
+- **Pro ($10):** 2 miembros (dueño + 1 asistente), clientes ilimitados, 150 citas/mes.
+- **Enterprise ($15):** Sin límites operativos.
+
+Las funciones como `checkAppointmentLimit` (citas mensuales) y `createEmployeeAction` (miembros del equipo) verifican este archivo antes de permitir transacciones, protegiendo al sistema de abusos y empujando el funnel de conversión.
 
 ---
 
@@ -427,6 +452,8 @@ cronix/
 │   ├── payments/                       # Facturación B2B SaaS
 │   │   ├── nowpayments.ts              # NOWPayments API Wrapper
 │   │   └── nowpayments.test.ts         # HMAC y tests unitarios
+│   ├── plans/                          # Estrategia de monetización
+│   │   └── plan-limits.ts              # SSOT para límites de citas y empleados
 │   ├── rate-limit/
 │   │   ├── redis-rate-limiter.ts       # Sliding window + login failure tracking
 │   │   └── token-quota.ts              # Cuota de tokens por negocio

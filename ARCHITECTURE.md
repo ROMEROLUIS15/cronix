@@ -20,6 +20,8 @@
 10. [Flujo de Datos Completo](#10-flujo-de-datos-completo)
 11. [Decisiones Arquitectónicas (ADRs)](#11-decisiones-arquitectónicas-adrs)
 12. [Voice Assistant Asíncrono (Dashboard)](#12-voice-assistant-asíncrono-dashboard)
+13. [Pagos B2B SaaS (NOWPayments)](#13-pagos-b2b-saas-nowpayments)
+14. [Estrategia de Monetización y Límites](#14-estrategia-de-monetización-y-límites)
 
 ---
 
@@ -741,3 +743,74 @@ El Dashboard incluye un **asistente de voz flotante** que usa **QStash para orqu
 - Si excede → error: "Has alcanzado el límite diario del asistente"
 
 ---
+
+## 13. Pagos B2B SaaS (NOWPayments)
+
+La plataforma utiliza **NOWPayments** como pasarela exclusiva para el pago de suscripciones (Pro y Enterprise) en criptomonedas (USDT/USDC).
+
+### Arquitectura de Integración
+
+```
+┌─────────────────────────────────┐
+│  Dashboard (Frontend)           │
+│  └─ Usuario activa plan         │
+└───────┬─────────────────────────┘
+        │ Server Action: actions.ts
+        ↓
+┌─────────────────────────────────┐
+│  NOWPayments API                │
+│  └─ createInvoice()             │
+└───────┬─────────────────────────┘
+        │ Redirige a invoice_url
+        │
+        │ [El cliente paga en cripto]
+        ↓
+┌─────────────────────────────────┐
+│  IPN Webhook Receiver           │
+│  api/webhooks/nowpayments/      │
+│  1. verifySignature (HMAC)      │
+│  2. QStash.publishJSON()        │
+└───────┬─────────────────────────┘
+        │ Encola el evento para
+        │ procesamiento asíncrono
+        ↓
+┌─────────────────────────────────┐
+│  QStash Worker                  │
+│  api/queue/process-saas-payment/│
+│  1. Actualiza `saas_invoices`   │
+│  2. Actualiza `businesses.plan` │
+│  3. Extiende `subscription_end` │
+└─────────────────────────────────┘
+```
+
+### Resiliencia y Seguridad
+- **Validación Criptográfica:** El Webhook receptor valida la firma HMAC-SHA256 (`x-nowpayments-sig`) antes de procesar cualquier dato. Las pruebas de esta capa están garantizadas en `lib/payments/nowpayments.test.ts`.
+- **Desacoplamiento (QStash):** El webhook devuelve `200 OK` a NOWPayments rápidamente, y encola la lógica pesada de negocio en QStash. Si hay errores actualizando la base de datos (timeout, rate limit), QStash reintenta automáticamente.
+- **Idempotencia:** La tabla `saas_invoices` previene doble procesamiento del mismo `payment_id`.
+
+---
+
+## 14. Estrategia de Monetización y Límites
+
+El embudo de conversión de SaaS de Cronix está diseñado utilizando límites operativos duros aplicados tanto en el Frontend como en el Backend.
+
+### Fuente Única de Verdad (SSOT)
+Todos los límites están centralizados en `lib/plans/plan-limits.ts`:
+
+| Plan | Equipo | Clientes | Citas / mes | Precio | Target |
+|---|---|---|---|---|---|
+| **Free** | 1 (Owner) | 20 | 30 | $0 | Prueba de concepto, negocios ultra pequeños. |
+| **Pro** | 2 (Owner+1) | ∞ | 150 | $10 | Profesionales independientes con asistente (ej. odontólogos). |
+| **Enterprise**| ∞ | ∞ | ∞ | $15 | Clínicas, salones de belleza y pymes. |
+
+### Enforcements (Bloqueos)
+La protección del sistema y el trigger para el *upgrade* operan a nivel de capa de datos y transacciones (Principio *Fail-Fast*):
+
+1. **Límites de Equipo:** `createEmployeeAction` (`team/actions.ts`) verifica contra `plan-limits.ts`. Si se supera el límite de equipo, lanza error inmediatamente y la UI muestra el toast de error paramétrico (proveniente del archivo de traducciones `limitErrors`).
+2. **Límites de Citas:** El helper `checkAppointmentLimit` cruza los datos de `appointments` (del mes actual) contra los límites del plan del negocio. Este guardián opera de manera ubicua:
+   - En el Dashboard antes de permitir una creación manual.
+   - Dentro de las *tools* del agente de IA de WhatsApp (`appointment.tools.ts`), bloqueando la acción desde la IA si la cuota mensual se agotó.
+3. **Downgrade Automático (CRON):** La ruta `api/cron/check-subscriptions` se ejecuta diariamente. Detecta planes con fecha `subscription_ends_at < now()`, y los revierte a `free`, inhabilitando excesos.
+
+---
+
