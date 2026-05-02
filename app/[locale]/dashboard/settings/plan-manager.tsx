@@ -152,7 +152,7 @@ export function PlanManager({
                   },
                   {
                     name: 'Pro',
-                    price: '$6 USDT/mo',
+                    price: '$10 USDT/mo',
                     color: '#0062FF',
                     bg: 'rgba(0,98,255,0.08)',
                     border: 'rgba(0,98,255,0.25)',
@@ -160,7 +160,7 @@ export function PlanManager({
                   },
                   {
                     name: 'Enterprise',
-                    price: '$10 USDT/mo',
+                    price: '$15 USDT/mo',
                     color: '#A855F7',
                     bg: 'rgba(168,85,247,0.08)',
                     border: 'rgba(168,85,247,0.25)',
@@ -220,8 +220,8 @@ export function PlanManager({
                     <tr className="border-t border-[#2E2E33] bg-[#16161A] font-semibold">
                       <td className="p-3 text-[#909098]">{t('tablePricePerMonth')}</td>
                       <td className="p-3 text-center text-[#909098]">$0</td>
-                      <td className="p-3 text-center text-[#0062FF]">$6 USDT</td>
-                      <td className="p-3 text-center text-[#A855F7]">$10 USDT</td>
+                      <td className="p-3 text-center text-[#0062FF]">$10 USDT</td>
+                      <td className="p-3 text-center text-[#A855F7]">$15 USDT</td>
                     </tr>
                   </tbody>
                 </table>
