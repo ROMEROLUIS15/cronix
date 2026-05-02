@@ -871,7 +871,7 @@
       "managePlan": "Plan verwalten",
       "modalTitle": "Cronix-Pläne",
       "currentPlanLabel": "Aktueller Plan:",
-      "freeLimitNote": "Limit: 20 Kunden, 1 Mitarbeiter und 30 Termine/Monat",
+      "freeLimitNote": "Limit: 20 Kunden, 1 Geschäftsinhaber und 30 Termine/Monat",
       "limitErrors": {
         "clients": "Sie haben das Limit von {limit} Kunden im kostenlosen Plan erreicht. Upgraden Sie Ihren Plan unter Einstellungen > Abrechnung.",
         "employees": "Sie haben das Limit von {limit} {limit, plural, one {Mitarbeiter} other {Mitarbeitern}} im {plan}-Plan erreicht. Upgraden Sie Ihren Plan unter Einstellungen > Abrechnung.",
@@ -889,7 +889,9 @@
       "tableBranches": "Filialen",
       "tableUpTo20": "Bis zu 20",
       "tableUpTo3": "Bis zu 3",
+      "tableUpTo2": "Inhaber + 1",
       "tableUpTo30": "Bis zu 30",
+      "tableUpTo150": "Bis zu 150",
       "tableOwnerOnly": "1 (Inhaber)",
       "tableUnlimited": "Unbegrenzt",
       "tableUnlimitedAppts": "Unbegrenzt",

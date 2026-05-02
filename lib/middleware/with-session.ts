@@ -54,6 +54,11 @@ export const withSession: MiddlewareFn = async (req, baseRes, next) => {
   // Stale token — clear cookies to prevent retry loops
   if (authError && !user) {
     clearSessionCookies(baseRes)
+    // Forward Supabase's cleared sb-* cookies so the browser actually removes them.
+    // Without this, the browser keeps sending the stale refresh token on every request.
+    if (supabaseResponse) {
+      copyCookies(supabaseResponse, baseRes)
+    }
     return null // continue chain (user will be caught by dashboard redirect below on next request)
   }
 

@@ -871,7 +871,7 @@
       "current": "Forfait {plan, select, free {Gratuit} pro {Pro} enterprise {Entreprise} other {Gratuit}}",
       "modalTitle": "Forfaits Cronix",
       "currentPlanLabel": "Forfait actuel :",
-      "freeLimitNote": "Limite de 20 clients, 1 employé et 30 rendez-vous/mois",
+      "freeLimitNote": "Limite de 20 clients, 1 propriétaire d'entreprise et 30 rendez-vous/mois",
       "limitErrors": {
         "clients": "Vous avez atteint la limite de {limit} clients du forfait gratuit. Mettez à niveau votre forfait dans Paramètres > Facturation.",
         "employees": "Vous avez atteint la limite de {limit} {limit, plural, one {employé} other {employés}} du forfait {plan}. Mettez à niveau votre forfait dans Paramètres > Facturation.",
@@ -889,7 +889,9 @@
       "tableBranches": "Succursales",
       "tableUpTo20": "Jusqu'à 20",
       "tableUpTo3": "Jusqu'à 3",
+      "tableUpTo2": "Propriétaire + 1",
       "tableUpTo30": "Jusqu'à 30",
+      "tableUpTo150": "Jusqu'à 150",
       "tableOwnerOnly": "1 (propriétaire)",
       "tableUnlimited": "Illimités",
       "tableUnlimitedAppts": "Illimités",

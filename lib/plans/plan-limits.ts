@@ -11,8 +11,8 @@ export const PLAN_LIMITS = {
   },
   pro: {
     clients:        Infinity,
-    employees:      3,
-    appointmentsPerMonth: Infinity,
+    employees:      2,
+    appointmentsPerMonth: 150,
   },
   enterprise: {
     clients:        Infinity,

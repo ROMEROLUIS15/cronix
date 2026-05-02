@@ -60,8 +60,8 @@ export function PlanManager({
   // ── Feature rows for comparison ──
   const rows = [
     { label: t('tableClients'),     free: t('tableUpTo20'),      pro: t('tableUnlimited'),      ent: t('tableUnlimited') },
-    { label: t('tableEmployees'),   free: t('tableOwnerOnly'),   pro: t('tableUpTo3'),           ent: t('tableUnlimited') },
-    { label: t('tableAppts'),       free: t('tableUpTo30'),      pro: t('tableUnlimitedAppts'),  ent: t('tableUnlimitedAppts') },
+    { label: t('tableEmployees'),   free: t('tableOwnerOnly'),   pro: t('tableUpTo2'),           ent: t('tableUnlimited') },
+    { label: t('tableAppts'),       free: t('tableUpTo30'),      pro: t('tableUpTo150'),         ent: t('tableUnlimitedAppts') },
     { label: t('tableAiAssistant'), free: true,                  pro: true,                      ent: true },
     { label: t('tableCalendar'),    free: true,                  pro: true,                      ent: true },
     { label: t('tableFinance'),     free: true,                  pro: true,                      ent: true },
@@ -190,6 +190,41 @@ export function PlanManager({
                         </div>
                       ))}
                     </div>
+                    {plan.name === 'Pro' && (
+                      <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
+                        <Button
+                          className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-11 text-xs font-semibold"
+                          onClick={() => handleUpgrade('pro')}
+                          disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
+                        >
+                          {loading === 'pro' ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : currentPlan === 'pro' ? (
+                            <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
+                          ) : (
+                            <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                    {plan.name === 'Enterprise' && (
+                      <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
+                        <Button
+                          className="w-full h-11 text-xs font-semibold"
+                          style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
+                          onClick={() => handleUpgrade('enterprise')}
+                          disabled={loading !== null || currentPlan === 'enterprise'}
+                        >
+                          {loading === 'enterprise' ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : currentPlan === 'enterprise' ? (
+                            <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
+                          ) : (
+                            <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -223,39 +258,43 @@ export function PlanManager({
                       <td className="p-3 text-center text-[#0062FF]">$10 USDT</td>
                       <td className="p-3 text-center text-[#A855F7]">$15 USDT</td>
                     </tr>
+                    <tr className="border-t border-[#2E2E33] bg-[#16161A]">
+                      <td className="p-3"></td>
+                      <td className="p-3 text-center"></td>
+                      <td className="p-3 text-center">
+                        <Button
+                          className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-10 text-xs font-semibold"
+                          onClick={() => handleUpgrade('pro')}
+                          disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
+                        >
+                          {loading === 'pro' ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : currentPlan === 'pro' ? (
+                            <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
+                          ) : (
+                            <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
+                          )}
+                        </Button>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Button
+                          className="w-full h-10 text-xs font-semibold"
+                          style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
+                          onClick={() => handleUpgrade('enterprise')}
+                          disabled={loading !== null || currentPlan === 'enterprise'}
+                        >
+                          {loading === 'enterprise' ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : currentPlan === 'enterprise' ? (
+                            <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
+                          ) : (
+                            <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
+                          )}
+                        </Button>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
-              </div>
-
-              {/* CTA buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <Button
-                  className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-11 text-xs sm:text-sm font-semibold"
-                  onClick={() => handleUpgrade('pro')}
-                  disabled={loading !== null || currentPlan === 'pro' || currentPlan === 'enterprise'}
-                >
-                  {loading === 'pro' ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : currentPlan === 'pro' ? (
-                    <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
-                  ) : (
-                    <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
-                  )}
-                </Button>
-                <Button
-                  className="w-full h-11 text-xs sm:text-sm font-semibold"
-                  style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
-                  onClick={() => handleUpgrade('enterprise')}
-                  disabled={loading !== null || currentPlan === 'enterprise'}
-                >
-                  {loading === 'enterprise' ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : currentPlan === 'enterprise' ? (
-                    <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
-                  ) : (
-                    <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
-                  )}
-                </Button>
               </div>
 
               <p className="text-xs text-center text-[#606068] pb-1">

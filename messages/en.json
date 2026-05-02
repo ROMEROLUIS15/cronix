@@ -871,7 +871,7 @@
       "current": "Plan {plan, select, free {Free} pro {Pro} enterprise {Enterprise} other {Free}}",
       "modalTitle": "Cronix Plans",
       "currentPlanLabel": "Current plan:",
-      "freeLimitNote": "Limit of 20 clients, 1 employee and 30 appointments/month",
+      "freeLimitNote": "Limit of 20 clients, 1 business owner and 30 appointments/month",
       "limitErrors": {
         "clients": "You have reached the limit of {limit} clients on the free plan. Upgrade your plan in Settings > Billing.",
         "employees": "You have reached the limit of {limit} {limit, plural, one {employee} other {employees}} on the {plan} plan. Upgrade your plan in Settings > Billing.",
@@ -889,7 +889,9 @@
       "tableBranches": "Branches",
       "tableUpTo20": "Up to 20",
       "tableUpTo3": "Up to 3",
+      "tableUpTo2": "Owner + 1",
       "tableUpTo30": "Up to 30",
+      "tableUpTo150": "Up to 150",
       "tableOwnerOnly": "1 (owner)",
       "tableUnlimited": "Unlimited",
       "tableUnlimitedAppts": "Unlimited",

@@ -871,7 +871,7 @@
       "managePlan": "Gestionar plan",
       "modalTitle": "Planes de Cronix",
       "currentPlanLabel": "Plan actual:",
-      "freeLimitNote": "Límite de 20 clientes, 1 empleado y 30 citas/mes",
+      "freeLimitNote": "Límite de 20 clientes, 1 dueño de negocio y 30 citas/mes",
       "limitErrors": {
         "clients": "Has alcanzado el límite de {limit} clientes del plan gratuito. Actualiza tu plan en Configuración > Facturación.",
         "employees": "Has alcanzado el límite de {limit} {limit, plural, one {empleado} other {empleados}} del plan {plan}. Actualiza tu plan en Configuración > Facturación.",
@@ -889,7 +889,9 @@
       "tableBranches": "Sucursales",
       "tableUpTo20": "Hasta 20",
       "tableUpTo3": "Hasta 3",
+      "tableUpTo2": "Dueño + 1",
       "tableUpTo30": "Hasta 30",
+      "tableUpTo150": "Hasta 150",
       "tableOwnerOnly": "1 (dueño)",
       "tableUnlimited": "Ilimitados",
       "tableUnlimitedAppts": "Ilimitadas",

@@ -872,7 +872,7 @@
       "current": "Piano {plan, select, free {Gratuito} pro {Pro} enterprise {Aziendale} other {Gratuito}}",
       "modalTitle": "Piani Cronix",
       "currentPlanLabel": "Piano attuale:",
-      "freeLimitNote": "Limite di 20 clienti, 1 dipendente e 30 appuntamenti/mese",
+      "freeLimitNote": "Limite di 20 clienti, 1 titolare dell'attività e 30 appuntamenti/mese",
       "limitErrors": {
         "clients": "Hai raggiunto il limite di {limit} clienti del piano gratuito. Aggiorna il tuo piano in Impostazioni > Fatturazione.",
         "employees": "Hai raggiunto il limite di {limit} {limit, plural, one {dipendente} other {dipendenti}} del piano {plan}. Aggiorna il tuo piano in Impostazioni > Fatturazione.",
@@ -890,7 +890,9 @@
       "tableBranches": "Filiali",
       "tableUpTo20": "Fino a 20",
       "tableUpTo3": "Fino a 3",
+      "tableUpTo2": "Titolare + 1",
       "tableUpTo30": "Fino a 30",
+      "tableUpTo150": "Fino a 150",
       "tableOwnerOnly": "1 (titolare)",
       "tableUnlimited": "Illimitati",
       "tableUnlimitedAppts": "Illimitati",

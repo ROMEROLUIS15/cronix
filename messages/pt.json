@@ -871,7 +871,7 @@
       "current": "Plano {plan, select, free {Gratuito} pro {Pro} enterprise {Empresarial} other {Gratuito}}",
       "modalTitle": "Planos Cronix",
       "currentPlanLabel": "Plano atual:",
-      "freeLimitNote": "Limite de 20 clientes, 1 funcionário e 30 agendamentos/mês",
+      "freeLimitNote": "Limite de 20 clientes, 1 dono de negócio e 30 agendamentos/mês",
       "limitErrors": {
         "clients": "Você atingiu o limite de {limit} clientes do plano gratuito. Atualize seu plano em Configurações > Faturamento.",
         "employees": "Você atingiu o limite de {limit} {limit, plural, one {funcionário} other {funcionários}} do plano {plan}. Atualize seu plano em Configurações > Faturamento.",
@@ -889,7 +889,9 @@
       "tableBranches": "Filiais",
       "tableUpTo20": "Até 20",
       "tableUpTo3": "Até 3",
+      "tableUpTo2": "Dono + 1",
       "tableUpTo30": "Até 30",
+      "tableUpTo150": "Até 150",
       "tableOwnerOnly": "1 (proprietário)",
       "tableUnlimited": "Ilimitados",
       "tableUnlimitedAppts": "Ilimitados",
