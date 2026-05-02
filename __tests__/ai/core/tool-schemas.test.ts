@@ -49,9 +49,6 @@ function invalid(schema: { safeParse: (v: unknown) => { success: boolean } }, va
 // ── HHmm (validación de hora) — fix crítico del audit ────────────────────────
 
 describe('HHmm regex — validación correcta post-fix', () => {
-  // Válidos
-  it('acepta "00:00"', () => valid(GetByDateSchema.shape ? { safeParse: (v) => ConfirmBookingSchema.safeParse({ service_id: 'X', date: '2026-05-03', time: v as string, client_name: 'Ana' }) } : GetAvailableSlotsSchema, '2026-05-03'))
-
   // Los tests de HHmm se hacen a través de ConfirmBookingSchema
   const baseValid = { service_id: 'Manicura', date: '2026-05-03', client_name: 'Ana García' }
 
