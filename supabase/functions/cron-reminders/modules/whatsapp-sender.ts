@@ -153,7 +153,7 @@ export async function sendOwnerWhatsAppSummary(
           languageCode: "es",
           parameters: [
             String(appointments.length),
-            listed.join(", "),
+            listed.join("  ⏳  "),
           ],
         }),
       });
