@@ -149,6 +149,13 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   let finalText = text ?? ''
 
   if (audioFile) {
+    // Diagnostic: log blob metadata so we can see exactly what arrived.
+    logger.info('AI-ASSISTANT-STT', 'Audio blob received', {
+      userId:   user.id,
+      size:     audioFile.size,
+      mimeType: audioFile.type,
+    })
+
     const sttProvider = new GroqProvider(GROQ_API_KEY)
     const sttStart    = Date.now()
 
@@ -168,7 +175,12 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
     const sttLatencyMs = Date.now() - sttStart
 
     if (!sttRes.text?.trim()) {
-      logger.warn('AI-ASSISTANT', 'Empty transcription received', { userId: user.id })
+      logger.warn('AI-ASSISTANT', 'Empty transcription received', {
+        userId:     user.id,
+        blobSize:   audioFile.size,
+        mimeType:   audioFile.type,
+        sttLatency: sttLatencyMs,
+      })
       return NextResponse.json({
         error: 'No logré captar lo que dijiste. ¿Podrías repetirlo un poco más claro?',
       }, { status: 422 })

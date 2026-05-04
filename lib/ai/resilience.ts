@@ -21,8 +21,8 @@ interface AIResponse<T> {
  * 🛠️ Safe STT (Speech to Text)
  */
 export async function safeSTT(
-  audioBlob: Blob, 
-  apiKey: string, 
+  audioBlob: Blob,
+  apiKey: string,
   language: string = 'es'
 ): Promise<AIResponse<{ text: string }>> {
   const start = Date.now()
@@ -39,8 +39,9 @@ export async function safeSTT(
       const currentKey = keys[currentKeyIndex % keys.length]
       if (!currentKey) throw new Error('No API keys available')
 
-      const formData = new FormData()
       const ext = audioBlob.type.includes('mp4') || audioBlob.type.includes('m4a') ? 'm4a' : 'webm'
+
+      const formData = new FormData()
       formData.append('file', audioBlob, `voice.${ext}`)
       formData.append('model', 'whisper-large-v3-turbo')
       formData.append('language', language)
@@ -53,24 +54,25 @@ export async function safeSTT(
 
       if (res.ok) {
         aiCircuit.reportSuccess('STT')
-        const data = await res.json()
-        return { data, latency: Date.now() - start, retries: retryCount, modelUsed: 'whisper-large-v3-turbo' }
+        const data = await res.json() as { text?: string }
+        return { data: { text: data.text ?? '' }, latency: Date.now() - start, retries: retryCount, modelUsed: 'whisper-large-v3-turbo' }
       }
 
       const errText = await res.text()
       aiCircuit.reportFailure('STT', errText)
-      
+      logger.error('AI-STT', `HTTP ${res.status}`, errText.slice(0, 300))
+
       if (res.status === 429 && keys.length > 1) {
         logger.warn('AI-STT', `Rate limit hit, rotating key immediately. Attempt ${retryCount + 1}`)
         currentKeyIndex++
         retryCount++
         continue
       }
-      
+
       if (res.status >= 500) {
         throw new Error(`STT API Error (${res.status}): ${errText}`)
       }
-      
+
       return { data: null, error: errText, latency: Date.now() - start, retries: retryCount }
 
     } catch (err: any) {

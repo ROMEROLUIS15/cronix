@@ -94,6 +94,7 @@ export function VoiceAssistantFab() {
   const currentJobIdRef    = useRef<string | null>(null)
   const audioUnlockedRef   = useRef<boolean>(false)
   const unlockPrimerRef    = useRef<HTMLAudioElement | null>(null)
+  const recognitionRef     = useRef<any>(null)
   const [volume, setVolume] = useState(0)
 
   // ── Audio unlock ──────────────────────────────────────────────────────────
@@ -368,6 +369,64 @@ export function VoiceAssistantFab() {
 
   // ── Recording ─────────────────────────────────────────────────────────────
   const startRecording = async () => {
+    unlockAudioPlayback()
+
+    // ── Web Speech API path (Chrome/Edge — no API key required) ────────────
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (SpeechRecognitionAPI) {
+      setState('listening')
+      setVolume(0)
+
+      const recognition = new SpeechRecognitionAPI()
+      recognitionRef.current = recognition
+      recognition.lang             = 'es-ES'
+      recognition.continuous       = false
+      recognition.interimResults   = false
+      recognition.maxAlternatives  = 1
+
+      recognition.onresult = (event: any) => {
+        recognitionRef.current = null
+        const transcript = Array.from(event.results as any[])
+          .map((r: any) => r[0].transcript)
+          .join('')
+          .trim()
+        if (transcript) {
+          setState('processing')
+          void sendTextToAssistant(transcript)
+        } else {
+          setState('idle')
+        }
+      }
+
+      recognition.onerror = (event: any) => {
+        recognitionRef.current = null
+        if (event.error === 'no-speech') {
+          setState('idle')
+          return
+        }
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          vocalizeSilentFailsafe('Necesito permiso para el micrófono. Actívalo en la configuración del navegador.')
+        } else {
+          vocalizeSilentFailsafe('No pude escucharte. Intenta de nuevo.')
+        }
+        setState('idle')
+      }
+
+      recognition.onend = () => {
+        recognitionRef.current = null
+        setState((s: AssistantState) => s === 'listening' ? 'idle' : s)
+      }
+
+      try {
+        recognition.start()
+      } catch {
+        recognitionRef.current = null
+        setState('idle')
+      }
+      return
+    }
+
+    // ── MediaRecorder fallback (Firefox / non-Chromium) ────────────────────
     if (!navigator.mediaDevices?.getUserMedia) {
       vocalizeSilentFailsafe('Micrófono no disponible en este navegador.')
       return
@@ -500,6 +559,10 @@ export function VoiceAssistantFab() {
   }
 
   const stopRecording = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch { /* ignore */ }
+      recognitionRef.current = null
+    }
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
     if (rafIdRef.current)        { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
