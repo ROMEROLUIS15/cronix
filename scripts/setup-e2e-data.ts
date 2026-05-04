@@ -101,7 +101,7 @@ async function setupTestData() {
     business_id: bizId,
     name:        'Test Admin',
     email:       TEST_EMAIL,
-    role:        'owner' as 'owner' | 'employee' | 'platform_admin',
+    role:        'platform_admin' as 'owner' | 'employee' | 'platform_admin',
   }, { onConflict: 'id' })
 
   if (upsertErr) {

@@ -120,7 +120,7 @@ test.describe('Payment Modal — method selection', () => {
     await openPlanModal(page);
 
     // Click "Activar Pro" button to open the payment method modal
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() > 0) {
       await activateBtn.click();
       await page.waitForTimeout(600);
@@ -138,7 +138,7 @@ test.describe('Payment Modal — method selection', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() > 0) {
       await activateBtn.click();
       await expect(page.locator('#payment-method-continue')).toBeVisible({ timeout: 8_000 });
@@ -155,7 +155,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() === 0) { test.skip(); return; }
 
     await activateBtn.click();
@@ -181,7 +181,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() === 0) { test.skip(); return; }
 
     await activateBtn.click();
@@ -200,7 +200,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() === 0) { test.skip(); return; }
 
     await activateBtn.click();
@@ -226,7 +226,7 @@ test.describe('Payment Modal — Binance Pay flow', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() === 0) { test.skip(); return; }
 
     await activateBtn.click();
@@ -246,7 +246,7 @@ test.describe('Payment Modal — close behavior', () => {
     await navigateToSettings(page);
     await openPlanModal(page);
 
-    const activateBtn = page.locator('button').filter({ hasText: /activar.*pro|\$10/i }).first();
+    const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
     if (await activateBtn.count() === 0) { test.skip(); return; }
 
     await activateBtn.click();

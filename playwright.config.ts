@@ -16,6 +16,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') })
  * Multi-browser support: Chromium, Firefox, WebKit (Safari engine).
  */
 export default defineConfig({
+  globalSetup: './tests/e2e/global-setup.ts',
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
