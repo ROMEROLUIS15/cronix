@@ -70,4 +70,9 @@ export interface IClientRepository {
     businessId: string,
     sixtyDaysAgo: string
   ): Promise<Result<{ name: string }[]>>
+
+  /**
+   * Soft-deletes a client by setting deleted_at. Scoped to businessId.
+   */
+  softDelete(clientId: string, businessId: string): Promise<Result<void>>
 }

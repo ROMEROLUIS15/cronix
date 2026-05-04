@@ -196,6 +196,12 @@ export type Decision =
           }
         }
       }>
+      /**
+       * When true the ExecutionEngine resets flow/draft/missingFields to idle
+       * before invoking the LLM. Set by DecisionEngine when it detects an entity
+       * conflict (e.g. user switches from Verónica to Alan mid-flow).
+       */
+      resetContext?: true
     }
   | {
       type: 'reject'

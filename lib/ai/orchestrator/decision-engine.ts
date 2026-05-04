@@ -86,6 +86,23 @@ function detectAnaphora(text: string): boolean {
   return ANAPHORA_PATTERN.test(text)
 }
 
+// ── Helper: Entity conflict detection ─────────────────────────────────────────
+// Returns true when the user is mid-flow for client A but the current turn
+// clearly refers to client B. Threshold 0.45 mirrors ClientResolver's boundary:
+// below it the names are unambiguously different people.
+
+function detectEntityConflict(inputText: string, state: ConversationState): boolean {
+  if (!state.draft) return false
+  const draftName = (state.draft as Record<string, unknown>)['client_name'] as string | undefined
+  if (!draftName) return false
+
+  const newName = extractClientNameFromOwnerText(inputText)
+  if (!newName) return false
+
+  const sim = similarity(normalizeForFuzzy(draftName), normalizeForFuzzy(newName))
+  return sim < 0.45
+}
+
 // ── Helper: Detect booking intent from text ───────────────────────────────────
 
 const BOOKING_SIGNALS = [
@@ -503,6 +520,39 @@ export class DecisionEngine implements IDecisionEngine {
       }
     }
 
+    // ── 1b. Entity conflict detection ────────────────────────────────────────
+    // If the user is mid-flow for client A but mentions client B, destroy the
+    // stale draft and route as fresh idle input. Prevents Verónica's data from
+    // bleeding into Alan's booking when the owner switches subject.
+    if (
+      (state.flow === 'collecting_booking' || state.flow === 'awaiting_confirmation') &&
+      detectEntityConflict(input.text, state)
+    ) {
+      const draftClient = (state.draft as Record<string, unknown>)?.['client_name'] ?? '?'
+      logger.info('DECISION-ENGINE', 'Entity conflict — resetting draft', {
+        userId:      input.userId,
+        draftClient,
+        text:        input.text.slice(0, 60),
+      })
+      const freshEntities  = extractEntities(input.text, input.timezone)
+      const freshResolved  = mergeResolvedEntities(freshEntities, null, input.context.services)
+      const freshPrompt    = this.agent.buildSystemPrompt(
+        input,
+        { ...state, flow: 'idle', draft: null, missingFields: [] },
+        freshResolved,
+      )
+      return {
+        type:         'reason_with_llm',
+        resetContext: true,
+        messages: [
+          { role: 'system', content: freshPrompt },
+          ...input.history.slice(-4),
+          { role: 'user', content: input.text },
+        ],
+        toolDefs: this.agent.buildToolDefs(strategy, 'idle'),
+      }
+    }
+
     // ── 2. If awaiting_confirmation, check for yes/no ────────────────────────
     if (state.flow === 'awaiting_confirmation') {
       if (isConfirmation(input.text)) {
@@ -593,13 +643,13 @@ export class DecisionEngine implements IDecisionEngine {
 
     const intent = classifyIntent(input.text)
 
-    // In idle state, cap history to the last 4 messages (2 turns).
-    // This prevents context from a previous unrelated query (e.g. "Alan Romero")
-    // from bleeding into a new independent query (e.g. "¿tenemos a Carlos?").
-    // Active flows (collecting_booking, etc.) keep their full history.
+    // Cap history to prevent context bleed between unrelated turns.
+    // idle → 4 messages (2 turns): stale queries from prior subjects must not pollute new ones.
+    // active flows → 6 messages (3 turns): enough context for collection without feeding the LLM
+    //   irrelevant early turns that may confuse it when the subject has shifted.
     const historyForLLM = state.flow === 'idle'
       ? input.history.slice(-4)
-      : input.history
+      : input.history.slice(-6)
 
     logger.info('DECISION-ENGINE', 'Routing to LLM', {
       userId:      input.userId,

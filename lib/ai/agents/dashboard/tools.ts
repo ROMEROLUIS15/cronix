@@ -6,8 +6,11 @@ export type { ToolDefEntry }
 
 // State machine: tools allowed per conversational flow.
 // Prevents the LLM from calling off-flow tools (e.g. cancel_booking while collecting a booking).
+// collecting_booking exposes only smart_schedule + get_services:
+//   smart_schedule handles client resolution + availability check + booking internally,
+//   eliminating the 3-step ReAct loop (search_clients → get_available_slots → confirm_booking).
 export const TOOLS_BY_FLOW: Partial<Record<ConversationFlow, Set<string>>> = {
-  collecting_booking:      new Set(['confirm_booking', 'create_client', 'get_available_slots', 'get_services', 'search_clients']),
+  collecting_booking:      new Set(['smart_schedule', 'get_services']),
   collecting_reschedule:   new Set(['reschedule_booking', 'get_appointments_by_date', 'get_available_slots', 'search_clients']),
   collecting_cancellation: new Set(['cancel_booking', 'get_appointments_by_date', 'search_clients']),
   answering_query:         new Set(['get_appointments_by_date', 'get_available_slots', 'get_services', 'search_clients']),
@@ -15,6 +18,30 @@ export const TOOLS_BY_FLOW: Partial<Record<ConversationFlow, Set<string>>> = {
 }
 
 const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
+  // ── smart_schedule — ONE-SHOT booking tool ────────────────────────────────
+  // Resolves client (auto-creates if new), checks availability, and creates the
+  // appointment in a single call. Replaces the 3-step search→slots→confirm loop.
+  {
+    type: 'function',
+    function: {
+      name: 'smart_schedule',
+      description:
+        'Agenda una cita completa en un solo paso. Llama DIRECTAMENTE cuando tengas servicio + cliente + fecha + hora. ' +
+        'NO llames search_clients ni get_available_slots antes — este tool los maneja internamente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          service_name: { type: 'string', description: 'Nombre del servicio tal como lo dijo el usuario (ej. "Manicura").' },
+          client_name:  { type: 'string', description: 'Nombre del cliente tal como lo dijo el usuario.' },
+          date:         { type: 'string', description: 'Fecha YYYY-MM-DD.' },
+          time:         { type: 'string', description: 'Hora HH:mm en formato 24h.' },
+        },
+        required: ['service_name', 'client_name', 'date', 'time'],
+        additionalProperties: false,
+      },
+    },
+  },
+
   {
     type: 'function',
     function: {
@@ -140,6 +167,43 @@ const ALL_DASHBOARD_TOOLS: ToolDefEntry[] = [
           query: { type: 'string', description: 'Nombre o parte del nombre a buscar (mínimo 2 caracteres)' },
         },
         required: ['query'],
+        additionalProperties: false,
+      },
+    },
+  },
+
+  // ── delete_client ─────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'delete_client',
+      description:
+        'Elimina un cliente del sistema. Verifica automáticamente que no tenga citas futuras antes de borrar. ' +
+        'Si tiene citas futuras, retorna un error con el conteo — cancélalas primero.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_name: { type: 'string', description: 'Nombre del cliente a eliminar.' },
+          client_id:   { type: 'string', description: 'UUID del cliente (opcional — mejora precisión si ya lo conoces).' },
+        },
+        required: ['client_name'],
+        additionalProperties: false,
+      },
+    },
+  },
+
+  // ── check_duplicate_clients ───────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'check_duplicate_clients',
+      description:
+        'Detecta clientes con nombres muy similares (posibles duplicados por errores de captura o voz). ' +
+        'Retorna grupos de candidatos para que el operador decida cuáles eliminar.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
         additionalProperties: false,
       },
     },

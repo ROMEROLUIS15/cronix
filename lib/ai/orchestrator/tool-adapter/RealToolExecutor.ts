@@ -23,11 +23,25 @@ import { CancelAppointmentUseCase }     from '@/lib/domain/use-cases/CancelAppoi
 import { RescheduleAppointmentUseCase } from '@/lib/domain/use-cases/RescheduleAppointmentUseCase'
 import { GetAppointmentsByDateUseCase } from '@/lib/domain/use-cases/GetAppointmentsByDateUseCase'
 import { CreateClientUseCase }          from '@/lib/domain/use-cases/CreateClientUseCase'
+import { DeleteClientUseCase }          from '@/lib/domain/use-cases/DeleteClientUseCase'
 import { GetAvailableSlotsUseCase }     from '@/lib/domain/use-cases/GetAvailableSlotsUseCase'
 import { fuzzyFind, similarity, normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
 import { logger }                       from '@/lib/logger'
 
 // ── Schemas (snake_case — matches LLM tool definitions exactly) ────────────────
+
+const SmartScheduleSchema = z.object({
+  service_name: z.string().min(1),
+  client_name:  z.string().min(1),
+  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time:         z.string().regex(/^\d{2}:\d{2}$/),
+  staff_id:     z.string().uuid().optional(),
+})
+
+const DeleteClientSchema = z.object({
+  client_name: z.string().min(1),
+  client_id:   z.string().uuid().optional(),
+})
 
 const ConfirmBookingSchema = z.object({
   service_id:  z.string().min(1), // accepts UUID or name — resolved fuzzy in resolveService
@@ -152,6 +166,7 @@ export class RealToolExecutor implements IToolExecutor {
   async execute(p: ToolExecuteParams): Promise<ExecResult> {
     try {
       switch (p.toolName) {
+        case 'smart_schedule':           return this.smartSchedule(p)
         case 'confirm_booking':          return this.confirmBooking(p)
         case 'cancel_booking':           return this.cancelBooking(p)
         case 'reschedule_booking':       return this.rescheduleBooking(p)
@@ -160,6 +175,8 @@ export class RealToolExecutor implements IToolExecutor {
         case 'create_client':            return this.createClient(p)
         case 'get_available_slots':      return this.getAvailableSlots(p)
         case 'search_clients':           return this.searchClients(p)
+        case 'delete_client':            return this.deleteClient(p)
+        case 'check_duplicate_clients':  return this.checkDuplicateClients(p)
         default:
           return { success: false, result: `Tool "${p.toolName}" no implementada.`, error: 'TOOL_NOT_FOUND' }
       }
@@ -597,6 +614,172 @@ export class RealToolExecutor implements IToolExecutor {
 
     const lines = result.data.map((s) => `• ${s.name} (${s.duration_min} min, $${s.price})`)
     return { success: true, result: `Servicios disponibles:\n${lines.join('\n')}` }
+  }
+
+  // ── smart_schedule ────────────────────────────────────────────────────────
+  // ONE-SHOT booking: resolves client (auto-creates if absent), validates the
+  // slot via findConflicts, then creates the appointment — all in one call.
+  // Replaces the 3-step LLM loop: search_clients → get_available_slots → confirm_booking.
+
+  private async smartSchedule(p: ToolExecuteParams): Promise<ExecResult> {
+    const parsed = SmartScheduleSchema.safeParse(p.args)
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((i) => i.path.join('.')).join(', ')
+      return { success: false, result: `Faltan datos para agendar: ${fields}` }
+    }
+
+    const { service_name, client_name, date, time, staff_id } = parsed.data
+
+    // 1. Resolve client — auto-create if not found (owner flow assumes new clients are valid)
+    const resolution = await this.resolveClient(p.businessId, client_name)
+    let clientFinal: { id: string; name: string }
+
+    if (resolution.status === 'ambiguous') {
+      const names = resolution.candidates.map((c) => c.name).join(', ')
+      return { success: false, result: `Hay varios clientes con nombre similar: ${names}. ¿Cuál es?` }
+    }
+
+    if (resolution.status === 'found') {
+      clientFinal = resolution.client
+    } else {
+      const created = await new CreateClientUseCase(this.clientRepo).execute({
+        businessId: p.businessId,
+        name:       client_name,
+      })
+      if (created.error || !created.data) {
+        return { success: false, result: created.error ?? `No pude registrar a ${client_name}.` }
+      }
+      logger.info('REAL-TOOL-EXECUTOR', 'smart_schedule: auto-created client', {
+        businessId: p.businessId,
+        name:       created.data.name,
+      })
+      clientFinal = { id: created.data.id, name: created.data.name }
+    }
+
+    // 2. Resolve service by spoken name (fuzzy match across catalog)
+    const service = await this.resolveService(p.businessId, service_name)
+    if (!service) {
+      const svcRes  = await this.serviceRepo.getActive(p.businessId)
+      const catalog = svcRes.data?.map((s) => s.name).join(', ') ?? 'ninguno'
+      return { success: false, result: `No encontré el servicio "${service_name}". Disponibles: ${catalog}.` }
+    }
+
+    // 3. Convert to UTC and check slot conflicts
+    const startISO     = localToUTC(date, time, p.timezone)
+    const endISO       = this.buildEndISO(startISO, service.duration_min)
+    const conflictsRes = await this.queryRepo.findConflicts(p.businessId, startISO, endISO)
+    if (!conflictsRes.error && conflictsRes.data && conflictsRes.data.length > 0) {
+      return {
+        success: false,
+        result:  `El horario ${time} del ${date} ya está ocupado. Elige otra hora.`,
+      }
+    }
+
+    // 4. Create appointment
+    const result = await new CreateAppointmentUseCase(this.queryRepo, this.commandRepo).execute({
+      businessId:     p.businessId,
+      clientId:       clientFinal.id,
+      serviceIds:     [service.id],
+      startAt:        startISO,
+      endAt:          endISO,
+      assignedUserId: staff_id ?? null,
+    })
+
+    if (result.error) return { success: false, result: result.error }
+
+    return {
+      success: true,
+      result:  `Listo. Agendé a ${clientFinal.name} para ${service.name} el ${date} a las ${time}.`,
+      data: {
+        appointmentId: result.data?.id ?? '',
+        clientName:    clientFinal.name,
+        serviceName:   service.name,
+        date,
+        time,
+        action: 'created',
+      },
+    }
+  }
+
+  // ── delete_client ─────────────────────────────────────────────────────────
+
+  private async deleteClient(p: ToolExecuteParams): Promise<ExecResult> {
+    const parsed = DeleteClientSchema.safeParse(p.args)
+    if (!parsed.success) {
+      return { success: false, result: 'Necesito el nombre del cliente para eliminarlo.' }
+    }
+
+    const { client_name, client_id } = parsed.data
+
+    const resolution = await this.resolveClient(p.businessId, client_name, client_id)
+    if (resolution.status === 'not_found') {
+      return { success: false, result: `No encontré al cliente "${client_name}".` }
+    }
+    if (resolution.status === 'ambiguous') {
+      const names = resolution.candidates.map((c) => c.name).join(', ')
+      return { success: false, result: `Hay varios clientes similares: ${names}. ¿A cuál elimino?` }
+    }
+
+    const { client } = resolution
+
+    const result = await new DeleteClientUseCase(this.clientRepo, this.queryRepo).execute({
+      businessId: p.businessId,
+      clientId:   client.id,
+    })
+
+    if (result.error) return { success: false, result: result.error }
+
+    return {
+      success: true,
+      result:  `Cliente "${client.name}" eliminado del sistema.`,
+    }
+  }
+
+  // ── check_duplicate_clients ───────────────────────────────────────────────
+  // Compares every client pair with fuzzy similarity. Groups with score ≥ 0.85
+  // are likely the same person entered twice (voice transcription variants, typos).
+
+  private async checkDuplicateClients(p: ToolExecuteParams): Promise<ExecResult> {
+    const allRes = await this.clientRepo.findActiveForAI(p.businessId)
+    if (allRes.error || !allRes.data?.length) {
+      return { success: true, result: 'No hay clientes registrados.' }
+    }
+
+    const clients        = allRes.data
+    const DUPE_THRESHOLD = 0.85
+    const groups: Array<{ primary: string; duplicates: string[] }> = []
+    const seen           = new Set<string>()
+
+    for (let i = 0; i < clients.length; i++) {
+      const a = clients[i]!
+      if (seen.has(a.id)) continue
+
+      const dupes: string[] = []
+      for (let j = i + 1; j < clients.length; j++) {
+        const b = clients[j]!
+        if (seen.has(b.id)) continue
+        const sim = similarity(normalizeForFuzzy(a.name), normalizeForFuzzy(b.name))
+        if (sim >= DUPE_THRESHOLD) {
+          dupes.push(b.name)
+          seen.add(b.id)
+        }
+      }
+
+      if (dupes.length > 0) {
+        groups.push({ primary: a.name, duplicates: dupes })
+        seen.add(a.id)
+      }
+    }
+
+    if (groups.length === 0) {
+      return { success: true, result: 'No se detectaron clientes duplicados.' }
+    }
+
+    const lines = groups.map((g) => `"${g.primary}" ↔ "${g.duplicates.join('", "')}"`)
+    return {
+      success: true,
+      result:  `Posibles duplicados:\n${lines.join('\n')}\n¿Deseas eliminar alguno?`,
+    }
   }
 
   private async searchClients(p: ToolExecuteParams): Promise<ExecResult> {

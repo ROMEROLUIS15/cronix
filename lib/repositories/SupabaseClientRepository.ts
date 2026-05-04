@@ -124,4 +124,16 @@ export class SupabaseClientRepository implements IClientRepository {
     if (error) return fail(`callInactiveClientsRpc: ${error.message}`)
     return ok((data ?? []) as { name: string }[])
   }
+
+  async softDelete(clientId: string, businessId: string): Promise<Result<void>> {
+    const { error } = await this.supabase
+      .from('clients')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', clientId)
+      .eq('business_id', businessId)
+
+    if (error) return fail(`softDelete client: ${error.message}`)
+    void cache.invalidate(businessId, 'clients')
+    return ok(undefined)
+  }
 }

@@ -204,6 +204,7 @@ export interface IExecutionEngine {
 
 const TOOL_TO_EVENT: Record<string, AppointmentEventType> = {
   confirm_booking:    'appointment.created',
+  smart_schedule:     'appointment.created',
   cancel_booking:     'appointment.cancelled',
   reschedule_booking: 'appointment.rescheduled',
 }
@@ -564,6 +565,16 @@ export class ExecutionEngine implements IExecutionEngine {
     input: AiInput,
     strategy: IUserStrategy,
   ): Promise<ExecutionResult> {
+    // ── Context reset (entity conflict detected by DecisionEngine) ────────────
+    // Wipe stale draft before the LLM sees a fresh system prompt. This prevents
+    // Verónica's booking data from persisting into Alan's flow.
+    if (decision.resetContext) {
+      state = { ...state, flow: 'idle', draft: null, missingFields: [], lastIntent: null }
+      logger.info('EXECUTION-ENGINE', 'Context reset applied (entity conflict)', {
+        businessId: input.businessId,
+      })
+    }
+
     const MAX_STEPS = this.maxReactIterations
     let step = 0
     let totalTokens = 0
@@ -575,7 +586,9 @@ export class ExecutionEngine implements IExecutionEngine {
     // Post-tool validation flag: if a write tool fails, exit the loop immediately.
     // Do NOT give the LLM another iteration — it may generate an optimistic response.
     let writeToolFailed = false
-    const WRITE_TOOLS = new Set(['confirm_booking', 'cancel_booking', 'reschedule_booking'])
+    // True when a write tool succeeds — triggers immediate exit without another LLM call.
+    let writeToolSucceeded = false
+    const WRITE_TOOLS = new Set(['confirm_booking', 'smart_schedule', 'cancel_booking', 'reschedule_booking'])
     /** Tracks the last successful write-tool payload for session memory ("cancela/reagenda lo último"). */
     let lastSuccessfulWriteData: BookingEventData | null = null
     /** Tracks consecutive failures per read-tool — bails out after 2 failures of the same tool. */
@@ -841,9 +854,15 @@ export class ExecutionEngine implements IExecutionEngine {
         if (result.success) {
           actionPerformed = true
 
-          // Session memory: capture last write-action for owner fast-path commands
           if (result.data && WRITE_TOOLS.has(toolCall.function.name)) {
             lastSuccessfulWriteData = result.data
+
+            // ── Deterministic success message — NO additional LLM call ────────
+            // Render the response from the structured write-tool payload. This cuts
+            // latency by one full LLM roundtrip and eliminates hallucination risk
+            // ("listo, agendé" without having actually called the tool).
+            responseText     = renderOwnerSuccessMessage(result.data)
+            writeToolSucceeded = true
           }
 
           // ── Event dispatch per write-tool success (fire-and-forget) ──────────
@@ -892,8 +911,10 @@ export class ExecutionEngine implements IExecutionEngine {
         }
       }
 
-      // Bail out of the outer while loop if a write tool failed
-      if (writeToolFailed) break
+      // Exit the ReAct loop immediately after any write-tool result (success or failure).
+      // Success: response already rendered via renderOwnerSuccessMessage — no LLM needed.
+      // Failure: bailing out prevents the LLM from generating an optimistic hallucination.
+      if (writeToolSucceeded || writeToolFailed) break
     } // end while
 
     // If loop exhausted without a response
@@ -950,7 +971,7 @@ export class ExecutionEngine implements IExecutionEngine {
     //   - write tool failed (bail-out path)          → don't leave the user trapped in collecting_booking
     // Keeps the draft/flow intact for genuine mid-collection turns where the LLM is
     // legitimately asking for one more field.
-    const shouldResetFlow = actionPerformed || writeToolFailed
+    const shouldResetFlow = actionPerformed || writeToolFailed || writeToolSucceeded
 
     return {
       text: responseText,
