@@ -10,15 +10,15 @@
  */
 
 // Días de la semana en español → índice JS (0=domingo)
+// Keys without accents only — text is NFD-normalized before lookup, so accented
+// variants ('miércoles', 'sábado') are unreachable after normalization.
 const DAY_MAP: Record<string, number> = {
   domingo:   0,
   lunes:     1,
   martes:    2,
-  miércoles: 3,
   miercoles: 3,
   jueves:    4,
   viernes:   5,
-  sábado:    6,
   sabado:    6,
 }
 
@@ -72,17 +72,20 @@ export function normalizeDateInput(raw: string, timezone: string): string | null
   // ── Relative keywords (order matters: most specific first) ─────────────────
   // "pasado mañana" must be checked BEFORE "mañana" to avoid partial match.
 
-  if (text.includes('pasado manana') || text.includes('pasado mañana')) {
+  // text is already NFD-normalized above, so only the accent-stripped forms appear.
+  if (text.includes('pasado manana')) {
     const d = new Date(today)
     d.setDate(d.getDate() + 2)
     return toISODate(d)
   }
 
-  if (text === 'hoy' || text.includes('hoy')) {
+  // Word boundary prevents false positives like "hoyo" or "hoyuelos"
+  if (/\bhoy\b/.test(text)) {
     return toISODate(today)
   }
 
-  if (text === 'manana' || text.includes('manana') || text.includes('mañana')) {
+  // Word boundary prevents false positives like "mananá" compounds or "mañanero"
+  if (/\bmanana\b/.test(text)) {
     const d = new Date(today)
     d.setDate(d.getDate() + 1)
     return toISODate(d)
