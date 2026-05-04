@@ -24,6 +24,7 @@ import { serializeForLlm }     from '@/lib/ai/core/contracts/tool-result'
 import { TenantEnforcer }      from '@/lib/ai/core/security/TenantEnforcer'
 import { BookingEngine }        from '@/lib/ai/core/booking/BookingEngine'
 import { getRepos }             from '@/lib/repositories'
+import { logger }               from '@/lib/logger'
 
 // Tipo que espera ExecutionEngine (IToolExecutor.execute)
 type ExecResult = {
@@ -65,12 +66,27 @@ export class DashboardBookingAdapter {
     workingHours?: Record<string, { open: string; close: string } | null>
   }): Promise<ExecResult> {
     const { toolName, rawArgs, userId, businessId, timezone, workingHours } = params
+    const startMs = Date.now()
+
+    logger.info('ADAPTER', 'Tool request received', {
+      toolName,
+      businessId,
+      userId,
+      hasArgs: rawArgs != null,
+    })
 
     // ── Verificación de tenant (estructural — no manual) ──────────────────────
     let ctx
     try {
       ctx = await TenantEnforcer.verify(businessId, userId, timezone)
     } catch (err) {
+      logger.warn('ADAPTER', 'Tenant verification failed', {
+        toolName,
+        businessId,
+        userId,
+        error:   err instanceof Error ? err.message : String(err),
+        durationMs: Date.now() - startMs,
+      })
       return {
         success: false,
         result:  'No autorizado.',
@@ -80,14 +96,27 @@ export class DashboardBookingAdapter {
 
     // ── Despachar al BookingEngine ─────────────────────────────────────────────
     const toolResult = await this.engine.dispatch(ctx, toolName, rawArgs, { workingHours })
+    const durationMs = Date.now() - startMs
 
     if (!toolResult.success) {
+      logger.info('ADAPTER', 'Tool failed', {
+        toolName,
+        businessId,
+        errorCode:  toolResult.error,
+        durationMs,
+      })
       return {
         success: false,
         result:  toolResult.message,
         error:   toolResult.error,
       }
     }
+
+    logger.info('ADAPTER', 'Tool succeeded', {
+      toolName,
+      businessId,
+      durationMs,
+    })
 
     return {
       success: true,

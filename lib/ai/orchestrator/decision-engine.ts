@@ -30,12 +30,16 @@ import type { IAgent, ResolvedEntities, ToolDefEntry } from '@/lib/ai/agents/IAg
 
 const CONFIRMATION_KEYWORDS = [
   'sí', 'si', 'dale', 'ok', 'confirmo', 'confirmar',
-  'adelante', 'por favor', 'hazlo', 'hazlo', 'perfecto',
+  'adelante', 'por favor', 'hazlo', 'perfecto',
   'genial', 'excelente', 'vale', 'bueno',
 ]
 
+// NOTE: 'cancela' is intentionally absent — it triggers new cancel intents, not rejections.
+// Only anaphoric variants ('cancela eso', 'cancela esto') that unambiguously mean
+// "abort the pending action" are included.
 const REJECTION_KEYWORDS = [
-  'no', 'mejor no', 'cancela', 'no quiero', 'mejor no',
+  'no', 'mejor no', 'no quiero',
+  'cancela eso', 'cancela esto', 'cancela la accion', 'cancela la reserva',
   'déjalo', 'dejalo', 'para', 'espera',
 ]
 
@@ -405,7 +409,7 @@ export class DecisionEngine implements IDecisionEngine {
       // Fast path C2 — Anaphora resolution: "cancela esta cita", "reagéndala", etc.
       // Resolves via entityContext.lastAppointmentId persisted from Redis
       if (detectAnaphora(input.text) && input.entityContext?.lastAppointmentId) {
-        const intent = input.text.toLowerCase().includes('cancel') ? 'cancel_booking' : 'reschedule'
+        const intent = input.text.toLowerCase().includes('cancel') ? 'cancel_booking' : 'reschedule_booking'
         logger.info('DECISION-ENGINE', 'Owner anaphora resolution fast-path', {
           userId:        input.userId,
           appointmentId: input.entityContext.lastAppointmentId,
