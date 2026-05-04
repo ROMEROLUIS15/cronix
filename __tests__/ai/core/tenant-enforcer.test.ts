@@ -17,9 +17,9 @@ import { TenantEnforcer } from '@/lib/ai/core/security/TenantEnforcer'
 // ── Mock de @/lib/supabase/server ─────────────────────────────────────────────
 
 const mockSingle = vi.fn()
-const mockEq     = vi.fn(() => ({ single: mockSingle }))
-const mockSelect = vi.fn(() => ({ eq: mockEq, single: mockSingle }))
-const mockFrom   = vi.fn(() => ({ select: mockSelect }))
+const mockEq: any = vi.fn(() => ({ single: mockSingle, eq: mockEq }))
+const mockSelect: any = vi.fn(() => ({ eq: mockEq, single: mockSingle }))
+const mockFrom: any = vi.fn(() => ({ select: mockSelect }))
 
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => ({
