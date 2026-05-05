@@ -23,6 +23,9 @@ export const mockBusiness: Business = {
   timezone: 'America/Bogota',
   plan: 'pro',
   subscription_ends_at: null,
+  referral_code: 'MOCK-REF',
+  referred_by_id: null,
+  bonus_appointments_limit: 0,
   settings: {
     notifications: {
       whatsapp: true,

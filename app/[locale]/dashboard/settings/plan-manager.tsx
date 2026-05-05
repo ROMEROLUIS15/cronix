@@ -79,7 +79,11 @@ export function PlanManager({
               {t('fullAccess')}
             </p>
           </div>
-          <Button variant="secondary" className="w-full sm:w-auto flex-shrink-0" onClick={() => setIsOpen(true)}>
+          <Button 
+            className="w-full sm:w-auto flex-shrink-0 hover:brightness-110 transition-all" 
+            style={{ backgroundColor: '#0062FF', color: 'white' }}
+            onClick={() => setIsOpen(true)}
+          >
             {t('managePlan')}
           </Button>
         </div>

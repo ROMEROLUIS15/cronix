@@ -15,7 +15,10 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Gem,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Business, BusinessSettingsJson } from "@/types";
@@ -23,7 +26,6 @@ import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useTranslations } from "next-intl";
 import { useSettingsForm, type DayHours } from "./hooks/use-settings-form";
-import { PlanManager } from "./plan-manager";
 
 export default function SettingsPage() {
   const t = useTranslations("settings");
@@ -329,7 +331,7 @@ export default function SettingsPage() {
             return (
               <div
                 key={key}
-                className={`border rounded-2xl p-4 transition-all duration-200 ${h.active ? 'bg-brand-500/5 border-brand-500/20' : 'bg-[#1C1C21] border-[#2E2E33]'}`}
+                className="border rounded-2xl p-4 transition-all duration-200 bg-[#1C1C21] border-[#2E2E33]"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   {/* Day and Status Toggle */}
@@ -651,7 +653,37 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <PlanManager currentPlan={biz?.plan} businessId={biz?.id} />
+      {/* Plan & Recompensas CTA */}
+      <Link href="/dashboard/plans" className="block">
+        <Card
+          className="cursor-pointer transition-all hover:brightness-110"
+          style={{
+            background: "linear-gradient(135deg, rgba(168,85,247,0.12) 0%, rgba(59,130,246,0.12) 100%)",
+            border: "1px solid rgba(168,85,247,0.25)",
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "rgba(168,85,247,0.15)" }}
+              >
+                <Gem size={20} style={{ color: "#A855F7" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "#F2F2F2" }}>
+                  🎁 ¡Gana más citas gratis!
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "#909098" }}>
+                  Invita un negocio y gana +10 citas extra al mes
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={18} style={{ color: "#A855F7" }} className="flex-shrink-0" />
+          </div>
+        </Card>
+      </Link>
+
     </div>
   );
 }

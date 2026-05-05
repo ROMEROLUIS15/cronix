@@ -1,41 +1,88 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/server';
+import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
 import { Database } from '@/types/database.types';
 
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+const supabaseAdmin = createAdminClient();
+
+type InvoiceStatus = Database['public']['Enums']['saas_invoice_status'];
+
+function toInvoiceStatus(paymentStatus: string): InvoiceStatus {
+  switch (paymentStatus) {
+    case 'waiting':     return 'waiting';
+    case 'confirming':
+    case 'confirmed':
+    case 'sending':     return 'confirming';
+    case 'partially_paid': return 'partially_paid';
+    case 'finished':    return 'finished';
+    case 'failed':      return 'failed';
+    case 'refunded':    return 'refunded';
+    case 'expired':     return 'expired';
+    default:            return 'waiting';
+  }
+}
+
+async function applyReferralBonus(businessId: string): Promise<void> {
+  const { data: biz } = await supabaseAdmin
+    .from('businesses')
+    .select('referred_by_id')
+    .eq('id', businessId)
+    .single();
+
+  if (!biz?.referred_by_id) return;
+
+  // Bonus only on the first successful payment
+  const { count } = await supabaseAdmin
+    .from('saas_invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .eq('status', 'finished');
+
+  if (count !== 1) return;
+
+  const { data: referrer } = await supabaseAdmin
+    .from('businesses')
+    .select('id, plan, subscription_ends_at')
+    .eq('id', biz.referred_by_id)
+    .single();
+
+  if (!referrer || referrer.plan === 'free') return;
+
+  const now = new Date();
+  const currentEndsAt = referrer.subscription_ends_at
+    ? new Date(referrer.subscription_ends_at)
+    : now;
+  const baseDate = currentEndsAt > now ? currentEndsAt : now;
+  baseDate.setDate(baseDate.getDate() + REFERRAL_BONUS_DAYS);
+
+  await supabaseAdmin
+    .from('businesses')
+    .update({ subscription_ends_at: baseDate.toISOString(), updated_at: now.toISOString() })
+    .eq('id', referrer.id);
+
+  await supabaseAdmin.from('notifications').insert({
+    business_id: referrer.id,
+    title: '¡Mes gratis ganado! 🎁',
+    content: 'Un negocio que invitaste ha activado su plan Pro. Hemos añadido 30 días adicionales a tu suscripción.',
+    type: 'billing',
+  });
+}
 
 async function handler(req: Request) {
   try {
     const payload = await req.json();
-    const invoiceId = payload.invoice_id?.toString();
-    const paymentId = payload.payment_id?.toString();
+    const invoiceId     = payload.invoice_id?.toString();
+    const paymentId     = payload.payment_id?.toString();
     const paymentStatus = payload.payment_status;
-    const cryptoAmount = payload.actually_paid;
+    const cryptoAmount  = payload.actually_paid;
     const cryptoCurrency = payload.pay_currency;
 
     if (!invoiceId) {
       return NextResponse.json({ error: 'Missing invoice_id' }, { status: 400 });
     }
 
-    // Normalizar el estado de NOWPayments a nuestro Enum de base de datos
-    let invoiceStatus: Database['public']['Enums']['saas_invoice_status'] = 'waiting';
-    switch (paymentStatus) {
-      case 'waiting': invoiceStatus = 'waiting'; break;
-      case 'confirming': 
-      case 'confirmed': 
-      case 'sending': invoiceStatus = 'confirming'; break;
-      case 'partially_paid': invoiceStatus = 'partially_paid'; break;
-      case 'finished': invoiceStatus = 'finished'; break;
-      case 'failed': invoiceStatus = 'failed'; break;
-      case 'refunded': invoiceStatus = 'refunded'; break;
-      case 'expired': invoiceStatus = 'expired'; break;
-      default: invoiceStatus = 'waiting';
-    }
+    const invoiceStatus = toInvoiceStatus(paymentStatus);
 
-    // 1. Actualizar el estado de la factura
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('saas_invoices')
       .update({
@@ -43,7 +90,7 @@ async function handler(req: Request) {
         np_payment_id: paymentId,
         crypto_amount: cryptoAmount,
         crypto_currency: cryptoCurrency,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('np_invoice_id', invoiceId)
       .select('id, business_id, plan_purchased')
@@ -54,17 +101,16 @@ async function handler(req: Request) {
       return NextResponse.json({ error: 'Invoice update failed' }, { status: 500 });
     }
 
-    // 2. Si el pago finalizó correctamente, actualizar el plan del negocio
     if (invoiceStatus === 'finished') {
       const endsAt = new Date();
-      endsAt.setMonth(endsAt.getMonth() + 1); // Suscripción de 1 mes (30 días aprox)
+      endsAt.setMonth(endsAt.getMonth() + 1);
 
       const { error: bizError } = await supabaseAdmin
         .from('businesses')
         .update({
           plan: invoice.plan_purchased,
           subscription_ends_at: endsAt.toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', invoice.business_id);
 
@@ -73,30 +119,31 @@ async function handler(req: Request) {
         return NextResponse.json({ error: 'Business update failed' }, { status: 500 });
       }
 
-      // Crear notificación de éxito
       await supabaseAdmin.from('notifications').insert({
         business_id: invoice.business_id,
         title: '¡Pago Confirmado! 🎉',
         content: `Tu plan ${invoice.plan_purchased.toUpperCase()} ha sido activado exitosamente.`,
         type: 'billing',
-        metadata: { invoice_id: invoice.id }
+        metadata: { invoice_id: invoice.id },
       });
+
+      await applyReferralBonus(invoice.business_id);
     }
 
-    // 3. Manejo de pagos parciales (Cripto-Caos)
     if (invoiceStatus === 'partially_paid') {
       await supabaseAdmin.from('notifications').insert({
         business_id: invoice.business_id,
         title: 'Pago Incompleto (Cripto)',
         content: `Recibimos un pago parcial de ${cryptoAmount} ${cryptoCurrency?.toUpperCase()}. Contacta a soporte para completar la activación de tu plan.`,
         type: 'alert',
-        metadata: { invoice_id: invoice.id, amount_received: cryptoAmount }
+        metadata: { invoice_id: invoice.id, amount_received: cryptoAmount },
       });
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error('Queue processing error:', err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Queue processing error:', message);
     return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
 }
@@ -104,8 +151,8 @@ async function handler(req: Request) {
 // Dynamic import defers Receiver creation to request time so the build
 // doesn't fail when QSTASH_* env vars are absent in CI.
 async function verifiedRoute(req: Request): Promise<Response> {
-  const { verifySignatureAppRouter } = await import('@upstash/qstash/dist/nextjs')
-  return verifySignatureAppRouter(handler)(req)
+  const { verifySignatureAppRouter } = await import('@upstash/qstash/dist/nextjs');
+  return verifySignatureAppRouter(handler)(req);
 }
 
 export const POST = verifiedRoute;

@@ -15,6 +15,7 @@
     "finances": "Finanzas",
     "reports": "Reportes",
     "settings": "Ajustes",
+    "plans": "Plan & Recompensas",
     "activeBusiness": "Empresa Activa",
     "defaultCategory": "Servicios",
     "closeMenu": "Cerrar menú",
@@ -54,7 +55,9 @@
     "setup": "Configuración Inicial",
     "setupSub": "Bienvenido",
     "agendaSub": "Agenda",
-    "systemPulseSub": "SaaS Health Monitor"
+    "systemPulseSub": "SaaS Health Monitor",
+    "plans": "Plan & Recompensas",
+    "plansSub": "Suscripción y referidos"
   },
   "notifications": {
     "title": "Notificaciones",
@@ -207,6 +210,42 @@
       "successDesc": "Ya puedes iniciar sesión con tu nueva contraseña.",
       "loginLink": "Ir al inicio de sesión"
     }
+  },
+  "plans": {
+    "pageTitle": "Plan & Recompensas",
+    "pageSubtitle": "Gestiona tu suscripción y gana recompensas invitando a otros negocios.",
+    "planSectionTitle": "Tu Plan Actual",
+    "planSectionSub": "Compara planes y administra tu suscripción.",
+    "referralSectionTitle": "Programa de Referidos",
+    "referralSectionSub": "Invita otros negocios y desbloquea recompensas exclusivas."
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Gana citas gratis",
+    "ctaDesc": "Invita negocios y obtén recompensas",
+    "pageTitle": "Programa de Referidos 🚀",
+    "pageSubtitle": "Invita a otros negocios y gana recompensas exclusivas.",
+    "heroBannerFree": "Gana +10 citas gratis por amigo",
+    "heroBannerPaid": "Gana 1 Mes Gratis de Plan Pro",
+    "heroDescFree": "Por cada negocio que se registre con tu enlace, te añadiremos 10 citas adicionales a tu límite mensual para siempre. ¡Ellos también ganan un bono de bienvenida!",
+    "heroDescPaid": "Invita a un negocio a Cronix. Cuando realicen su primer pago, te regalaremos 30 días adicionales en tu suscripción actual de forma automática.",
+    "copyLink": "Copiar Enlace",
+    "copied": "¡Copiado!",
+    "rewardStatusTitle": "Estado de Recompensas",
+    "extraApptsLabel": "Citas Extra Ganadas",
+    "baseLimitText": "Límite base: {base} citas. Actual: {current} citas/mes.",
+    "monthsEarnedLabel": "Meses Ganados Totales",
+    "expiryText": "Tu suscripción actual vence el: {date}",
+    "howItWorksTitle": "¿Cómo funciona?",
+    "step1": "Comparte tu enlace único con otros dueños de negocios (Spa, Barberías, Clínicas).",
+    "step2": "Ellos se registran creando su cuenta gratuita.",
+    "step3": "Recibes tu recompensa instantáneamente (citas extra) o en cuanto ellos pasen a un plan de pago (meses gratis).",
+    "referralsListTitle": "Tus Referidos ({count})",
+    "emptyReferrals": "Aún no has invitado a ningún negocio. ¡Comparte tu enlace para empezar!",
+    "colBusiness": "Negocio",
+    "colDate": "Fecha de Registro",
+    "colStatus": "Estado",
+    "statusFree": "Registrado (Free)",
+    "statusPaid": "Plan Activo (Premium)"
   },
   "validation": {
     "emailInvalid": "Email inválido",

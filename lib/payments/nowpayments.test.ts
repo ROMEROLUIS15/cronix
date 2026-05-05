@@ -33,7 +33,7 @@ describe('NOWPaymentsAPI', () => {
         id: '12345',
         invoice_url: 'https://nowpayments.io/payment/?iid=12345',
         order_id: 'bus-123',
-        price_amount: '6.00',
+        price_amount: '10.00',
         price_currency: 'usd'
       };
 
@@ -43,7 +43,7 @@ describe('NOWPaymentsAPI', () => {
       });
 
       const result = await nowpayments.createInvoice({
-        price_amount: 6.00,
+        price_amount: 10.00,
         price_currency: 'usd',
         order_id: 'bus-123'
       });
@@ -68,7 +68,7 @@ describe('NOWPaymentsAPI', () => {
       });
 
       const result = await nowpayments.createInvoice({
-        price_amount: 6.00,
+        price_amount: 10.00,
         price_currency: 'usd',
         order_id: 'bus-123'
       });
@@ -81,7 +81,7 @@ describe('NOWPaymentsAPI', () => {
       (fetch as any).mockRejectedValue(new Error('Network error'));
 
       const result = await nowpayments.createInvoice({
-        price_amount: 6.00,
+        price_amount: 10.00,
         price_currency: 'usd',
         order_id: 'bus-123'
       });

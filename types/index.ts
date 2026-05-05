@@ -87,6 +87,14 @@ export interface DashboardStats {
   completedToday: number
 }
 
+// ── Referral System ──────────────────────────────────────────
+export type ReferralBusiness = Pick<
+  Business,
+  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at'
+>
+
+export type ReferralInvite = Pick<Business, 'id' | 'name' | 'plan' | 'created_at'>
+
 // ── Query Response Types (Supabase JOINs) ───────────────────
 export type {
   AppointmentWithRelations,

@@ -17,6 +17,7 @@ import {
   Activity,
   ShieldCheck,
   CreditCard,
+  Gem,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/lib/actions/auth";
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/finances",    labelKey: "finances",  icon: DollarSign },
   { href: "/dashboard/reports",     labelKey: "reports",   icon: BarChart3 },
   { href: "/dashboard/settings",    labelKey: "settings",  icon: Settings },
+  { href: "/dashboard/plans",       labelKey: "plans",     icon: Gem },
   // Admin-only tools: labels kept in English — internal, locale-agnostic
   { href: "/dashboard/admin/pulse",    labelKey: "__pulse",        icon: Activity,     adminOnly: true },
   { href: "/dashboard/admin/users",    labelKey: "__adminUsers",   icon: ShieldCheck,  adminOnly: true },
@@ -59,8 +61,8 @@ export function Sidebar({
   user,
   business,
 }: SidebarProps) {
-  const t = useTranslations('nav');
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   const initials =
     user?.name

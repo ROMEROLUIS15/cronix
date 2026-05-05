@@ -3,6 +3,9 @@
  * Update here and all guards (AI tool, server action, UI) update automatically.
  */
 
+export const MAX_BONUS_APPOINTMENTS = 50
+export const REFERRAL_BONUS_DAYS = 30
+
 export const PLAN_LIMITS = {
   free: {
     clients:        20,
@@ -31,8 +34,10 @@ export function getEmployeeLimit(plan: string): number {
   return PLAN_LIMITS[plan as PlanKey]?.employees ?? PLAN_LIMITS.free.employees
 }
 
-export function getAppointmentMonthLimit(plan: string): number {
-  return PLAN_LIMITS[plan as PlanKey]?.appointmentsPerMonth ?? PLAN_LIMITS.free.appointmentsPerMonth
+export function getAppointmentMonthLimit(business: { plan: string; bonus_appointments_limit?: number | null }): number {
+  const baseLimit = PLAN_LIMITS[business.plan as PlanKey]?.appointmentsPerMonth ?? PLAN_LIMITS.free.appointmentsPerMonth
+  if (!isFinite(baseLimit)) return Infinity
+  return baseLimit + (business.bonus_appointments_limit || 0)
 }
 
 export function canAccessReports(plan: string): boolean {

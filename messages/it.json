@@ -15,6 +15,7 @@
     "finances": "Finanze",
     "reports": "Report",
     "settings": "Impostazioni",
+    "referrals": "Referral",
     "activeBusiness": "Azienda attiva",
     "defaultCategory": "Servizi",
     "closeMenu": "Chiudi menu",
@@ -54,7 +55,9 @@
     "setup": "Configurazione Iniziale",
     "setupSub": "Benvenuto",
     "agendaSub": "Agenda",
-    "systemPulseSub": "SaaS Health Monitor"
+    "systemPulseSub": "SaaS Health Monitor",
+    "plans": "Piano & Premi",
+    "plansSub": "Abbonamento e referral"
   },
   "notifications": {
     "title": "Notifiche",

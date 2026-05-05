@@ -1336,7 +1336,7 @@ To ensure the "Executive Assistant" experience feels premium and lag-free:
 The SaaS billing architecture is completely isolated from the final customer's transactions to ensure data purity. It uses Upstash QStash to guarantee webhook delivery and idempotency.
 
 ```text
-Dashboard UI -> Select Plan ($6 / $10)
+Dashboard UI -> Select Plan ($10 / $15)
   ↓
 Server Action (createInvoice)
   ├─ Calls NOWPayments API

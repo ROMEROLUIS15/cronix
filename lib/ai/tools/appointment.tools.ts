@@ -235,7 +235,10 @@ export async function book_appointment(
     // Plan limit: max appointments per month on free plan
     const bizResult = await ctx.businessRepo.getById(business_id)
     if (!bizResult.error && bizResult.data) {
-      const limit = getAppointmentMonthLimit(bizResult.data.plan ?? 'free')
+      const limit = getAppointmentMonthLimit({
+        plan: bizResult.data.plan ?? 'free',
+        bonus_appointments_limit: bizResult.data.bonus_appointments_limit ?? 0
+      })
       if (isFinite(limit)) {
         const now = new Date()
         const countResult = await ctx.appointmentRepo.findByDateRange(

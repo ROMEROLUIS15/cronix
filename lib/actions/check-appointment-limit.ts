@@ -12,14 +12,19 @@ export async function checkAppointmentLimit(businessId: string): Promise<{
 }> {
   const supabase = await createClient()
 
-  const { data: biz } = await supabase
+  const { data: biz, error } = await supabase
     .from('businesses')
-    .select('plan')
+    .select('plan, bonus_appointments_limit')
     .eq('id', businessId)
     .single()
 
+  if (error) console.error('[checkAppointmentLimit] query failed:', error.message)
+
   const plan = biz?.plan ?? 'free'
-  const limit = getAppointmentMonthLimit(plan)
+  const limit = getAppointmentMonthLimit({
+    plan,
+    bonus_appointments_limit: biz?.bonus_appointments_limit
+  })
 
   if (!isFinite(limit)) {
     return { allowed: true, current: 0, limit: Infinity, plan }

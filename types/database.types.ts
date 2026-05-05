@@ -244,6 +244,9 @@ export type Database = {
           owner_id: string
           phone: string | null
           plan: Database["public"]["Enums"]["business_plan"] | null
+          referral_code: string | null
+          referred_by_id: string | null
+          bonus_appointments_limit: number | null
           settings: Json | null
           slug: string | null
           subscription_ends_at: string | null
@@ -261,6 +264,9 @@ export type Database = {
           owner_id: string
           phone?: string | null
           plan?: Database["public"]["Enums"]["business_plan"] | null
+          referral_code?: string | null
+          referred_by_id?: string | null
+          bonus_appointments_limit?: number | null
           settings?: Json | null
           slug?: string | null
           subscription_ends_at?: string | null
@@ -278,6 +284,9 @@ export type Database = {
           owner_id?: string
           phone?: string | null
           plan?: Database["public"]["Enums"]["business_plan"] | null
+          referral_code?: string | null
+          referred_by_id?: string | null
+          bonus_appointments_limit?: number | null
           settings?: Json | null
           slug?: string | null
           subscription_ends_at?: string | null

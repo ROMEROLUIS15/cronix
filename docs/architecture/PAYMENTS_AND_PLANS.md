@@ -17,12 +17,13 @@
 9. [Queue Worker — /api/queue/process-saas-payment](#9-queue-worker--apiqueueprocess-saas-payment)
 10. [Cron Job — /api/cron/check-subscriptions](#10-cron-job--apicroncheck-subscriptions)
 11. [Aplicación de Límites del Plan](#11-aplicación-de-límites-del-plan)
-12. [UI — PlanManager](#12-ui--planmanager)
+12. [UI — Plan & Recompensas](#12-ui--plan--recompensas)
 13. [Internacionalización de Errores de Plan](#13-internacionalización-de-errores-de-plan)
 14. [Variables de Entorno](#14-variables-de-entorno)
 15. [Tests Unitarios](#15-tests-unitarios)
 16. [Seguridad](#16-seguridad)
 17. [Migraciones de Base de Datos](#17-migraciones-de-base-de-datos)
+18. [Sistema de Referidos](#18-sistema-de-referidos)
 
 ---
 
@@ -54,8 +55,8 @@ User abre link → paga en cripto
 | Plan       | Precio      | Clientes | Empleados | Citas/mes  |
 |------------|-------------|----------|-----------|------------|
 | Free       | $0          | 20       | 1 (dueño) | 30         |
-| Pro        | $6 USDT/mes | Ilimitados | 3       | Ilimitadas |
-| Enterprise | $10 USDT/mes | Ilimitados | Ilimitados | Ilimitadas |
+| Pro        | $10 USDT/mes | Ilimitados | 3       | Ilimitadas |
+| Enterprise | $15 USDT/mes | Ilimitados | Ilimitados | Ilimitadas |
 
 Todas las funcionalidades (agenda, servicios, finanzas, reportes, WhatsApp, asistente IA) están disponibles en todos los planes. Los límites solo aplican a volumen.
 
@@ -128,9 +129,14 @@ CREATE INDEX idx_businesses_subscription_ends_at ON public.businesses(subscripti
 
 **Archivo**: `lib/plans/plan-limits.ts`
 
-Este archivo es la **única** fuente de verdad para todos los límites. Cualquier cambio de límites se hace aquí y se propaga automáticamente a todos los puntos de aplicación (acciones del servidor, herramientas de IA, UI).
+Este archivo es la **única** fuente de verdad para todos los límites y constantes de negocio. Cualquier cambio se propaga automáticamente a todos los puntos de aplicación (acciones del servidor, herramientas de IA, UI, sistema de referidos).
 
 ```typescript
+// ── Constantes de referidos ──────────────────────────────────────────────────
+export const MAX_BONUS_APPOINTMENTS = 50  // tope de citas extra por referidos (plan free)
+export const REFERRAL_BONUS_DAYS    = 30  // días extra otorgados al referidor (plan pagado)
+
+// ── Límites por plan ─────────────────────────────────────────────────────────
 export const PLAN_LIMITS = {
   free:       { clients: 20,       employees: 1,        appointmentsPerMonth: 30       },
   pro:        { clients: Infinity, employees: 3,        appointmentsPerMonth: Infinity },
@@ -141,12 +147,12 @@ export type PlanKey = keyof typeof PLAN_LIMITS
 
 export function getClientLimit(plan: string): number
 export function getEmployeeLimit(plan: string): number
-export function getAppointmentMonthLimit(plan: string): number
+export function getAppointmentMonthLimit(business: { plan: string; bonus_appointments_limit?: number | null }): number
 export function canAccessReports(plan: string): boolean  // true para pro y enterprise
 export function isFreePlan(plan: string): boolean
 ```
 
-> **Regla**: Nunca hardcodear límites en la UI ni en las acciones. Siempre importar desde aquí.
+> **Regla**: Nunca hardcodear límites ni constantes de referidos en la UI ni en las acciones. Siempre importar desde aquí.
 
 ---
 
@@ -206,7 +212,7 @@ Clase `NOWPaymentsAPI` con singleton exportado `nowpayments`.
 
 ```typescript
 nowpayments.createInvoice({
-  price_amount:      6.00,
+  price_amount:      10.00,
   price_currency:    'usd',
   pay_currency:      'usdtbsc', // NOWPayments code for USDT on BSC (BEP-20)
   order_id:          `${businessId}-${Date.now()}`,
@@ -252,7 +258,7 @@ Para pruebas locales, cambiar `NOWPAYMENTS_API_URL` a `https://api.sandbox.nowpa
 export async function createSaaSCheckoutSession(plan: 'pro' | 'enterprise') {
   // 1. Autenticación: obtiene user de la sesión
   // 2. Obtiene business_id del usuario autenticado
-  // 3. amountUsd = plan === 'pro' ? 6.00 : 10.00
+  // 3. amountUsd = plan === 'pro' ? 10.00 : 15.00
   // 4. orderId = `${business.id}-${Date.now()}` (único por intento)
   // 5. nowpayments.createInvoice(...)
   // 6. supabaseAdmin.from('saas_invoices').insert({ status: 'waiting', ... })
@@ -326,7 +332,30 @@ supabaseAdmin.from('notifications').insert({
   content: `Tu plan ${invoice.plan_purchased.toUpperCase()} ha sido activado exitosamente.`,
   type: 'billing',
 })
+
+// Aplica bonus de referido si aplica (ver §18)
+await applyReferralBonus(invoice.business_id)
 ```
+
+### `applyReferralBonus(businessId)` — función privada del worker
+
+Extraída del handler principal para mantener el SRP. Se ejecuta solo cuando `status === 'finished'`.
+
+```typescript
+async function applyReferralBonus(businessId: string): Promise<void>
+```
+
+**Lógica**:
+
+1. Obtiene `referred_by_id` del negocio que acaba de pagar.
+2. Si no tiene referidor → termina sin efecto.
+3. Verifica que este sea el **primer** pago finalizado del negocio (`count === 1` en `saas_invoices` con `status = 'finished'`). Garantiza que el bonus se aplica una sola vez.
+4. Obtiene el plan actual del referidor.
+5. Si el referidor tiene plan `free` → no recibe bonus de meses (ese modelo solo aplica a planes pagados).
+6. Si el referidor tiene plan pagado (`pro` / `enterprise`) → extiende su `subscription_ends_at` en `REFERRAL_BONUS_DAYS` días.
+7. Crea notificación in-app para el referidor.
+
+> **Nota**: el bonus para el plan Free (citas extra) se aplica en el momento del registro del negocio invitado, no aquí. Ver §18.4.
 
 ### Cuando `status === 'partially_paid'`
 
@@ -401,7 +430,7 @@ if (isFinite(limit)) {
 }
 ```
 
-### Capa 3 — Client Hook: Citas mensuales
+### Capa 3 — Client Hook: Citas mensuales (con bonus de referidos)
 
 **Archivo**: `app/[locale]/dashboard/appointments/new/hooks/use-appointment-form.ts`
 
@@ -412,10 +441,12 @@ import { checkAppointmentLimit } from '@/lib/actions/check-appointment-limit'
 
 const limitCheck = await checkAppointmentLimit(businessId)
 if (!limitCheck.allowed) {
-  setMsg({ type: 'error', text: tPlan('appointments', { limit: limitCheck.limit }) })
+  setMsg({ type: 'limit_error', text: tPlan('appointments', { limit: limitCheck.limit }) })
   return
 }
 ```
+
+Cuando el tipo del mensaje es `'limit_error'` (en vez de `'error'`), la UI muestra además una CTA de referidos que lleva a `/dashboard/plans`, invitando al usuario a ganar más citas invitando negocios en lugar de simplemente bloquear la acción.
 
 **Archivo helper**: `lib/actions/check-appointment-limit.ts`
 
@@ -426,6 +457,13 @@ export async function checkAppointmentLimit(businessId: string): Promise<{
   limit: number
   plan: string
 }>
+```
+
+El límite efectivo se calcula con `getAppointmentMonthLimit({ plan, bonus_appointments_limit })`, sumando el bonus de referidos al base del plan:
+
+```typescript
+// Plan free con 2 referidos: 30 + 20 = 50 citas/mes efectivas
+getAppointmentMonthLimit({ plan: 'free', bonus_appointments_limit: 20 }) // → 50
 ```
 
 Cuenta citas del mes actual con status distinto de `cancelled` o `no_show`.
@@ -447,7 +485,41 @@ El asistente IA Luis también verifica el límite antes de agendar, para que no 
 
 ---
 
-## 12. UI — PlanManager
+## 12. UI — Plan & Recompensas
+
+### Página unificada — `/dashboard/plans`
+
+**Archivo**: `app/[locale]/dashboard/plans/page.tsx`
+
+Server Component que centraliza toda la información de monetización del negocio. Reemplaza la anterior ubicación de `PlanManager` en Ajustes.
+
+**Estructura visual**:
+```
+Plan & Recompensas
+├── Tu Plan Actual
+│   └── <PlanManager> — comparador + modal de upgrade
+└── Programa de Referidos
+    └── <ReferralClient> — enlace referido + progreso + lista de invitados
+```
+
+**Data fetching** (un único `createAdminClient()` para ambas secciones):
+```typescript
+// Datos del negocio (sirven a ambos hijos)
+const { data: business } = await adminSupabase
+  .from("businesses")
+  .select("id, name, plan, referral_code, bonus_appointments_limit, subscription_ends_at")
+  .eq("id", dbUser.business_id)
+  .single()
+
+// Lista de negocios que usaron el código de este negocio
+const { data: invited } = await adminSupabase
+  .from("businesses")
+  .select("id, name, plan, created_at")
+  .eq("referred_by_id", business.id)
+  .order("created_at", { ascending: false })
+```
+
+### PlanManager
 
 **Archivo**: `app/[locale]/dashboard/settings/plan-manager.tsx`
 
@@ -457,6 +529,15 @@ Componente `'use client'` que:
 2. Abre un modal con tabla comparativa de planes.
 3. Al pulsar "Activar Pro/Enterprise", llama a `createSaaSCheckoutSession(plan)` y abre el `invoice_url` en nueva pestaña.
 4. Escucha cambios Realtime de Supabase en `businesses` filtrado por `id=eq.${businessId}` — recarga la página cuando el plan cambia.
+
+### Puntos de entrada al flujo
+
+| Ubicación | Componente | Acción |
+|---|---|---|
+| Sidebar | `Gem` icon → "Plan & Recompensas" | Navega a `/dashboard/plans` |
+| Ajustes | CTA card "🎁 ¡Gana más citas gratis!" | Navega a `/dashboard/plans` |
+| Nueva cita (límite alcanzado) | CTA banner `limit_error` | Navega a `/dashboard/plans` |
+| `/dashboard/referrals` (URL directa) | Redirect automático | Redirige a `/dashboard/plans` |
 
 ### Nota sobre el contador de clientes
 
@@ -505,8 +586,8 @@ Claves en `messages/{locale}.json`:
   "tableUnlimitedAppts": "Ilimitadas",
   "tableComingSoon": "Próximamente",
   "tablePricePerMonth": "Precio / mes",
-  "activatePro": "Activar Pro — $6 USDT",
-  "activateEnterprise": "Activar Enterprise — $10 USDT",
+  "activatePro": "Activar Pro — $10 USDT",
+  "activateEnterprise": "Activar Enterprise — $15 USDT",
   "proActive": "Plan Pro activo",
   "enterpriseActive": "Plan Enterprise activo",
   "paymentNote": "Pago en USDT TRC-20 vía NOWPayments...",
@@ -614,6 +695,34 @@ En `createSaaSCheckoutSession`, el `business_id` se obtiene de la sesión del us
 - Crea la tabla `saas_invoices` con todos sus índices, políticas RLS y trigger de `updated_at`.
 - Añade la columna `subscription_ends_at` a `businesses`.
 
+### `20260504100000_referral_system.sql`
+
+Agrega el sistema de referidos a la tabla `businesses`:
+
+```sql
+-- Columnas nuevas
+ALTER TABLE public.businesses
+  ADD COLUMN IF NOT EXISTS referral_code           TEXT UNIQUE,
+  ADD COLUMN IF NOT EXISTS referred_by_id          UUID REFERENCES public.businesses(id),
+  ADD COLUMN IF NOT EXISTS bonus_appointments_limit INTEGER DEFAULT 0;
+
+-- Índice parcial para el query de "negocios que yo referí"
+-- (WHERE referred_by_id = $1 — usado en la página Plan & Recompensas)
+CREATE INDEX IF NOT EXISTS idx_businesses_referred_by_id
+  ON public.businesses (referred_by_id)
+  WHERE referred_by_id IS NOT NULL;
+
+-- Poblar códigos para negocios existentes
+UPDATE public.businesses
+SET referral_code = substring(replace(gen_random_uuid()::text, '-', '') FROM 1 FOR 8)
+WHERE referral_code IS NULL;
+
+-- Reemplaza fn_create_business_and_link_owner para aceptar p_referral_code
+CREATE OR REPLACE FUNCTION public.fn_create_business_and_link_owner(..., p_referral_code TEXT DEFAULT NULL)
+```
+
+> La función `fn_create_business_and_link_owner` es `SECURITY DEFINER` — el `service_role` la ejecuta, no el cliente. Aplica el bonus de bienvenida (+10 citas) al negocio invitado y el bonus Dropbox al referidor en el momento del registro.
+
 ### `20260430130000_reset_plans_to_free.sql`
 
 Migration de corrección de datos. Resetea a `'free'` todos los negocios que fueron asignados a `'pro'` durante el registro (bug anterior) y que no tienen ninguna factura `finished`:
@@ -629,32 +738,257 @@ WHERE plan != 'free'
 
 ---
 
+## 18. Sistema de Referidos
+
+### 18.1 Visión General
+
+El sistema de referidos implementa **dos modelos de recompensa** simultáneos según el plan del referidor:
+
+| Modelo | Plan referidor | Trigger | Recompensa |
+|--------|---------------|---------|------------|
+| **Dropbox** | Free | Registro del invitado | +10 citas/mes al referidor (cap: +50). El invitado recibe +10 de bienvenida. |
+| **Notion** | Pro / Enterprise | Primer pago del invitado | +30 días de suscripción al referidor |
+
+Ambos modelos coexisten. Un negocio free con 3 referidos tiene efectivamente `30 + 30 = 60` citas/mes.
+
+**Flujo de registro con código referido**:
+```
+Usuario nuevo abre /register?ref=ABC12345
+    → fn_create_business_and_link_owner(p_referral_code='ABC12345')
+        → Busca negocio con referral_code='ABC12345'
+        → Si referidor es Free → bonus_appointments_limit += 10 (referidor)
+        → Inserta nuevo business con referred_by_id = referidor.id
+        → Si invitado empieza en Free → bonus_appointments_limit = 10 (bienvenida)
+```
+
+**Flujo de primer pago del invitado**:
+```
+Invitado hace su primer pago (status='finished' en saas_invoices)
+    → applyReferralBonus(businessId) en /api/queue/process-saas-payment
+        → Verifica referred_by_id != NULL
+        → Verifica que es el PRIMER pago (count=1 en saas_invoices finished)
+        → Si referidor tiene plan pagado → subscription_ends_at += 30 días
+        → Notificación in-app al referidor
+```
+
+---
+
+### 18.2 Esquema de Base de Datos
+
+#### Columnas en `businesses`
+
+| Columna | Tipo | Default | Descripción |
+|---|---|---|---|
+| `referral_code` | TEXT UNIQUE | NULL → poblado en creación | Código único del negocio para compartir |
+| `referred_by_id` | UUID FK → businesses(id) | NULL | ID del negocio que los refirió |
+| `bonus_appointments_limit` | INTEGER | 0 | Citas extra acumuladas por referidos (solo relevante en plan free) |
+
+#### Índices
+
+```sql
+-- referral_code ya tiene índice implícito por UNIQUE
+-- referred_by_id necesita índice explícito (usado en WHERE referred_by_id = $1)
+CREATE INDEX idx_businesses_referred_by_id
+  ON public.businesses (referred_by_id)
+  WHERE referred_by_id IS NOT NULL;
+```
+
+---
+
+### 18.3 Tipos TypeScript
+
+**Archivo**: `types/index.ts`
+
+```typescript
+// Derivados del schema — si la DB cambia, TypeScript fuerza actualizar los consumidores
+export type ReferralBusiness = Pick<
+  Business,
+  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at'
+>
+
+export type ReferralInvite = Pick<Business, 'id' | 'name' | 'plan' | 'created_at'>
+```
+
+> **Por qué `Pick` y no interfaces locales**: garantiza que `ReferralBusiness.plan` siempre sea `BusinessPlan | null` (el enum de la DB), nunca un `string` suelto que rompa la lógica de comparación.
+
+---
+
+### 18.4 Lógica de Recompensas — `lib/referrals/rewards.ts`
+
+Función pura sin efectos secundarios ni dependencias de UI. Testeable de forma aislada.
+
+```typescript
+export interface ReferralRewardInfo {
+  isFree:             boolean  // true si plan === 'free'
+  currentBonus:       number   // bonus_appointments_limit actual
+  baseLimit:          number   // PLAN_LIMITS.free.appointmentsPerMonth (30)
+  maxBonus:           number   // MAX_BONUS_APPOINTMENTS (50)
+  progressPercentage: number   // 0-100 para la barra de progreso
+}
+
+export function getReferralRewardInfo(
+  plan: string | null,
+  bonusLimit: number | null,
+): ReferralRewardInfo
+```
+
+**Ejemplo**:
+```typescript
+getReferralRewardInfo('free', 20)
+// → { isFree: true, currentBonus: 20, baseLimit: 30, maxBonus: 50, progressPercentage: 40 }
+
+getReferralRewardInfo('pro', 0)
+// → { isFree: false, currentBonus: 0, baseLimit: 30, maxBonus: 50, progressPercentage: 100 }
+```
+
+---
+
+### 18.5 Función de Registro — `fn_create_business_and_link_owner`
+
+**Archivo**: `supabase/migrations/20260504100000_referral_system.sql`
+
+Función PostgreSQL `SECURITY DEFINER` que maneja todo el alta del negocio de forma atómica:
+
+```sql
+CREATE OR REPLACE FUNCTION public.fn_create_business_and_link_owner(
+  p_owner_id      UUID,
+  p_owner_name    TEXT,
+  p_owner_email   TEXT,
+  p_name          TEXT,
+  p_category      TEXT,
+  p_timezone      TEXT,
+  p_plan          TEXT,
+  p_referral_code TEXT DEFAULT NULL   -- ← nuevo parámetro
+) RETURNS JSONB
+```
+
+**Orden de operaciones**:
+1. Valida que `auth.uid() = p_owner_id` (no se puede crear negocio en nombre de otro).
+2. Genera `slug` y `referral_code` propios del negocio nuevo.
+3. Si `p_referral_code` fue proporcionado → busca el referidor.
+4. Si referidor existe y es `free` → `bonus_appointments_limit += 10` (Dropbox bonus, cap 50).
+5. Inserta el negocio con `referral_code` propio y `referred_by_id` del referidor.
+6. Actualiza `users` para vincular al owner.
+7. Si el invitado empieza en `free` y tiene referidor → `bonus_appointments_limit = 10` (bienvenida).
+
+---
+
+### 18.6 UI — `ReferralClient`
+
+**Archivo**: `app/[locale]/dashboard/referrals/referral-client.tsx`
+**Usado en**: `app/[locale]/dashboard/plans/page.tsx`
+
+Componente `'use client'` completamente internacionalizado vía `useTranslations("referrals")`.
+
+**Props**:
+```typescript
+interface ReferralClientProps {
+  business: ReferralBusiness  // datos del negocio actual
+  invited:  ReferralInvite[]  // negocios que usaron el código
+  appUrl:   string            // NEXT_PUBLIC_APP_URL (pasado desde server)
+}
+```
+
+**Secciones internas**:
+
+| Sección | Descripción |
+|---|---|
+| Hero Card | Link para copiar + descripción del modelo de recompensa (dinámico según plan) |
+| Estado de Recompensas | Barra de progreso (free) o contador de meses ganados (paid) |
+| ¿Cómo funciona? | 3 pasos fijos, traducidos |
+| Tus Referidos | Tabla con nombre, fecha y estado (Free / Plan Activo) |
+
+**Clipboard seguro**:
+```typescript
+const copyToClipboard = async () => {
+  try {
+    await navigator.clipboard.writeText(referralLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  } catch {
+    // Silencioso: HTTP context o permisos denegados
+  }
+}
+```
+
+---
+
+### 18.7 Internacionalización
+
+Namespace `referrals` en `messages/{es,en}.json`. Todas las cadenas del componente usan `useTranslations("referrals")`.
+
+**Claves principales**:
+
+```json
+"referrals": {
+  "heroBannerFree":    "Gana +10 citas gratis por amigo",
+  "heroBannerPaid":    "Gana 1 Mes Gratis de Plan Pro",
+  "heroDescFree":      "...",
+  "heroDescPaid":      "...",
+  "copyLink":          "Copiar Enlace",
+  "copied":            "¡Copiado!",
+  "rewardStatusTitle": "Estado de Recompensas",
+  "extraApptsLabel":   "Citas Extra Ganadas",
+  "baseLimitText":     "Límite base: {base} citas. Actual: {current} citas/mes.",
+  "monthsEarnedLabel": "Meses Ganados Totales",
+  "expiryText":        "Tu suscripción actual vence el: {date}",
+  "referralsListTitle":"Tus Referidos ({count})",
+  "statusFree":        "Registrado (Free)",
+  "statusPaid":        "Plan Activo (Premium)"
+}
+```
+
+Y en el namespace `plans` (página contenedora):
+
+```json
+"plans": {
+  "pageTitle":             "Plan & Recompensas",
+  "pageSubtitle":          "...",
+  "planSectionTitle":      "Tu Plan Actual",
+  "referralSectionTitle":  "Programa de Referidos"
+}
+```
+
+---
+
 ## Diagrama de Archivos
 
 ```
 lib/
 ├── payments/
-│   ├── nowpayments.ts          # API client + HMAC verifier
-│   └── nowpayments.test.ts     # Tests unitarios (Vitest)
+│   ├── nowpayments.ts              # API client + HMAC verifier
+│   └── nowpayments.test.ts         # Tests unitarios (Vitest)
 ├── plans/
-│   └── plan-limits.ts          # FUENTE ÚNICA DE VERDAD de límites
+│   └── plan-limits.ts              # FUENTE ÚNICA DE VERDAD: límites + constantes referidos
+├── referrals/
+│   └── rewards.ts                  # getReferralRewardInfo() — lógica pura, sin UI
 └── actions/
-    └── check-appointment-limit.ts  # Helper server action para citas
+    └── check-appointment-limit.ts  # Helper server action para citas (incluye bonus)
 
 app/
 ├── api/
-│   ├── webhooks/nowpayments/route.ts       # Recibe IPN, encola en QStash
-│   ├── queue/process-saas-payment/route.ts # Worker: actualiza DB
-│   └── cron/check-subscriptions/route.ts  # Degrada planes expirados
+│   ├── webhooks/nowpayments/route.ts        # Recibe IPN, encola en QStash
+│   ├── queue/process-saas-payment/route.ts  # Worker: actualiza DB + applyReferralBonus()
+│   └── cron/check-subscriptions/route.ts   # Degrada planes expirados
 └── [locale]/dashboard/
+    ├── plans/
+    │   └── page.tsx                # Página unificada Plan + Referidos (server component)
+    ├── referrals/
+    │   ├── page.tsx                # Redirect → /dashboard/plans
+    │   └── referral-client.tsx     # UI de referidos (client component)
     └── settings/
-        ├── plan-manager.tsx    # Modal UI + Realtime listener
-        └── actions.ts          # createSaaSCheckoutSession
+        ├── plan-manager.tsx        # Modal UI + Realtime listener
+        └── actions.ts              # createSaaSCheckoutSession
+
+types/
+├── index.ts                        # ReferralBusiness, ReferralInvite (Pick<Business, ...>)
+└── database.types.ts               # referral_code, referred_by_id, bonus_appointments_limit
 
 messages/
-└── {es,en,de,fr,it,pt}.json   # settings.plan.* + settings.plan.limitErrors.*
+└── {es,en}.json                    # nav.plans, plans.*, referrals.*
 
 supabase/migrations/
 ├── 20260430120000_saas_invoices.sql
-└── 20260430130000_reset_plans_to_free.sql
+├── 20260430130000_reset_plans_to_free.sql
+└── 20260504100000_referral_system.sql      # columnas + índice + fn actualizada
 ```

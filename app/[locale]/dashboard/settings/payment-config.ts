@@ -31,8 +31,8 @@ export const PLAN_CONFIG = {
 
 export const PAGO_MOVIL_CONFIG = {
   bankName: 'Bancamiga',
-  phone:    '0424-709-2980',
-  cedula:   'V-15.295.575',
+  phone:    '04247092980',
+  cedula:   'V15295575',
 } as const;
 
 // ─── Binance Pay — SSOT ──────────────────────────────────────────────────────

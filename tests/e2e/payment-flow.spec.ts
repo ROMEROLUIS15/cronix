@@ -46,7 +46,8 @@ test.describe('Admin Sidebar — Payments nav item', () => {
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
 
     // The sidebar link to /dashboard/admin/payments should exist
-    const paymentsLink = page.locator('a[href*="/dashboard/admin/payments"]');
+    // Use .first() because the sidebar renders twice in the DOM (desktop + mobile overlay)
+    const paymentsLink = page.locator('a[href*="/dashboard/admin/payments"]').first();
     await expect(paymentsLink).toBeVisible({ timeout: 10_000 });
   });
 
@@ -54,8 +55,9 @@ test.describe('Admin Sidebar — Payments nav item', () => {
     await page.goto(`${BASE_URL}/es/dashboard`);
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
 
-    await expect(page.locator('a[href*="/dashboard/admin/pulse"]')).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('a[href*="/dashboard/admin/users"]')).toBeVisible({ timeout: 5_000 });
+    // Use .first() because the sidebar renders twice in the DOM (desktop + mobile overlay)
+    await expect(page.locator('a[href*="/dashboard/admin/pulse"]').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('a[href*="/dashboard/admin/users"]').first()).toBeVisible({ timeout: 5_000 });
   });
 });
 
@@ -165,8 +167,8 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
 
     // Should show Pago Móvil data
     await expect(page.getByText('Bancamiga')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText('0424-709-2980')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('V-15.295.575')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('04247092980')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('V15295575')).toBeVisible({ timeout: 5_000 });
 
     // Reference input visible
     await expect(page.locator('#pago-movil-ref')).toBeVisible({ timeout: 5_000 });

@@ -15,6 +15,7 @@
     "finances": "Finances",
     "reports": "Reports",
     "settings": "Settings",
+    "plans": "Plan & Rewards",
     "activeBusiness": "Active Business",
     "defaultCategory": "Services",
     "closeMenu": "Close menu",
@@ -54,7 +55,9 @@
     "setup": "Initial Setup",
     "setupSub": "Welcome",
     "agendaSub": "Calendar",
-    "systemPulseSub": "SaaS Health Monitor"
+    "systemPulseSub": "SaaS Health Monitor",
+    "plans": "Plan & Rewards",
+    "plansSub": "Subscription & referrals"
   },
   "notifications": {
     "title": "Notifications",
@@ -207,6 +210,42 @@
       "successDesc": "You can now sign in with your new password.",
       "loginLink": "Go to sign in"
     }
+  },
+  "plans": {
+    "pageTitle": "Plan & Rewards",
+    "pageSubtitle": "Manage your subscription and earn rewards by inviting other businesses.",
+    "planSectionTitle": "Your Current Plan",
+    "planSectionSub": "Compare plans and manage your subscription.",
+    "referralSectionTitle": "Referral Program",
+    "referralSectionSub": "Invite other businesses and unlock exclusive rewards."
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Earn free appointments",
+    "ctaDesc": "Invite businesses and get rewards",
+    "pageTitle": "Referral Program 🚀",
+    "pageSubtitle": "Invite other businesses and earn exclusive rewards.",
+    "heroBannerFree": "Earn +10 free appointments per friend",
+    "heroBannerPaid": "Earn 1 Free Month of Pro Plan",
+    "heroDescFree": "For every business that signs up with your link, we'll add 10 extra appointments to your monthly limit forever. They also get a welcome bonus!",
+    "heroDescPaid": "Invite a business to Cronix. When they make their first payment, we'll gift you 30 additional days on your current subscription automatically.",
+    "copyLink": "Copy Link",
+    "copied": "Copied!",
+    "rewardStatusTitle": "Reward Status",
+    "extraApptsLabel": "Extra Appointments Earned",
+    "baseLimitText": "Base limit: {base} appointments. Current: {current} appts/month.",
+    "monthsEarnedLabel": "Total Months Earned",
+    "expiryText": "Your current subscription expires on: {date}",
+    "howItWorksTitle": "How does it work?",
+    "step1": "Share your unique link with other business owners (Spas, Barbershops, Clinics).",
+    "step2": "They sign up by creating their free account.",
+    "step3": "You receive your reward instantly (extra appointments) or when they upgrade to a paid plan (free months).",
+    "referralsListTitle": "Your Referrals ({count})",
+    "emptyReferrals": "You haven't invited any businesses yet. Share your link to get started!",
+    "colBusiness": "Business",
+    "colDate": "Registration Date",
+    "colStatus": "Status",
+    "statusFree": "Registered (Free)",
+    "statusPaid": "Active Plan (Premium)"
   },
   "validation": {
     "emailInvalid": "Invalid email",

@@ -46,6 +46,7 @@ const PAGE_TITLE_ENTRIES: PageTitleEntry[] = [
   { match: p => p.includes('/profile'),               titleKey: 'myProfile',       subtitleKey: 'myProfileSub'      },
   { match: p => p.includes('/finances'),              titleKey: 'finances',        subtitleKey: 'financesSub'       },
   { match: p => p.includes('/reports'),               titleKey: 'reports',         subtitleKey: 'reportsSub'        },
+  { match: p => p.includes('/dashboard/plans'),       titleKey: 'plans',           subtitleKey: 'plansSub'          },
   { match: p => p.includes('/dashboard/admin/pulse'), titleKey: 'dashboard',       subtitleKey: 'systemPulseSub'    },
   { match: p => p.includes('/setup'),                 titleKey: 'setup',           subtitleKey: 'setupSub'          },
 ]

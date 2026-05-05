@@ -98,7 +98,7 @@ export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderP
             className="w-full h-11 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             style={tab === tb
               ? { background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 0 15px rgba(0,98,255,0.4)" }
-              : { background: "rgba(0,98,255,1)", color: "#fff", border: "1px solid #0062FF", opacity: 0.85 }}
+              : { background: "rgba(0,98,255,0.85)", color: "#fff", border: "1px solid #0062FF" }}
           >
             {tb === "agenda"
               ? <><CalendarDays size={18} /><span>{t('tabs.agenda')}</span></>

@@ -94,7 +94,7 @@ interface UseAppointmentFormReturn {
 
   // Submit
   saving:   boolean
-  msg:      { type: 'success' | 'error'; text: string } | null
+  msg:      { type: 'success' | 'error' | 'limit_error'; text: string } | null
   handleSubmit: (e: React.FormEvent) => Promise<void>
 
   // Voice
@@ -136,7 +136,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
   const [bizNotif,      setBizNotif]      = useState<BizNotifSettings>({ whatsapp: false, reminderMinutes: 1440 })
   const [skipReminder,  setSkipReminder]  = useState(false)
   const [saving,        setSaving]        = useState(false)
-  const [msg,           setMsg]           = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [msg,           setMsg]           = useState<{ type: 'success' | 'error' | 'limit_error'; text: string } | null>(null)
   const [isListening,   setIsListening]   = useState(false)
   const [aiParsing,     setIsAiParsing]   = useState(false)
 
@@ -333,7 +333,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     // Plan limit: max appointments per month on free plan
     const limitCheck = await checkAppointmentLimit(businessId)
     if (!limitCheck.allowed) {
-      setMsg({ type: 'error', text: tPlan('appointments', { limit: limitCheck.limit }) })
+      setMsg({ type: 'limit_error', text: tPlan('appointments', { limit: limitCheck.limit }) })
       setSaving(false)
       return
     }

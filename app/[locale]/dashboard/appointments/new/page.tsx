@@ -121,12 +121,30 @@ function NewAppointmentForm() {
       </div>
 
       {msg && (
-        <div className="flex items-center gap-3 text-sm p-4 rounded-xl"
-          style={msg.type === 'success'
-            ? { background: 'rgba(48,209,88,0.1)',  border: '1px solid rgba(48,209,88,0.2)',  color: '#30D158' }
-            : { background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)',  color: '#FF6B6B' }}>
-          {msg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-          {msg.text}
+        <div className={`flex flex-col gap-3 ${msg.type === 'limit_error' ? 'mb-4' : ''}`}>
+          <div className="flex items-center gap-3 text-sm p-4 rounded-xl"
+            style={msg.type === 'success'
+              ? { background: 'rgba(48,209,88,0.1)',  border: '1px solid rgba(48,209,88,0.2)',  color: '#30D158' }
+              : { background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)',  color: '#FF6B6B' }}>
+            {msg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+            {msg.text}
+          </div>
+          {msg.type === 'limit_error' && (
+            <Link href="/dashboard/plans" className="w-full">
+              <div className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold rounded-xl p-4 flex items-center justify-between transition-all cursor-pointer shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <UserPlus size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm">¿Necesitas más citas?</p>
+                    <p className="text-xs text-white/80">Gana +10 citas extra invitando a un amigo</p>
+                  </div>
+                </div>
+                <ArrowLeft size={16} className="rotate-180" />
+              </div>
+            </Link>
+          )}
         </div>
       )}
 
