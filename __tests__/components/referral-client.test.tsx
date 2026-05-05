@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReferralClient } from '@/app/[locale]/dashboard/referrals/referral-client';
@@ -228,7 +228,7 @@ describe('ReferralClient — referrals list with data', () => {
 
   it('shows em dash for null business name', () => {
     const inviteWithNoName: ReferralInvite[] = [
-      { id: 'inv-null', name: null, plan: 'free', created_at: '2026-04-01T00:00:00Z' },
+      { id: 'inv-null', name: '', plan: 'free', created_at: '2026-04-01T00:00:00Z' },
     ];
     renderFree(inviteWithNoName);
     expect(screen.getByText('—')).toBeInTheDocument();
