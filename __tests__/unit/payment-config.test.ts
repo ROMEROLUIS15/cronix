@@ -72,8 +72,9 @@ describe('PAGO_MOVIL_CONFIG', () => {
     expect(PAGO_MOVIL_CONFIG.phone).toMatch(/^04\d/);
   });
 
-  it('cedula should start with V- prefix', () => {
-    expect(PAGO_MOVIL_CONFIG.cedula).toMatch(/^V-/);
+  it('cedula should start with V prefix (no hyphen)', () => {
+    // Format: V15295575 — no separators, for easy copy/paste into banking apps
+    expect(PAGO_MOVIL_CONFIG.cedula).toMatch(/^V\d/);
   });
 
   it('cedula digits should be numeric', () => {
@@ -86,7 +87,8 @@ describe('PAGO_MOVIL_CONFIG', () => {
   });
 
   it('phone should be the configured production number', () => {
-    expect(PAGO_MOVIL_CONFIG.phone).toBe('0424-709-2980');
+    // No separators — format for easy copy/paste into banking apps
+    expect(PAGO_MOVIL_CONFIG.phone).toBe('04247092980');
   });
 });
 
