@@ -72,14 +72,13 @@ describe('PAGO_MOVIL_CONFIG', () => {
     expect(PAGO_MOVIL_CONFIG.phone).toMatch(/^04\d/);
   });
 
-  it('cedula should start with V prefix (no hyphen)', () => {
-    // Format: V15295575 — no separators, for easy copy/paste into banking apps
-    expect(PAGO_MOVIL_CONFIG.cedula).toMatch(/^V\d/);
+  it('cedula should be numeric only (no prefix)', () => {
+    // Format: 15295575 — digits only, for easy copy/paste into banking apps
+    expect(PAGO_MOVIL_CONFIG.cedula).toMatch(/^\d+$/);
   });
 
   it('cedula digits should be numeric', () => {
-    const digits = PAGO_MOVIL_CONFIG.cedula.replace(/[V\-\.]/g, '');
-    expect(Number(digits)).toBeGreaterThan(0);
+    expect(Number(PAGO_MOVIL_CONFIG.cedula)).toBeGreaterThan(0);
   });
 
   it('should use Bancamiga as the bank', () => {

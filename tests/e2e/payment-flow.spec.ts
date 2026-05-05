@@ -168,7 +168,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
     // Should show Pago Móvil data
     await expect(page.getByText('Bancamiga')).toBeVisible({ timeout: 8_000 });
     await expect(page.getByText('04247092980')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('V15295575')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('15295575')).toBeVisible({ timeout: 5_000 });
 
     // Reference input visible
     await expect(page.locator('#pago-movil-ref')).toBeVisible({ timeout: 5_000 });

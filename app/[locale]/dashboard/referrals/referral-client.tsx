@@ -44,9 +44,10 @@ export function ReferralClient({ business, invited, appUrl }: ReferralClientProp
           boxShadow: "inset 0 1px 1px rgba(255,255,255,0.05)",
         }}
       >
-        <div className="absolute top-0 right-0 p-3 sm:p-8 opacity-20 pointer-events-none">
+        <div className="hidden sm:block absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
           <Gift size={120} />
         </div>
+
         <div className="relative z-10 p-6 sm:p-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400">
