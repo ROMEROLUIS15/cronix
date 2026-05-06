@@ -370,7 +370,7 @@ export function useDashboardData({
   // ── Return ──────────────────────────────────────────────────────────────
 
   return {
-    monthApts,
+    monthApts: monthApts.filter(apt => apt.status !== 'cancelled'),
     stats,
     hasServices,
     loading,

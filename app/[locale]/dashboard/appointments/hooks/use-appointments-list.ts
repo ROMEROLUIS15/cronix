@@ -85,8 +85,9 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
 
   const filteredApts = useMemo(
     () => appointments.filter(a =>
-      a.client?.name?.toLowerCase().includes(query.toLowerCase()) ||
-      a.service?.name?.toLowerCase().includes(query.toLowerCase())
+      a.status !== 'cancelled' &&
+      (a.client?.name?.toLowerCase().includes(query.toLowerCase()) ||
+       a.service?.name?.toLowerCase().includes(query.toLowerCase()))
     ),
     [appointments, query]
   );
