@@ -41,7 +41,7 @@ export class SupabaseBusinessRepository implements IBusinessRepository {
     return ok({ settings: data?.settings as Record<string, unknown> | null })
   }
 
-  async create(data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string }): Promise<Result<BusinessRow>> {
+  async create(data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string; referred_by_id?: string | null }): Promise<Result<BusinessRow>> {
     const { data: business, error } = await this.supabase
       .from('businesses')
       .insert({ ...data, slug: generateBusinessSlug(data.name) })
@@ -50,6 +50,17 @@ export class SupabaseBusinessRepository implements IBusinessRepository {
 
     if (error) return fail(`Error creating business: ${error.message}`)
     return ok(business)
+  }
+
+  async getByReferralCode(code: string): Promise<Result<BusinessRow | null>> {
+    const { data, error } = await this.supabase
+      .from('businesses')
+      .select('*')
+      .eq('referral_code', code)
+      .maybeSingle()
+
+    if (error) return fail(`Error fetching business by referral code: ${error.message}`)
+    return ok(data as BusinessRow | null)
   }
 
   async getName(businessId: string): Promise<Result<string | null>> {

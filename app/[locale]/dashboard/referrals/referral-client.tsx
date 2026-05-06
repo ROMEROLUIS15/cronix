@@ -20,7 +20,7 @@ export function ReferralClient({ business, invited, appUrl }: ReferralClientProp
   const t = useTranslations("referrals");
   const [copied, setCopied] = useState(false);
 
-  const referralLink = `${appUrl}/register?ref=${business.referral_code ?? "PENDING"}`;
+  const referralLink = `${appUrl}/invite/${business.referral_code ?? "PENDING"}`;
   const reward = getReferralRewardInfo(business.plan, business.bonus_appointments_limit);
   const paidInvitesCount = invited.filter((b) => b.plan !== "free" && b.plan !== null).length;
 

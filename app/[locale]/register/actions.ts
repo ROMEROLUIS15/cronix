@@ -14,10 +14,17 @@ export async function register(formData: FormData) {
   }
 
   const { firstName, lastName, bizName, bizCategory, email, password } = result.data
-  const timezone = (data.timezone as string) || 'America/Caracas'
+  const timezone    = (data.timezone as string) || 'America/Caracas'
+  const referralCode = (data.referral_code as string | undefined)?.trim().toUpperCase() || undefined
   const supabase = await createClient()
   const admin = createAdminClient()
-  const { users: usersRepoInstance } = getRepos(admin)
+  const { users: usersRepoInstance, businesses: businessesRepoInstance } = getRepos(admin)
+
+  let referredById: string | null = null
+  if (referralCode) {
+    const refResult = await businessesRepoInstance.getByReferralCode(referralCode)
+    if (refResult.data?.id) referredById = refResult.data.id
+  }
 
   // Verificar que el email no esté registrado antes de crear el auth user
   const existingCheck = await usersRepoInstance.getUserProfileByEmail(email)
@@ -47,6 +54,7 @@ export async function register(formData: FormData) {
         biz_name:     bizName,
         biz_category: bizCategory,
         biz_timezone: timezone,
+        ...(referralCode ? { ref_code: referralCode } : {}),
       },
       emailRedirectTo: `${siteUrl}/auth/callback`,
     }
@@ -74,6 +82,7 @@ export async function register(formData: FormData) {
     owner_id: user.id,
     timezone,
     plan: 'free',
+    ...(referredById ? { referred_by_id: referredById } : {}),
   })
 
   if (businessResult.error) {

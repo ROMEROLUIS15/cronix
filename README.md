@@ -112,7 +112,20 @@ cronix/
 │   │   ├── webhooks/             # WhatsApp, NOWPayments webhooks
 │   │   ├── passkey/              # Autenticación con passkeys
 │   │   └── health/               # Health check
+│   ├── auth/callback/            # OAuth + email confirmation handler
 │   └── [locale]/                 # Páginas del dashboard (i18n)
+│       ├── invite/[code]/        # Landing pública de invitación referidos
+│       ├── register/             # Registro — captura ?ref= y pasa referred_by_id
+│       ├── login/
+│       ├── forgot-password/
+│       └── dashboard/
+│           ├── plans/            # Plan actual + programa de referidos (unificado)
+│           ├── referrals/        # Redirect → /dashboard/plans
+│           ├── appointments/
+│           ├── clients/
+│           ├── finances/
+│           ├── settings/
+│           └── profile/
 │
 ├── lib/
 │   ├── ai/
@@ -156,7 +169,7 @@ cronix/
 │   │   ├── SupabaseServiceRepository.ts
 │   │   ├── SupabaseFinanceRepository.ts
 │   │   ├── SupabaseUserRepository.ts
-│   │   ├── SupabaseBusinessRepository.ts
+│   │   ├── SupabaseBusinessRepository.ts  # +getByReferralCode()
 │   │   ├── SupabaseNotificationRepository.ts
 │   │   ├── SupabaseReminderRepository.ts
 │   │   └── __tests__/
@@ -164,7 +177,11 @@ cronix/
 │   ├── domain/
 │   │   ├── use-cases/            # Business logic (channel-free)
 │   │   ├── repositories/         # Interfaces (contratos)
+│   │   │   └── IBusinessRepository.ts  # +getByReferralCode(), +referred_by_id en create()
 │   │   └── errors/
+│   │
+│   ├── referrals/
+│   │   └── rewards.ts            # getReferralRewardInfo() — lógica pura
 │   │
 │   └── cache.ts                  # Redis abstraction
 │
@@ -174,7 +191,9 @@ cronix/
 │       ├── cron-reminders/       # Recordatorios automáticos
 │       └── _shared/              # Helpers compartidos
 │
-├── __tests__/                    # Tests adicionales
+├── __tests__/
+│   ├── components/
+│   │   └── referral-client.test.tsx   # 32 tests — link /invite/[code]
 │   ├── domain/
 │   ├── unit/
 │   ├── rate-limit/

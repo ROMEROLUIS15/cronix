@@ -32,7 +32,12 @@ export interface IBusinessRepository {
   /**
    * Creates a new business and returns the created row.
    */
-  create(data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string }): Promise<Result<BusinessRow>>
+  create(data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string; referred_by_id?: string | null }): Promise<Result<BusinessRow>>
+
+  /**
+   * Looks up a business by its referral_code. Returns null if not found.
+   */
+  getByReferralCode(code: string): Promise<Result<BusinessRow | null>>
 
   /**
    * Returns a business by its ID.

@@ -1,16 +1,30 @@
 import { createAdminClient } from './db.ts'
 import type { AppointmentWithClient, BusinessRow } from '../types.ts'
 
+/**
+ * Formats a UTC ISO timestamp to HH:MM (24h) in the given timezone.
+ * Produces "16:00", "09:30", etc. so that displayTimeString() in the UI
+ * can convert it to "4:00 p. m." / "9:30 a. m." without double-conversion.
+ */
+function formatTime24h(isoString: string, timezone: string): string {
+  return new Date(isoString).toLocaleTimeString('en-CA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: timezone,
+  })
+}
+
 export function buildReminderNotification(
-  appointments: AppointmentWithClient[]
+  appointments: AppointmentWithClient[],
+  timezone = 'UTC',
 ): { title: string; content: string; type: string; metadata: Record<string, unknown> } {
   const MAX_LISTED = 5
   const listed = appointments.slice(0, MAX_LISTED).map(apt => {
     const clientName = apt.clients?.name ?? 'Cliente'
     const serviceName = apt.services?.name ?? 'Servicio'
-    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
-      hour: '2-digit', minute: '2-digit',
-    })
+    // Store in 24h so displayTimeString() converts exactly once in the UI
+    const time = formatTime24h(apt.start_at, timezone)
     return `${time} · ${clientName} — ${serviceName}`
   })
 
@@ -74,9 +88,8 @@ export async function sendPushNotification(
   const listed = appointments.slice(0, MAX_LISTED).map(apt => {
     const clientName = apt.clients?.name ?? 'Cliente'
     const serviceName = apt.services?.name ?? 'Servicio'
-    const time = new Date(apt.start_at).toLocaleTimeString('es-CO', {
-      hour: '2-digit', minute: '2-digit', timeZone: timezone,
-    })
+    // Store in 24h so displayTimeString() converts exactly once in the UI
+    const time = formatTime24h(apt.start_at, timezone)
     return `${time} · ${clientName} — ${serviceName}`
   })
 

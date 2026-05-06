@@ -32,6 +32,7 @@ function RegisterForm() {
   const t = useTranslations("auth.register");
   const searchParams = useSearchParams();
   const rawError    = searchParams.get("error") as OAuthError;
+  const refCode     = searchParams.get("ref") ?? "";
   const OAUTH_ERROR_MESSAGES = getOauthErrorMessages(t);
   const oauthError  = rawError && rawError in OAUTH_ERROR_MESSAGES ? rawError : null;
   const oauthMsg    = oauthError ? OAUTH_ERROR_MESSAGES[oauthError] : null;
@@ -203,6 +204,7 @@ function RegisterForm() {
               <form onSubmit={handleSubmit}
                 style={{ display:"flex", flexDirection:"column", gap:"0.875rem" }}>
                 <input type="hidden" name="timezone" value={Intl.DateTimeFormat().resolvedOptions().timeZone} />
+                {refCode && <input type="hidden" name="referral_code" value={refCode} />}
 
                 {/* Server error */}
                 {error && (

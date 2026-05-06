@@ -54,7 +54,7 @@ const INVITED_LIST: ReferralInvite[] = [
   { id: 'inv-2', name: 'Estudio Top', plan: 'pro', created_at: '2026-03-15T00:00:00Z' },
 ];
 
-const APP_URL = 'https://cronix.co';
+const APP_URL = 'https://cronix-app.vercel.app';
 
 const renderFree = (invited: ReferralInvite[] = []) =>
   render(<ReferralClient business={FREE_BUSINESS} invited={invited} appUrl={APP_URL} />);
@@ -67,18 +67,18 @@ const renderPro = (invited: ReferralInvite[] = []) =>
 describe('ReferralClient — referral link', () => {
   it('displays the full referral link for free plan', () => {
     renderFree();
-    expect(screen.getByText(`${APP_URL}/register?ref=SALON123`)).toBeInTheDocument();
+    expect(screen.getByText(`${APP_URL}/invite/SALON123`)).toBeInTheDocument();
   });
 
   it('displays the full referral link for pro plan', () => {
     renderPro();
-    expect(screen.getByText(`${APP_URL}/register?ref=BARBER456`)).toBeInTheDocument();
+    expect(screen.getByText(`${APP_URL}/invite/BARBER456`)).toBeInTheDocument();
   });
 
   it('shows PENDING in link when referral_code is null', () => {
     const biz = { ...FREE_BUSINESS, referral_code: null };
     render(<ReferralClient business={biz} invited={[]} appUrl={APP_URL} />);
-    expect(screen.getByText(`${APP_URL}/register?ref=PENDING`)).toBeInTheDocument();
+    expect(screen.getByText(`${APP_URL}/invite/PENDING`)).toBeInTheDocument();
   });
 });
 
@@ -263,7 +263,7 @@ describe('ReferralClient — copy button', () => {
     await userEvent.click(screen.getByText('referrals.copyLink'));
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-        `${APP_URL}/register?ref=SALON123`,
+        `${APP_URL}/invite/SALON123`,
       );
     });
   });

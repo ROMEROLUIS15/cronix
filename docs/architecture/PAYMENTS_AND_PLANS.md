@@ -753,12 +753,15 @@ Ambos modelos coexisten. Un negocio free con 3 referidos tiene efectivamente `30
 
 **Flujo de registro con código referido**:
 ```
-Usuario nuevo abre /register?ref=ABC12345
-    → fn_create_business_and_link_owner(p_referral_code='ABC12345')
-        → Busca negocio con referral_code='ABC12345'
-        → Si referidor es Free → bonus_appointments_limit += 10 (referidor)
-        → Inserta nuevo business con referred_by_id = referidor.id
-        → Si invitado empieza en Free → bonus_appointments_limit = 10 (bienvenida)
+Usuario recibe link https://cronix-app.vercel.app/invite/ABC12345
+    → /invite/[code]/page.tsx — landing page pública con nombre del negocio invitador
+        → Botón "Crear cuenta gratis" → /register?ref=ABC12345
+    → register/page.tsx lee ?ref= y lo pasa como <input hidden name="referral_code">
+    → register/actions.ts llama businessesRepo.getByReferralCode('ABC12345')
+        → guarda referred_by_id + ref_code en user_metadata (para flujo email)
+    → Al confirmar email → auth/callback/route.ts → ensureBusinessFromMetadata()
+        → lee ref_code del user_metadata, resuelve referred_by_id
+        → crea business con referred_by_id correcto
 ```
 
 **Flujo de primer pago del invitado**:
@@ -873,19 +876,39 @@ CREATE OR REPLACE FUNCTION public.fn_create_business_and_link_owner(
 
 ---
 
-### 18.6 UI — `ReferralClient`
+### 18.6 Página de Invitación Pública — `/invite/[code]`
+
+**Archivo**: `app/[locale]/invite/[code]/page.tsx`
+
+Server Component público (sin autenticación). Recibe el código de referido como segmento de ruta.
+
+**Flujo**:
+1. Llama a `businessesRepo.getByReferralCode(code.toUpperCase())`.
+2. Si el código no existe → `redirect(/register)` silencioso.
+3. Si existe → renderiza landing page con el nombre del negocio invitador y un botón que apunta a `/register?ref=CODE`.
+
+**Por qué una ruta limpia en vez de `?ref=`**:
+- Los query params pueden ser eliminados por WhatsApp, clientes de correo y acortadores de links.
+- La URL `/invite/ABC123` es más legible, memorable y confiable para compartir.
+- Permite mostrar contexto (quién invita) antes de mostrar el formulario de registro.
+
+---
+
+### 18.7 UI — `ReferralClient`
 
 **Archivo**: `app/[locale]/dashboard/referrals/referral-client.tsx`
 **Usado en**: `app/[locale]/dashboard/plans/page.tsx`
 
 Componente `'use client'` completamente internacionalizado vía `useTranslations("referrals")`.
 
+El link generado usa la ruta pública de invitación: `${appUrl}/invite/${referral_code}`.
+
 **Props**:
 ```typescript
 interface ReferralClientProps {
   business: ReferralBusiness  // datos del negocio actual
   invited:  ReferralInvite[]  // negocios que usaron el código
-  appUrl:   string            // NEXT_PUBLIC_APP_URL (pasado desde server)
+  appUrl:   string            // NEXT_PUBLIC_SITE_URL (pasado desde server)
 }
 ```
 
@@ -913,7 +936,7 @@ const copyToClipboard = async () => {
 
 ---
 
-### 18.7 Internacionalización
+### 18.8 Internacionalización
 
 Namespace `referrals` en `messages/{es,en}.json`. Todas las cadenas del componente usan `useTranslations("referrals")`.
 
@@ -962,23 +985,37 @@ lib/
 │   └── plan-limits.ts              # FUENTE ÚNICA DE VERDAD: límites + constantes referidos
 ├── referrals/
 │   └── rewards.ts                  # getReferralRewardInfo() — lógica pura, sin UI
-└── actions/
-    └── check-appointment-limit.ts  # Helper server action para citas (incluye bonus)
+├── actions/
+│   └── check-appointment-limit.ts  # Helper server action para citas (incluye bonus)
+├── domain/repositories/
+│   └── IBusinessRepository.ts      # +getByReferralCode() +referred_by_id en create()
+└── repositories/
+    └── SupabaseBusinessRepository.ts  # impl. getByReferralCode() via .maybeSingle()
 
 app/
 ├── api/
 │   ├── webhooks/nowpayments/route.ts        # Recibe IPN, encola en QStash
 │   ├── queue/process-saas-payment/route.ts  # Worker: actualiza DB + applyReferralBonus()
 │   └── cron/check-subscriptions/route.ts   # Degrada planes expirados
-└── [locale]/dashboard/
-    ├── plans/
-    │   └── page.tsx                # Página unificada Plan + Referidos (server component)
-    ├── referrals/
-    │   ├── page.tsx                # Redirect → /dashboard/plans
-    │   └── referral-client.tsx     # UI de referidos (client component)
-    └── settings/
-        ├── plan-manager.tsx        # Modal UI + Realtime listener
-        └── actions.ts              # createSaaSCheckoutSession
+├── auth/callback/route.ts                   # ensureBusinessFromMetadata resuelve ref_code
+└── [locale]/
+    ├── invite/[code]/
+    │   └── page.tsx                # Landing pública de invitación (server component)
+    ├── register/
+    │   ├── page.tsx                # Lee ?ref=, pasa <input hidden referral_code>
+    │   └── actions.ts              # getByReferralCode + referred_by_id al crear negocio
+    └── dashboard/
+        ├── plans/
+        │   └── page.tsx            # Página unificada Plan + Referidos; usa NEXT_PUBLIC_SITE_URL
+        ├── referrals/
+        │   ├── page.tsx            # Redirect → /dashboard/plans
+        │   └── referral-client.tsx # Genera link /invite/[code] para copiar
+        └── settings/
+            ├── plan-manager.tsx    # Modal UI + Realtime listener
+            └── actions.ts          # createSaaSCheckoutSession
+
+__tests__/components/
+└── referral-client.test.tsx        # 32 tests — link actualizado a /invite/[code]
 
 types/
 ├── index.ts                        # ReferralBusiness, ReferralInvite (Pick<Business, ...>)

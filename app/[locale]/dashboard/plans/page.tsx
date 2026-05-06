@@ -96,7 +96,7 @@ export default async function PlansPage() {
         <ReferralClient
           business={business}
           invited={(invited ?? []) as ReferralInvite[]}
-          appUrl={process.env.NEXT_PUBLIC_APP_URL ?? "https://cronix.co"}
+          appUrl={process.env.NEXT_PUBLIC_SITE_URL ?? "https://cronix-app.vercel.app"}
         />
       </section>
     </div>

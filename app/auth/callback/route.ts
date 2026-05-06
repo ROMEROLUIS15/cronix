@@ -117,6 +117,7 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
   const bizName     = user.user_metadata?.biz_name     as string | undefined
   const bizCategory = user.user_metadata?.biz_category as string | undefined
   const bizTimezone = user.user_metadata?.biz_timezone as string | undefined
+  const refCode     = user.user_metadata?.ref_code     as string | undefined
   if (!bizName) return
 
   const userCtx = await usersRepoInstance.getUserContextById(user.id)
@@ -124,12 +125,19 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
 
   if (!dbUser || dbUser.business_id) return  // already has a business
 
+  let referredById: string | null = null
+  if (refCode) {
+    const refResult = await businessesRepoInstance.getByReferralCode(refCode)
+    if (refResult.data?.id) referredById = refResult.data.id
+  }
+
   const { data: bizData, error: bizError } = await businessesRepoInstance.create({
     name:     bizName,
     owner_id: user.id,
     category: bizCategory ?? 'General',
     timezone: bizTimezone ?? 'America/Caracas',
     plan:     'free',
+    ...(referredById ? { referred_by_id: referredById } : {}),
   })
 
   if (bizError || !bizData) {

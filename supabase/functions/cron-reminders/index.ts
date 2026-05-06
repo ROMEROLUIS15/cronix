@@ -132,7 +132,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 2. Create in-app notification ─────────────────────────────────────
-    const notifPayload = buildReminderNotification(apts)
+    const notifPayload = buildReminderNotification(apts, timezone)
     try {
       await insertNotification(biz.id, notifPayload)
     } catch (err) {
