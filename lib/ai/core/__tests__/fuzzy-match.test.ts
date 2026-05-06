@@ -103,15 +103,41 @@ describe('fuzzyFind', () => {
     }
   })
 
-  it('returns at most 3 candidates when ambiguous', () => {
+  it('returns at most 4 candidates when ambiguous', () => {
     const many: Client[] = Array.from({ length: 10 }, (_, i) => ({
       id: String(i),
       name: `Laura Variant ${i}`,
     }))
     const result = fuzzyFind(many, 'Laura')
     if (result.status === 'ambiguous') {
-      expect(result.candidates.length).toBeLessThanOrEqual(3)
+      expect(result.candidates.length).toBeLessThanOrEqual(4)
     }
+  })
+
+  it('same-name duplicates do not pull in different-name clients with shared surname', () => {
+    const withDuplicates: Client[] = [
+      { id: '1', name: 'Alan Romero' },
+      { id: '2', name: 'Alan Romero' },
+      { id: '3', name: 'Verónica Romero' },
+    ]
+    const result = fuzzyFind(withDuplicates, 'Alan Romero')
+    // Must be ambiguous (two identical names) — not found (would need to pick one)
+    expect(result.status).toBe('ambiguous')
+    if (result.status === 'ambiguous') {
+      // Verónica Romero must NOT appear — different first name, different person
+      expect(result.candidates.every(c => c.name === 'Alan Romero')).toBe(true)
+      expect(result.candidates.length).toBe(2)
+    }
+  })
+
+  it('single Alan Romero is found unambiguously even with Verónica Romero present', () => {
+    const list: Client[] = [
+      { id: '1', name: 'Alan Romero' },
+      { id: '2', name: 'Verónica Romero' },
+    ]
+    const result = fuzzyFind(list, 'Alan Romero')
+    expect(result.status).toBe('found')
+    if (result.status === 'found') expect(result.match.id).toBe('1')
   })
 
   it('single-entity list always returns found or not_found (never ambiguous)', () => {

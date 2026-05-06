@@ -10,6 +10,29 @@ import type { ToolContext } from './_context'
 import { fmtUserDate, formatForSpeech } from './_helpers'
 import { getClientLimit } from '@/lib/plans/plan-limits'
 
+// ── Disambiguation helper ──────────────────────────────────────────────────
+
+/**
+ * Formats an ambiguous client list for the LLM.
+ * When all candidates share the same full name (exact duplicates), it
+ * distinguishes them by phone number so the user can pick the right one.
+ * Otherwise returns a plain name list.
+ */
+function formatAmbiguousClients(candidates: { name: string; phone?: string | null }[]): string {
+  if (!candidates.length) return 'No encontré candidatos.'
+  const first = candidates[0]!
+  const allSameName = candidates.every(
+    c => c.name.toLowerCase().trim() === first.name.toLowerCase().trim()
+  )
+  if (allSameName && candidates.length > 1) {
+    const byPhone = candidates
+      .map(c => `tel. ${c.phone ?? 'sin teléfono'}`)
+      .join(' y ')
+    return `Hay ${candidates.length} clientes llamados "${first.name}": ${byPhone}. ¿A cuál te refieres?`
+  }
+  return `Encontré varios clientes parecidos: ${candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+}
+
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
 export const GetClientDebtSchema = z.object({
@@ -59,7 +82,7 @@ export async function get_client_debt(
 
   const fuzzyMatch = fuzzyFind(clientsResult.data, client_name)
   if (fuzzyMatch.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-  if (fuzzyMatch.status === 'ambiguous') return `Encontré varios clientes parecidos: ${fuzzyMatch.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+  if (fuzzyMatch.status === 'ambiguous') return formatAmbiguousClients(fuzzyMatch.candidates)
 
   const client = fuzzyMatch.match
 
@@ -95,7 +118,7 @@ export async function get_client_appointments(
 
   const fuzzyMatch = fuzzyFind(clientsResult.data, client_name)
   if (fuzzyMatch.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-  if (fuzzyMatch.status === 'ambiguous') return `Encontré varios clientes parecidos: ${fuzzyMatch.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+  if (fuzzyMatch.status === 'ambiguous') return formatAmbiguousClients(fuzzyMatch.candidates)
 
   const client      = fuzzyMatch.match
   const apptsResult = await ctx.appointmentRepo.findUpcomingByClient(business_id, client.id)
@@ -142,8 +165,7 @@ export async function get_clients(
       return `Encontré al cliente ${c.name}. ¿Es a quien te refieres?`
     }
     if (fuzzyResult.status === 'ambiguous') {
-      const candidates = fuzzyResult.candidates.map(c => `- ${c.name}`).join('\n')
-      return formatForSpeech(`Encontré varios clientes parecidos a "${query}":\n${candidates}\n¿Cuál de ellos es?`)
+      return formatAmbiguousClients(fuzzyResult.candidates)
     }
     return `No encontré ningún cliente llamado "${query}".`
   }
@@ -192,10 +214,19 @@ export async function create_client(
     return 'Error: no pude verificar si el cliente ya existe. Intenta de nuevo.'
   }
 
+  // Block exact-name duplicates before fuzzy check to prevent same-name clients
+  const normalizedInput = client_name.toLowerCase().trim()
+  const exactDuplicate  = existingResult.data.find(
+    c => c.name.toLowerCase().trim() === normalizedInput
+  )
+  if (exactDuplicate) {
+    return `Ya existe un cliente llamado "${exactDuplicate.name}"${exactDuplicate.phone ? ` (tel. ${exactDuplicate.phone})` : ''}. No se creó un duplicado. Si es una persona distinta, registrala con un nombre diferente o agrega un identificador (ej. "Alan Romero 2").`
+  }
+
   const duplicate = fuzzyFind(existingResult.data, client_name)
   if (duplicate.status === 'found') {
     const d = duplicate.match
-    return `El cliente "${d.name}"${d.phone ? ` (Tel: ${d.phone})` : ''} ya está registrado. No se creó un duplicado.`
+    return `El cliente "${d.name}"${d.phone ? ` (tel. ${d.phone})` : ''} ya está registrado. No se creó un duplicado.`
   }
 
   // Plan limit check

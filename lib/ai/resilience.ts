@@ -110,9 +110,9 @@ export async function safeLLM(
     // max_tokens split by use case:
     // - With tools (planner/ReAct): 300 tokens — tool_call JSON can be 100-200 tokens alone;
     //   100 was causing truncation and silent fallback to plain text.
-    // - Without tools (quality tier text): 100 tokens — voice response is 2-3 sentences max;
-    //   keeping it low prevents long TTS synthesis latency downstream.
-    const maxTokens = tools.length ? 300 : 100
+    // - Without tools (final synthesis): 220 tokens — allows listing ~10 appointments
+    //   or a multi-item client list without truncation, while keeping TTS latency low.
+    const maxTokens = tools.length ? 300 : 220
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',

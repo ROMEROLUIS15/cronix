@@ -123,7 +123,7 @@ describe('fuzzyFind — ambiguous detection', () => {
 
     const result = fuzzyFind(manySimilar, 'carlos')
     expect(result.status).toBe('ambiguous')
-    expect((result as any).candidates.length).toBeLessThanOrEqual(3)
+    expect((result as any).candidates.length).toBeLessThanOrEqual(4)
   })
 })
 

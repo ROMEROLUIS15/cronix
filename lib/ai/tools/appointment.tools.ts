@@ -11,6 +11,19 @@ import {
   notificationForAppointmentCreated,
   notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
+
+function formatAmbiguousClients(candidates: { name: string; phone?: string | null }[]): string {
+  if (!candidates.length) return 'No encontré candidatos.'
+  const first = candidates[0]!
+  const allSameName = candidates.every(
+    c => c.name.toLowerCase().trim() === first.name.toLowerCase().trim()
+  )
+  if (allSameName && candidates.length > 1) {
+    const byPhone = candidates.map(c => `tel. ${c.phone ?? 'sin teléfono'}`).join(' y ')
+    return `Hay ${candidates.length} clientes llamados "${first.name}": ${byPhone}. ¿A cuál te refieres?`
+  }
+  return `Encontré varios clientes parecidos: ${candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+}
 import type { ToolContext } from './_context'
 import {
   toLocalDateString,
@@ -168,7 +181,7 @@ export async function cancel_appointment(
 
     const clientMatch = fuzzyFind(clientsResult.data, client_name)
     if (clientMatch.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-    if (clientMatch.status === 'ambiguous') return `Encontré varios clientes parecidos: ${clientMatch.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+    if (clientMatch.status === 'ambiguous') return formatAmbiguousClients(clientMatch.candidates)
 
     const client      = clientMatch.match
     const apptsResult = await ctx.appointmentRepo.findUpcomingByClient(business_id, client.id)
@@ -344,7 +357,7 @@ export async function reschedule_appointment(
 
   const clientMatch = fuzzyFind(clientsResult.data, client_name)
   if (clientMatch.status === 'not_found') return `No encontré ningún cliente llamado "${client_name}".`
-  if (clientMatch.status === 'ambiguous') return `Encontré varios clientes parecidos: ${clientMatch.candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+  if (clientMatch.status === 'ambiguous') return formatAmbiguousClients(clientMatch.candidates)
 
   const client      = clientMatch.match
   const apptsResult = await ctx.appointmentRepo.findUpcomingByClient(business_id, client.id)

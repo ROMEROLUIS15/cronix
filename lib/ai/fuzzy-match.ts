@@ -8,7 +8,7 @@
  * No external dependencies.
  */
 
-type NamedEntity = { id: string; name: string }
+type NamedEntity = { id: string; name: string; phone?: string | null }
 
 // ── Normalisation ──────────────────────────────────────────────────────────
 const ACCENTS: [RegExp, string][] = [
@@ -116,9 +116,13 @@ export function fuzzyFind<T extends NamedEntity>(
     return { status: 'found', match: best.entity }
   }
 
-  // Ambiguous: return top candidates for the LLM to disambiguate
+  // Ambiguous: only return candidates within 0.20 of the best score.
+  // This prevents a lower-scoring entity (e.g. "Verónica Romero" when searching
+  // "Alan Romero") from polluting the disambiguation list when two exact-same-name
+  // clients tie at the top.
+  const tightCandidates = scored.filter(x => best.score - x.score < 0.20)
   return {
     status: 'ambiguous',
-    candidates: scored.slice(0, 3).map(x => x.entity),
+    candidates: tightCandidates.slice(0, 4).map(x => x.entity),
   }
 }

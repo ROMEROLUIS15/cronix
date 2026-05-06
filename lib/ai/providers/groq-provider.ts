@@ -89,7 +89,7 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
         body: JSON.stringify({
           model,
           messages,
-          max_tokens:  100,
+          max_tokens:  220,
           temperature: 0.1,
           stream:      true,
         }),
