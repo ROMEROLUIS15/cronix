@@ -1344,5 +1344,41 @@
     "cancel": "Annuler",
     "confirm": "Confirmer",
     "placeholder": "Sélectionner la date et l'heure"
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Gagnez des rendez-vous gratuits",
+    "ctaDesc": "Invitez des entreprises et obtenez des récompenses",
+    "pageTitle": "Programme de Parrainage 🚀",
+    "pageSubtitle": "Invitez d'autres entreprises et gagnez des récompenses exclusives.",
+    "heroBannerFree": "Gagnez +10 RDV gratuits par ami",
+    "heroBannerPaid": "Gagnez 1 mois gratuit du Plan Pro",
+    "heroDescFree": "Pour chaque entreprise qui s'inscrit avec votre lien, nous ajouterons 10 rendez-vous supplémentaires à votre limite mensuelle pour toujours. Ils gagnent aussi un bonus de bienvenue !",
+    "heroDescPaid": "Invitez une entreprise à Cronix. Quand elle effectue son premier paiement, nous vous offrons automatiquement 30 jours supplémentaires sur votre abonnement actuel.",
+    "copyLink": "Copier le lien",
+    "copied": "Copié !",
+    "rewardStatusTitle": "État des récompenses",
+    "extraApptsLabel": "RDV supplémentaires gagnés",
+    "baseLimitText": "Limite de base : {base} RDV. Actuelle : {current} RDV/mois.",
+    "monthsEarnedLabel": "Total des mois gagnés",
+    "expiryText": "Votre abonnement actuel expire le : {date}",
+    "howItWorksTitle": "Comment ça marche ?",
+    "step1": "Partagez votre lien unique avec d'autres propriétaires d'entreprises (Spa, Barbiers, Cliniques).",
+    "step2": "Ils s'inscrivent en créant leur compte gratuit.",
+    "step3": "Vous recevez votre récompense instantanément (RDV supplémentaires) ou dès qu'ils passent à un plan payant (mois gratuits).",
+    "referralsListTitle": "Vos parrainages ({count})",
+    "emptyReferrals": "Vous n'avez encore invité aucune entreprise. Partagez votre lien pour commencer !",
+    "colBusiness": "Entreprise",
+    "colDate": "Date d'inscription",
+    "colStatus": "Statut",
+    "statusFree": "Inscrit (Gratuit)",
+    "statusPaid": "Plan Actif (Premium)"
+  },
+  "plans": {
+    "pageTitle": "Plan & Récompenses",
+    "pageSubtitle": "Gérez votre abonnement et gagnez des récompenses en invitant d'autres entreprises.",
+    "planSectionTitle": "Votre forfait actuel",
+    "planSectionSub": "Comparez les forfaits et gérez votre abonnement.",
+    "referralSectionTitle": "Programme de parrainage",
+    "referralSectionSub": "Invitez d'autres entreprises et débloquez des récompenses exclusives."
   }
 }

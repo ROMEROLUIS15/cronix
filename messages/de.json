@@ -1344,5 +1344,41 @@
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
     "placeholder": "Datum und Uhrzeit wählen"
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Verdiene kostenlose Termine",
+    "ctaDesc": "Lade Unternehmen ein und erhalte Belohnungen",
+    "pageTitle": "Empfehlungsprogramm 🚀",
+    "pageSubtitle": "Lade andere Unternehmen ein und verdiene exklusive Belohnungen.",
+    "heroBannerFree": "Verdiene +10 kostenlose Termine pro Freund",
+    "heroBannerPaid": "Verdiene 1 Monat Pro-Plan gratis",
+    "heroDescFree": "Für jedes Unternehmen, das sich mit deinem Link registriert, fügen wir deinem monatlichen Limit dauerhaft 10 zusätzliche Termine hinzu. Sie erhalten auch einen Willkommensbonus!",
+    "heroDescPaid": "Lade ein Unternehmen zu Cronix ein. Wenn es seine erste Zahlung leistet, schenken wir dir automatisch 30 zusätzliche Tage für dein aktuelles Abonnement.",
+    "copyLink": "Link kopieren",
+    "copied": "Kopiert!",
+    "rewardStatusTitle": "Belohnungsstatus",
+    "extraApptsLabel": "Verdiente Extra-Termine",
+    "baseLimitText": "Basislimit: {base} Termine. Aktuell: {current} Termine/Monat.",
+    "monthsEarnedLabel": "Insgesamt verdiente Monate",
+    "expiryText": "Dein aktuelles Abonnement läuft ab am: {date}",
+    "howItWorksTitle": "Wie funktioniert es?",
+    "step1": "Teile deinen einzigartigen Link mit anderen Unternehmensbesitzern (Spa, Barbiere, Kliniken).",
+    "step2": "Sie registrieren sich und erstellen ihr kostenloses Konto.",
+    "step3": "Du erhältst sofort deine Belohnung (Extra-Termine) oder wenn sie zu einem bezahlten Plan wechseln (Gratismonate).",
+    "referralsListTitle": "Deine Empfehlungen ({count})",
+    "emptyReferrals": "Du hast noch kein Unternehmen eingeladen. Teile deinen Link, um zu beginnen!",
+    "colBusiness": "Unternehmen",
+    "colDate": "Registrierungsdatum",
+    "colStatus": "Status",
+    "statusFree": "Registriert (Free)",
+    "statusPaid": "Aktiver Plan (Premium)"
+  },
+  "plans": {
+    "pageTitle": "Plan & Belohnungen",
+    "pageSubtitle": "Verwalte dein Abonnement und verdiene Belohnungen, indem du andere Unternehmen einlädst.",
+    "planSectionTitle": "Dein aktueller Plan",
+    "planSectionSub": "Vergleiche Pläne und verwalte dein Abonnement.",
+    "referralSectionTitle": "Empfehlungsprogramm",
+    "referralSectionSub": "Lade andere Unternehmen ein und schalte exklusive Belohnungen frei."
   }
 }

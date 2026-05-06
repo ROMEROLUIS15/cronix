@@ -1344,5 +1344,41 @@
     "cancel": "Cancelar",
     "confirm": "Confirmar",
     "placeholder": "Selecionar data e hora"
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Ganhe consultas grátis",
+    "ctaDesc": "Convide negócios e obtenha recompensas",
+    "pageTitle": "Programa de Indicações 🚀",
+    "pageSubtitle": "Convide outros negócios e ganhe recompensas exclusivas.",
+    "heroBannerFree": "Ganhe +10 consultas grátis por amigo",
+    "heroBannerPaid": "Ganhe 1 mês grátis do Plano Pro",
+    "heroDescFree": "Por cada negócio que se registar com o seu link, adicionaremos 10 consultas adicionais ao seu limite mensal para sempre. Eles também ganham um bónus de boas-vindas!",
+    "heroDescPaid": "Convide um negócio para o Cronix. Quando fizer o primeiro pagamento, oferecemos-lhe automaticamente 30 dias adicionais no seu plano atual.",
+    "copyLink": "Copiar link",
+    "copied": "Copiado!",
+    "rewardStatusTitle": "Estado das recompensas",
+    "extraApptsLabel": "Consultas extra ganhas",
+    "baseLimitText": "Limite base: {base} consultas. Atual: {current} consultas/mês.",
+    "monthsEarnedLabel": "Total de meses ganhos",
+    "expiryText": "A sua subscrição atual expira em: {date}",
+    "howItWorksTitle": "Como funciona?",
+    "step1": "Partilhe o seu link único com outros donos de negócios (Spa, Barbearias, Clínicas).",
+    "step2": "Eles registam-se criando a sua conta gratuita.",
+    "step3": "Recebe a sua recompensa instantaneamente (consultas extra) ou assim que mudarem para um plano pago (meses gratuitos).",
+    "referralsListTitle": "As suas indicações ({count})",
+    "emptyReferrals": "Ainda não convidou nenhum negócio. Partilhe o seu link para começar!",
+    "colBusiness": "Negócio",
+    "colDate": "Data de registo",
+    "colStatus": "Estado",
+    "statusFree": "Registado (Free)",
+    "statusPaid": "Plano Ativo (Premium)"
+  },
+  "plans": {
+    "pageTitle": "Plano & Recompensas",
+    "pageSubtitle": "Gerencie a sua subscrição e ganhe recompensas convidando outros negócios.",
+    "planSectionTitle": "O seu plano atual",
+    "planSectionSub": "Compare planos e gerencie a sua subscrição.",
+    "referralSectionTitle": "Programa de Indicações",
+    "referralSectionSub": "Convide outros negócios e desbloqueie recompensas exclusivas."
   }
 }

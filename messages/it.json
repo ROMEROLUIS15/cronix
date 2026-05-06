@@ -1345,5 +1345,41 @@
     "cancel": "Annulla",
     "confirm": "Conferma",
     "placeholder": "Seleziona data e ora"
+  },
+  "referrals": {
+    "ctaTitle": "🎁 Guadagna appuntamenti gratis",
+    "ctaDesc": "Invita aziende e ottieni premi",
+    "pageTitle": "Programma Referral 🚀",
+    "pageSubtitle": "Invita altre aziende e guadagna premi esclusivi.",
+    "heroBannerFree": "Guadagna +10 appuntamenti gratis per amico",
+    "heroBannerPaid": "Guadagna 1 mese gratis del Piano Pro",
+    "heroDescFree": "Per ogni azienda che si registra con il tuo link, aggiungeremo 10 appuntamenti aggiuntivi al tuo limite mensile per sempre. Anche loro guadagnano un bonus di benvenuto!",
+    "heroDescPaid": "Invita un'azienda a Cronix. Quando effettua il primo pagamento, ti regaliamo automaticamente 30 giorni aggiuntivi nel tuo abbonamento attuale.",
+    "copyLink": "Copia link",
+    "copied": "Copiato!",
+    "rewardStatusTitle": "Stato premi",
+    "extraApptsLabel": "Appuntamenti extra guadagnati",
+    "baseLimitText": "Limite base: {base} appuntamenti. Attuale: {current} appuntamenti/mese.",
+    "monthsEarnedLabel": "Mesi guadagnati totali",
+    "expiryText": "Il tuo abbonamento attuale scade il: {date}",
+    "howItWorksTitle": "Come funziona?",
+    "step1": "Condividi il tuo link unico con altri titolari d'azienda (Spa, Barberie, Cliniche).",
+    "step2": "Si registrano creando il loro account gratuito.",
+    "step3": "Ricevi il tuo premio istantaneamente (appuntamenti extra) o non appena passano a un piano a pagamento (mesi gratuiti).",
+    "referralsListTitle": "I tuoi referral ({count})",
+    "emptyReferrals": "Non hai ancora invitato nessuna azienda. Condividi il tuo link per iniziare!",
+    "colBusiness": "Azienda",
+    "colDate": "Data di registrazione",
+    "colStatus": "Stato",
+    "statusFree": "Registrato (Free)",
+    "statusPaid": "Piano Attivo (Premium)"
+  },
+  "plans": {
+    "pageTitle": "Piano & Premi",
+    "pageSubtitle": "Gestisci il tuo abbonamento e guadagna premi invitando altre aziende.",
+    "planSectionTitle": "Il tuo piano attuale",
+    "planSectionSub": "Confronta i piani e gestisci il tuo abbonamento.",
+    "referralSectionTitle": "Programma Referral",
+    "referralSectionSub": "Invita altre aziende e sblocca premi esclusivi."
   }
 }
