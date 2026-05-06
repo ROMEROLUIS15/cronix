@@ -12,18 +12,6 @@ import {
   notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
 
-function formatAmbiguousClients(candidates: { name: string; phone?: string | null }[]): string {
-  if (!candidates.length) return 'No encontré candidatos.'
-  const first = candidates[0]!
-  const allSameName = candidates.every(
-    c => c.name.toLowerCase().trim() === first.name.toLowerCase().trim()
-  )
-  if (allSameName && candidates.length > 1) {
-    const byPhone = candidates.map(c => `tel. ${c.phone ?? 'sin teléfono'}`).join(' y ')
-    return `Hay ${candidates.length} clientes llamados "${first.name}": ${byPhone}. ¿A cuál te refieres?`
-  }
-  return `Encontré varios clientes parecidos: ${candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
-}
 import type { ToolContext } from './_context'
 import {
   toLocalDateString,
@@ -33,6 +21,7 @@ import {
   validateApptDate,
   fireToolNotification,
   formatForSpeech,
+  formatAmbiguousClients,
 } from './_helpers'
 import { getAppointmentMonthLimit } from '@/lib/plans/plan-limits'
 

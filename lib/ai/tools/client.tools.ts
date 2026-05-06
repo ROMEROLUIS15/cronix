@@ -7,31 +7,9 @@ import { addDays } from 'date-fns'
 import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
 import type { ToolContext } from './_context'
-import { fmtUserDate, formatForSpeech } from './_helpers'
+import { fmtUserDate, formatForSpeech, formatAmbiguousClients } from './_helpers'
+import { normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
 import { getClientLimit } from '@/lib/plans/plan-limits'
-
-// ── Disambiguation helper ──────────────────────────────────────────────────
-
-/**
- * Formats an ambiguous client list for the LLM.
- * When all candidates share the same full name (exact duplicates), it
- * distinguishes them by phone number so the user can pick the right one.
- * Otherwise returns a plain name list.
- */
-function formatAmbiguousClients(candidates: { name: string; phone?: string | null }[]): string {
-  if (!candidates.length) return 'No encontré candidatos.'
-  const first = candidates[0]!
-  const allSameName = candidates.every(
-    c => c.name.toLowerCase().trim() === first.name.toLowerCase().trim()
-  )
-  if (allSameName && candidates.length > 1) {
-    const byPhone = candidates
-      .map(c => `tel. ${c.phone ?? 'sin teléfono'}`)
-      .join(' y ')
-    return `Hay ${candidates.length} clientes llamados "${first.name}": ${byPhone}. ¿A cuál te refieres?`
-  }
-  return `Encontré varios clientes parecidos: ${candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
-}
 
 // ── SCHEMAS ────────────────────────────────────────────────────────────────
 
@@ -214,10 +192,11 @@ export async function create_client(
     return 'Error: no pude verificar si el cliente ya existe. Intenta de nuevo.'
   }
 
-  // Block exact-name duplicates before fuzzy check to prevent same-name clients
-  const normalizedInput = client_name.toLowerCase().trim()
+  // Block exact-name duplicates before fuzzy check to prevent same-name clients.
+  // Uses normalizeForFuzzy (strips accents + lowercases) so "Alán" == "Alan".
+  const normalizedInput = normalizeForFuzzy(client_name)
   const exactDuplicate  = existingResult.data.find(
-    c => c.name.toLowerCase().trim() === normalizedInput
+    c => normalizeForFuzzy(c.name) === normalizedInput
   )
   if (exactDuplicate) {
     return `Ya existe un cliente llamado "${exactDuplicate.name}"${exactDuplicate.phone ? ` (tel. ${exactDuplicate.phone})` : ''}. No se creó un duplicado. Si es una persona distinta, registrala con un nombre diferente o agrega un identificador (ej. "Alan Romero 2").`

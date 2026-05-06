@@ -8,7 +8,7 @@
  * No external dependencies.
  */
 
-type NamedEntity = { id: string; name: string; phone?: string | null }
+type NamedEntity = { id: string; name: string }
 
 // ── Normalisation ──────────────────────────────────────────────────────────
 const ACCENTS: [RegExp, string][] = [

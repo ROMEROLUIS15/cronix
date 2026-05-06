@@ -119,6 +119,36 @@ export async function fireToolNotification(
   }
 }
 
+// ── Client disambiguation ───────────────────────────────────────────────────
+
+/**
+ * Formats an ambiguous client list into a speech-ready disambiguation prompt.
+ *
+ * When all candidates share the exact same full name (duplicates), it
+ * distinguishes them by phone so the user can pick the right one.
+ * Otherwise returns a plain name list for the LLM to relay.
+ *
+ * Accepts any object with at least { name, phone? } — works for clients
+ * returned by findActiveForAI without coupling to a specific DB row type.
+ */
+export function formatAmbiguousClients(
+  candidates: { name: string; phone?: string | null }[]
+): string {
+  if (!candidates.length) return 'No encontré candidatos.'
+  const first = candidates[0]!
+  const normalFirst = first.name.toLowerCase().trim()
+  const allSameName = candidates.every(
+    c => c.name.toLowerCase().trim() === normalFirst
+  )
+  if (allSameName && candidates.length > 1) {
+    const byPhone = candidates
+      .map(c => `tel. ${c.phone ?? 'sin teléfono'}`)
+      .join(' y ')
+    return `Hay ${candidates.length} clientes llamados "${first.name}": ${byPhone}. ¿A cuál te refieres?`
+  }
+  return `Encontré varios clientes parecidos: ${candidates.map(c => c.name).join(', ')}. ¿A cuál te refieres?`
+}
+
 // ── Speech formatting ───────────────────────────────────────────────────────
 
 /**
