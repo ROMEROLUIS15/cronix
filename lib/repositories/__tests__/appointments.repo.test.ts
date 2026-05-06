@@ -23,6 +23,7 @@ describe('SupabaseAppointmentRepository', () => {
       const fromMock = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        neq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
@@ -44,6 +45,7 @@ describe('SupabaseAppointmentRepository', () => {
       const fromMock = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        neq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         order: vi.fn().mockResolvedValue({ data: null, error: mockError }),
