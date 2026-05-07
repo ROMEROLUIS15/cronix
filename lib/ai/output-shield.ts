@@ -27,7 +27,8 @@ const INJECTION_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: 'en_override',          pattern: /disregard\s+(all\s+)?(previous|prior)\s+instructions?|you\s+are\s+now\s+/i },
 
   // ── Unicode/encoding bypass attempts ─────────────────────────────────────
-  { name: 'unicode_bypass',       pattern: /[\u00E0-\u00FF][\u0300-\u036f]/ },  // Accented chars + combining diacritics
+  // unicode_bypass REMOVED \u2014 was matching plain accented Spanish (\u00F1, \u00E1, \u00E9, \u00ED, \u00F3, \u00FA)
+  // and blocking legitimate responses. NFKC normalization (line 69) handles homoglyph attacks.
   { name: 'zero_width_injection', pattern: /[\u200B-\u200D\uFEFF\u2060\u00AD]{2,}/ },  // Multiple zero-width chars
   { name: 'html_entity_encoding', pattern: /&#?[0-9a-f]{1,6};/i },
   { name: 'url_encoding_abuse',   pattern: /(?:%[0-9a-f]{2}){3,}/i },  // 3+ consecutive URL-encoded chars
@@ -40,15 +41,18 @@ const INJECTION_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
 
   // ── Data exfiltration — PII and tenant data ───────────────────────────────
   { name: 'uuid_leak',            pattern: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
-  // Matches phone-like digit sequences (10-15 digits with phone separators: spaces/hyphens/parens).
-  // Deliberately excludes '.' to avoid false positives on currency amounts like "$15.000.000".
-  // Negative lookahead (?!\d{4}-\d{2}-\d{2}\b) prevents false-positives on ISO dates (YYYY-MM-DD).
-  { name: 'phone_leak',           pattern: /\b(?!\d{4}-\d{2}-\d{2}\b)\+?\d[\d\s\-()]{8,}\d\b/ },
+  // phone_leak REMOVED — the system prompt explicitly instructs Luis to relay
+  // client phone numbers when the owner asks. Blocking phones here contradicts
+  // that capability and produces "no puedo procesar" for legitimate phone queries.
 
   // ── Tool name leakage — complete list of all registered tools ────────────
   {
     name: 'tool_name_leak',
-    pattern: /\b(get_today_summary|book_appointment|cancel_appointment|reschedule_appointment|register_payment|get_client_debt|get_client_appointments|get_inactive_clients|get_revenue_stats|get_monthly_forecast|get_month_report|send_reactivation_message|create_client|get_clients|get_staff|get_services|get_upcoming_gaps|confirm_booking|reschedule_booking|cancel_booking)\b/,
+    // Only tool names actually registered in RealToolExecutor.
+    // Compound names like 'create_client'/'get_services' would false-positive on
+    // legitimate Spanish ("crear cliente", "los servicios") — restricted to
+    // identifier-style usage (snake_case with underscore boundary).
+    pattern: /\b(smart_schedule|confirm_booking|cancel_booking|reschedule_booking|get_appointments_by_date|get_available_slots|search_clients|delete_client|check_duplicate_clients)\b/,
   },
 
   // ── Structural attacks ───────────────────────────────────────────────────

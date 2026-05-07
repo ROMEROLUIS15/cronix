@@ -152,54 +152,6 @@ const INTENT_PATTERNS: Array<{
     // user's timezone so "mañana" means the correct calendar day for their location.
   },
 
-  // ─ Resumen del día ──────────────────────────────────────────────────────────
-  {
-    toolName: 'get_today_summary',
-    keywords: [
-      'resumen de hoy',
-      'resumen del dia',
-      'como va el dia',
-      'como vamos hoy',
-      'cuantas citas hay hoy',
-      'citas de hoy',
-      'agenda de hoy',
-      'que tenemos hoy',
-      'reporte del dia',
-      'balance del dia',
-    ],
-  },
-
-  // ─ Huecos libres / disponibilidad ──────────────────────────────────────────
-  {
-    toolName: 'get_upcoming_gaps',
-    keywords: [
-      'hay espacio libre',
-      'hay hueco',
-      'cuando hay disponible',
-      'horario disponible',
-      'horario libre',
-      'espacios libres',
-      'proximos espacios',
-      'cuando puedo agendar',
-      'hay lugar hoy',
-    ],
-  },
-
-  // ─ Ingresos / estadísticas semanales ────────────────────────────────────────
-  {
-    toolName: 'get_revenue_stats',
-    keywords: [
-      'cuanto facture',
-      'cuanto gane',
-      'ingresos de esta semana',
-      'estadisticas de la semana',
-      'ventas de esta semana',
-      'como van los ingresos',
-      'comparacion de semanas',
-      'cuanto llevamos',
-    ],
-  },
-
   // ─ Catálogo de servicios ────────────────────────────────────────────────────
   {
     toolName: 'get_services',
@@ -216,33 +168,10 @@ const INTENT_PATTERNS: Array<{
     ],
   },
 
-  // ─ Proyección mensual / forecast ────────────────────────────────────────────
-  {
-    toolName: 'get_monthly_forecast',
-    keywords: [
-      'proyeccion del mes',
-      'cuanto vamos a cerrar',
-      'cierre del mes',
-      'estimado del mes',
-      'cuanto falta para cerrar',
-      'proyeccion mensual',
-      'como va el mes',
-    ],
-  },
-
-  // ─ Clientes inactivos ───────────────────────────────────────────────────────
-  {
-    toolName: 'get_inactive_clients',
-    keywords: [
-      'clientes inactivos',
-      'quienes no han venido',
-      'clientes que no vienen',
-      'clientes perdidos',
-      'quien falta',
-      'clientes sin visita',
-      'hace tiempo que no vienen',
-    ],
-  },
+  // ─ Patrones eliminados — sus tools no están registradas en RealToolExecutor:
+  //     get_today_summary, get_upcoming_gaps, get_revenue_stats,
+  //     get_monthly_forecast, get_inactive_clients
+  //   Cuando se implementen e instalen en el ejecutor, se pueden reañadir aquí.
 ]
 
 // ── Fuzzy matching ─────────────────────────────────────────────────────────────
@@ -420,8 +349,9 @@ const FUTURE_DATE_SIGNALS = [
 // NOT matched: "el dia de hoy" (no number), "agenda de hoy" (no number).
 const NUMERIC_DATE_RE = /\b(el\s+dia\s+\d+|para\s+el\s+\d+|del\s+dia\s+\d+|el\s+\d+\s+de)\b/
 
-// Tools whose data scope is strictly TODAY — must not fire on future-date queries
-const TODAY_ONLY_TOOLS = new Set(['get_today_summary', 'get_upcoming_gaps'])
+// Tools whose data scope is strictly TODAY — must not fire on future-date queries.
+// Empty for now (deprecated tools removed). Kept as a Set so future tools can be added.
+const TODAY_ONLY_TOOLS = new Set<string>()
 
 export function routeIntent(userText: string, userId?: string, userTimezone?: string): RouterResult {
   const normalized  = norm(userText)

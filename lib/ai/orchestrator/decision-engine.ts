@@ -394,21 +394,12 @@ export class DecisionEngine implements IDecisionEngine {
         return { type: 'answer_query', toolName: 'get_appointments_by_date', args: { date: tomorrowStr } }
       }
 
-      // Fast path R — intent-router (keyword + fuzzy match, zero LLM)
-      // Catches variants the regex above misses: "qué clientes tengo para mañana",
-      // "quién viene esta semana", "cuánto facturé", etc.
-      const routed = routeIntent(input.text, input.userId, input.timezone)
-      if (routed.matched) {
-        logger.info('DECISION-ENGINE', `Owner fast-path R [${routed.matchType}]: ${routed.intent.toolName}`, {
-          userId: input.userId,
-          query:  input.text.slice(0, 60),
-        })
-        return {
-          type:     'answer_query',
-          toolName: routed.intent.toolName,
-          args:     routed.intent.args ?? {},
-        }
-      }
+      // Fast path R — DESHABILITADO TEMPORALMENTE.
+      // El intent-router puede enrutar a tools no registradas en RealToolExecutor,
+      // causando "Orchestration failed". Reactivar solo después de:
+      //   1. Auditar que cada toolName en INTENT_PATTERNS exista en el ejecutor
+      //   2. Agregar guardia de tool-not-found en execution-engine
+      // Mientras, las queries caen al LLM que ya valida tools antes de ejecutar.
     }
 
     // ── Guard — no services configured ────────────────────────────────────────
