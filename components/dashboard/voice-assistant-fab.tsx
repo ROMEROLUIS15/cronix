@@ -434,8 +434,17 @@ export function VoiceAssistantFab() {
   const startRecording = async () => {
     unlockAudioPlayback()
 
-    // ── Web Speech API path (Chrome/Edge — no API key required) ────────────
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    // Mobile Android Chrome PWA: Web Speech API conflicts with parallel getUserMedia
+    // (volume monitor) and returns empty transcripts — silent failure, the button
+    // never enters "processing" state and goes straight back to idle.
+    // On mobile we force the MediaRecorder + server-side Whisper path which always works.
+    const isMobile = typeof navigator !== 'undefined'
+      && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+
+    // ── Web Speech API path (desktop Chrome/Edge only) ─────────────────────
+    const SpeechRecognitionAPI = !isMobile
+      ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+      : null
     if (SpeechRecognitionAPI) {
       setState('listening')
       setVolume(0)
