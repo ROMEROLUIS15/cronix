@@ -5,9 +5,6 @@
 import type { IAppointmentQueryRepository } from '@/lib/domain/repositories'
 import type { GetAppointmentsByDateInput, AppointmentSummary } from './types'
 import { ok, fail, type Result } from '@/types/result'
-import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
-
 export class GetAppointmentsByDateUseCase {
   constructor(
     private queryRepo: IAppointmentQueryRepository,
@@ -24,6 +21,8 @@ export class GetAppointmentsByDateUseCase {
       (a) => a.status !== 'cancelled' && a.status !== 'no_show'
     )
 
+    const timezone = input.timezone ?? 'UTC'
+
     const summaries: AppointmentSummary[] = active
       .sort((a, b) => a.start_at.localeCompare(b.start_at))
       .map((a) => {
@@ -32,7 +31,15 @@ export class GetAppointmentsByDateUseCase {
           (a.service as { name: string } | null)?.name ??
           (a.appointment_services as { service: { name: string } }[] | null)?.[0]?.service?.name ??
           'Servicio'
-        const timeStr = format(parseISO(a.start_at), 'h:mm a', { locale: es })
+
+        // Format in the user's local timezone, not the server's UTC timezone.
+        // Intl.DateTimeFormat resolves the correct offset for the given IANA timezone.
+        const timeStr = new Intl.DateTimeFormat('es-419', {
+          hour:     'numeric',
+          minute:   '2-digit',
+          hour12:   true,
+          timeZone: timezone,
+        }).format(new Date(a.start_at))
 
         return {
           id: a.id,

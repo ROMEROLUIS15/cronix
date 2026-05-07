@@ -799,16 +799,20 @@ export class RealToolExecutor implements IToolExecutor {
     const found = fuzzyFind(allRes.data, parsed.data.query)
 
     if (found.status === 'found') {
-      // Single unambiguous match — LLM must use this name directly, no clarification needed
+      // Single unambiguous match — include phone so the LLM can relay it if asked.
+      // findActiveForAI returns ClientForAI which always has phone (null if not set).
+      const phoneStr = found.match.phone ? ` | tel. ${found.match.phone}` : ''
       return {
         success: true,
-        result: `CLIENT_FOUND: ${found.match.name}. Usa este nombre exacto en confirm_booking. NO preguntes al usuario cuál es.`,
+        result: `CLIENT_FOUND: ${found.match.name}${phoneStr}. Usa este nombre exacto en confirm_booking. NO preguntes al usuario cuál es.`,
       }
     }
 
     if (found.status === 'ambiguous') {
       // Only report ambiguity when the DB actually has multiple distinct candidates
-      const list = found.candidates.map((c) => c.name).join(', ')
+      const list = found.candidates
+        .map((c) => `${c.name}${c.phone ? ` (tel. ${c.phone})` : ''}`)
+        .join(', ')
       return {
         success: true,
         result: `MULTIPLE_CLIENTS: ${list}. Pregunta al usuario cuál de estos prefiere antes de continuar.`,

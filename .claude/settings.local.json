@@ -17,7 +17,11 @@
       "Bash(supabase --version)",
       "Bash(node -e ' *)",
       "Bash(npm install *)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(node -e 'const d=require\\('\\\\''./__TRACKED_VAR__'\\\\''\\); const r=d.referrals; const p=d.plans; console.log\\('\\\\''referrals keys:'\\\\'', r ? Object.keys\\(r\\).length : '\\\\''MISSING'\\\\''\\); console.log\\('\\\\''plans keys:'\\\\'', p ? Object.keys\\(p\\).length : '\\\\''MISSING'\\\\''\\);')",
+      "Bash(node -e \"const d=require\\('./messages/es.json'\\); console.log\\(JSON.stringify\\(d.referrals, null, 2\\)\\); console.log\\('---PLANS---'\\); console.log\\(JSON.stringify\\(d.plans, null, 2\\)\\);\")",
+      "Bash(xargs grep -l \"SYSTEM_PROMPT\\\\|systemPrompt\")",
+      "Bash(git merge *)"
     ]
   }
 }

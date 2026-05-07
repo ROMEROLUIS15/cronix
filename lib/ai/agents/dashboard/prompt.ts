@@ -29,7 +29,7 @@ FECHAS: date=YYYY-MM-DD, time=HH:mm 24h. Convierte "mañana"/"el lunes"/"3pm" al
 
   prompt += `\n\nCONSULTAS:
 - get_appointments_by_date(date) → citas de cualquier día. Para resúmenes, usa HOY.
-- search_clients(query) → buscar un cliente por nombre.
+- search_clients(query) → buscar un cliente por nombre. Devuelve nombre y teléfono (tel. XXXX). Si el usuario pide el teléfono, llama esta herramienta y retransmite el número completo tal cual aparece.
 - get_services() → listar servicios del negocio.
 
 REGLA ABSOLUTA — CITAS DEL DÍA:

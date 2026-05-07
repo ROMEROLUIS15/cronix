@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, format } from 'date-fns'
+import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
@@ -128,22 +128,19 @@ export async function get_upcoming_gaps(
     return 'No autorizado para acceder a esta información.'
   }
 
-  const todayStart = startOfDay(new Date()).toISOString()
-  const todayEnd   = endOfDay(new Date()).toISOString()
-
-  const result = await ctx.appointmentRepo.findByDateRange(
-    business_id,
-    todayStart,
-    todayEnd,
-    ['pending', 'confirmed']
-  )
+  // Use the day boundaries in the user's local timezone, not the server's UTC.
+  // startOfDay(new Date()) would give UTC midnight — wrong for UTC-4 users (off by 4h).
+  const localToday = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date())
+  const result = await ctx.appointmentRepo.getDayAppointments(business_id, localToday)
 
   if (result.error || !result.data) {
     logger.error('TOOL-DB', `get_upcoming_gaps failed: ${result.error}`, { business_id })
     return 'Error al consultar la agenda de hoy. Intenta de nuevo en un momento.'
   }
 
-  const appts = result.data
+  const appts = (result.data ?? []).filter(
+    a => a.status === 'pending' || a.status === 'confirmed'
+  )
   if (!appts.length) return 'Toda la agenda de hoy está libre, no hay citas programadas.'
 
   const fmt     = (d: string) => fmtUserDate(d, timezone, 'h:mm a')

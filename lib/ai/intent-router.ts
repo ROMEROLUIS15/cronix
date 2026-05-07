@@ -463,10 +463,15 @@ export function routeIntent(userText: string, userId?: string, userTimezone?: st
   // The "mañana" pattern has no pre-computed args — we inject the timezone-correct
   // tomorrow here so "mañana" always means the right calendar day regardless of
   // whether the server is in a different UTC offset than the user.
+  //
+  // IMPORTANT: For fuzzy-matched queries (e.g. "¿qué clientes tengo para mañana?"),
+  // none of the keywords substring-match exactly, so we must detect "manana" in the
+  // full normalized query — not just via keyword substring containment.
   function resolveArgs(pattern: (typeof INTENT_PATTERNS)[number]): Record<string, unknown> {
     if (pattern.toolName === 'get_appointments_by_date' && !pattern.args) {
-      const isTomorrow = pattern.keywords.some(kw => normalized.includes(norm(kw)) && kw.includes('manana'))
-      if (isTomorrow) return { date: tomorrowIso }
+      if (normalized.includes('manana')) return { date: tomorrowIso }
+      // Default to today so the tool always receives a valid date.
+      return { date: todayIso }
     }
     return pattern.args ?? {}
   }

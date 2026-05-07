@@ -80,6 +80,32 @@ export function VoiceAssistantFab() {
     return () => window.removeEventListener('cronix:toggle-fab', handleToggle as EventListener)
   }, [y, yDesktop, businessId, supabase])
 
+  // ── Supabase Realtime: invalidate React Query on DB changes ───────────────
+  // Any write by the AI assistant (or by another tab/device) triggers an immediate
+  // cache invalidation so the calendar and stats update without F5.
+  useEffect(() => {
+    if (!businessId) return
+
+    const invalidateAppts = () => {
+      void queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
+    const invalidateNotifs = () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel = (supabase as any)
+      .channel(`cronix-realtime-${businessId}`)
+      .on('postgres_changes', { event: '*',      schema: 'public', table: 'appointments', filter: `business_id=eq.${businessId}` }, invalidateAppts)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `business_id=eq.${businessId}` }, invalidateNotifs)
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [businessId, supabase, queryClient])
+
   const mediaRecorderRef   = useRef<MediaRecorder | null>(null)
   const audioContextRef    = useRef<AudioContext | null>(null)
   const analyserRef        = useRef<AnalyserNode | null>(null)
@@ -179,8 +205,12 @@ export function VoiceAssistantFab() {
     history?: { role: string; content: string }[]
   }) => {
     if (data.actionPerformed) {
-      void queryClient.invalidateQueries({ queryKey: ['appointments', businessId] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard-stats', businessId] })
+      // Invalidate without exact match so all appointment query variants refresh
+      // (e.g. ['appointments', id], ['appointments', id, date], etc.)
+      void queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
     }
     if (data.history) setChatHistory(data.history.slice(-15))
 
@@ -384,8 +414,44 @@ export function VoiceAssistantFab() {
       recognition.interimResults   = false
       recognition.maxAlternatives  = 1
 
+      // Open a parallel mic stream for volume monitoring.
+      // Web Speech API doesn't expose the raw MediaStream, so we open an independent
+      // getUserMedia() alongside it. Both can access the mic without conflict.
+      let monitorStream: MediaStream | null = null
+      const stopMonitor = () => {
+        if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null }
+        monitorStream?.getTracks().forEach(t => t.stop())
+        monitorStream = null
+        analyserRef.current = null
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.close().catch(() => {/* ignore */})
+          audioContextRef.current = null
+        }
+      }
+
+      navigator.mediaDevices?.getUserMedia({ audio: true }).then(stream => {
+        monitorStream = stream
+        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+        audioContextRef.current = ctx
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 256
+        analyser.smoothingTimeConstant = 0.6
+        ctx.createMediaStreamSource(stream).connect(analyser)
+        analyserRef.current = analyser
+        const tdArray = new Uint8Array(analyser.fftSize)
+        const monitorLoop = () => {
+          if (!analyserRef.current) return
+          analyserRef.current.getByteTimeDomainData(tdArray)
+          const rms = Math.sqrt(tdArray.reduce((s, v) => s + (v - 128) ** 2, 0) / tdArray.length)
+          setVolume(Math.min((rms / 128) * 5, 1))
+          rafIdRef.current = requestAnimationFrame(monitorLoop)
+        }
+        rafIdRef.current = requestAnimationFrame(monitorLoop)
+      }).catch(() => { /* no volume display if permission denied */ })
+
       recognition.onresult = (event: any) => {
         recognitionRef.current = null
+        stopMonitor()
         const transcript = Array.from(event.results as any[])
           .map((r: any) => r[0].transcript)
           .join('')
@@ -400,6 +466,7 @@ export function VoiceAssistantFab() {
 
       recognition.onerror = (event: any) => {
         recognitionRef.current = null
+        stopMonitor()
         if (event.error === 'no-speech') {
           setState('idle')
           return
@@ -414,6 +481,7 @@ export function VoiceAssistantFab() {
 
       recognition.onend = () => {
         recognitionRef.current = null
+        stopMonitor()
         setState((s: AssistantState) => s === 'listening' ? 'idle' : s)
       }
 
@@ -421,6 +489,7 @@ export function VoiceAssistantFab() {
         recognition.start()
       } catch {
         recognitionRef.current = null
+        stopMonitor()
         setState('idle')
       }
       return
@@ -661,8 +730,8 @@ export function VoiceAssistantFab() {
           }
         >
           {state === 'idle'       && <Mic className="w-6 h-6" style={{ color: '#3884FF' }} />}
-          {state === 'listening'  && <VoiceVisualizer isActive volume={volume} isSpeaking={false} />}
-          {state === 'processing' && <VoiceVisualizer isActive volume={0.15} isSpeaking={false} />}
+          {state === 'listening'  && <VoiceVisualizer isActive volume={Math.max(volume, 0.25)} isSpeaking={false} />}
+          {state === 'processing' && <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />}
           {state === 'speaking'   && <VoiceVisualizer isActive volume={0.5} isSpeaking />}
           <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-zinc-700 rounded-full opacity-30" />
         </motion.button>
@@ -701,9 +770,9 @@ export function VoiceAssistantFab() {
           {state === 'idle'
             ? <Mic className="w-4 h-4 flex-shrink-0" style={{ color: '#3884FF' }} />
             : state === 'listening'
-            ? <VoiceVisualizer isActive volume={volume} isSpeaking={false} />
+            ? <VoiceVisualizer isActive volume={Math.max(volume, 0.25)} isSpeaking={false} />
             : state === 'processing'
-            ? <VoiceVisualizer isActive volume={0.15} isSpeaking={false} />
+            ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin flex-shrink-0" />
             : <VoiceVisualizer isActive volume={0.5} isSpeaking />
           }
           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${state === 'idle' ? 'bg-[#3884FF]' : 'bg-white animate-pulse'}`} />
