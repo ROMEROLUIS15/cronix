@@ -20,7 +20,7 @@ function firstSentenceEnd(text: string): number {
 // fast tier: Groq 8B — lowest latency for simple read queries.
 const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string; baseUrl?: string; altKey?: string }> = {
   quality: {
-    primary: 'llama-3.3-70b',
+    primary: 'llama3.3-70b',
     fallback: 'llama-3.1-8b-instant',
     baseUrl: 'https://api.cerebras.ai/v1/chat/completions',
     altKey:  process.env.CEREBRAS_API_KEY,

@@ -24,6 +24,7 @@ import { logger } from '@/lib/logger'
 import { normalizeDateInput, normalizeTimeInput } from '@/lib/ai/utils/date-normalize'
 import { similarity, normalizeForFuzzy } from '@/lib/ai/fuzzy-match'
 import type { IAgent, ResolvedEntities, ToolDefEntry } from '@/lib/ai/agents/IAgent'
+import { routeIntent } from '@/lib/ai/intent-router'
 
 
 // ── Confirmation keywords (Spanish) ──────────────────────────────────────────
@@ -391,6 +392,22 @@ export class DecisionEngine implements IDecisionEngine {
         const tomorrowStr = d.toLocaleDateString('en-CA', { timeZone: input.timezone })
         logger.info('DECISION-ENGINE', 'Owner fast-path: tomorrow query', { userId: input.userId, date: tomorrowStr })
         return { type: 'answer_query', toolName: 'get_appointments_by_date', args: { date: tomorrowStr } }
+      }
+
+      // Fast path R — intent-router (keyword + fuzzy match, zero LLM)
+      // Catches variants the regex above misses: "qué clientes tengo para mañana",
+      // "quién viene esta semana", "cuánto facturé", etc.
+      const routed = routeIntent(input.text, input.userId, input.timezone)
+      if (routed.matched) {
+        logger.info('DECISION-ENGINE', `Owner fast-path R [${routed.matchType}]: ${routed.intent.toolName}`, {
+          userId: input.userId,
+          query:  input.text.slice(0, 60),
+        })
+        return {
+          type:     'answer_query',
+          toolName: routed.intent.toolName,
+          args:     routed.intent.args ?? {},
+        }
       }
     }
 

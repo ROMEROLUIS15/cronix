@@ -28,17 +28,15 @@ import {
 } from "./guards.ts"
 import {
   callLlm,
-  heliconeHeaders,
   LlmRateLimitError,
   CircuitBreakerError,
   SMALL_MODEL,
-  LARGE_MODEL,
   MAX_STEPS,
 } from "./groq-client.ts"
 import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
-import { toolsAllowedThisTurn, lastAssistantWasConfirmation, isAffirmative } from "./confirmation-gate.ts"
+import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -209,14 +207,18 @@ export async function runAgentLoop(
 
       if (fnName) {
         addBreadcrumb(`LLM emitted embedded <function> syntax — recovering ${fnName}`, 'agent', 'warning')
+        const VALID_TOOL_NAMES = new Set(['confirm_booking', 'reschedule_booking', 'cancel_booking'])
         let argsValid = false
-        try { JSON.parse(argsRaw); argsValid = true } catch {}
-        
-        if (argsValid) {
+        try { JSON.parse(argsRaw); argsValid = true } catch { /* malformed JSON — skip recovery */ }
+
+        if (argsValid && VALID_TOOL_NAMES.has(fnName)) {
           assistantMsg.tool_calls = [{
             id:       `call_${Date.now()}`,
             type:     'function',
-            function: { name: fnName, arguments: argsRaw },
+            function: {
+              name:      fnName as 'confirm_booking' | 'reschedule_booking' | 'cancel_booking',
+              arguments: argsRaw,
+            },
           }]
           // Hide leaked content from LLM
           assistantMsg.content = null
@@ -440,7 +442,7 @@ export async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Pr
     addBreadcrumb(`Deepgram STT error ${res.status}: ${errBody.slice(0, 200)}`, 'llm', 'error', { status: res.status })
     if (res.status >= 500) await reportServiceFailure(serviceName)
     const err = new Error(`Deepgram ${res.status}: ${errBody}`);
-    (err as any).bufferData = `Len: ${buffer.byteLength}`;
+    (err as Error & { bufferData?: string }).bufferData = `Len: ${buffer.byteLength}`;
     throw err
   }
 
