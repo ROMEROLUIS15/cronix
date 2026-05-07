@@ -12,6 +12,12 @@
 //   LLM_API_KEY / GROQ_API_KEY                          — for LLM + STT
 //   DEEPGRAM_AURA_API_KEY                               — for TTS
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Extend Vercel function timeout to 60s (requires Pro plan; on Hobby it caps at 10s).
+// The worker pipeline (LLM + tool calls + TTS) routinely exceeds the 10s default.
+// Without this, Vercel kills the function mid-execution → silent failure for the user.
+export const maxDuration = 60
+
 import { Receiver } from '@upstash/qstash'
 import { logger } from '@/lib/logger'
 import { jobStore } from '@/lib/ai/job-store'

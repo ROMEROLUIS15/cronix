@@ -223,7 +223,8 @@ export const POST = withErrorHandler(async (req, _context, _supabase, user) => {
   // QStash cannot reach localhost, so in development we fire-and-forget a
   // direct fetch to the local worker. In production the QStash path below runs.
   if (process.env.NODE_ENV === 'development') {
-    const workerUrl = 'http://localhost:3000/api/assistant/voice/worker'
+    const devPort  = process.env.PORT ?? '3000'
+    const workerUrl = `http://localhost:${devPort}/api/assistant/voice/worker`
     // Intentionally not awaited — this is fire-and-forget. The POST returns
     // immediately while the worker runs in parallel, matching the QStash flow.
     void fetch(workerUrl, {
