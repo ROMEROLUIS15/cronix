@@ -123,30 +123,65 @@ export function VoiceAssistantFab() {
   const recognitionRef     = useRef<any>(null)
   const [volume, setVolume] = useState(0)
 
-  // ── Audio unlock ──────────────────────────────────────────────────────────
-  // Browsers block Audio.play() outside a user-gesture window. The polling
-  // result arrives 5–40s after the click, so we prime a muted audio element
-  // synchronously inside the click handler. Once primed, subsequent
-  // programmatic playback is allowed on the same origin.
+  // ── Audio unlock + reusable element ──────────────────────────────────────
+  // iOS/Android strictly require Audio.play() to originate from a user gesture.
+  // A NEW Audio element created later (when the polling result arrives 3-40s
+  // after the click) is NOT considered unlocked, even if a different element was
+  // unlocked during the gesture. The fix is to keep ONE audio element alive
+  // for the lifetime of the component and reuse it for every playback by setting
+  // its `src` — that element stays unlocked once the user has interacted with it.
   const unlockAudioPlayback = () => {
+    if (!unlockPrimerRef.current) {
+      try {
+        const el = new Audio()
+        el.preload  = 'auto'
+        el.autoplay = false
+        unlockPrimerRef.current = el
+      } catch { return }
+    }
     if (audioUnlockedRef.current) return
     try {
-      const primer = new Audio()
-      primer.muted     = true
-      primer.loop      = false
-      primer.autoplay  = false
-      primer.src       = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhOvUAAAIAADSDuAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
-      const p = primer.play()
+      const el = unlockPrimerRef.current
+      el.muted = true
+      el.src   = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhOvUAAAIAADSDuAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
+      const p = el.play()
       if (p && typeof p.then === 'function') {
         p.then(() => {
           audioUnlockedRef.current = true
-          primer.pause()
+          el.pause()
+          el.muted = false
         }).catch(() => { /* will retry on next click */ })
       } else {
         audioUnlockedRef.current = true
+        el.muted = false
       }
-      unlockPrimerRef.current = primer
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Plays `src` on the unlocked audio element. Returns a Promise that resolves
+   * when playback ends (success or error). Reuses the same element so iOS/Android
+   * keep allowing programmatic playback.
+   */
+  const playOnUnlockedElement = (src: string, opts: { onEnd?: () => void; onError?: () => void } = {}): void => {
+    const el = unlockPrimerRef.current ?? new Audio()
+    if (!unlockPrimerRef.current) unlockPrimerRef.current = el
+
+    // Wipe previous handlers — the element is reused across playbacks
+    el.onended = null
+    el.onerror = null
+    el.pause()
+    el.muted = false
+    el.src   = src
+
+    el.onended = () => { opts.onEnd?.() }
+    el.onerror = () => { opts.onError?.() }
+
+    const p = el.play()
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => { opts.onError?.() })
+    }
+    currentAudioRef.current = el
   }
 
   // ── Fetch with client-side timeout ───────────────────────────────────────
@@ -160,18 +195,15 @@ export function VoiceAssistantFab() {
   // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
-    const audio = new Audio(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`)
-    currentAudioRef.current = audio
-    audio.onended = () => setState('idle')
-    audio.onerror = () => setState('idle')
-    audio.play().catch(() => setState('idle'))
+    playOnUnlockedElement(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`, {
+      onEnd:   () => setState('idle'),
+      onError: () => setState('idle'),
+    })
   }
 
   // ── Play audio URL — on any failure, fall back to 'No te entendí bien' via TTS ─
   const playAudio = async (src: string, fallbackText?: string) => {
     return new Promise<void>((resolve) => {
-      const audio = new Audio(src)
-      currentAudioRef.current = audio
       let fallbackFired = false
       const fireFallback = () => {
         if (fallbackFired) return
@@ -179,9 +211,10 @@ export function VoiceAssistantFab() {
         vocalizeSilentFailsafe(fallbackText ?? 'No te entendí bien, ¿puedes repetir?')
         resolve()
       }
-      audio.onended = () => { setState('idle'); resolve() }
-      audio.onerror = () => { fireFallback() }
-      audio.play().catch(() => { fireFallback() })
+      playOnUnlockedElement(src, {
+        onEnd:   () => { setState('idle'); resolve() },
+        onError: () => { fireFallback() },
+      })
     })
   }
 

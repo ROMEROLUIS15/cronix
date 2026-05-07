@@ -259,13 +259,19 @@ function fuzzyKeywordMatch(queryNorm: string, keywordNorm: string): boolean {
 
   if (queryWords.length === 0 || keywordWords.length === 0) return false
 
-  // Each keyword word must have at least ONE query word that matches it
   const matchedPhraseWords = keywordWords.filter(kw =>
     queryWords.some(qw => wordSimilarity(qw, kw) >= FUZZY_THRESHOLD)
   )
 
-  // Require ≥ 50% of the keyword words to match (avoids false positives on long phrases)
-  return matchedPhraseWords.length >= Math.ceil(keywordWords.length * 0.5)
+  // For keywords with 1-2 discriminating words, require ALL to match.
+  // 50% on a 2-word keyword means a single generic word like "clientes" is enough
+  // to false-match "clientes inactivos" against "un cliente llamado Luis".
+  // For 3+ word keywords, 60% is enough to tolerate one mistranscribed word.
+  const required = keywordWords.length <= 2
+    ? keywordWords.length
+    : Math.ceil(keywordWords.length * 0.6)
+
+  return matchedPhraseWords.length >= required
 }
 
 // ── Numeric date extraction ────────────────────────────────────────────────────
@@ -384,6 +390,17 @@ const AMBIGUOUS_SIGNALS = [
   'saber sobre las citas',
 ]
 
+// ── Specific-person guard ──────────────────────────────────────────────────────
+// When the user names a specific person ("un cliente llamado Luis", "Maria Pérez"),
+// the intent is about that individual — never a list/aggregate query.
+// Fast path would misfire (e.g. "cliente llamado X" → fuzzy-matches "clientes inactivos"
+// because "cliente" alone hits the 50% threshold). Always send to LLM for disambiguation.
+const SPECIFIC_PERSON_SIGNALS = [
+  'llamado', 'llamada', 'se llama', 'que se llama',
+  'el cliente ', 'la cliente ', 'mi cliente ',
+  'el paciente ', 'la paciente ',
+]
+
 // ── Future-date guard ─────────────────────────────────────────────────────────
 // Queries referencing a future date must never hit today-only tools.
 // Without this, "qué citas tengo para mañana" fuzzy-matches "citas de hoy"
@@ -429,6 +446,15 @@ export function routeIntent(userText: string, userId?: string, userTimezone?: st
 
   // Guard: ambiguous/conversational queries should fall through to the LLM.
   if (AMBIGUOUS_SIGNALS.some(signal => normalized.includes(norm(signal)))) {
+    return { matched: false }
+  }
+
+  // Guard: queries naming a specific person → LLM (needs entity resolution).
+  if (SPECIFIC_PERSON_SIGNALS.some(signal => normalized.includes(norm(signal)))) {
+    logger.info('AI-ROUTER', 'Specific person mentioned — bypassing fast path', {
+      userId,
+      query: normalized.slice(0, 60),
+    })
     return { matched: false }
   }
 
