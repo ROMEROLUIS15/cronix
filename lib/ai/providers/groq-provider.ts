@@ -14,9 +14,21 @@ function firstSentenceEnd(text: string): number {
   return m?.index !== undefined ? m.index + 1 : -1
 }
 
-const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string }> = {
-  quality: { primary: 'llama-3.3-70b-versatile', fallback: 'llama-3.1-8b-instant' },
-  fast:    { primary: 'llama-3.1-8b-instant',     fallback: 'llama-3.3-70b-versatile' },
+// quality tier: Cerebras 70B primary (~1s) → Groq 8B fallback.
+//   Cerebras runs llama-3.3-70b at near-8B speed (wafer chips), fits Hobby 10s budget.
+//   If CEREBRAS_API_KEY is absent, falls back to Groq 8B automatically.
+// fast tier: Groq 8B — lowest latency for simple read queries.
+const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string; baseUrl?: string; altKey?: string }> = {
+  quality: {
+    primary: 'llama-3.3-70b',
+    fallback: 'llama-3.1-8b-instant',
+    baseUrl: 'https://api.cerebras.ai/v1/chat/completions',
+    altKey:  process.env.CEREBRAS_API_KEY,
+  },
+  fast: {
+    primary: 'llama-3.1-8b-instant',
+    fallback: 'llama-3.3-70b-versatile',
+  },
 }
 
 export class GroqProvider implements ISttProvider, ILlmProvider {
@@ -36,8 +48,27 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
   }
 
   async chat(messages: LlmMessage[], tools?: ToolSchema[], tier: LlmTier = 'fast'): Promise<LlmResult> {
-    const { primary, fallback } = MODEL_BY_TIER[tier]
-    const res = await safeLLM(messages, tools ?? [], this.apiKey, primary, fallback)
+    const { primary, fallback, baseUrl, altKey } = MODEL_BY_TIER[tier]
+
+    // quality tier: try Cerebras 70B first (fast + free), fall back to Groq 8B
+    if (altKey && baseUrl) {
+      const cerebrasRes = await safeLLM(messages, tools ?? [], altKey, primary, primary, baseUrl)
+      if (!cerebrasRes.error && cerebrasRes.data) {
+        const data   = cerebrasRes.data as { choices: { message: LlmMessage }[]; usage?: { total_tokens?: number } }
+        const choice = data.choices?.[0]
+        if (choice) {
+          return {
+            message: choice.message,
+            model:   cerebrasRes.modelUsed ?? primary,
+            latency: cerebrasRes.latency,
+            tokens:  data.usage?.total_tokens ?? 0,
+          }
+        }
+      }
+      logger.warn('AI-LLM', 'Cerebras failed — falling back to Groq', { tier })
+    }
+
+    const res = await safeLLM(messages, tools ?? [], this.apiKey, fallback, fallback)
 
     if (res.error || !res.data) {
       return {

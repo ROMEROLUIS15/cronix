@@ -97,7 +97,8 @@ export async function safeLLM(
   tools: any[],
   apiKey: string,
   primaryModel: string = 'llama-3.1-8b-instant',
-  fallbackModel: string = 'llama-3.3-70b-versatile'
+  fallbackModel: string = 'llama-3.3-70b-versatile',
+  baseUrl: string = 'https://api.groq.com/openai/v1/chat/completions'
 ): Promise<AIResponse<any>> {
   const start = Date.now()
   if (!aiCircuit.isAvailable('LLM')) {
@@ -107,9 +108,9 @@ export async function safeLLM(
   const keys = apiKey.split(',').map(k => k.trim()).filter(Boolean)
 
   const execute = async (model: string, key: string) => {
-    const maxTokens = tools.length ? 500 : 300
+    const maxTokens = tools.length ? 350 : 250
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch(baseUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
