@@ -160,8 +160,16 @@ export function VoiceAssistantFab() {
 
   /**
    * Plays `src` on the unlocked audio element. Returns a Promise that resolves
-   * when playback ends (success or error). Reuses the same element so iOS/Android
-   * keep allowing programmatic playback.
+   * when playback ends, errors, or hits the safety timeout. Reuses the same
+   * element so iOS/Android keep allowing programmatic playback.
+   *
+   * Robustness baked in:
+   *   - "started playing" check after 1500ms — catches silent autoplay blocks
+   *     where neither `play()` rejection nor `onerror` fires (mobile bug)
+   *   - hard timeout at 30s — final safety against any event-not-firing edge
+   *     case (long data: URLs, browser bugs, etc.)
+   *   - all paths converge to a single `finish()` so the caller's promise
+   *     ALWAYS resolves
    */
   const playOnUnlockedElement = (src: string, opts: { onEnd?: () => void; onError?: () => void } = {}): void => {
     const el = unlockPrimerRef.current ?? new Audio()
@@ -174,13 +182,54 @@ export function VoiceAssistantFab() {
     el.muted = false
     el.src   = src
 
-    el.onended = () => { opts.onEnd?.() }
-    el.onerror = () => { opts.onError?.() }
+    let settled = false
+    let startedPlaying = false
+    let hardTimer: ReturnType<typeof setTimeout> | null = null
+    let startCheckTimer: ReturnType<typeof setTimeout> | null = null
+
+    const finish = (kind: 'end' | 'error' | 'timeout' | 'never-started') => {
+      if (settled) return
+      settled = true
+      if (hardTimer) { clearTimeout(hardTimer); hardTimer = null }
+      if (startCheckTimer) { clearTimeout(startCheckTimer); startCheckTimer = null }
+      el.onended = null
+      el.onerror = null
+      el.onplaying = null
+      logger.info('VoiceAssistantFab', `Audio playback finished: ${kind}`, {
+        startedPlaying,
+        srcKind: src.startsWith('data:') ? 'data-url' : 'http',
+      })
+      if (kind === 'end') opts.onEnd?.()
+      else                opts.onError?.()
+    }
+
+    el.onplaying = () => { startedPlaying = true }
+    el.onended   = () => finish('end')
+    el.onerror   = () => finish('error')
 
     const p = el.play()
     if (p && typeof p.catch === 'function') {
-      p.catch(() => { opts.onError?.() })
+      p.catch(() => finish('error'))
     }
+
+    // If after 1.5s the audio never reached "playing" state, treat as failure.
+    // This catches mobile autoplay blocks where browsers silently refuse to
+    // play but don't fire `error` either. 1.5s is long enough for any normal
+    // codec decode + buffer.
+    startCheckTimer = setTimeout(() => {
+      if (!startedPlaying && !settled) {
+        logger.warn('VoiceAssistantFab', 'Audio did not start playing within 1.5s — treating as error')
+        finish('never-started')
+      }
+    }, 1500)
+
+    // Hard cap at 30s — guards against any edge case where neither `ended`
+    // nor `error` ever fires (long data URLs, disconnected media, etc.).
+    hardTimer = setTimeout(() => {
+      logger.warn('VoiceAssistantFab', 'Audio playback hard timeout (30s)')
+      finish('timeout')
+    }, 30_000)
+
     currentAudioRef.current = el
   }
 
