@@ -423,26 +423,39 @@ export function VoiceAssistantFab() {
         rafIdRef.current = requestAnimationFrame(monitorLoop)
       }).catch(() => { /* no volume display if permission denied */ })
 
+      // Track whether onresult ever fired so we can detect "silent" recognition
+      // (onend fires without onresult/onerror) — common cause of "desktop no
+      // me responde nada".
+      let resultFired = false
+
       recognition.onresult = (event: any) => {
+        resultFired = true
         recognitionRef.current = null
         stopMonitor()
         const transcript = Array.from(event.results as any[])
           .map((r: any) => r[0].transcript)
           .join('')
           .trim()
+        logger.info('VoiceAssistantFab', 'Speech recognition onresult', { transcript, length: transcript.length })
         if (transcript) {
           setState('processing')
           void callVoiceWorker({ text: transcript })
         } else {
+          // Empty transcript — give the user audio feedback so they know
+          // the system is alive but didn't catch their voice.
+          vocalizeSilentFailsafe('No te escuché bien, intenta de nuevo.')
           setState('idle')
         }
       }
 
       recognition.onerror = (event: any) => {
+        resultFired = true
         recognitionRef.current = null
         stopMonitor()
+        logger.warn('VoiceAssistantFab', 'Speech recognition onerror', { error: event.error })
         if (event.error === 'no-speech') {
-          setState('idle')
+          // Audio feedback so the user knows we're alive but heard nothing.
+          vocalizeSilentFailsafe('No te escuché, ¿puedes repetir más fuerte?')
           return
         }
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
@@ -456,14 +469,26 @@ export function VoiceAssistantFab() {
       recognition.onend = () => {
         recognitionRef.current = null
         stopMonitor()
+        // If onend fires WITHOUT onresult or onerror, the recognition silently
+        // failed (Chrome desktop bug, often when network or speech service is
+        // unavailable). Surface this to the user with audio feedback instead
+        // of just resetting silently.
+        if (!resultFired) {
+          logger.warn('VoiceAssistantFab', 'Speech recognition ended without result/error — silent failure')
+          vocalizeSilentFailsafe('No pude reconocer tu voz. Intenta de nuevo en unos segundos.')
+          return
+        }
         setState((s: AssistantState) => s === 'listening' ? 'idle' : s)
       }
 
       try {
         recognition.start()
-      } catch {
+        logger.info('VoiceAssistantFab', 'Speech recognition started (desktop Web Speech API)')
+      } catch (err) {
         recognitionRef.current = null
         stopMonitor()
+        logger.error('VoiceAssistantFab', 'Speech recognition start threw', err)
+        vocalizeSilentFailsafe('No se pudo iniciar el reconocimiento de voz.')
         setState('idle')
       }
       return
