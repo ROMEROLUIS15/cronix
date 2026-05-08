@@ -2,6 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { nowpayments } from '@/lib/payments/nowpayments';
+import { fetchBcvRate, type BcvRateResult } from '@/lib/payments/bcv-rate';
 
 export type ManualPaymentMethod = 'pago_movil' | 'binance_manual';
 
@@ -125,4 +126,12 @@ export async function submitManualPayment({
     console.error('[ManualPayment] Unexpected error:', err);
     return { error: 'Error interno. Inténtalo de nuevo.' };
   }
+}
+
+/**
+ * Server action to fetch the BCV exchange rate.
+ * Must run server-side because ve.dolarapi.com blocks browser CORS requests.
+ */
+export async function getBcvRateAction(): Promise<BcvRateResult | null> {
+  return fetchBcvRate();
 }

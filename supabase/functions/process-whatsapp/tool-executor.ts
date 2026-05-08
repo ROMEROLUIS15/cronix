@@ -25,7 +25,6 @@ import {
   emitCreatedEvent,
   emitRescheduledEvent,
   emitCancelledEvent,
-  sendClientBookingConfirmation,
 } from "./notifications.ts"
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
@@ -213,8 +212,8 @@ export async function executeToolCall(
 
     // Fire-and-forget: owner notification (dashboard + owner WA)
     emitCreatedEvent(business, client?.name ?? customerName, svcName, date, time, result.appointment_id ?? '')
-    // Fire-and-forget: client confirmation WA (business-branded, separate from conversational reply)
-    void sendClientBookingConfirmation(sender, 'created', business.name, svcName, date, time)
+    // Client receives booking confirmation via the main conversational reply
+    // (renderBookingSuccessTemplate) — no separate sendClientBookingConfirmation needed.
 
     addBreadcrumb('Appointment created', 'agent', 'info', { appointment_id: result.appointment_id })
     return JSON.stringify({ success: true, appointment_id: result.appointment_id, date, time, service_name: svcName })
@@ -252,7 +251,8 @@ export async function executeToolCall(
     const clientName = aptDetails.clients?.name ?? customerName
 
     emitRescheduledEvent(business, clientName, svcName, appointment_id, new_date, new_time)
-    void sendClientBookingConfirmation(sender, 'rescheduled', business.name, svcName, new_date, new_time)
+    // Client receives reschedule confirmation via the main conversational reply
+    // (renderBookingSuccessTemplate) — no separate sendClientBookingConfirmation needed.
 
     addBreadcrumb('Appointment rescheduled', 'agent', 'info', { appointment_id })
     return JSON.stringify({ success: true, new_date, new_time, service_name: svcName })
@@ -292,7 +292,8 @@ export async function executeToolCall(
     const { date: oldDate, time: oldTime } = utcToLocalParts(aptDetails.start_at, business.timezone)
 
     emitCancelledEvent(business, clientName, svcName, appointment_id, aptDetails.start_at)
-    void sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, oldDate, oldTime)
+    // Client receives cancellation confirmation via the main conversational reply
+    // (renderBookingSuccessTemplate) — no separate sendClientBookingConfirmation needed.
 
     addBreadcrumb('Appointment cancelled', 'agent', 'info', { appointment_id })
     return JSON.stringify({ success: true, service_name: svcName, date: oldDate, time: oldTime })

@@ -191,8 +191,19 @@ export function renderBookingSuccessTemplate(
       const timeStr = formatLocalTime(newTime)
       return `✅ ¡Cita reagendada! Ahora te esperamos el ${dateStr} a las ${timeStr} para *${serviceName}*. ¿Necesitas algo más?`
     }
-    case 'cancel_booking':
-      return `✅ Tu cita de *${data.service_name}* ha sido cancelada. Cuando quieras agendar de nuevo, aquí estamos. 😊`
+    case 'cancel_booking': {
+      const date        = data['date']         ?? ''
+      const time        = data['time']         ?? ''
+      const serviceName = data['service_name'] ?? ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+        return `❌ Tu cita de *${serviceName}* ha sido cancelada.\n\nCuando quieras agendar de nuevo, aquí estamos. 😊`
+      }
+      const [cy, cm, cd] = date.split('-').map(Number) as [number, number, number]
+      const dateObj = new Date(Date.UTC(cy, cm - 1, cd))
+      const dateStr = dateObj.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+      const timeStr = formatLocalTime(time)
+      return `❌ Tu cita de *${serviceName}* del ${dateStr} a las ${timeStr} ha sido cancelada.\n\nCuando quieras agendar de nuevo, aquí estamos. 😊`
+    }
     default:
       return '✅ Acción completada.'
   }

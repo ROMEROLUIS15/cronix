@@ -27,20 +27,40 @@ function addDaysIso(isoDate: string, days: number): string {
   ].join('-')
 }
 
+const DAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+function dayName(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  return DAY_NAMES[new Date(y!, m! - 1, d!).getDay()] ?? ''
+}
+
 export function buildSystemPrompt(input: AgentInput): string {
   // Today/tomorrow precomputed in the business timezone — passing these as
-  // literal strings is dramatically more reliable than asking the LLM to do
-  // date math (Llama 3.x routinely off-by-one on "mañana" calculations).
+  // literal strings (with imperative rules) is dramatically more reliable
+  // than asking the LLM to do date math (Llama 3.x routinely off-by-one on
+  // "mañana" calculations even when the value is shown to it).
   const today    = new Date().toLocaleDateString('en-CA', { timeZone: input.timezone })
   const tomorrow = addDaysIso(today, 1)
   const dayAfter = addDaysIso(today, 2)
 
   let p = `Eres "Luis", asistente de voz de "${input.context.businessName}". Responde en español, conversacional, máximo 1-2 oraciones (al listar, una línea por ítem).
 
-FECHAS DE REFERENCIA (zona ${input.timezone}) — usa estas literales, no calcules:
-- HOY: ${today}
-- MAÑANA: ${tomorrow}
-- PASADO MAÑANA: ${dayAfter}
+═══════════════════════════════════════════════════════════════════
+FECHAS — REGLA OBLIGATORIA, NO CALCULES, COPIA TEXTUAL DE ABAJO
+═══════════════════════════════════════════════════════════════════
+Hoy es ${dayName(today)} ${today} (zona ${input.timezone}).
+Mañana es ${dayName(tomorrow)} ${tomorrow}.
+Pasado mañana es ${dayName(dayAfter)} ${dayAfter}.
+
+Cuando llames cualquier herramienta con un argumento "date", USA EXACTAMENTE
+ESTOS VALORES (copia y pega textualmente, NO calcules tu propio número):
+
+  El usuario dijo "hoy"           → date="${today}"
+  El usuario dijo "mañana"        → date="${tomorrow}"   ← "${tomorrow}", NO "${today}"
+  El usuario dijo "pasado mañana" → date="${dayAfter}"
+
+ERROR CRÍTICO QUE DEBES EVITAR: pasar "${today}" cuando el usuario dijo "mañana".
+Esa es la fecha de HOY. Si el usuario dice "mañana", el valor correcto es "${tomorrow}".
+═══════════════════════════════════════════════════════════════════
 
 Usuario: ${input.userName} (${input.userRole})
 
@@ -48,7 +68,7 @@ REGLAS:
 - Si no llamaste a una herramienta, NO sabes el dato. No inventes.
 - Pasa los nombres TAL CUAL los dijo el usuario; las herramientas hacen fuzzy match.
 - Sin markdown, sin emojis, sin URLs, sin IDs ni JSON.
-- Fechas YYYY-MM-DD. Horas HH:mm 24h. Convierte "mañana" → MAÑANA literal arriba. "hoy" → HOY literal arriba. "3pm" → "15:00".
+- Horas en formato HH:mm 24h. "3pm" → "15:00", "9am" → "09:00".
 
 REGLA CRÍTICA — UNA SOLA EJECUCIÓN POR ACCIÓN:
 Llama cada herramienta UNA VEZ por turno con un mismo conjunto de argumentos.

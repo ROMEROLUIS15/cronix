@@ -12,9 +12,11 @@ import { PaymentMethodModal } from './payment-method-modal';
 export function PlanManager({
   currentPlan,
   businessId,
+  businessTimezone,
 }: {
   currentPlan: string | undefined | null;
   businessId?: string;
+  businessTimezone?: string | null;
 }) {
   const t = useTranslations('settings.plan');
   const [isOpen, setIsOpen]         = useState(false);
@@ -94,6 +96,7 @@ export function PlanManager({
         <PaymentMethodModal
           plan={paymentPlan}
           onClose={() => setPaymentPlan(null)}
+          businessTimezone={businessTimezone ?? null}
         />
       )}
 

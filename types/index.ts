@@ -90,7 +90,7 @@ export interface DashboardStats {
 // ── Referral System ──────────────────────────────────────────
 export type ReferralBusiness = Pick<
   Business,
-  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at'
+  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at' | 'timezone'
 >
 
 export type ReferralInvite = Pick<Business, 'id' | 'name' | 'plan' | 'created_at'>

@@ -24,6 +24,7 @@
 16. [Seguridad](#16-seguridad)
 17. [Migraciones de Base de Datos](#17-migraciones-de-base-de-datos)
 18. [Sistema de Referidos](#18-sistema-de-referidos)
+19. [Conversión Bolívares (BCV + 30% Markup)](#19-conversión-bolívares-bcv--30-markup)
 
 ---
 
@@ -507,7 +508,7 @@ Plan & Recompensas
 // Datos del negocio (sirven a ambos hijos)
 const { data: business } = await adminSupabase
   .from("businesses")
-  .select("id, name, plan, referral_code, bonus_appointments_limit, subscription_ends_at")
+  .select("id, name, plan, referral_code, bonus_appointments_limit, subscription_ends_at, timezone")
   .eq("id", dbUser.business_id)
   .single()
 
@@ -806,7 +807,7 @@ CREATE INDEX idx_businesses_referred_by_id
 // Derivados del schema — si la DB cambia, TypeScript fuerza actualizar los consumidores
 export type ReferralBusiness = Pick<
   Business,
-  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at'
+  'id' | 'name' | 'plan' | 'referral_code' | 'bonus_appointments_limit' | 'subscription_ends_at' | 'timezone'
 >
 
 export type ReferralInvite = Pick<Business, 'id' | 'name' | 'plan' | 'created_at'>
@@ -980,7 +981,8 @@ Y en el namespace `plans` (página contenedora):
 lib/
 ├── payments/
 │   ├── nowpayments.ts              # API client + HMAC verifier
-│   └── nowpayments.test.ts         # Tests unitarios (Vitest)
+│   ├── nowpayments.test.ts         # Tests unitarios (Vitest)
+│   └── bcv-rate.ts                 # Wrapper API tasa BCV Venezuela (ve.dolarapi.com)
 ├── plans/
 │   └── plan-limits.ts              # FUENTE ÚNICA DE VERDAD: límites + constantes referidos
 ├── referrals/
@@ -1011,7 +1013,8 @@ app/
         │   ├── page.tsx            # Redirect → /dashboard/plans
         │   └── referral-client.tsx # Genera link /invite/[code] para copiar
         └── settings/
-            ├── plan-manager.tsx    # Modal UI + Realtime listener
+            ├── plan-manager.tsx    # Modal UI + Realtime listener (acepta businessTimezone)
+            ├── payment-method-modal.tsx  # Modal de selección de método de pago (filtra Pago Móvil por VE)
             └── actions.ts          # createSaaSCheckoutSession
 
 __tests__/components/
@@ -1029,3 +1032,106 @@ supabase/migrations/
 ├── 20260430130000_reset_plans_to_free.sql
 └── 20260504100000_referral_system.sql      # columnas + índice + fn actualizada
 ```
+
+---
+
+## 19. Conversión Bolívares (BCV + 30% Markup)
+
+### 19.1 Propósito
+
+Los negocios venezolanos pagan via **Pago Móvil** en bolívares (Bs.). Como la tasa oficial del BCV no refleja el costo real de adquirir dólares en Venezuela, se aplica un **30% de markup** sobre la tasa oficial para cubrir la diferencia con el dólar paralelo.
+
+**Ejemplo**: Plan Pro = $10 → BCV: Bs. 499.86/$ → Con 30%: Bs. 649.82/$ → **Total: Bs. 6,498.19**
+
+### 19.2 API Externa
+
+**Endpoint**: `GET https://ve.dolarapi.com/v1/dolares`
+
+- ✅ Gratuita, sin API key, sin `.env` adicional
+- ✅ Devuelve tasa oficial BCV y tasa paralela en JSON
+- ⚠️ Basada en scraping del sitio del BCV — puede fallar temporalmente si el BCV cambia su sitio
+
+**Respuesta utilizada**:
+```json
+{
+  "fuente": "oficial",
+  "promedio": 499.8608,
+  "fechaActualizacion": "2026-05-08T00:00:00-04:00"
+}
+```
+
+Se usa exclusivamente la fuente `"oficial"`. El campo `promedio` es la tasa Bs./USD del BCV.
+
+### 19.3 Wrapper — `lib/payments/bcv-rate.ts`
+
+Sigue el principio de **Agnosticismo de Dependencias** — si mañana cambia la API, solo se modifica este archivo.
+
+```typescript
+// Constantes
+export const BCV_MARKUP_PERCENT = 0.30   // 30% sobre tasa oficial
+export const VENEZUELA_TIMEZONE = 'America/Caracas'
+
+// Tipos
+export interface BcvRateResult {
+  bcvRate:        number   // Tasa oficial BCV (Bs. por 1 USD)
+  rateWithMarkup: number   // Tasa con 30% markup (Bs. por 1 USD)
+  updatedAt:      string   // ISO timestamp de la última actualización
+}
+
+// Funciones exportadas
+export function fetchBcvRate(): Promise<BcvRateResult | null>
+export function calculateBsAmount(amountUsd: number, rateWithMarkup: number): string
+export function isVenezuelanBusiness(timezone: string | null | undefined): boolean
+```
+
+**Cache en memoria**: Los resultados de `fetchBcvRate()` se cachean por **5 minutos** (`CACHE_TTL_MS = 300_000`) para no golpear la API en cada render. Si la API falla, se retorna el valor cacheado anterior (stale) o `null` si no hay cache.
+
+**Timeout**: Cada request tiene un `AbortController` con timeout de 5 segundos.
+
+### 19.4 Detección de Negocio Venezolano
+
+Se usa el campo `timezone` de la tabla `businesses`, que se guarda al registrarse:
+
+```typescript
+isVenezuelanBusiness('America/Caracas')  // → true
+isVenezuelanBusiness('America/Bogota')   // → false
+isVenezuelanBusiness(null)               // → false
+```
+
+### 19.5 Impacto en la UI
+
+#### Pago Móvil: Solo para Venezuela
+
+El método de pago **Pago Móvil** solo aparece en el modal si `isVenezuelanBusiness(timezone)` es `true`. Los negocios de otros países ven solo:
+- Criptomoneda (Automático) — NOWPayments
+- Binance Pay (Manual)
+
+#### Monto en Bolívares Calculado
+
+Cuando un negocio venezolano selecciona Pago Móvil, el componente `PagoMovilInstructions` muestra un `DataRow` adicional:
+
+| Campo | Valor | Copiar |
+|---|---|---|
+| Banco | Bancamiga | ✅ |
+| Teléfono | 04247092980 | ✅ |
+| Cédula | 15295575 | ✅ |
+| Concepto | Cronix Pro | ✅ |
+| **Monto a transferir** | **Bs. 6,498.19** | ✅ |
+
+El monto se calcula automáticamente: `$amountUsd × (bcvRate × 1.30)`. Si la API falla, se muestra un fallback: *"⚠ No se pudo obtener la tasa BCV. Consulta bcv.org.ve y aplica un 30% adicional."*
+
+### 19.6 Cadena de Props
+
+```
+plans/page.tsx (server)
+  └── select(..., timezone) → business.timezone
+        └── <PlanManager businessTimezone={business.timezone}>
+              └── <PaymentMethodModal businessTimezone={...}>
+                    ├── isVenezuelanBusiness(tz) → filtra METHODS
+                    ├── fetchBcvRate() → calcula amountBs
+                    └── <PagoMovilInstructions amountBs={...}>
+```
+
+### 19.7 Sin Variables de Entorno Adicionales
+
+Esta funcionalidad **no requiere ninguna variable de entorno**. La API `ve.dolarapi.com` es pública y gratuita. El markup del 30% es una constante hardcodeada en `bcv-rate.ts`. Para cambiar el porcentaje, solo se modifica `BCV_MARKUP_PERCENT`.

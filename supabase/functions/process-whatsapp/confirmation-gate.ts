@@ -14,7 +14,7 @@
 // ── Patterns ──────────────────────────────────────────────────────────────────
 
 const CONFIRMATION_QUESTION_RE =
-  /¿\s*(Confirmo|Reagendo|Procedo|Te\s+(?:confirmo|agendo|reagendo)|Confirma[rs]?\s+(?:que\s+(?:cancele|reagende|agende)|la\s+cancelaci[óo]n|el\s+reagendamiento|la\s+reserva|la\s+cita))/i
+  /¿\s*(Confirmo|Reagendo|Procedo|Te\s+(?:confirmo|agendo|reagendo)|Confirma[rs]?\s+(?:que\s+(?:(?:la|lo|se|las|los)\s+)?(?:cancele|reagende|agende)|la\s+cancelaci[óo]n|el\s+reagendamiento|la\s+reserva|la\s+cita))/i
 
 const AFFIRMATIVE_RE =
   /^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\s+supuesto|as[íi]\s+es|est[áa]\s+bien|todo\s+bien|me\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\s+acuerdo|de\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)\b/i

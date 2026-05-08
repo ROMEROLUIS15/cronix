@@ -9,7 +9,7 @@
  * i18n — Traducciones en 6 idiomas via next-intl.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2, X, Bitcoin, Smartphone, Copy, Check, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,12 @@ import {
   type Plan,
   type AnyPaymentMethod,
 } from './payment-config';
+import {
+  calculateBsAmount,
+  isVenezuelanBusiness,
+  type BcvRateResult,
+} from '@/lib/payments/bcv-rate';
+import { getBcvRateAction } from './actions';
 
 // ─── CopyButton ───────────────────────────────────────────────────────────────
 
@@ -97,7 +103,7 @@ function DataRow({
 
 // ─── PagoMovilInstructions ────────────────────────────────────────────────────
 
-function PagoMovilInstructions({ concept }: { concept: string }) {
+function PagoMovilInstructions({ concept, amountBs }: { concept: string; amountBs: string | null }) {
   const t = useTranslations('settings.plan.paymentModal.pagoMovil');
 
   return (
@@ -112,6 +118,13 @@ function PagoMovilInstructions({ concept }: { concept: string }) {
       <DataRow label={t('phone')}   value={PAGO_MOVIL_CONFIG.phone}    copyable />
       <DataRow label={t('cedula')}  value={PAGO_MOVIL_CONFIG.cedula}   copyable />
       <DataRow label={t('concept')} value={concept}                    copyable />
+      {amountBs ? (
+        <DataRow label="Monto a transferir" value={`Bs. ${amountBs}`} copyable highlight />
+      ) : (
+        <p className="text-[10px] text-amber-400/80 pt-2 leading-snug">
+          ⚠ No se pudo obtener la tasa BCV. Consulta bcv.org.ve y aplica un 30% adicional.
+        </p>
+      )}
     </div>
   );
 }
@@ -247,18 +260,37 @@ function MethodCard({
 interface Props {
   plan:    Plan;
   onClose: () => void;
+  businessTimezone?: string | null;
 }
 
-export function PaymentMethodModal({ plan, onClose }: Props) {
+export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
   const t   = useTranslations('settings.plan.paymentModal');
   const cfg = PLAN_CONFIG[plan];
   const flow = usePaymentFlow(plan, onClose);
+  const isVE = isVenezuelanBusiness(businessTimezone);
 
-  const METHODS: { method: AnyPaymentMethod; icon: React.ReactNode }[] = [
-    { method: 'nowpayments',    icon: <Bitcoin    size={18} className="text-amber-400" /> },
-    { method: 'pago_movil',     icon: <Smartphone size={18} className="text-emerald-400" /> },
-    { method: 'binance_manual', icon: <Bitcoin    size={18} className="text-yellow-400" /> },
-  ];
+  // ── BCV rate for Venezuelan businesses ──────────────────────────────────────
+  const [bcvRate, setBcvRate] = useState<BcvRateResult | null>(null);
+
+  useEffect(() => {
+    if (!isVE) return;
+    getBcvRateAction().then(setBcvRate).catch(() => setBcvRate(null));
+  }, [isVE]);
+
+  const amountBs = bcvRate
+    ? calculateBsAmount(cfg.amountUsd, bcvRate.rateWithMarkup)
+    : null;
+
+  // Filter payment methods: Pago Móvil only for Venezuelan businesses
+  const METHODS = useMemo(() => {
+    const all: { method: AnyPaymentMethod; icon: React.ReactNode }[] = [
+      { method: 'nowpayments',    icon: <Bitcoin    size={18} className="text-amber-400" /> },
+      { method: 'pago_movil',     icon: <Smartphone size={18} className="text-emerald-400" /> },
+      { method: 'binance_manual', icon: <Bitcoin    size={18} className="text-yellow-400" /> },
+    ];
+    if (!isVE) return all.filter((m) => m.method !== 'pago_movil');
+    return all;
+  }, [isVE]);
 
   return (
     <div
@@ -351,7 +383,7 @@ export function PaymentMethodModal({ plan, onClose }: Props) {
           {/* ══ STEP 2a: Pago Móvil form ═══════════════════════════════════ */}
           {flow.step === 'manual_form' && flow.method === 'pago_movil' && (
             <>
-              <PagoMovilInstructions concept={`Cronix ${cfg.label}`} />
+              <PagoMovilInstructions concept={`Cronix ${cfg.label}`} amountBs={amountBs} />
               <ReferenceInput
                 id="pago-movil-ref"
                 label={t('pagoMovil.refLabel')}

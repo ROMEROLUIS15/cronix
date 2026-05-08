@@ -38,6 +38,7 @@ const FREE_BUSINESS: ReferralBusiness = {
   referral_code: 'SALON123',
   bonus_appointments_limit: 10,
   subscription_ends_at: null,
+  timezone: 'America/Caracas',
 };
 
 const PRO_BUSINESS: ReferralBusiness = {
@@ -47,6 +48,7 @@ const PRO_BUSINESS: ReferralBusiness = {
   referral_code: 'BARBER456',
   bonus_appointments_limit: null,
   subscription_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  timezone: 'America/Bogota',
 };
 
 const INVITED_LIST: ReferralInvite[] = [

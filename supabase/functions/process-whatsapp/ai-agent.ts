@@ -61,6 +61,8 @@ function sanitizeOutput(text: string): string {
 }
 
 function containsInternalSyntax(text: string): boolean {
+  // Bare UUIDs leaked by the 8B when the confirmation gate blocks tool access
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text.trim())) return true
   return new RegExp(`<function[=\\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"|\\b${TOOL_NAME_ALTERNATION}\\b`, 'i').test(text)
 }
 

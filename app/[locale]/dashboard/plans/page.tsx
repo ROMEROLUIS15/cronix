@@ -12,6 +12,7 @@ const ADMIN_PREVIEW: ReferralBusiness = {
   referral_code: "ADMIN-PREVIEW",
   bonus_appointments_limit: 0,
   subscription_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  timezone: "America/Caracas",
 };
 
 export default async function PlansPage() {
@@ -30,7 +31,7 @@ export default async function PlansPage() {
   if (dbUser?.business_id) {
     const { data, error } = await adminSupabase
       .from("businesses")
-      .select("id, name, plan, referral_code, bonus_appointments_limit, subscription_ends_at")
+      .select("id, name, plan, referral_code, bonus_appointments_limit, subscription_ends_at, timezone")
       .eq("id", dbUser.business_id)
       .single();
 
@@ -77,7 +78,7 @@ export default async function PlansPage() {
             {t("planSectionSub")}
           </p>
         </div>
-        <PlanManager currentPlan={business.plan} businessId={business.id} />
+        <PlanManager currentPlan={business.plan} businessId={business.id} businessTimezone={business.timezone} />
       </section>
 
       {/* Divider */}
