@@ -63,7 +63,7 @@ async function callCerebras(messages: LlmMessage[]): Promise<LlmResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       'llama-3.3-70b',
+        model:       'gpt-oss-120b',
         messages,
         tools:       TOOL_DEFINITIONS,
         tool_choice: 'auto',
@@ -146,26 +146,31 @@ async function callGroq(messages: LlmMessage[], model: string): Promise<LlmRespo
 
 /**
  * Provider fallback chain (best → last resort):
- *   1. Cerebras llama-3.3-70b   (~1s, free 60 RPM)        — best latency + quality
- *   2. Groq    llama-3.3-70b-versatile (~3-4s, free)      — same quality, slower
- *   3. Groq    llama-3.1-8b-instant   (~0.5s, free)       — fast but imprecise tool calling
+ *   1. Cerebras gpt-oss-120b           (~1-1.5s, free)    — OpenAI lineage = best tool calling
+ *   2. Groq    llama-3.3-70b-versatile (~3-4s, free)      — solid 70B, big TPM headroom
+ *   3. Groq    llama-3.1-8b-instant    (~0.5s, free)      — fast but imprecise (loops on tools)
  *
- * The 70B fallback (Groq versatile) is critical — without it, a Cerebras
- * outage drops us to 8B which loops on the same tool call (we saw this in
- * production: get_appointments_by_date fired twice, dedup blocked the 2nd).
+ * Why gpt-oss-120b on Cerebras (not Llama):
+ *   Cerebras retired llama-3.3-70b. Of the remaining options (gpt-oss-120b,
+ *   qwen-3-235b, zai-glm-4.7, llama3.1-8b), gpt-oss-120b is the strongest
+ *   choice for tool calling — OpenAI's open-source GPT-OSS uses exactly the
+ *   function/tool format we already emit. Cerebras runs it in ~1-1.5s.
+ *
+ * Why keep Groq 70B as fallback:
+ *   If Cerebras has an outage we still want 70B-class quality, not the 8B
+ *   which loops on identical tool calls. Groq still hosts llama-3.3-70b.
  */
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
   if (CEREBRAS_KEY) {
     try {
       const resp = await callCerebras(messages)
-      return { resp, modelUsed: 'cerebras/llama-3.3-70b' }
+      return { resp, modelUsed: 'cerebras/gpt-oss-120b' }
     } catch (err) {
       const reason    = err instanceof Error ? err.message : String(err)
       const isTimeout = err instanceof Error && err.name === 'AbortError'
       console.warn(`[VOICE-WORKER-AGENT] Cerebras failed (${isTimeout ? 'TIMEOUT' : 'ERROR'}), falling back to Groq 70B: ${reason}`)
     }
   }
-  // Try Groq 70B versatile first — much better tool-calling than the 8B
   try {
     const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
     return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
