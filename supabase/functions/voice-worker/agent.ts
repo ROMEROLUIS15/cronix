@@ -29,7 +29,9 @@ const GROQ_KEYS    = (Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY'
 
 const CEREBRAS_URL = 'https://api.cerebras.ai/v1/chat/completions'
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions'
-const CEREBRAS_TIMEOUT_MS = 6000  // bail fast — Groq fallback is acceptable
+// Cerebras 70B with tool definitions can take 2-4s — give it 12s before bailing.
+// Plenty of room left in the 150s Edge Function budget for the Groq fallback.
+const CEREBRAS_TIMEOUT_MS = 12_000
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
@@ -80,13 +82,15 @@ async function callCerebras(messages: LlmMessage[]): Promise<LlmResponse> {
   }
 }
 
-async function callGroq(messages: LlmMessage[]): Promise<LlmResponse> {
-  if (GROQ_KEYS.length === 0) throw new Error('LLM_API_KEY not set')
-  // Use the first key — multi-key rotation can be added later if needed.
+/**
+ * Single-attempt Groq call with one key. Throws with the HTTP status preserved
+ * so the caller can decide whether to rotate keys (429) or give up (other 4xx/5xx).
+ */
+async function callGroqOnce(messages: LlmMessage[], key: string): Promise<LlmResponse> {
   const res = await fetch(GROQ_URL, {
     method:  'POST',
     headers: {
-      Authorization:  `Bearer ${GROQ_KEYS[0]}`,
+      Authorization:  `Bearer ${key}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -100,9 +104,38 @@ async function callGroq(messages: LlmMessage[]): Promise<LlmResponse> {
   })
   if (!res.ok) {
     const errText = (await res.text()).slice(0, 300)
-    throw new Error(`Groq ${res.status}: ${errText}`)
+    const err = new Error(`Groq ${res.status}: ${errText}`) as Error & { status: number }
+    err.status = res.status
+    throw err
   }
   return await res.json() as LlmResponse
+}
+
+/**
+ * Calls Groq with key rotation. On 429, immediately tries the next key.
+ * Other errors propagate up — the caller (LLM fallback chain) handles them.
+ *
+ * With 3 free-tier Groq keys × 6000 TPM each = 18000 TPM aggregate. A typical
+ * voice turn consumes ~3-4k tokens, so this comfortably handles 4-5 turns/min.
+ */
+async function callGroq(messages: LlmMessage[]): Promise<LlmResponse> {
+  if (GROQ_KEYS.length === 0) throw new Error('LLM_API_KEY not set')
+  let lastErr: unknown = null
+  for (let i = 0; i < GROQ_KEYS.length; i++) {
+    try {
+      return await callGroqOnce(messages, GROQ_KEYS[i]!)
+    } catch (err) {
+      lastErr = err
+      const status = (err as { status?: number }).status
+      if (status === 429 && i < GROQ_KEYS.length - 1) {
+        console.warn(`[VOICE-WORKER-AGENT] Groq key ${i + 1}/${GROQ_KEYS.length} hit 429 — rotating`)
+        continue
+      }
+      // Non-429 or last key — bail
+      throw err
+    }
+  }
+  throw lastErr ?? new Error('All Groq keys exhausted')
 }
 
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
@@ -111,7 +144,10 @@ async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmR
       const resp = await callCerebras(messages)
       return { resp, modelUsed: 'cerebras/llama3.3-70b' }
     } catch (err) {
-      console.warn(`[VOICE-WORKER-AGENT] Cerebras failed, falling back: ${err instanceof Error ? err.message : String(err)}`)
+      // Explicit log so we can diagnose Cerebras failures (timeout vs 4xx vs 5xx).
+      const reason = err instanceof Error ? err.message : String(err)
+      const isTimeout = err instanceof Error && err.name === 'AbortError'
+      console.warn(`[VOICE-WORKER-AGENT] Cerebras failed (${isTimeout ? 'TIMEOUT' : 'ERROR'}), falling back to Groq: ${reason}`)
     }
   }
   const resp = await callGroq(messages)
