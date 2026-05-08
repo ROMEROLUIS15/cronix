@@ -114,13 +114,13 @@ export function VoiceAssistantFab() {
   const hasSpokenRef       = useRef<boolean>(false)
   const currentAudioRef    = useRef<HTMLAudioElement | null>(null)
   const audioChunksRef     = useRef<Blob[]>([])
-  const pollingTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const idleCheckRef       = useRef<ReturnType<typeof setInterval> | null>(null)
-  const onlineListenerRef  = useRef<(() => void) | null>(null)
-  const currentJobIdRef    = useRef<string | null>(null)
   const audioUnlockedRef   = useRef<boolean>(false)
   const unlockPrimerRef    = useRef<HTMLAudioElement | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef     = useRef<any>(null)
+  // AbortController for the in-flight Edge Function request — lets us cancel
+  // when the user taps to interrupt while we're waiting for the response.
+  const inflightAbortRef   = useRef<AbortController | null>(null)
   const [volume, setVolume] = useState(0)
 
   // ── Audio unlock + reusable element ──────────────────────────────────────
@@ -184,14 +184,6 @@ export function VoiceAssistantFab() {
     currentAudioRef.current = el
   }
 
-  // ── Fetch with client-side timeout ───────────────────────────────────────
-  const FETCH_TIMEOUT_MS = 45_000
-  const fetchWithTimeout = (url: string, opts: RequestInit): Promise<Response> => {
-    const controller = new AbortController()
-    const timer      = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-    return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer))
-  }
-
   // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
@@ -218,215 +210,106 @@ export function VoiceAssistantFab() {
     })
   }
 
-  // ── Polling: stop + cleanup ───────────────────────────────────────────────
-  const stopPolling = () => {
-    if (pollingTimerRef.current)   { clearTimeout(pollingTimerRef.current);   pollingTimerRef.current  = null }
-    if (idleCheckRef.current)      { clearInterval(idleCheckRef.current);      idleCheckRef.current     = null }
-    if (onlineListenerRef.current) {
-      window.removeEventListener('online', onlineListenerRef.current)
-      onlineListenerRef.current = null
-    }
-    currentJobIdRef.current = null
-    try { sessionStorage.removeItem('cronix-active-job') } catch { /* ignore */ }
-  }
+  // ── Edge Function URL ──────────────────────────────────────────────────────
+  // Called directly by the FAB — bypasses Vercel entirely so we get the full
+  // 150s Supabase Edge Function timeout instead of Vercel Hobby's 10s cap.
+  const VOICE_WORKER_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/voice-worker`
 
-  // ── Handle completed job result ───────────────────────────────────────────
-  const handleJobResult = async (data: {
-    text?: string
-    audioUrl?: string | null
-    actionPerformed?: boolean
-    history?: { role: string; content: string }[]
-  }) => {
-    if (data.actionPerformed) {
-      // Invalidate without exact match so all appointment query variants refresh
-      // (e.g. ['appointments', id], ['appointments', id, date], etc.)
-      void queryClient.invalidateQueries({ queryKey: ['appointments'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-      void queryClient.invalidateQueries({ queryKey: ['clients'] })
-      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    }
-    if (data.history) setChatHistory(data.history.slice(-15))
-
-    setState('speaking')
-
-    const fallback = data.actionPerformed ? 'Listo.' : 'No te entendí bien, ¿puedes repetir?'
-
-    if (data.audioUrl) {
-      await playAudio(data.audioUrl, data.text || fallback)
-    } else if (data.text?.trim()) {
-      await playAudio(`/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`, data.text)
-    } else {
-      vocalizeSilentFailsafe(fallback)
-    }
-  }
-
-  // ── Polling: start (resilient to network blinks) ──────────────────────────
-  // - setTimeout recursion with adaptive delay (750ms normal → 2500ms after 3+ errors)
-  // - Pauses while offline, fires immediately on 'online' event
-  // - Idle timeout measured from LAST successful server contact
-  // - Persists job_id in sessionStorage for recovery on page reload
-  const startJobPolling = (jobId: string) => {
-    stopPolling()
-    currentJobIdRef.current = jobId
+  /**
+   * One-shot synchronous call to the voice-worker Edge Function.
+   * Sends either an audio Blob (multipart) or plain text (JSON), waits for the
+   * full pipeline (STT → LLM → TTS), then plays the resulting audio.
+   *
+   * No polling, no jobs — the Edge Function returns the final result directly.
+   */
+  const callVoiceWorker = async (input: { audio: Blob } | { text: string }) => {
+    // Cancel any prior in-flight request before starting a new one
+    inflightAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    inflightAbortRef.current = ctrl
 
     try {
-      sessionStorage.setItem('cronix-active-job', JSON.stringify({ jobId, startedAt: Date.now() }))
-    } catch { /* storage unavailable — polling still works */ }
-
-    let consecutiveErrors = 0
-    let notFoundCount     = 0
-    const pollStart       = Date.now()
-    const POLL_BUDGET_MS  = 45_000
-    const isCurrent       = () => currentJobIdRef.current === jobId
-
-    const scheduleNext = (delayMs: number) => {
-      if (!isCurrent()) return
-      pollingTimerRef.current = setTimeout(() => { void doPoll() }, delayMs)
-    }
-
-    const doPoll = async () => {
-      if (!isCurrent()) return
-      if (Date.now() - pollStart > POLL_BUDGET_MS) {
-        stopPolling()
-        setState('speaking')
-        vocalizeSilentFailsafe('El asistente tardó demasiado en responder. Por favor intenta de nuevo.')
+      // Get the user's JWT — the Edge Function has verify_jwt=true
+      const { data: sessionData } = await supabase.auth.getSession()
+      const jwt = sessionData.session?.access_token
+      if (!jwt) {
+        vocalizeSilentFailsafe('Sesión expirada. Recarga la página.')
         return
       }
-      if (typeof navigator !== 'undefined' && !navigator.onLine) { scheduleNext(2000); return }
 
-      try {
-        const res = await fetch(`/api/assistant/voice/status?job_id=${encodeURIComponent(jobId)}`)
-        if (!isCurrent()) return
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const headers: Record<string, string> = { Authorization: `Bearer ${jwt}` }
+      let body: BodyInit
 
-        // 404 tolerance: Redis eventual consistency — job may not be visible on
-        // the very first polls. Give it up to ~10s of 404s before giving up.
-        if (res.status === 404) {
-          notFoundCount++
-          if (notFoundCount >= 14) {
-            stopPolling()
-            vocalizeSilentFailsafe('No recibí respuesta del asistente. Por favor intenta de nuevo.')
-            return
-          }
-          scheduleNext(750)
-          return
-        }
-
-        if (!res.ok) {
-          consecutiveErrors++
-          scheduleNext(consecutiveErrors >= 3 ? 2500 : 750)
-          return
-        }
-
-        consecutiveErrors = 0
-        notFoundCount     = 0
-
-        const data = await res.json() as {
-          status: string
-          text?: string
-          audioUrl?: string | null
-          actionPerformed?: boolean
-          history?: { role: string; content: string }[]
-        }
-
-        if (data.status === 'completed') {
-          stopPolling()
-          await handleJobResult(data)
-        } else if (data.status === 'failed') {
-          stopPolling()
-          setState('speaking')
-          if (data.audioUrl) {
-            await playAudio(data.audioUrl, 'No te entendí bien, ¿puedes repetir?')
-          } else {
-            vocalizeSilentFailsafe('No te entendí bien, ¿puedes repetir?')
-          }
-        } else {
-          // queued / processing — keep asking until completed or budget elapses
-          scheduleNext(750)
-        }
-      } catch {
-        if (!isCurrent()) return
-        consecutiveErrors++
-        scheduleNext(consecutiveErrors >= 3 ? 2500 : 750)
+      if ('audio' in input) {
+        const form = new FormData()
+        form.append('audio',    input.audio, 'audio.webm')
+        form.append('timezone', timezone)
+        body = form
+      } else {
+        headers['Content-Type'] = 'application/json'
+        body = JSON.stringify({ text: input.text, timezone })
       }
-    }
 
-    const onOnline = () => {
-      if (!isCurrent()) return
-      consecutiveErrors = 0
-      if (pollingTimerRef.current) { clearTimeout(pollingTimerRef.current); pollingTimerRef.current = null }
-      void doPoll()
-    }
-    onlineListenerRef.current = onOnline
-    window.addEventListener('online', onOnline)
-
-    void doPoll()
-  }
-
-  // ── Send audio blob ───────────────────────────────────────────────────────
-  const sendAudioToAssistant = async (audioBlob: Blob) => {
-    try {
-      const formData = new FormData()
-      formData.append('audio',    audioBlob, 'audio.webm')
-      formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
-
-      const res = await fetchWithTimeout('/api/assistant/voice', {
+      const res = await fetch(VOICE_WORKER_URL, {
         method:  'POST',
-        headers: { 'x-request-id': crypto.randomUUID() },
-        body:    formData,
+        headers,
+        body,
+        signal:  ctrl.signal,
       })
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
-        logger.error('VoiceAssistantFab', `API error ${res.status}`, errData)
-        const errMsg = res.status === 403 ? 'Sin acceso al asistente.'
-                     : res.status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
-                     : (errData as { error?: string }).error || 'Error al contactar a Luis.'
-        vocalizeSilentFailsafe(errMsg)
+        const status  = res.status
+        logger.error('VoiceAssistantFab', `Edge Function error ${status}`, errData)
+        const msg = status === 401 ? 'Sin acceso al asistente.'
+                  : status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
+                  : (errData as { error?: string }).error || 'Error al contactar a Luis.'
+        vocalizeSilentFailsafe(msg)
         return
       }
 
-      const data = await res.json() as { job_id: string; status: string }
+      const data = await res.json() as {
+        text:            string
+        audioUrl:        string | null
+        actionPerformed: boolean
+        transcription:   string
+      }
 
-      startJobPolling(data.job_id)
+      // Refresh data caches if the agent wrote something
+      if (data.actionPerformed) {
+        void queryClient.invalidateQueries({ queryKey: ['appointments']     })
+        void queryClient.invalidateQueries({ queryKey: ['dashboard-stats']  })
+        void queryClient.invalidateQueries({ queryKey: ['clients']          })
+        void queryClient.invalidateQueries({ queryKey: ['notifications']    })
+      }
 
+      // Append both turns to the in-memory chat history for context across taps
+      setChatHistory(prev => [
+        ...prev,
+        { role: 'user',      content: data.transcription || (('text' in input) ? input.text : '') },
+        { role: 'assistant', content: data.text },
+      ].slice(-15))
+
+      // Play the response audio (or fall back to TTS endpoint with the text)
+      setState('speaking')
+      const fallback = data.actionPerformed ? 'Listo.' : 'No te entendí bien, ¿puedes repetir?'
+      if (data.audioUrl) {
+        await playAudio(data.audioUrl, data.text || fallback)
+      } else if (data.text.trim()) {
+        await playAudio(`/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`, data.text)
+      } else {
+        vocalizeSilentFailsafe(fallback)
+      }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        vocalizeSilentFailsafe('Tiempo de espera agotado. Intenta de nuevo.')
+        // Cancelled by user tap — do nothing, state already reset
         return
       }
-      logger.error('VoiceAssistantFab', 'Network error contacting assistant', err)
+      logger.error('VoiceAssistantFab', 'Network error calling voice-worker', err)
       vocalizeSilentFailsafe('Error de red. Intenta de nuevo.')
-    }
-  }
-
-  // ── Send text ─────────────────────────────────────────────────────────────
-  const sendTextToAssistant = async (text: string) => {
-    try {
-      const res = await fetchWithTimeout('/api/assistant/voice', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'x-request-id': crypto.randomUUID() },
-        body:    JSON.stringify({ text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-      })
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        const errMsg = res.status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
-                     : (errData as { error?: string }).error || 'Error al conectar con Luis.'
-        vocalizeSilentFailsafe(errMsg)
-        return
-      }
-
-      const data = await res.json() as { job_id: string; status: string }
-
-      startJobPolling(data.job_id)
-
-    } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        vocalizeSilentFailsafe('Tiempo de espera agotado. Intenta de nuevo.')
-        return
-      }
-      logger.error('VoiceAssistantFab', 'Error sending text to assistant', err)
-      vocalizeSilentFailsafe('Error de red. Intenta de nuevo.')
+    } finally {
+      if (inflightAbortRef.current === ctrl) inflightAbortRef.current = null
     }
   }
 
@@ -500,7 +383,7 @@ export function VoiceAssistantFab() {
           .trim()
         if (transcript) {
           setState('processing')
-          void sendTextToAssistant(transcript)
+          void callVoiceWorker({ text: transcript })
         } else {
           setState('idle')
         }
@@ -607,7 +490,7 @@ export function VoiceAssistantFab() {
           return
         }
 
-        await sendAudioToAssistant(new Blob(audioChunksRef.current, { type: mimeType }))
+        await callVoiceWorker({ audio: new Blob(audioChunksRef.current, { type: mimeType }) })
       }
 
       mediaRecorder.start(250)
@@ -706,7 +589,9 @@ export function VoiceAssistantFab() {
       return
     }
     if (state === 'processing') {
-      stopPolling()
+      // Cancel the in-flight Edge Function call and reset.
+      inflightAbortRef.current?.abort()
+      inflightAbortRef.current = null
       setState('idle')
       return
     }
@@ -714,35 +599,25 @@ export function VoiceAssistantFab() {
     if (state === 'listening') stopRecording()
   }
 
-  // Cleanup polling on unmount
+  // Cleanup on unmount: cancel any in-flight request.
   useEffect(() => {
-    return () => stopPolling()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      inflightAbortRef.current?.abort()
+      inflightAbortRef.current = null
+    }
   }, [])
 
-  // Recovery: resume polling after page reload if a job was in-flight
-  useEffect(() => {
-    if (!isLoaded) return
-    try {
-      const saved = sessionStorage.getItem('cronix-active-job')
-      if (!saved) return
-      const { jobId, startedAt } = JSON.parse(saved) as { jobId: string; startedAt: number }
-      if (Date.now() - startedAt > 5 * 60 * 1000) {
-        sessionStorage.removeItem('cronix-active-job')
-        return
-      }
-      setState('processing')
-      startJobPolling(jobId)
-    } catch { /* ignore corrupt sessionStorage */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded])
-
-  // Safety timeout: 30 min max in processing/speaking (matches session TTL)
+  // Safety timeout: 30 min max in processing/speaking (matches session TTL).
+  // For sync Edge Function calls this is mostly defensive — the request itself
+  // resolves or aborts well before this fires.
   useEffect(() => {
     if (state !== 'speaking' && state !== 'processing') return
-    const timer = setTimeout(() => { stopPolling(); setState('idle') }, 30 * 60 * 1000)
+    const timer = setTimeout(() => {
+      inflightAbortRef.current?.abort()
+      inflightAbortRef.current = null
+      setState('idle')
+    }, 30 * 60 * 1000)
     return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
   if (typeof window === 'undefined' || !isLoaded || !showLuisFab) return null

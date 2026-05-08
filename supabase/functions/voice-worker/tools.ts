@@ -1,0 +1,801 @@
+/**
+ * Tool implementations for the dashboard voice agent.
+ *
+ * Each tool delegates to direct Supabase queries (no use case layer here —
+ * that lives in Vercel-side code which we can't import). The business rules
+ * are mirrored faithfully from RealToolExecutor.ts so behavior matches.
+ *
+ * Tool registry is a Map<name, fn>. The dispatcher in agent.ts picks one,
+ * validates args (lightweight — Zod-style not needed here, model is well-trained),
+ * and returns a ToolResult.
+ */
+
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import type { ToolResult, BookingEventData } from './types.ts'
+
+// ── Tool execution context ─────────────────────────────────────────────────
+
+export interface ToolContext {
+  // deno-lint-ignore no-explicit-any
+  supabase:    SupabaseClient<any>
+  businessId:  string
+  userId:      string
+  timezone:    string
+  workingHours?: Record<string, { open: string; close: string } | null>
+}
+
+// ── Lightweight fuzzy matching (Levenshtein-based) ─────────────────────────
+
+function normalize(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  const dp: number[] = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = dp[0]!
+    dp[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j]!
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j]!, dp[j - 1]!)
+      prev = tmp
+    }
+  }
+  return dp[b.length]!
+}
+
+function similarity(a: string, b: string): number {
+  const max = Math.max(a.length, b.length, 1)
+  return 1 - levenshtein(a, b) / max
+}
+
+interface FuzzyMatch<T extends { name: string }> {
+  status: 'found' | 'ambiguous' | 'not_found'
+  match?: T
+  candidates?: T[]
+}
+
+const FUZZY_THRESHOLD       = 0.65
+const FUZZY_AMBIGUOUS_GAP   = 0.10  // if top 2 within this gap → ambiguous
+
+function fuzzyFind<T extends { name: string }>(items: T[], query: string): FuzzyMatch<T> {
+  if (!items.length) return { status: 'not_found' }
+  const needle = normalize(query)
+
+  const scored = items
+    .map(item => ({ item, score: similarity(normalize(item.name), needle) }))
+    .filter(s => s.score >= FUZZY_THRESHOLD || normalize(s.item.name).includes(needle))
+    .sort((a, b) => b.score - a.score)
+
+  if (scored.length === 0) return { status: 'not_found' }
+  if (scored.length === 1) return { status: 'found', match: scored[0]!.item }
+
+  const [first, second] = scored
+  if (first!.score - second!.score >= FUZZY_AMBIGUOUS_GAP) {
+    return { status: 'found', match: first!.item }
+  }
+  return { status: 'ambiguous', candidates: scored.slice(0, 5).map(s => s.item) }
+}
+
+// ── Time helpers (timezone-aware) ──────────────────────────────────────────
+
+/**
+ * Converts a local datetime (in business timezone) to a UTC ISO string.
+ * Mirrors lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts → localToUTC.
+ */
+function localToUTC(date: string, time: string, tz: string): string {
+  const naiveAsUTC = new Date(`${date}T${time}:00Z`)
+  const tzStr      = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(naiveAsUTC)
+  const tzDisplayedAsUTC = new Date(tzStr.replace(' ', 'T') + 'Z')
+  const offsetMs         = naiveAsUTC.getTime() - tzDisplayedAsUTC.getTime()
+  return new Date(naiveAsUTC.getTime() + offsetMs).toISOString()
+}
+
+function buildEndISO(startISO: string, durationMin: number): string {
+  return new Date(new Date(startISO).getTime() + durationMin * 60_000).toISOString()
+}
+
+function humanizeDate(isoDate: string, timezone: string): string {
+  try {
+    const [y, m, d] = isoDate.split('-').map(Number)
+    return new Intl.DateTimeFormat('es', {
+      day: 'numeric', month: 'long', timeZone: timezone,
+    }).format(new Date(y!, m! - 1, d!))
+  } catch {
+    return isoDate
+  }
+}
+
+function formatTimeFromISO(iso: string, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat('es-419', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone,
+    }).format(new Date(iso))
+  } catch {
+    return iso.slice(11, 16)
+  }
+}
+
+// ── Repository-style helpers ───────────────────────────────────────────────
+
+interface ClientRow { id: string; name: string; phone: string | null }
+interface ServiceRow { id: string; name: string; duration_min: number; price: number }
+
+async function getActiveClients(ctx: ToolContext): Promise<ClientRow[]> {
+  const { data, error } = await ctx.supabase
+    .from('clients')
+    .select('id, name, phone')
+    .eq('business_id', ctx.businessId)
+    .eq('status', 'active')
+  if (error || !data) return []
+  return data as ClientRow[]
+}
+
+async function getActiveServices(ctx: ToolContext): Promise<ServiceRow[]> {
+  const { data, error } = await ctx.supabase
+    .from('services')
+    .select('id, name, duration_min, price')
+    .eq('business_id', ctx.businessId)
+    .eq('active', true)
+  if (error || !data) return []
+  return data as ServiceRow[]
+}
+
+async function findConflicts(
+  ctx:       ToolContext,
+  startISO:  string,
+  endISO:    string,
+  excludeId?: string,
+): Promise<boolean> {
+  let q = ctx.supabase
+    .from('appointments')
+    .select('id')
+    .eq('business_id', ctx.businessId)
+    .in('status', ['pending', 'confirmed'])
+    .lt('start_at', endISO)
+    .gt('end_at', startISO)
+  if (excludeId) q = q.neq('id', excludeId)
+  const { data, error } = await q
+  if (error) return false  // fail-open: assume no conflict, let DB handle
+  return (data?.length ?? 0) > 0
+}
+
+interface ResolveOk    { status: 'found';     client: ClientRow }
+interface ResolveAmb   { status: 'ambiguous'; candidates: ClientRow[] }
+interface ResolveMiss  { status: 'not_found' }
+type ResolveResult = ResolveOk | ResolveAmb | ResolveMiss
+
+async function resolveClient(ctx: ToolContext, name: string): Promise<ResolveResult> {
+  const all = await getActiveClients(ctx)
+  if (!all.length) return { status: 'not_found' }
+  const found = fuzzyFind(all, name)
+  if (found.status === 'found')     return { status: 'found',     client: found.match! }
+  if (found.status === 'ambiguous') return { status: 'ambiguous', candidates: found.candidates! }
+  return { status: 'not_found' }
+}
+
+async function resolveService(ctx: ToolContext, nameOrId: string): Promise<ServiceRow | null> {
+  const all = await getActiveServices(ctx)
+  if (!all.length) return null
+  // 1. Exact UUID match
+  const exact = all.find(s => s.id === nameOrId)
+  if (exact) return exact
+  // 2. Fuzzy by name
+  const fuzzy = fuzzyFind(all, nameOrId)
+  return fuzzy.status === 'found' ? fuzzy.match! : null
+}
+
+// ── Tool: smart_schedule ───────────────────────────────────────────────────
+
+interface SmartScheduleArgs {
+  service_name: string
+  client_name:  string
+  date:         string
+  time:         string
+}
+
+async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise<ToolResult> {
+  const { service_name, client_name, date, time } = args
+  if (!service_name || !client_name || !date || !time) {
+    return { success: false, result: 'Faltan datos para agendar (cliente, servicio, fecha y hora son obligatorios).' }
+  }
+
+  // 1. Resolve client (auto-create if not found)
+  let client: ClientRow
+  const resolution = await resolveClient(ctx, client_name)
+  if (resolution.status === 'ambiguous') {
+    const names = resolution.candidates.map(c => c.name).join(', ')
+    return { success: false, result: `Hay varios clientes con nombre similar: ${names}. ¿Cuál es?` }
+  }
+  if (resolution.status === 'found') {
+    client = resolution.client
+  } else {
+    const { data: created, error } = await ctx.supabase
+      .from('clients')
+      .insert({ business_id: ctx.businessId, name: client_name, status: 'active' })
+      .select('id, name, phone')
+      .single()
+    if (error || !created) {
+      return { success: false, result: `No pude registrar a ${client_name}: ${error?.message ?? 'error desconocido'}` }
+    }
+    client = created as ClientRow
+  }
+
+  // 2. Resolve service
+  const service = await resolveService(ctx, service_name)
+  if (!service) {
+    const all = await getActiveServices(ctx)
+    const catalog = all.map(s => s.name).join(', ') || 'ninguno'
+    return { success: false, result: `No encontré el servicio "${service_name}". Disponibles: ${catalog}.` }
+  }
+
+  // 3. Compute slot in UTC + check conflicts
+  const startISO = localToUTC(date, time, ctx.timezone)
+  const endISO   = buildEndISO(startISO, service.duration_min)
+  if (await findConflicts(ctx, startISO, endISO)) {
+    return { success: false, result: `El horario ${time} del ${date} ya está ocupado. Elige otra hora.` }
+  }
+
+  // 4. Insert appointment (trigger handles appointment_services junction)
+  const { data: created, error } = await ctx.supabase
+    .from('appointments')
+    .insert({
+      business_id: ctx.businessId,
+      client_id:   client.id,
+      service_id:  service.id,
+      start_at:    startISO,
+      end_at:      endISO,
+      status:      'pending',
+    })
+    .select('id')
+    .single()
+
+  if (error || !created) {
+    return { success: false, result: `No pude crear la cita: ${error?.message ?? 'error desconocido'}` }
+  }
+
+  const data: BookingEventData = {
+    appointmentId: created.id as string,
+    clientName:    client.name,
+    serviceName:   service.name,
+    date,
+    time,
+    action:        'created',
+  }
+  return {
+    success: true,
+    result:  `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}.`,
+    data,
+  }
+}
+
+// ── Tool: cancel_booking ───────────────────────────────────────────────────
+
+interface CancelBookingArgs {
+  client_name: string
+  date?:       string
+  time?:       string
+}
+
+interface AppointmentForLookup {
+  id:         string
+  start_at:   string
+  end_at:     string
+  client_id:  string | null
+  service_id: string | null
+}
+
+async function findAppointmentByClientName(
+  ctx:    ToolContext,
+  client: ClientRow,
+  date?:  string,
+  time?:  string,
+): Promise<AppointmentForLookup | { error: string }> {
+  // Default to today if no date given
+  const targetDate = date ?? new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+
+  let q = ctx.supabase
+    .from('appointments')
+    .select('id, start_at, end_at, client_id, service_id')
+    .eq('business_id', ctx.businessId)
+    .eq('client_id', client.id)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', `${targetDate}T00:00:00`)
+    .lte('start_at', `${targetDate}T23:59:59`)
+    .order('start_at')
+
+  const { data, error } = await q
+  if (error) return { error: `Error buscando cita: ${error.message}` }
+  const list = (data ?? []) as AppointmentForLookup[]
+  if (list.length === 0) return { error: `No encontré cita activa de ${client.name} el ${targetDate}.` }
+  if (list.length === 1) return list[0]!
+
+  // Multiple → narrow by time
+  if (time) {
+    const matched = list.find(a => formatTimeFromISO(a.start_at, ctx.timezone).startsWith(time.split(':')[0]!))
+    if (matched) return matched
+  }
+  const labels = list.slice(0, 3).map(a => formatTimeFromISO(a.start_at, ctx.timezone)).join(', ')
+  return { error: `${client.name} tiene varias citas el ${targetDate}: ${labels}. ¿Cuál cancelo?` }
+}
+
+async function cancelBooking(ctx: ToolContext, args: CancelBookingArgs): Promise<ToolResult> {
+  if (!args.client_name) return { success: false, result: 'Necesito el nombre del cliente para cancelar.' }
+
+  const resolution = await resolveClient(ctx, args.client_name)
+  if (resolution.status !== 'found') {
+    if (resolution.status === 'ambiguous') {
+      const names = resolution.candidates.map(c => c.name).join(', ')
+      return { success: false, result: `Hay varios clientes similares: ${names}. ¿Cuál?` }
+    }
+    return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+  }
+
+  const apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
+  if ('error' in apt) return { success: false, result: apt.error }
+
+  // Resolve service name for the response (best-effort)
+  let serviceName = 'Servicio'
+  if (apt.service_id) {
+    const svc = await resolveService(ctx, apt.service_id)
+    if (svc) serviceName = svc.name
+  }
+
+  const { error } = await ctx.supabase
+    .from('appointments')
+    .update({ status: 'cancelled' })
+    .eq('id', apt.id)
+    .eq('business_id', ctx.businessId)
+
+  if (error) return { success: false, result: `No pude cancelar: ${error.message}` }
+
+  const data: BookingEventData = {
+    appointmentId: apt.id,
+    clientName:    resolution.client.name,
+    serviceName,
+    date: apt.start_at.slice(0, 10),
+    time: apt.start_at.slice(11, 16),
+    action: 'cancelled',
+  }
+  return {
+    success: true,
+    result:  `Listo. Cancelé la cita de ${resolution.client.name} (${serviceName}).`,
+    data,
+  }
+}
+
+// ── Tool: reschedule_booking ───────────────────────────────────────────────
+
+interface RescheduleBookingArgs {
+  client_name: string
+  date?:       string
+  time?:       string
+  new_date:    string
+  new_time:    string
+}
+
+async function rescheduleBooking(ctx: ToolContext, args: RescheduleBookingArgs): Promise<ToolResult> {
+  if (!args.client_name || !args.new_date || !args.new_time) {
+    return { success: false, result: 'Necesito el cliente y la nueva fecha/hora.' }
+  }
+
+  const resolution = await resolveClient(ctx, args.client_name)
+  if (resolution.status !== 'found') {
+    if (resolution.status === 'ambiguous') {
+      const names = resolution.candidates.map(c => c.name).join(', ')
+      return { success: false, result: `Hay varios clientes similares: ${names}. ¿Cuál?` }
+    }
+    return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+  }
+
+  const apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
+  if ('error' in apt) return { success: false, result: apt.error }
+
+  // Resolve service for duration + name
+  let durationMin = 60
+  let serviceName = 'Servicio'
+  if (apt.service_id) {
+    const svc = await resolveService(ctx, apt.service_id)
+    if (svc) {
+      durationMin = svc.duration_min
+      serviceName = svc.name
+    }
+  }
+
+  const newStartISO = localToUTC(args.new_date, args.new_time, ctx.timezone)
+  const newEndISO   = buildEndISO(newStartISO, durationMin)
+
+  if (await findConflicts(ctx, newStartISO, newEndISO, apt.id)) {
+    return { success: false, result: `El horario ${args.new_time} del ${args.new_date} ya está ocupado. Elige otra hora.` }
+  }
+
+  const { error } = await ctx.supabase
+    .from('appointments')
+    .update({ start_at: newStartISO, end_at: newEndISO })
+    .eq('id', apt.id)
+    .eq('business_id', ctx.businessId)
+
+  if (error) return { success: false, result: `No pude reagendar: ${error.message}` }
+
+  const data: BookingEventData = {
+    appointmentId: apt.id,
+    clientName:    resolution.client.name,
+    serviceName,
+    date: args.new_date,
+    time: args.new_time,
+    action: 'rescheduled',
+  }
+  return {
+    success: true,
+    result:  `Listo. Reagendé la cita de ${resolution.client.name} para el ${args.new_date} a las ${args.new_time}.`,
+    data,
+  }
+}
+
+// ── Tool: get_appointments_by_date ─────────────────────────────────────────
+
+interface GetByDateArgs { date: string }
+
+async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Promise<ToolResult> {
+  if (!args.date || !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
+    return { success: false, result: 'Necesito una fecha válida (YYYY-MM-DD).' }
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('appointments')
+    .select('id, start_at, status, client:clients(name), service:services(name)')
+    .eq('business_id', ctx.businessId)
+    .neq('status', 'cancelled')
+    .gte('start_at', `${args.date}T00:00:00`)
+    .lte('start_at', `${args.date}T23:59:59`)
+    .order('start_at')
+
+  if (error) return { success: false, result: `Error al consultar citas: ${error.message}` }
+
+  const dateLabel = humanizeDate(args.date, ctx.timezone)
+  if (!data?.length) return { success: true, result: `No hay citas para el ${dateLabel}.` }
+
+  const lines = data.map((row: Record<string, unknown>) => {
+    const time = formatTimeFromISO(row.start_at as string, ctx.timezone)
+    const cli  = (row.client  as { name?: string } | null)?.name  ?? '—'
+    const svc  = (row.service as { name?: string } | null)?.name  ?? '—'
+    return `${time} ${cli} — ${svc}`
+  })
+  return { success: true, result: `Citas del ${dateLabel}: ${lines.join('. ')}.` }
+}
+
+// ── Tool: search_clients ───────────────────────────────────────────────────
+
+interface SearchClientsArgs { query: string }
+
+async function searchClients(ctx: ToolContext, args: SearchClientsArgs): Promise<ToolResult> {
+  if (!args.query || args.query.length < 2) {
+    return { success: false, result: 'Necesito al menos 2 caracteres para buscar.' }
+  }
+
+  const all = await getActiveClients(ctx)
+  if (!all.length) {
+    return { success: true, result: `CLIENT_NOT_FOUND: "${args.query}" no existe. Si vas a agendar, usa client_name="${args.query}" — se registra automático.` }
+  }
+
+  const found = fuzzyFind(all, args.query)
+  if (found.status === 'found') {
+    const phone = found.match!.phone ? ` | tel. ${found.match!.phone}` : ''
+    return { success: true, result: `CLIENT_FOUND: ${found.match!.name}${phone}. Usa este nombre exacto si vas a agendar.` }
+  }
+  if (found.status === 'ambiguous') {
+    const list = found.candidates!.map(c => `${c.name}${c.phone ? ` (tel. ${c.phone})` : ''}`).join(', ')
+    return { success: true, result: `MULTIPLE_CLIENTS: ${list}. Pregunta al usuario cuál.` }
+  }
+  return { success: true, result: `CLIENT_NOT_FOUND: "${args.query}" no existe. Si vas a agendar, usa client_name="${args.query}" — se registra automático.` }
+}
+
+// ── Tool: get_services ─────────────────────────────────────────────────────
+
+async function getServices(ctx: ToolContext): Promise<ToolResult> {
+  const all = await getActiveServices(ctx)
+  if (!all.length) return { success: true, result: 'No hay servicios configurados.' }
+  const lines = all.map(s => `${s.name} (${s.duration_min} min, $${s.price})`)
+  return { success: true, result: `Servicios disponibles: ${lines.join(', ')}.` }
+}
+
+// ── Tool: create_client ────────────────────────────────────────────────────
+
+interface CreateClientArgs { name: string; phone?: string }
+
+async function createClient(ctx: ToolContext, args: CreateClientArgs): Promise<ToolResult> {
+  if (!args.name) return { success: false, result: 'Necesito el nombre del cliente.' }
+
+  const { data, error } = await ctx.supabase
+    .from('clients')
+    .insert({
+      business_id: ctx.businessId,
+      name:        args.name,
+      phone:       args.phone ?? null,
+      status:      'active',
+    })
+    .select('id, name')
+    .single()
+
+  if (error || !data) return { success: false, result: `No se pudo registrar: ${error?.message ?? 'desconocido'}` }
+  return { success: true, result: `Cliente "${(data as { name: string }).name}" registrado.` }
+}
+
+// ── Tool: delete_client ────────────────────────────────────────────────────
+
+interface DeleteClientArgs { client_name: string }
+
+async function deleteClient(ctx: ToolContext, args: DeleteClientArgs): Promise<ToolResult> {
+  if (!args.client_name) return { success: false, result: 'Necesito el nombre del cliente.' }
+
+  const resolution = await resolveClient(ctx, args.client_name)
+  if (resolution.status === 'not_found') {
+    return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+  }
+  if (resolution.status === 'ambiguous') {
+    const names = resolution.candidates.map(c => c.name).join(', ')
+    return { success: false, result: `Hay varios clientes similares: ${names}. ¿A cuál elimino?` }
+  }
+
+  // Block delete if client has future appointments (mirrors DeleteClientUseCase)
+  const { count } = await ctx.supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', ctx.businessId)
+    .eq('client_id', resolution.client.id)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', new Date().toISOString())
+
+  if ((count ?? 0) > 0) {
+    return { success: false, result: `No se puede eliminar: ${resolution.client.name} tiene ${count} cita(s) futura(s). Cancélalas primero.` }
+  }
+
+  const { error } = await ctx.supabase
+    .from('clients')
+    .delete()
+    .eq('id', resolution.client.id)
+    .eq('business_id', ctx.businessId)
+
+  if (error) return { success: false, result: `No pude eliminar: ${error.message}` }
+  return { success: true, result: `Cliente "${resolution.client.name}" eliminado.` }
+}
+
+// ── Tool: get_available_slots ──────────────────────────────────────────────
+
+interface GetAvailableSlotsArgs { date: string; duration_min: number }
+
+async function getAvailableSlots(ctx: ToolContext, args: GetAvailableSlotsArgs): Promise<ToolResult> {
+  if (!args.date || !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
+    return { success: false, result: 'Necesito una fecha válida (YYYY-MM-DD).' }
+  }
+  if (!args.duration_min || args.duration_min < 5 || args.duration_min > 480) {
+    return { success: false, result: 'Necesito una duración entre 5 y 480 minutos.' }
+  }
+
+  // Day of week for the requested date in business timezone
+  const dayOfWeek = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long', timeZone: ctx.timezone,
+  }).format(new Date(`${args.date}T12:00:00Z`)).toLowerCase()
+
+  const wh = ctx.workingHours?.[dayOfWeek]
+  if (ctx.workingHours && Object.prototype.hasOwnProperty.call(ctx.workingHours, dayOfWeek) && !wh) {
+    return { success: true, result: `El negocio está cerrado el ${args.date}.` }
+  }
+
+  // Default working hours when unset: 09:00-18:00
+  const open  = wh?.open  ?? '09:00'
+  const close = wh?.close ?? '18:00'
+
+  // Get all booked intervals for the day
+  const { data: booked, error } = await ctx.supabase
+    .from('appointments')
+    .select('start_at, end_at')
+    .eq('business_id', ctx.businessId)
+    .in('status', ['pending', 'confirmed'])
+    .gte('start_at', `${args.date}T00:00:00`)
+    .lte('start_at', `${args.date}T23:59:59`)
+    .order('start_at')
+
+  if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}` }
+
+  // Generate candidate slots every 30 minutes within working hours
+  const SLOT_INTERVAL = 30
+  const free: string[] = []
+  const [oh, om] = open.split(':').map(Number)
+  const [ch, cm] = close.split(':').map(Number)
+
+  for (let h = oh!; h < ch!; h++) {
+    for (let m = (h === oh ? om! : 0); m < 60; m += SLOT_INTERVAL) {
+      if (h === ch && m >= cm!) break
+      const candidateTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      const startISO = localToUTC(args.date, candidateTime, ctx.timezone)
+      const endISO   = buildEndISO(startISO, args.duration_min)
+      const conflict = (booked ?? []).some((b: { start_at: string; end_at: string }) =>
+        new Date(b.start_at) < new Date(endISO) && new Date(b.end_at) > new Date(startISO)
+      )
+      if (!conflict) free.push(candidateTime)
+    }
+  }
+
+  if (!free.length) return { success: true, result: `No hay horarios libres para el ${args.date}.` }
+  return { success: true, result: `Horarios libres el ${args.date}: ${free.join(', ')}.` }
+}
+
+// ── Dispatcher + tool definitions for the LLM ──────────────────────────────
+
+export interface ToolDefinition {
+  type: 'function'
+  function: {
+    name:        string
+    description: string
+    parameters:  Record<string, unknown>
+  }
+}
+
+export const TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'smart_schedule',
+      description: 'Agenda una cita en un solo paso. Llama SOLO cuando tengas servicio + cliente + fecha + hora.',
+      parameters: {
+        type: 'object',
+        properties: {
+          service_name: { type: 'string', description: 'Nombre del servicio' },
+          client_name:  { type: 'string', description: 'Nombre del cliente' },
+          date:         { type: 'string', description: 'YYYY-MM-DD' },
+          time:         { type: 'string', description: 'HH:mm 24h' },
+        },
+        required: ['service_name', 'client_name', 'date', 'time'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancel_booking',
+      description: 'Cancela una cita. Pasa client_name; date/time opcionales para desambiguar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_name: { type: 'string' },
+          date:        { type: 'string', description: 'YYYY-MM-DD opcional' },
+          time:        { type: 'string', description: 'HH:mm opcional' },
+        },
+        required: ['client_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'reschedule_booking',
+      description: 'Reagenda una cita a una nueva fecha/hora.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_name: { type: 'string' },
+          date:        { type: 'string', description: 'YYYY-MM-DD actual (opcional)' },
+          time:        { type: 'string', description: 'HH:mm actual (opcional)' },
+          new_date:    { type: 'string', description: 'YYYY-MM-DD nuevo' },
+          new_time:    { type: 'string', description: 'HH:mm nuevo' },
+        },
+        required: ['client_name', 'new_date', 'new_time'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_appointments_by_date',
+      description: 'Lista citas de un día específico.',
+      parameters: {
+        type: 'object',
+        properties: { date: { type: 'string', description: 'YYYY-MM-DD' } },
+        required: ['date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_clients',
+      description: 'Busca un cliente por nombre. Devuelve nombre y teléfono.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'Mínimo 2 caracteres' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_services',
+      description: 'Lista los servicios del negocio.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_client',
+      description: 'Registra un cliente nuevo (cuando el usuario pida explícitamente registrar).',
+      parameters: {
+        type: 'object',
+        properties: {
+          name:  { type: 'string' },
+          phone: { type: 'string' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_client',
+      description: 'Elimina un cliente. Falla si tiene citas futuras.',
+      parameters: {
+        type: 'object',
+        properties: { client_name: { type: 'string' } },
+        required: ['client_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_available_slots',
+      description: 'Consulta horarios libres para una fecha y duración.',
+      parameters: {
+        type: 'object',
+        properties: {
+          date:         { type: 'string', description: 'YYYY-MM-DD' },
+          duration_min: { type: 'number', description: '5-480' },
+        },
+        required: ['date', 'duration_min'],
+      },
+    },
+  },
+]
+
+export const WRITE_TOOLS = new Set([
+  'smart_schedule', 'cancel_booking', 'reschedule_booking',
+  'create_client', 'delete_client',
+])
+
+/** Single dispatcher — agent.ts only needs to know this. */
+export async function executeTool(
+  toolName: string,
+  args:     Record<string, unknown>,
+  ctx:      ToolContext,
+): Promise<ToolResult> {
+  try {
+    switch (toolName) {
+      case 'smart_schedule':           return await smartSchedule(ctx, args as unknown as SmartScheduleArgs)
+      case 'cancel_booking':           return await cancelBooking(ctx, args as unknown as CancelBookingArgs)
+      case 'reschedule_booking':       return await rescheduleBooking(ctx, args as unknown as RescheduleBookingArgs)
+      case 'get_appointments_by_date': return await getAppointmentsByDate(ctx, args as unknown as GetByDateArgs)
+      case 'search_clients':           return await searchClients(ctx, args as unknown as SearchClientsArgs)
+      case 'get_services':             return await getServices(ctx)
+      case 'create_client':            return await createClient(ctx, args as unknown as CreateClientArgs)
+      case 'delete_client':            return await deleteClient(ctx, args as unknown as DeleteClientArgs)
+      case 'get_available_slots':      return await getAvailableSlots(ctx, args as unknown as GetAvailableSlotsArgs)
+      default:
+        return { success: false, result: `Tool desconocida: ${toolName}`, error: 'TOOL_NOT_FOUND' }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[VOICE-WORKER-TOOLS] ${toolName} threw: ${msg}`)
+    return { success: false, result: 'Error interno al ejecutar la acción.', error: msg }
+  }
+}

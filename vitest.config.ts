@@ -22,7 +22,7 @@ export default defineConfig({
       include: [
         'lib/domain/**',
         'lib/repositories/**',
-        'lib/ai/orchestrator/**',
+        'lib/ai/core/**',
         'app/api/**',
       ],
       exclude: [

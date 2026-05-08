@@ -326,3 +326,11 @@ verify_jwt = false
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+
+[functions.voice-worker]
+enabled = true
+# verify_jwt = true → Supabase auto-rejects requests without a valid user JWT.
+# The dashboard FAB sends the user's session token in the Authorization header.
+verify_jwt = true
+import_map = "./functions/voice-worker/deno.json"
+entrypoint = "./functions/voice-worker/index.ts"
