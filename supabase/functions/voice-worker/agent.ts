@@ -63,7 +63,7 @@ async function callCerebras(messages: LlmMessage[]): Promise<LlmResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       'llama3.3-70b',
+        model:       'llama-3.3-70b',
         messages,
         tools:       TOOL_DEFINITIONS,
         tool_choice: 'auto',
@@ -142,7 +142,7 @@ async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmR
   if (CEREBRAS_KEY) {
     try {
       const resp = await callCerebras(messages)
-      return { resp, modelUsed: 'cerebras/llama3.3-70b' }
+      return { resp, modelUsed: 'cerebras/llama-3.3-70b' }
     } catch (err) {
       // Explicit log so we can diagnose Cerebras failures (timeout vs 4xx vs 5xx).
       const reason = err instanceof Error ? err.message : String(err)
