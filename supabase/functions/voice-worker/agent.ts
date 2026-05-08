@@ -1,17 +1,17 @@
 /**
- * Agent loop — Groq Llama 3.3 70B with native tool calling.
+ * Agent loop — Groq Llama 3.1 8B-instant with native tool calling.
  *
  * Manual implementation of the OpenAI-compatible tool-calling protocol:
  *   1. Send messages + tool defs to LLM
  *   2. If response has tool_calls, execute each, append tool messages
  *   3. Loop until LLM returns plain text (or MAX_STEPS exhausted)
  *
- * Per-turn deduplication: same (toolName + args) blocked. Prevents the
- * 6-duplicate-bookings bug seen with the previous architecture.
+ * Per-turn deduplication: same (toolName + args) blocked. Prevents
+ * duplicate bookings if the model loops on the same tool call.
  *
- * Provider strategy:
- *   1. Groq llama-3.3-70b-versatile primary (~3-4s, free, key rotation on 429)
- *   2. Groq llama-3.1-8b-instant fallback   (~0.5s, free, loops on tools)
+ * Provider strategy (mirrors process-whatsapp which has been stable in prod):
+ *   1. Groq llama-3.1-8b-instant primary    (~0.5s, free, literal tool results)
+ *   2. Groq llama-3.3-70b-versatile fallback (~3-4s, free, only on 8B failure)
  *
  * Required env vars:
  *   LLM_API_KEY  (Groq — comma-separated keys for rotation)
@@ -116,21 +116,30 @@ async function callGroq(messages: LlmMessage[], model: string): Promise<LlmRespo
 }
 
 /**
- * Provider fallback chain (Cerebras intentionally absent — see top-of-file note):
- *   1. Groq llama-3.3-70b-versatile (~3-4s)  — primary; reliable tool calling
- *   2. Groq llama-3.1-8b-instant    (~0.5s)  — last resort; loops on tools
+ * Provider fallback chain — 8B PRIMARY (matches the WhatsApp pattern):
+ *   1. Groq llama-3.1-8b-instant    (~0.5s)  — primary: literal, doesn't hallucinate tool results
+ *   2. Groq llama-3.3-70b-versatile (~3-4s)  — fallback only on 8B failure
+ *
+ * Why 8B as primary:
+ *   In production, 70B Versatile demonstrably ignored tool results. With
+ *   `found=4` clearly returned by get_appointments_by_date, 70B still answered
+ *   "no hay citas". The 8B is more literal — it relays whatever the tool
+ *   returned without trying to be "smart". This is the same pattern that
+ *   process-whatsapp uses successfully in production.
+ *
+ *   8B is also 6-8× faster, dropping total turn latency from ~15s to ~3-4s.
+ *   Quality of natural-language framing is lower, but correctness > prose.
  */
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
   try {
-    const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
-    return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
+    const resp = await callGroq(messages, 'llama-3.1-8b-instant')
+    return { resp, modelUsed: 'groq/llama-3.1-8b-instant' }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.warn(`[VOICE-WORKER-AGENT] Groq 70B failed, falling back to 8B: ${reason}`)
+    console.warn(`[VOICE-WORKER-AGENT] Groq 8B failed, falling back to 70B: ${reason}`)
   }
-  // Last resort: 8B — fast but the model loops on tool calls
-  const resp = await callGroq(messages, 'llama-3.1-8b-instant')
-  return { resp, modelUsed: 'groq/llama-3.1-8b-instant' }
+  const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
+  return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
 }
 
 // ── Notification building (post-write side effect) ─────────────────────────
