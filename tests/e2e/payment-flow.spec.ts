@@ -24,13 +24,16 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function navigateToSettings(page: Page) {
-  await page.goto(`${BASE_URL}/es/dashboard/settings`);
+async function navigateToPlans(page: Page) {
+  // PlanManager (which contains "Gestionar plan") was moved from /dashboard/settings
+  // to /dashboard/plans. Tests must navigate there now.
+  await page.goto(`${BASE_URL}/es/dashboard/plans`);
   await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
 }
 
 async function openPlanModal(page: Page) {
-  // Click "Gestionar plan" or "Manage Plan" button
+  // Click "Gestionar plan" or "Manage Plan" button (lives inside PlanManager
+  // on /dashboard/plans).
   const managePlanBtn = page.locator('button, a').filter({ hasText: /gestionar|manage plan/i }).first();
   await managePlanBtn.waitFor({ state: 'visible', timeout: 10_000 });
   await managePlanBtn.click();
@@ -118,7 +121,7 @@ test.describe('Admin Payments page — /dashboard/admin/payments', () => {
 
 test.describe('Payment Modal — method selection', () => {
   test('modal opens and shows 3 payment methods', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     // Click "Activar Pro" button to open the payment method modal
@@ -137,7 +140,7 @@ test.describe('Payment Modal — method selection', () => {
   });
 
   test('continue button is present on step 1', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
@@ -154,7 +157,7 @@ test.describe('Payment Modal — method selection', () => {
 
 test.describe('Payment Modal — Pago Móvil flow', () => {
   test('shows Pago Móvil data with copy buttons', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
@@ -180,7 +183,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
   });
 
   test('back button returns to method selection', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
@@ -199,7 +202,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
   });
 
   test('submit button is disabled without reference', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
@@ -225,7 +228,7 @@ test.describe('Payment Modal — Pago Móvil flow', () => {
 
 test.describe('Payment Modal — Binance Pay flow', () => {
   test('shows Binance Pay ID and exact amount', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });
@@ -245,7 +248,7 @@ test.describe('Payment Modal — Binance Pay flow', () => {
 
 test.describe('Payment Modal — close behavior', () => {
   test('modal closes when X button is clicked', async ({ page }) => {
-    await navigateToSettings(page);
+    await navigateToPlans(page);
     await openPlanModal(page);
 
     const activateBtn = page.locator('#desktop-activate-pro').filter({ hasText: /activar/i });

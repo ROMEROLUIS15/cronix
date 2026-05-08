@@ -104,9 +104,11 @@ test.describe('/dashboard/plans — plan section', () => {
     await manageBtn.click();
     await page.waitForTimeout(600);
 
-    // Modal or comparison table appears
+    // Modal or comparison table appears. Both desktop and mobile variants
+    // exist in DOM but only one is visible per viewport — `:visible` filter
+    // ensures we wait for whichever is shown by the current breakpoint.
     await expect(
-      page.locator('#desktop-activate-pro, #mobile-activate-pro').first()
+      page.locator('#desktop-activate-pro:visible, #mobile-activate-pro:visible').first()
     ).toBeVisible({ timeout: 8_000 });
   });
 });
@@ -121,8 +123,10 @@ test.describe('/dashboard/plans — referral section', () => {
 
   test('shows the referral link input with the business referral code', async ({ page }) => {
     await goToPlans(page);
-    // The referral link contains /register?ref=
-    await expect(page.locator('span').filter({ hasText: /register\?ref=/i }).first()).toBeVisible({ timeout: 10_000 });
+    // The referral link is rendered as `${appUrl}/invite/${code}` — the
+    // /invite/ segment is the stable marker (the leading appUrl varies by
+    // env, the trailing code varies by business).
+    await expect(page.locator('span').filter({ hasText: /\/invite\//i }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('shows the copy link button', async ({ page }) => {
@@ -131,7 +135,13 @@ test.describe('/dashboard/plans — referral section', () => {
     await expect(copyBtn).toBeVisible({ timeout: 10_000 });
   });
 
-  test('copy link button shows confirmation after click', async ({ page }) => {
+  test('copy link button shows confirmation after click', async ({ page, context }) => {
+    // The component uses navigator.clipboard.writeText() which throws in
+    // Playwright unless we explicitly grant clipboard-write permission.
+    // Without this grant, the click silently fails inside the try/catch
+    // and the "Copiado" state is never reached.
+    await context.grantPermissions(['clipboard-write', 'clipboard-read'], { origin: BASE_URL });
+
     await goToPlans(page);
     const copyBtn = page.locator('button').filter({ hasText: /copiar|copy/i }).first();
     await copyBtn.waitFor({ state: 'visible', timeout: 10_000 });

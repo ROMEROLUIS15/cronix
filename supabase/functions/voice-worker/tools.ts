@@ -103,12 +103,30 @@ function buildEndISO(startISO: string, durationMin: number): string {
   return new Date(new Date(startISO).getTime() + durationMin * 60_000).toISOString()
 }
 
+/**
+ * Renders a YYYY-MM-DD as "9 de mayo" in the given timezone.
+ *
+ * CRITICAL — anchored to NOON UTC, not midnight local.
+ *
+ * The previous version used `new Date(y, m-1, d)` which constructs a Date
+ * at midnight in the SERVER'S local timezone. Edge Functions run in UTC,
+ * so `new Date(2026, 4, 9)` becomes "2026-05-09 00:00 UTC". When that
+ * instant is formatted in a negative-UTC timezone like America/Caracas
+ * (UTC-4), it renders as "2026-05-08 20:00 Caracas" → "8 de mayo".
+ * Off-by-one bug. The user reported it across THREE different queries:
+ *   - "mañana" → response said "8 de mayo" (was May 9)
+ *   - "pasado mañana" → response said "9 de mayo" (was May 10)
+ *   - "el 16 de mayo" → response said "15 de mayo" (was May 16)
+ *
+ * Anchoring to NOON UTC (12:00:00Z) keeps the calendar day stable across
+ * all timezones from UTC-11 (Niue) to UTC+12 (NZ). 12:00 UTC translates
+ * to 01:00–23:00 in any of those zones — always the same calendar day.
+ */
 function humanizeDate(isoDate: string, timezone: string): string {
   try {
-    const [y, m, d] = isoDate.split('-').map(Number)
     return new Intl.DateTimeFormat('es', {
       day: 'numeric', month: 'long', timeZone: timezone,
-    }).format(new Date(y!, m! - 1, d!))
+    }).format(new Date(`${isoDate}T12:00:00Z`))
   } catch {
     return isoDate
   }
