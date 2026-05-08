@@ -297,6 +297,8 @@ interface AppointmentForLookup {
   end_at:     string
   client_id:  string | null
   service_id: string | null
+  /** Service IDs from the junction table — used as fallback when service_id is null. */
+  appointment_services?: Array<{ service_id: string; sort_order: number }>
 }
 
 async function findAppointmentByClientName(
@@ -305,17 +307,15 @@ async function findAppointmentByClientName(
   date?:  string,
   time?:  string,
 ): Promise<AppointmentForLookup | { error: string }> {
-  // Default to today (in business timezone) if no date given
   const targetDate = date ?? new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+  const startISO   = localToUTC(targetDate, '00:00', ctx.timezone)
+  const endISO     = localToUTC(targetDate, '23:59', ctx.timezone)
 
-  // Compute UTC boundaries from the business-local day — same correctness
-  // fix applied in getAppointmentsByDate above.
-  const startISO = localToUTC(targetDate, '00:00', ctx.timezone)
-  const endISO   = localToUTC(targetDate, '23:59', ctx.timezone)
-
+  // Include the appointment_services junction so callers can find the service
+  // even when service_id is null on the appointment row.
   const q = ctx.supabase
     .from('appointments')
-    .select('id, start_at, end_at, client_id, service_id')
+    .select('id, start_at, end_at, client_id, service_id, appointment_services(service_id, sort_order)')
     .eq('business_id', ctx.businessId)
     .eq('client_id', client.id)
     .in('status', ['pending', 'confirmed'])
@@ -325,17 +325,26 @@ async function findAppointmentByClientName(
 
   const { data, error } = await q
   if (error) return { error: `Error buscando cita: ${error.message}` }
-  const list = (data ?? []) as AppointmentForLookup[]
+  const list = (data ?? []) as unknown as AppointmentForLookup[]
   if (list.length === 0) return { error: `No encontré cita activa de ${client.name} el ${targetDate}.` }
   if (list.length === 1) return list[0]!
 
-  // Multiple → narrow by time
   if (time) {
     const matched = list.find(a => formatTimeFromISO(a.start_at, ctx.timezone).startsWith(time.split(':')[0]!))
     if (matched) return matched
   }
   const labels = list.slice(0, 3).map(a => formatTimeFromISO(a.start_at, ctx.timezone)).join(', ')
   return { error: `${client.name} tiene varias citas el ${targetDate}: ${labels}. ¿Cuál cancelo?` }
+}
+
+/**
+ * Resolves the canonical service_id for an appointment, checking the direct FK
+ * first and falling back to the lowest-sort-order entry in the junction table.
+ */
+function resolveAppointmentServiceId(apt: AppointmentForLookup): string | null {
+  if (apt.service_id) return apt.service_id
+  const sorted = (apt.appointment_services ?? []).slice().sort((a, b) => a.sort_order - b.sort_order)
+  return sorted[0]?.service_id ?? null
 }
 
 async function cancelBooking(ctx: ToolContext, args: CancelBookingArgs): Promise<ToolResult> {
@@ -353,10 +362,11 @@ async function cancelBooking(ctx: ToolContext, args: CancelBookingArgs): Promise
   const apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
   if ('error' in apt) return { success: false, result: apt.error }
 
-  // Resolve service name for the response (best-effort)
+  // Service name with junction-table fallback
   let serviceName = 'Servicio'
-  if (apt.service_id) {
-    const svc = await resolveService(ctx, apt.service_id)
+  const serviceId = resolveAppointmentServiceId(apt)
+  if (serviceId) {
+    const svc = await resolveService(ctx, serviceId)
     if (svc) serviceName = svc.name
   }
 
@@ -410,11 +420,12 @@ async function rescheduleBooking(ctx: ToolContext, args: RescheduleBookingArgs):
   const apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
   if ('error' in apt) return { success: false, result: apt.error }
 
-  // Resolve service for duration + name
+  // Service for duration + name (junction-table fallback)
   let durationMin = 60
   let serviceName = 'Servicio'
-  if (apt.service_id) {
-    const svc = await resolveService(ctx, apt.service_id)
+  const serviceId = resolveAppointmentServiceId(apt)
+  if (serviceId) {
+    const svc = await resolveService(ctx, serviceId)
     if (svc) {
       durationMin = svc.duration_min
       serviceName = svc.name
@@ -460,16 +471,26 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
     return { success: false, result: 'Necesito una fecha válida (YYYY-MM-DD).' }
   }
 
-  // Build the day boundaries IN THE BUSINESS TIMEZONE, then convert to UTC.
-  // The previous naive `${date}T00:00:00` was interpreted as UTC by Postgres,
-  // which silently dropped late-evening appointments in negative-UTC timezones
-  // (e.g. a 9 PM cita in UTC-4 stored as the next day in UTC).
+  // Day boundaries in business timezone → UTC.
   const startISO = localToUTC(args.date, '00:00', ctx.timezone)
   const endISO   = localToUTC(args.date, '23:59', ctx.timezone)
 
+  // CRITICAL: select BOTH `service:services` (direct FK on appointments.service_id)
+  // AND `appointment_services` (junction table for multi-service or trigger-only
+  // appointments). Mirrors the proven pattern in lib/repositories/SupabaseAppointmentRepository.ts.
+  // The previous query only had the direct FK; appointments stored solely via the
+  // junction table came back with service=null, causing empty service names in
+  // the formatted result and confusing the LLM.
   const { data, error } = await ctx.supabase
     .from('appointments')
-    .select('id, start_at, status, client:clients(name), service:services(name)')
+    .select(`
+      id,
+      start_at,
+      status,
+      client:clients(name),
+      service:services(name),
+      appointment_services(sort_order, service:services(name))
+    `)
     .eq('business_id', ctx.businessId)
     .neq('status', 'cancelled')
     .gte('start_at', startISO)
@@ -483,18 +504,34 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
   const dateLabel = humanizeDate(args.date, ctx.timezone)
   if (!data?.length) return { success: true, result: `EMPTY: no hay citas para el ${dateLabel}.` }
 
-  // Unambiguous format. Each appointment on its OWN line, 24h time, prefixed
-  // with the explicit count. This eliminates the ambiguity that was causing
-  // the LLM to hallucinate "no hay citas" when found=N>0:
-  //   - Old format used "a. m." with periods that looked like sentence ends
-  //   - Old format joined with ". " which read as a series of fragments
-  //   - Now: COUNT=N\n + one appointment per line
-  const lines = data.map((row: Record<string, unknown>) => {
-    const time = formatTimeFromISO(row.start_at as string, ctx.timezone)
-    const cli  = (row.client  as { name?: string } | null)?.name  ?? '—'
-    const svc  = (row.service as { name?: string } | null)?.name  ?? '—'
+  // Service name lookup: try direct FK first, then junction table.
+  type AptRow = {
+    start_at: string
+    client?:  { name?: string } | null
+    service?: { name?: string } | null
+    appointment_services?: Array<{
+      sort_order: number
+      service?:   { name?: string } | null
+    }>
+  }
+
+  const lines = (data as unknown as AptRow[]).map((row) => {
+    const time = formatTimeFromISO(row.start_at, ctx.timezone)
+    const cli  = row.client?.name ?? 'cliente'
+    // Direct FK first; fall back to the first service in the junction.
+    const junctionServices = (row.appointment_services ?? [])
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+    const svc = row.service?.name
+      ?? junctionServices[0]?.service?.name
+      ?? 'servicio'
     return `${time} ${cli} - ${svc}`
   })
+
+  // Diagnostic: log the first formatted line so we can confirm names land
+  // correctly in production (vs ending up as the fallback strings).
+  console.log(`[VOICE-WORKER-TOOLS] First formatted line: "${lines[0] ?? ''}"`)
+
   return {
     success: true,
     result:  `COUNT=${data.length}. Citas del ${dateLabel}:\n${lines.join('\n')}`,

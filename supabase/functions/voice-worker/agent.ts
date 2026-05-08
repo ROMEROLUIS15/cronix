@@ -1,5 +1,5 @@
 /**
- * Agent loop — Groq Llama 3.1 8B-instant with native tool calling.
+ * Agent loop — Groq Llama 3.3 70B Versatile with native tool calling.
  *
  * Manual implementation of the OpenAI-compatible tool-calling protocol:
  *   1. Send messages + tool defs to LLM
@@ -9,9 +9,9 @@
  * Per-turn deduplication: same (toolName + args) blocked. Prevents
  * duplicate bookings if the model loops on the same tool call.
  *
- * Provider strategy (mirrors process-whatsapp which has been stable in prod):
- *   1. Groq llama-3.1-8b-instant primary    (~0.5s, free, literal tool results)
- *   2. Groq llama-3.3-70b-versatile fallback (~3-4s, free, only on 8B failure)
+ * Provider strategy:
+ *   1. Groq llama-3.3-70b-versatile primary  (~3-4s, free, better prose)
+ *   2. Groq llama-3.1-8b-instant fallback    (~0.5s, free, on 70B failure)
  *
  * Required env vars:
  *   LLM_API_KEY  (Groq — comma-separated keys for rotation)
@@ -116,30 +116,28 @@ async function callGroq(messages: LlmMessage[], model: string): Promise<LlmRespo
 }
 
 /**
- * Provider fallback chain — 8B PRIMARY (matches the WhatsApp pattern):
- *   1. Groq llama-3.1-8b-instant    (~0.5s)  — primary: literal, doesn't hallucinate tool results
- *   2. Groq llama-3.3-70b-versatile (~3-4s)  — fallback only on 8B failure
+ * Provider fallback chain — 70B primary for natural-language quality:
+ *   1. Groq llama-3.3-70b-versatile (~3-4s)  — primary: better prose synthesis
+ *   2. Groq llama-3.1-8b-instant    (~0.5s)  — fallback only on 70B failure
  *
- * Why 8B as primary:
- *   In production, 70B Versatile demonstrably ignored tool results. With
- *   `found=4` clearly returned by get_appointments_by_date, 70B still answered
- *   "no hay citas". The 8B is more literal — it relays whatever the tool
- *   returned without trying to be "smart". This is the same pattern that
- *   process-whatsapp uses successfully in production.
- *
- *   8B is also 6-8× faster, dropping total turn latency from ~15s to ~3-4s.
- *   Quality of natural-language framing is lower, but correctness > prose.
+ * Earlier we saw 70B respond "no hay citas" when the tool returned found=4.
+ * Root cause turned out to be the QUERY, not the model: the tool didn't
+ * follow the appointment_services junction table, so service.name came back
+ * null, the formatted result looked like "10:00 cliente -" with no service,
+ * and the LLM (any LLM) interpreted that as missing data. With the query
+ * fixed (see tools.ts → getAppointmentsByDate), the 70B's natural prose
+ * comes through cleanly.
  */
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
   try {
-    const resp = await callGroq(messages, 'llama-3.1-8b-instant')
-    return { resp, modelUsed: 'groq/llama-3.1-8b-instant' }
+    const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
+    return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.warn(`[VOICE-WORKER-AGENT] Groq 8B failed, falling back to 70B: ${reason}`)
+    console.warn(`[VOICE-WORKER-AGENT] Groq 70B failed, falling back to 8B: ${reason}`)
   }
-  const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
-  return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
+  const resp = await callGroq(messages, 'llama-3.1-8b-instant')
+  return { resp, modelUsed: 'groq/llama-3.1-8b-instant' }
 }
 
 // ── Notification building (post-write side effect) ─────────────────────────
