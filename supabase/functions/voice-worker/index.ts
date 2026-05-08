@@ -195,6 +195,8 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
   }
 
+  console.log(`[VOICE-WORKER] Request: user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
+
   // 4. Load context + history in parallel
   let context: BusinessContext
   let history: AgentInput['history']

@@ -299,17 +299,22 @@ async function findAppointmentByClientName(
   date?:  string,
   time?:  string,
 ): Promise<AppointmentForLookup | { error: string }> {
-  // Default to today if no date given
+  // Default to today (in business timezone) if no date given
   const targetDate = date ?? new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
-  let q = ctx.supabase
+  // Compute UTC boundaries from the business-local day — same correctness
+  // fix applied in getAppointmentsByDate above.
+  const startISO = localToUTC(targetDate, '00:00', ctx.timezone)
+  const endISO   = localToUTC(targetDate, '23:59', ctx.timezone)
+
+  const q = ctx.supabase
     .from('appointments')
     .select('id, start_at, end_at, client_id, service_id')
     .eq('business_id', ctx.businessId)
     .eq('client_id', client.id)
     .in('status', ['pending', 'confirmed'])
-    .gte('start_at', `${targetDate}T00:00:00`)
-    .lte('start_at', `${targetDate}T23:59:59`)
+    .gte('start_at', startISO)
+    .lte('start_at', endISO)
     .order('start_at')
 
   const { data, error } = await q
@@ -449,14 +454,23 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
     return { success: false, result: 'Necesito una fecha válida (YYYY-MM-DD).' }
   }
 
+  // Build the day boundaries IN THE BUSINESS TIMEZONE, then convert to UTC.
+  // The previous naive `${date}T00:00:00` was interpreted as UTC by Postgres,
+  // which silently dropped late-evening appointments in negative-UTC timezones
+  // (e.g. a 9 PM cita in UTC-4 stored as the next day in UTC).
+  const startISO = localToUTC(args.date, '00:00', ctx.timezone)
+  const endISO   = localToUTC(args.date, '23:59', ctx.timezone)
+
   const { data, error } = await ctx.supabase
     .from('appointments')
     .select('id, start_at, status, client:clients(name), service:services(name)')
     .eq('business_id', ctx.businessId)
     .neq('status', 'cancelled')
-    .gte('start_at', `${args.date}T00:00:00`)
-    .lte('start_at', `${args.date}T23:59:59`)
+    .gte('start_at', startISO)
+    .lte('start_at', endISO)
     .order('start_at')
+
+  console.log(`[VOICE-WORKER-TOOLS] get_appointments_by_date date=${args.date} tz=${ctx.timezone} range=[${startISO} → ${endISO}] found=${data?.length ?? 0}`)
 
   if (error) return { success: false, result: `Error al consultar citas: ${error.message}` }
 
