@@ -138,6 +138,48 @@ function detectTemporalIntent(userText: string, today: string): DateOverride | n
   return null
 }
 
+// ── Fast path — total LLM bypass for simple appointment-list queries ─────
+//
+// Same deterministic philosophy as the junction-table fix earlier: when the
+// user's intent is unambiguous from the input text alone, we don't need
+// the LLM at all. Call the tool directly with the right date, return the
+// tool's user-facing result. Zero room for the LLM to mess up.
+//
+// Triggers ONLY on the canonical read-list patterns. Anything ambiguous,
+// any write operation, any complex query — falls through to the normal
+// LLM flow unchanged. This is purely additive; nothing existing breaks.
+
+/** Detects "qué citas tengo {hoy|mañana|pasado mañana}" — read-list intent only. */
+function detectAppointmentListFastPath(
+  userText: string,
+  today: string,
+): { date: string; reason: string } | null {
+  const t = userText.toLowerCase()
+
+  // Reject if any write keyword is present — fast path is read-only.
+  //
+  // "agenda" is ambiguous: SUSTANTIVO (= calendar) vs VERBO conjugation. We
+  // only want to block the verb. The lookahead on agend(...) requires an
+  // unambiguously verbal suffix: -ar, -ame, -alo, -aste, -aron, -ado, etc.
+  // Bare "agenda" (e.g. "agenda de hoy") is left through to QUERY.
+  const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
+  const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
+  if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
+
+  // Must look like a query about appointments (not generic chitchat).
+  // Accepts: "qué citas tengo X", "citas de X", "agenda de X", "qué tengo X",
+  // "muéstrame las citas X", "cuáles son mis citas X"
+  const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que)\b|\bagenda\b|\bmis?\s+citas\b|\bqu[eé]\s+tengo\b|\bcu[aá]les\s+son\s+mis?\s+citas\b|\bmu[eé]strame\b)/
+  if (!QUERY.test(t)) return null
+
+  // Detect target date keyword. Order matters: "pasado mañana" before "mañana".
+  if (/\bpasado\s+ma[ñn]ana\b/.test(t)) return { date: addDaysIso(today, 2), reason: 'pasado mañana' }
+  if (/\bma[ñn]ana\b/.test(t))          return { date: addDaysIso(today, 1), reason: 'mañana' }
+  if (/\bhoy\b/.test(t))                return { date: today,                reason: 'hoy' }
+
+  return null
+}
+
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -152,6 +194,38 @@ export async function runAgent(
   ctx:   ToolContext,
   input: AgentInput,
 ): Promise<AgentOutput> {
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+
+  // ── FAST PATH — total LLM bypass for simple "qué citas tengo X" queries
+  //
+  // The user's input text is unambiguous enough that we can answer correctly
+  // without involving the LLM. Eliminates every class of LLM-induced bug:
+  // wrong date math, hallucinated tool args, ignored tool results, looping.
+  //
+  // Same philosophy as the junction-table SQL fix from earlier: when the
+  // answer is computable deterministically, compute it. Don't roll the dice.
+  const fastPath = detectAppointmentListFastPath(input.text, todayLocal)
+  if (fastPath) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH: get_appointments_by_date date=${fastPath.date} (user said "${fastPath.reason}") — skipping LLM entirely`)
+    const result = await executeTool('get_appointments_by_date', { date: fastPath.date }, ctx)
+    const text = result.success
+      ? result.result
+      : 'No pude consultar las citas en este momento. Intenta de nuevo en un momento.'
+    const newHistory: AgentOutput['history'] = [
+      ...input.history,
+      { role: 'user',      content: input.text },
+      { role: 'assistant', content: text       },
+    ].slice(-30)
+    return {
+      text,
+      actionPerformed:      false,
+      history:              newHistory,
+      modelUsed:            'fast-path/no-llm',
+      pendingNotifications: [],
+    }
+  }
+
+  // ── Normal LLM flow (everything else) ─────────────────────────────────
   const provider = getProvider()
   const tools    = toNeutralTools()
   const system   = buildSystemPrompt(input)
@@ -159,7 +233,6 @@ export async function runAgent(
   // Pre-compute the user's temporal intent ONCE for this turn. If the user
   // said "hoy" / "mañana" / "pasado mañana", we'll use this to override the
   // LLM's date selection on any tool call that takes a `date` arg.
-  const todayLocal      = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
   const dateOverride    = detectTemporalIntent(input.text, todayLocal)
 
   // Conversation history → neutral messages
