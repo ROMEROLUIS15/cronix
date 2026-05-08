@@ -1,108 +1,91 @@
 /**
- * Speech-to-text via Groq Whisper.
+ * Speech-to-text via Deepgram Nova-2.
  *
- * Receives the raw audio Blob from the FAB, returns the transcribed text.
- * No retries — Whisper is reliable; if it fails the user just retries.
+ * Switched from Groq Whisper because Whisper rejected audio produced by
+ * Android Chrome's MediaRecorder. The bytes were valid Opus frames but
+ * lacked the WebM container's EBML header (`1a 45 df a3`), so Whisper
+ * returned 400 "could not process file - is it a valid media file?".
+ *
+ * Deepgram Nova-2 is far more permissive — it accepts raw Opus, OGG, WebM,
+ * MP4, WAV, MP3 and parses what it gets without strict header validation.
+ * This is the same provider used in supabase/functions/process-whatsapp/
+ * which has been running in production without STT issues.
  *
  * Required env var (Supabase secret):
- *   LLM_API_KEY  (Groq API key — supports comma-separated keys, first is used)
+ *   DEEPGRAM_AURA_API_KEY  — same key works for Aura (TTS) + Nova-2 (STT)
  *
- * Throws on transport errors so the caller can surface a 500. Returns empty
- * string for "couldn't understand" so the caller can ask the user to repeat.
+ * Returns trimmed transcript, or empty string for unintelligible/silent audio.
  */
 
-const GROQ_KEYS = (Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY') ?? '')
-  .split(',').map(k => k.trim()).filter(Boolean)
+const DEEPGRAM_KEY = Deno.env.get('DEEPGRAM_AURA_API_KEY')
+  ?? Deno.env.get('DEEPGRAM_API_KEY')
+  ?? ''
 
-const STT_MODEL = 'whisper-large-v3-turbo'
+const DEEPGRAM_URL = 'https://api.deepgram.com/v1/listen?model=nova-2&language=es&smart_format=true'
 
 /**
- * Detects audio MIME type from the Blob's reported type, falling back to
- * magic-byte sniffing when the type is empty/wrong (common after FormData
- * cross-boundary serialization where Deno may drop the content-type).
- *
- * Returns { mime, ext } so we can re-wrap the audio in a Blob with the
- * correct type AND name the file with the matching extension for Whisper.
+ * Sniffs the first 16 bytes for known audio magic numbers — used only for
+ * diagnostic logging now that Deepgram tolerates anything. Helps us see at
+ * a glance whether a problematic recording lacks the expected container.
  */
-async function detectAudioFormat(audio: Blob): Promise<{ mime: string; ext: string }> {
-  // 1. Trust the Blob's own type if it looks like real audio
-  const t = audio.type.toLowerCase()
-  if (t.includes('mp4') || t.includes('m4a')) return { mime: 'audio/mp4',  ext: 'm4a'  }
-  if (t.includes('ogg'))                       return { mime: 'audio/ogg',  ext: 'ogg'  }
-  if (t.includes('mpeg') || t.includes('mp3')) return { mime: 'audio/mpeg', ext: 'mp3'  }
-  if (t.includes('wav'))                       return { mime: 'audio/wav',  ext: 'wav'  }
-  if (t.includes('webm'))                      return { mime: 'audio/webm', ext: 'webm' }
-
-  // 2. Magic byte sniffing — needed when type is missing (octet-stream)
-  const head = new Uint8Array(await audio.slice(0, 16).arrayBuffer())
+function detectAudioFormat(head: Uint8Array): string {
   // EBML header (WebM/Matroska): 0x1A 0x45 0xDF 0xA3
-  if (head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3) {
-    return { mime: 'audio/webm', ext: 'webm' }
-  }
+  if (head[0] === 0x1A && head[1] === 0x45 && head[2] === 0xDF && head[3] === 0xA3) return 'webm'
   // ftyp box (MP4/M4A): bytes 4-7 = 'ftyp'
-  if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) {
-    return { mime: 'audio/mp4', ext: 'm4a' }
-  }
+  if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) return 'mp4'
   // OggS header
-  if (head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53) {
-    return { mime: 'audio/ogg', ext: 'ogg' }
-  }
+  if (head[0] === 0x4F && head[1] === 0x67 && head[2] === 0x67 && head[3] === 0x53) return 'ogg'
   // ID3 header (MP3)
-  if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {
-    return { mime: 'audio/mpeg', ext: 'mp3' }
-  }
-  // Default: assume webm — most browsers' MediaRecorder default
-  return { mime: 'audio/webm', ext: 'webm' }
+  if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return 'mp3'
+  return 'unknown'
 }
 
 export async function transcribe(audio: Blob): Promise<string> {
-  if (GROQ_KEYS.length === 0) {
-    throw new Error('No Groq API key configured (LLM_API_KEY)')
+  if (!DEEPGRAM_KEY) {
+    throw new Error('DEEPGRAM_AURA_API_KEY not set')
   }
   if (audio.size === 0) {
     console.warn('[VOICE-WORKER-STT] Empty audio Blob received')
     return ''
   }
 
-  const { mime, ext } = await detectAudioFormat(audio)
-  const buf = await audio.arrayBuffer()
+  const buf      = await audio.arrayBuffer()
+  const head     = new Uint8Array(buf.slice(0, 16))
+  const headHex  = Array.from(head).map(b => b.toString(16).padStart(2, '0')).join(' ')
+  const detected = detectAudioFormat(head)
+  // Use the Blob's declared MIME if present (Deepgram parses it as a hint),
+  // otherwise fall back to a generic webm guess.
+  const mime     = audio.type || 'audio/webm'
 
-  // Hex dump of first 16 bytes — invaluable when Whisper rejects the file
-  // ("could not process file - is it a valid media file?"). Without these
-  // bytes we can't tell if the issue is:
-  //   - A truncated upload (size suspiciously small)
-  //   - A wrong magic header (some other format we didn't detect)
-  //   - Corruption in transit
-  const headBytes = Array.from(new Uint8Array(buf.slice(0, 16)))
-    .map(b => b.toString(16).padStart(2, '0')).join(' ')
-  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, declared=${audio.type || 'none'}, detected=${mime}, head=${headBytes}`)
+  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, mime=${mime}, container=${detected}, head=${headHex}`)
 
-  // Reject obviously broken audio (< 1 KB is almost certainly truncated)
+  // Reject obviously broken audio (< 1 KB is almost always truncated).
   if (audio.size < 1024) {
     console.warn(`[VOICE-WORKER-STT] Audio too small (${audio.size}b) — likely truncated, returning empty`)
     return ''
   }
 
-  // Re-wrap in a fresh File with explicit type — guarantees Whisper sees
-  // the correct content-type even if FormData parsing dropped the original.
-  const file = new File([buf], `voice.${ext}`, { type: mime })
-
-  const form = new FormData()
-  form.append('file',     file)
-  form.append('model',    STT_MODEL)
-  form.append('language', 'es')
-
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+  const res = await fetch(DEEPGRAM_URL, {
     method:  'POST',
-    headers: { Authorization: `Bearer ${GROQ_KEYS[0]}` },
-    body:    form,
+    headers: {
+      Authorization:  `Token ${DEEPGRAM_KEY}`,
+      'Content-Type': mime,
+    },
+    body: buf,
   })
 
   if (!res.ok) {
     const errText = (await res.text()).slice(0, 300)
-    throw new Error(`Groq Whisper ${res.status}: ${errText}`)
+    throw new Error(`Deepgram STT ${res.status}: ${errText}`)
   }
 
-  const data = await res.json() as { text?: string }
-  return (data.text ?? '').trim()
+  const data = await res.json() as {
+    results?: {
+      channels?: Array<{
+        alternatives?: Array<{ transcript?: string }>
+      }>
+    }
+  }
+  const transcript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? ''
+  return transcript.trim()
 }
