@@ -114,10 +114,16 @@ function humanizeDate(isoDate: string, timezone: string): string {
   }
 }
 
+/**
+ * Returns the time in 24h `HH:MM` format in the business timezone.
+ * Intentionally NOT using locale "a. m." formatting — the periods inside
+ * "a. m." were causing the LLM to misparse the appointments list as
+ * sentences, then hallucinate "no hay citas" instead of listing them.
+ */
 function formatTimeFromISO(iso: string, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat('es-419', {
-      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone,
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
     }).format(new Date(iso))
   } catch {
     return iso.slice(11, 16)
@@ -475,15 +481,24 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
   if (error) return { success: false, result: `Error al consultar citas: ${error.message}` }
 
   const dateLabel = humanizeDate(args.date, ctx.timezone)
-  if (!data?.length) return { success: true, result: `No hay citas para el ${dateLabel}.` }
+  if (!data?.length) return { success: true, result: `EMPTY: no hay citas para el ${dateLabel}.` }
 
+  // Unambiguous format. Each appointment on its OWN line, 24h time, prefixed
+  // with the explicit count. This eliminates the ambiguity that was causing
+  // the LLM to hallucinate "no hay citas" when found=N>0:
+  //   - Old format used "a. m." with periods that looked like sentence ends
+  //   - Old format joined with ". " which read as a series of fragments
+  //   - Now: COUNT=N\n + one appointment per line
   const lines = data.map((row: Record<string, unknown>) => {
     const time = formatTimeFromISO(row.start_at as string, ctx.timezone)
     const cli  = (row.client  as { name?: string } | null)?.name  ?? '—'
     const svc  = (row.service as { name?: string } | null)?.name  ?? '—'
-    return `${time} ${cli} — ${svc}`
+    return `${time} ${cli} - ${svc}`
   })
-  return { success: true, result: `Citas del ${dateLabel}: ${lines.join('. ')}.` }
+  return {
+    success: true,
+    result:  `COUNT=${data.length}. Citas del ${dateLabel}:\n${lines.join('\n')}`,
+  }
 }
 
 // ── Tool: search_clients ───────────────────────────────────────────────────

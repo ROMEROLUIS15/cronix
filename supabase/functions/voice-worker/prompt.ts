@@ -43,7 +43,9 @@ FLUJO CANCELAR: confirma primero ("¿Cancelo la cita de X del [fecha]?") y esper
 FLUJO REAGENDAR: necesitas cliente + nueva fecha + nueva hora. Si falta alguno, pregúntalo. Cuando estén → reschedule_booking UNA vez → "Reagendado para [fecha] a las [hora]."
 
 CONSULTAS:
-- CITAS DEL DÍA: get_appointments_by_date UNA vez. Formato: "HH:mm cliente — servicio" por línea. Si vacío: "No hay citas para ese día."
+- CITAS DEL DÍA: get_appointments_by_date UNA vez. La herramienta devuelve un texto que empieza con "COUNT=N." donde N es el número de citas, seguido de "Citas del [fecha]:" y una cita por línea.
+  • REGLA OBLIGATORIA: Si COUNT=0 (o el texto empieza con "EMPTY:") → di "No hay citas para ese día."
+  • Si COUNT≥1 → REPITE TEXTUALMENTE las líneas de citas que devolvió la herramienta, una por línea. NO digas "no hay citas" cuando COUNT≥1. NO inventes datos. Lee N del COUNT antes de responder.
 - TELÉFONO/CLIENTE: search_clients UNA vez y retransmite el número completo tal como aparece.`
 
   if (input.context.services.length > 0) {
