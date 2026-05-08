@@ -83,10 +83,15 @@ async function callCerebras(messages: LlmMessage[]): Promise<LlmResponse> {
 }
 
 /**
- * Single-attempt Groq call with one key. Throws with the HTTP status preserved
- * so the caller can decide whether to rotate keys (429) or give up (other 4xx/5xx).
+ * Single-attempt Groq call with one key + a chosen model.
+ * Status code is preserved on the thrown error so the caller can choose to
+ * rotate keys (429) vs bail (other errors).
  */
-async function callGroqOnce(messages: LlmMessage[], key: string): Promise<LlmResponse> {
+async function callGroqOnce(
+  messages: LlmMessage[],
+  key:      string,
+  model:    string,
+): Promise<LlmResponse> {
   const res = await fetch(GROQ_URL, {
     method:  'POST',
     headers: {
@@ -94,7 +99,7 @@ async function callGroqOnce(messages: LlmMessage[], key: string): Promise<LlmRes
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model:       'llama-3.1-8b-instant',
+      model,
       messages,
       tools:       TOOL_DEFINITIONS,
       tool_choice: 'auto',
@@ -104,7 +109,7 @@ async function callGroqOnce(messages: LlmMessage[], key: string): Promise<LlmRes
   })
   if (!res.ok) {
     const errText = (await res.text()).slice(0, 300)
-    const err = new Error(`Groq ${res.status}: ${errText}`) as Error & { status: number }
+    const err = new Error(`Groq[${model}] ${res.status}: ${errText}`) as Error & { status: number }
     err.status = res.status
     throw err
   }
@@ -112,45 +117,64 @@ async function callGroqOnce(messages: LlmMessage[], key: string): Promise<LlmRes
 }
 
 /**
- * Calls Groq with key rotation. On 429, immediately tries the next key.
- * Other errors propagate up — the caller (LLM fallback chain) handles them.
+ * Calls Groq with a specific model and key rotation. On 429, immediately tries
+ * the next key. Non-429 errors propagate up so the caller can fall back further.
  *
- * With 3 free-tier Groq keys × 6000 TPM each = 18000 TPM aggregate. A typical
- * voice turn consumes ~3-4k tokens, so this comfortably handles 4-5 turns/min.
+ * Free-tier capacity (per model, per key):
+ *   llama-3.3-70b-versatile  → 12000 TPM
+ *   llama-3.1-8b-instant     →  6000 TPM
+ * With 3 keys = 36000 TPM aggregate for 70B, ample for the validation MVP.
  */
-async function callGroq(messages: LlmMessage[]): Promise<LlmResponse> {
+async function callGroq(messages: LlmMessage[], model: string): Promise<LlmResponse> {
   if (GROQ_KEYS.length === 0) throw new Error('LLM_API_KEY not set')
   let lastErr: unknown = null
   for (let i = 0; i < GROQ_KEYS.length; i++) {
     try {
-      return await callGroqOnce(messages, GROQ_KEYS[i]!)
+      return await callGroqOnce(messages, GROQ_KEYS[i]!, model)
     } catch (err) {
       lastErr = err
       const status = (err as { status?: number }).status
       if (status === 429 && i < GROQ_KEYS.length - 1) {
-        console.warn(`[VOICE-WORKER-AGENT] Groq key ${i + 1}/${GROQ_KEYS.length} hit 429 — rotating`)
+        console.warn(`[VOICE-WORKER-AGENT] Groq[${model}] key ${i + 1}/${GROQ_KEYS.length} hit 429 — rotating`)
         continue
       }
-      // Non-429 or last key — bail
       throw err
     }
   }
   throw lastErr ?? new Error('All Groq keys exhausted')
 }
 
+/**
+ * Provider fallback chain (best → last resort):
+ *   1. Cerebras llama-3.3-70b   (~1s, free 60 RPM)        — best latency + quality
+ *   2. Groq    llama-3.3-70b-versatile (~3-4s, free)      — same quality, slower
+ *   3. Groq    llama-3.1-8b-instant   (~0.5s, free)       — fast but imprecise tool calling
+ *
+ * The 70B fallback (Groq versatile) is critical — without it, a Cerebras
+ * outage drops us to 8B which loops on the same tool call (we saw this in
+ * production: get_appointments_by_date fired twice, dedup blocked the 2nd).
+ */
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
   if (CEREBRAS_KEY) {
     try {
       const resp = await callCerebras(messages)
       return { resp, modelUsed: 'cerebras/llama-3.3-70b' }
     } catch (err) {
-      // Explicit log so we can diagnose Cerebras failures (timeout vs 4xx vs 5xx).
-      const reason = err instanceof Error ? err.message : String(err)
+      const reason    = err instanceof Error ? err.message : String(err)
       const isTimeout = err instanceof Error && err.name === 'AbortError'
-      console.warn(`[VOICE-WORKER-AGENT] Cerebras failed (${isTimeout ? 'TIMEOUT' : 'ERROR'}), falling back to Groq: ${reason}`)
+      console.warn(`[VOICE-WORKER-AGENT] Cerebras failed (${isTimeout ? 'TIMEOUT' : 'ERROR'}), falling back to Groq 70B: ${reason}`)
     }
   }
-  const resp = await callGroq(messages)
+  // Try Groq 70B versatile first — much better tool-calling than the 8B
+  try {
+    const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
+    return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.warn(`[VOICE-WORKER-AGENT] Groq 70B failed, falling back to 8B: ${reason}`)
+  }
+  // Last resort: 8B — fast but the model loops on tool calls
+  const resp = await callGroq(messages, 'llama-3.1-8b-instant')
   return { resp, modelUsed: 'groq/llama-3.1-8b-instant' }
 }
 
