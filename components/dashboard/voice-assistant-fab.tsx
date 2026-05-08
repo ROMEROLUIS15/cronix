@@ -607,16 +607,18 @@ export function VoiceAssistantFab() {
     }
   }, [])
 
-  // Safety timeout: 30 min max in processing/speaking (matches session TTL).
-  // For sync Edge Function calls this is mostly defensive — the request itself
-  // resolves or aborts well before this fires.
+  // Safety timeout: 45s max in processing/speaking. Real responses come back
+  // in 3-7s; if we're still here at 45s, something hung (audio playback locked
+  // by mobile autoplay policy, network blip, etc.). Force back to idle so the
+  // user can tap again instead of having to reload the PWA.
   useEffect(() => {
     if (state !== 'speaking' && state !== 'processing') return
     const timer = setTimeout(() => {
       inflightAbortRef.current?.abort()
       inflightAbortRef.current = null
+      currentAudioRef.current?.pause()
       setState('idle')
-    }, 30 * 60 * 1000)
+    }, 45_000)
     return () => clearTimeout(timer)
   }, [state])
 

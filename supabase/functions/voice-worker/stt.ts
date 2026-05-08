@@ -65,11 +65,26 @@ export async function transcribe(audio: Blob): Promise<string> {
   }
 
   const { mime, ext } = await detectAudioFormat(audio)
-  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, declared=${audio.type || 'none'}, detected=${mime}`)
+  const buf = await audio.arrayBuffer()
 
-  // Re-wrap in a fresh Blob with explicit type — guarantees Whisper sees
+  // Hex dump of first 16 bytes — invaluable when Whisper rejects the file
+  // ("could not process file - is it a valid media file?"). Without these
+  // bytes we can't tell if the issue is:
+  //   - A truncated upload (size suspiciously small)
+  //   - A wrong magic header (some other format we didn't detect)
+  //   - Corruption in transit
+  const headBytes = Array.from(new Uint8Array(buf.slice(0, 16)))
+    .map(b => b.toString(16).padStart(2, '0')).join(' ')
+  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, declared=${audio.type || 'none'}, detected=${mime}, head=${headBytes}`)
+
+  // Reject obviously broken audio (< 1 KB is almost certainly truncated)
+  if (audio.size < 1024) {
+    console.warn(`[VOICE-WORKER-STT] Audio too small (${audio.size}b) — likely truncated, returning empty`)
+    return ''
+  }
+
+  // Re-wrap in a fresh File with explicit type — guarantees Whisper sees
   // the correct content-type even if FormData parsing dropped the original.
-  const buf  = await audio.arrayBuffer()
   const file = new File([buf], `voice.${ext}`, { type: mime })
 
   const form = new FormData()

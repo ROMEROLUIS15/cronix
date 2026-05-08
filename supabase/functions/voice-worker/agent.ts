@@ -1,5 +1,5 @@
 /**
- * Agent loop — Cerebras 70B with native tool calling.
+ * Agent loop — Groq Llama 3.3 70B with native tool calling.
  *
  * Manual implementation of the OpenAI-compatible tool-calling protocol:
  *   1. Send messages + tool defs to LLM
@@ -9,12 +9,12 @@
  * Per-turn deduplication: same (toolName + args) blocked. Prevents the
  * 6-duplicate-bookings bug seen with the previous architecture.
  *
- * Provider strategy: Cerebras 70B primary (~1s, free 60 RPM). Falls back to
- * Groq 8B-instant (~0.5s) if Cerebras returns 5xx or times out.
+ * Provider strategy:
+ *   1. Groq llama-3.3-70b-versatile primary (~3-4s, free, key rotation on 429)
+ *   2. Groq llama-3.1-8b-instant fallback   (~0.5s, free, loops on tools)
  *
  * Required env vars:
- *   CEREBRAS_API_KEY  (recommended)
- *   LLM_API_KEY       (Groq, comma-separated for key rotation)
+ *   LLM_API_KEY  (Groq — comma-separated keys for rotation)
  */
 
 import { buildSystemPrompt }                          from './prompt.ts'
@@ -22,16 +22,18 @@ import { TOOL_DEFINITIONS, WRITE_TOOLS, executeTool, type ToolContext } from './
 import type { AgentInput, AgentOutput, LlmMessage, AppointmentNotification, NotificationType } from './types.ts'
 
 // ── Provider config ────────────────────────────────────────────────────────
+//
+// Cerebras was removed: the free tier lists models in /v1/models but rejects
+// them at the chat endpoint (gpt-oss-120b → 404, llama-3.3-70b → 404).
+// We rely on Groq exclusively. Groq llama-3.3-70b-versatile delivers similar
+// quality to Cerebras at ~3-4s instead of ~1s — perfectly fine inside the
+// 150s Edge Function budget. To re-add Cerebras: confirm a working model id
+// on the user's plan, then restore the Cerebras attempt in callLlmWithFallback.
 
-const CEREBRAS_KEY = Deno.env.get('CEREBRAS_API_KEY') ?? ''
-const GROQ_KEYS    = (Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY') ?? '')
+const GROQ_KEYS = (Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY') ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 
-const CEREBRAS_URL = 'https://api.cerebras.ai/v1/chat/completions'
-const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions'
-// Cerebras 70B with tool definitions can take 2-4s — give it 12s before bailing.
-// Plenty of room left in the 150s Edge Function budget for the Groq fallback.
-const CEREBRAS_TIMEOUT_MS = 12_000
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
@@ -49,37 +51,6 @@ interface LlmResponse {
     }
   }>
   usage?: { total_tokens?: number }
-}
-
-async function callCerebras(messages: LlmMessage[]): Promise<LlmResponse> {
-  if (!CEREBRAS_KEY) throw new Error('CEREBRAS_API_KEY not set')
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), CEREBRAS_TIMEOUT_MS)
-  try {
-    const res = await fetch(CEREBRAS_URL, {
-      method:  'POST',
-      headers: {
-        Authorization:  `Bearer ${CEREBRAS_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model:       'gpt-oss-120b',
-        messages,
-        tools:       TOOL_DEFINITIONS,
-        tool_choice: 'auto',
-        temperature: 0.1,
-        max_tokens:  400,
-      }),
-      signal: ctrl.signal,
-    })
-    if (!res.ok) {
-      const errText = (await res.text()).slice(0, 300)
-      throw new Error(`Cerebras ${res.status}: ${errText}`)
-    }
-    return await res.json() as LlmResponse
-  } finally {
-    clearTimeout(timer)
-  }
 }
 
 /**
@@ -145,32 +116,11 @@ async function callGroq(messages: LlmMessage[], model: string): Promise<LlmRespo
 }
 
 /**
- * Provider fallback chain (best → last resort):
- *   1. Cerebras gpt-oss-120b           (~1-1.5s, free)    — OpenAI lineage = best tool calling
- *   2. Groq    llama-3.3-70b-versatile (~3-4s, free)      — solid 70B, big TPM headroom
- *   3. Groq    llama-3.1-8b-instant    (~0.5s, free)      — fast but imprecise (loops on tools)
- *
- * Why gpt-oss-120b on Cerebras (not Llama):
- *   Cerebras retired llama-3.3-70b. Of the remaining options (gpt-oss-120b,
- *   qwen-3-235b, zai-glm-4.7, llama3.1-8b), gpt-oss-120b is the strongest
- *   choice for tool calling — OpenAI's open-source GPT-OSS uses exactly the
- *   function/tool format we already emit. Cerebras runs it in ~1-1.5s.
- *
- * Why keep Groq 70B as fallback:
- *   If Cerebras has an outage we still want 70B-class quality, not the 8B
- *   which loops on identical tool calls. Groq still hosts llama-3.3-70b.
+ * Provider fallback chain (Cerebras intentionally absent — see top-of-file note):
+ *   1. Groq llama-3.3-70b-versatile (~3-4s)  — primary; reliable tool calling
+ *   2. Groq llama-3.1-8b-instant    (~0.5s)  — last resort; loops on tools
  */
 async function callLlmWithFallback(messages: LlmMessage[]): Promise<{ resp: LlmResponse; modelUsed: string }> {
-  if (CEREBRAS_KEY) {
-    try {
-      const resp = await callCerebras(messages)
-      return { resp, modelUsed: 'cerebras/gpt-oss-120b' }
-    } catch (err) {
-      const reason    = err instanceof Error ? err.message : String(err)
-      const isTimeout = err instanceof Error && err.name === 'AbortError'
-      console.warn(`[VOICE-WORKER-AGENT] Cerebras failed (${isTimeout ? 'TIMEOUT' : 'ERROR'}), falling back to Groq 70B: ${reason}`)
-    }
-  }
   try {
     const resp = await callGroq(messages, 'llama-3.3-70b-versatile')
     return { resp, modelUsed: 'groq/llama-3.3-70b-versatile' }
