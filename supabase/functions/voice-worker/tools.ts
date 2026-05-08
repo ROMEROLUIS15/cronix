@@ -115,16 +115,36 @@ function humanizeDate(isoDate: string, timezone: string): string {
 }
 
 /**
- * Returns the time in 24h `HH:MM` format in the business timezone.
- * Intentionally NOT using locale "a. m." formatting — the periods inside
- * "a. m." were causing the LLM to misparse the appointments list as
- * sentences, then hallucinate "no hay citas" instead of listing them.
+ * Returns a TTS-friendly Spanish time string in the business timezone.
+ *   09:00 → "9 de la mañana"
+ *   12:30 → "12 y 30 del mediodía"   (well, 12:00 → "del mediodía"; 12:30 → "de la tarde")
+ *   15:00 → "3 de la tarde"
+ *   20:30 → "8 y 30 de la noche"
+ *
+ * Reads naturally aloud and avoids the "a. m. / p. m." pronunciation issues
+ * (Deepgram tends to spell "AM" as letters and the periods in "a. m." used
+ * to confuse the LLM in the previous architecture — both problems gone).
  */
 function formatTimeFromISO(iso: string, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat('en-GB', {
+    const parts = new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
-    }).format(new Date(iso))
+    }).formatToParts(new Date(iso))
+    const hour24 = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10)
+    const minute =          parts.find(p => p.type === 'minute')?.value ?? '00'
+
+    let displayHour: number
+    let suffix: string
+    if (hour24 === 0)        { displayHour = 12;          suffix = 'de la madrugada' }
+    else if (hour24 < 6)     { displayHour = hour24;      suffix = 'de la madrugada' }
+    else if (hour24 < 12)    { displayHour = hour24;      suffix = 'de la mañana' }
+    else if (hour24 === 12 && minute === '00') { displayHour = 12; suffix = 'del mediodía' }
+    else if (hour24 < 19)    { displayHour = hour24 === 12 ? 12 : hour24 - 12; suffix = 'de la tarde' }
+    else                     { displayHour = hour24 - 12; suffix = 'de la noche' }
+
+    return minute === '00'
+      ? `${displayHour} ${suffix}`
+      : `${displayHour} y ${parseInt(minute, 10)} ${suffix}`
   } catch {
     return iso.slice(11, 16)
   }
@@ -514,7 +534,7 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
     }>
   }
 
-  const lines = (data as unknown as AptRow[]).map((row) => {
+  const items = (data as unknown as AptRow[]).map((row) => {
     const time = formatTimeFromISO(row.start_at, ctx.timezone)
     const cli  = row.client?.name ?? 'cliente'
     // Direct FK first; fall back to the first service in the junction.
@@ -524,21 +544,24 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
     const svc = row.service?.name
       ?? junctionServices[0]?.service?.name
       ?? 'servicio'
-    return `${time} ${cli} - ${svc}`
+    return `${cli} a las ${time} para ${svc}`
   })
 
-  console.log(`[VOICE-WORKER-TOOLS] First formatted line: "${lines[0] ?? ''}"`)
+  console.log(`[VOICE-WORKER-TOOLS] First formatted line: "${items[0] ?? ''}"`)
 
   // User-facing string. The agent loop bypasses LLM synthesis when a single
-  // tool call succeeds (see READ_TOOLS_BYPASS in agent.ts) and uses this text
-  // directly as the spoken response. So this string MUST read naturally.
+  // tool call succeeds and uses this text directly as the spoken response.
+  // It must read naturally end-to-end:
+  //   - opener ends with a period (TTS pauses naturally)
+  //   - items joined by ". " so each gets a pause and clear cadence
+  //   - final period prevents the abrupt cut-off the user reported
   const opener = data.length === 1
-    ? `Tienes 1 cita el ${dateLabel}:`
-    : `Tienes ${data.length} citas el ${dateLabel}:`
+    ? `Tienes 1 cita el ${dateLabel}.`
+    : `Tienes ${data.length} citas el ${dateLabel}.`
 
   return {
     success: true,
-    result:  `${opener}\n${lines.join('\n')}`,
+    result:  `${opener} ${items.join('. ')}.`,
   }
 }
 
