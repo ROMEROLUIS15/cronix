@@ -21,9 +21,12 @@ import { createOpenAI }   from '@ai-sdk/openai'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
 
-import { getRepos }         from '@/lib/repositories'
-import { RealToolExecutor } from '@/lib/ai/orchestrator/tool-adapter/RealToolExecutor'
-import { logger }           from '@/lib/logger'
+import { getRepos }              from '@/lib/repositories'
+import { RealToolExecutor }      from '@/lib/ai/orchestrator/tool-adapter/RealToolExecutor'
+import { NotificationService }   from '@/lib/notifications/notification-service'
+import { emitEvent }             from '@/lib/ai/orchestrator/event-dispatcher'
+import type { AppointmentEvent, AppointmentEventType, BookingEventData } from '@/lib/ai/orchestrator/events'
+import { logger }                from '@/lib/logger'
 
 // ── Providers ──────────────────────────────────────────────────────────────
 
@@ -82,10 +85,28 @@ REGLAS:
 - Pasa los nombres TAL CUAL los dijo el usuario; las herramientas hacen fuzzy match.
 - Sin markdown, sin emojis, sin URLs, sin IDs ni JSON.
 - Fechas YYYY-MM-DD. Horas HH:mm 24h. Convierte "mañana" / "3pm" antes de llamar herramientas.
-- Para AGENDAR: cuando tengas servicio + cliente + fecha + hora → smart_schedule directamente.
-- Para CANCELAR: confirma primero ("¿Cancelo la cita de X?") y espera "sí" antes de cancel_booking.
-- CITAS DEL DÍA formato: "HH:mm cliente — servicio" por línea. Si vacío: "No hay citas para ese día."
-- Si pides el teléfono de un cliente, llama search_clients y retransmite el número completo.`
+
+REGLA CRÍTICA — UNA SOLA EJECUCIÓN POR ACCIÓN:
+- Llama cada herramienta UNA SOLA VEZ por turno. NO la repitas con los mismos argumentos.
+- Después de smart_schedule exitoso → responde "Listo. Agendé a X el [fecha] a las [hora]." y TERMINA.
+- Después de cancel_booking exitoso → responde "Cancelado." y TERMINA.
+- Si una herramienta devuelve éxito, NO la vuelvas a llamar. Sintetiza la respuesta y para.
+
+FLUJO AGENDAR (4 PARÁMETROS OBLIGATORIOS): cliente + servicio + fecha + hora.
+- Si FALTA cualquiera de los 4 → pregunta SOLO por ese dato faltante. Pregunta corta y directa, un dato a la vez. NO inventes valores. NO llames smart_schedule todavía.
+- Ejemplos:
+   • "Agéndame a María Pérez para el 24 de mayo" → faltan servicio + hora → pregunta primero "¿Para qué servicio?"
+   • Cuando responda el servicio → si aún falta hora, pregunta "¿A qué hora?"
+   • SOLO cuando tengas los 4 → smart_schedule(service_name, client_name, date, time) UNA SOLA VEZ.
+- Después del éxito → "Listo. Agendé a [cliente] para [servicio] el [fecha] a las [hora]." y TERMINA.
+
+FLUJO CANCELAR: confirma primero ("¿Cancelo la cita de X del [fecha]?") y espera "sí" → cancel_booking UNA vez → "Cancelado."
+
+FLUJO REAGENDAR: necesitas cliente + nueva fecha + nueva hora. Si falta alguno, pregúntalo. Cuando estén → reschedule_booking UNA vez → "Reagendado para [fecha] a las [hora]."
+
+CONSULTAS:
+- CITAS DEL DÍA: get_appointments_by_date UNA vez. Formato: "HH:mm cliente — servicio" por línea. Si vacío: "No hay citas para ese día."
+- TELÉFONO/CLIENTE: search_clients UNA vez y retransmite el número completo tal como aparece.`
 
   if (input.context.services.length > 0) {
     p += '\n\nSERVICIOS DISPONIBLES: ' + input.context.services
@@ -124,16 +145,82 @@ REGLAS:
 
 // ── Tool factory ───────────────────────────────────────────────────────────
 
+// Maps the write tool name to the AppointmentEvent type emitted to the bell.
+// create_client and delete_client are NOT here — those don't generate bell
+// notifications today (no equivalent event type in events.ts).
+const TOOL_TO_EVENT: Record<string, AppointmentEventType> = {
+  smart_schedule:     'appointment.created',
+  confirm_booking:    'appointment.created',
+  cancel_booking:     'appointment.cancelled',
+  reschedule_booking: 'appointment.rescheduled',
+}
+
+/**
+ * Builds an AppointmentEvent from a successful write-tool's BookingEventData.
+ * Mirrors the helper from execution-engine.ts so the bell + WhatsApp pipeline
+ * fires exactly the same way after the rewrite.
+ */
+function buildAppointmentEvent(
+  toolName: string,
+  data:     BookingEventData,
+  input:    VoiceAgentInput,
+): AppointmentEvent {
+  return {
+    eventId:     crypto.randomUUID(),
+    type:        TOOL_TO_EVENT[toolName] ?? 'appointment.created',
+    businessId:  input.businessId,
+    clientName:  data.clientName,
+    serviceName: data.serviceName,
+    date:        data.date,
+    time:        data.time,
+    userId:      input.userId,
+    channel:     'web',
+  }
+}
+
 /**
  * Wraps a RealToolExecutor call into an AI SDK tool execute function.
  * Returns the tool's text result so the LLM can synthesize the response.
+ *
+ * Two critical responsibilities beyond execution:
+ *   1. Per-turn deduplication — blocks the LLM from calling the same write
+ *      tool with the same args multiple times (root cause of the 6-duplicate-
+ *      bookings bug seen in production).
+ *   2. Bell notification dispatch — after a successful write tool, fires an
+ *      AppointmentEvent fire-and-forget through NotificationService so the
+ *      dashboard bell + WhatsApp owner notice both light up.
  */
 function makeToolExecutor(
-  executor: RealToolExecutor,
-  input:    VoiceAgentInput,
-  flags:    { actionPerformed: boolean },
+  executor:    RealToolExecutor,
+  notifSvc:    NotificationService,
+  input:       VoiceAgentInput,
+  flags:       { actionPerformed: boolean },
 ) {
+  const WRITE_TOOLS = new Set([
+    'smart_schedule', 'confirm_booking', 'cancel_booking',
+    'reschedule_booking', 'create_client', 'delete_client',
+  ])
+  // Fingerprints of tool calls already executed in THIS turn.
+  // Same name + same args = exact duplicate → blocked to prevent loop bookings.
+  const executedFingerprints = new Set<string>()
+
   return async (toolName: string, args: Record<string, unknown>): Promise<string> => {
+    // Stable fingerprint: tool name + canonical JSON of args (sorted keys).
+    const sortedArgs = Object.keys(args).sort().reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = args[k]
+      return acc
+    }, {})
+    const fingerprint = `${toolName}::${JSON.stringify(sortedArgs)}`
+
+    if (executedFingerprints.has(fingerprint)) {
+      logger.warn('VOICE-AGENT', `Duplicate tool call blocked: ${toolName}`, {
+        userId: input.userId,
+        args:   sortedArgs,
+      })
+      return 'Esta acción ya fue ejecutada en este turno con los mismos datos. No la repitas. Responde al usuario con el resultado anterior.'
+    }
+    executedFingerprints.add(fingerprint)
+
     const t0 = Date.now()
     try {
       const result = await executor.execute({
@@ -148,10 +235,20 @@ function makeToolExecutor(
         ok:       result.success,
         duration: Date.now() - t0,
       })
+
       if (!result.success) return `Error: ${result.error ?? result.result}`
-      // Track if a write tool succeeded
-      const writeTools = new Set(['smart_schedule', 'confirm_booking', 'cancel_booking', 'reschedule_booking', 'create_client', 'delete_client'])
-      if (writeTools.has(toolName)) flags.actionPerformed = true
+
+      if (WRITE_TOOLS.has(toolName)) {
+        flags.actionPerformed = true
+        // Dispatch bell notification + WhatsApp notice if this tool produced
+        // structured data (smart_schedule, cancel_booking, reschedule_booking).
+        // Fire-and-forget — never blocks the response.
+        if (result.data && TOOL_TO_EVENT[toolName]) {
+          const event = buildAppointmentEvent(toolName, result.data, input)
+          emitEvent(event, notifSvc)
+        }
+      }
+
       return result.result
     } catch (err) {
       logger.error('VOICE-AGENT', `Tool ${toolName} threw`, { err: err instanceof Error ? err.message : String(err) })
@@ -262,9 +359,12 @@ export async function runVoiceAgent(
     repos.clients,
     repos.services,
   )
+  // Bell + WhatsApp owner notifications. Fired fire-and-forget after each
+  // successful write tool — derivative, never blocks the response.
+  const notifSvc = new NotificationService(supabase)
 
   const flags = { actionPerformed: false }
-  const exec  = makeToolExecutor(executor, input, flags)
+  const exec  = makeToolExecutor(executor, notifSvc, input, flags)
   const tools = buildTools(exec)
 
   const system   = buildSystemPrompt(input)
@@ -283,7 +383,9 @@ export async function runVoiceAgent(
       system,
       messages,
       tools,
-      stopWhen:        stepCountIs(4),
+      // 3 steps max: enough for 1-2 tool calls + final synthesis.
+      // Higher values risk runaway loops (smart_schedule called 6x in production).
+      stopWhen:        stepCountIs(3),
       temperature:     0.1,
       maxOutputTokens: 400,
     })
