@@ -80,6 +80,64 @@ function toNeutralTools(): NeutralTool[] {
   }))
 }
 
+// ── Date guard (deterministic override of LLM date arithmetic) ───────────
+//
+// Llama 3.3 70B Versatile — even with extremely explicit imperative prompts
+// listing "MAÑANA: <date>" — sometimes still passes today's date when the
+// user says "mañana". This is a documented model weakness in numeric
+// reasoning that prompt engineering can't fully eliminate.
+//
+// Solution: trust the model for INTENT (which tool to call, who to mention)
+// but override its DATE selection with deterministic logic when we detect
+// known temporal keywords in the user input. The LLM proposes, our code
+// disposes.
+
+/** Tools whose args include a `date: YYYY-MM-DD` field we can guard. */
+const DATE_TOOLS = new Set([
+  'get_appointments_by_date',
+  'get_available_slots',
+  'smart_schedule',
+  'cancel_booking',
+  'reschedule_booking',
+])
+
+function addDaysIso(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(y!, m! - 1, d!)
+  date.setDate(date.getDate() + days)
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
+interface DateOverride {
+  date:    string
+  reason:  string
+}
+
+/**
+ * Inspects the user's text for temporal keywords ("hoy", "mañana", "pasado
+ * mañana") and returns the canonical date. Order matters: "pasado mañana"
+ * must be checked BEFORE "mañana" because the latter is a substring of
+ * the former.
+ *
+ * Returns null when no recognized keyword is present (LLM keeps its date).
+ */
+function detectTemporalIntent(userText: string, today: string): DateOverride | null {
+  const t = userText.toLowerCase()
+  // Word-boundary regexes so "Manaña" inside another word doesn't trigger.
+  const PASADO_MANANA = /\bpasado\s+ma[ñn]ana\b/
+  const MANANA        = /\bma[ñn]ana\b/
+  const HOY           = /\bhoy\b/
+
+  if (PASADO_MANANA.test(t)) return { date: addDaysIso(today, 2), reason: '"pasado mañana"' }
+  if (MANANA.test(t))        return { date: addDaysIso(today, 1), reason: '"mañana"' }
+  if (HOY.test(t))           return { date: today,                reason: '"hoy"' }
+  return null
+}
+
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -97,6 +155,12 @@ export async function runAgent(
   const provider = getProvider()
   const tools    = toNeutralTools()
   const system   = buildSystemPrompt(input)
+
+  // Pre-compute the user's temporal intent ONCE for this turn. If the user
+  // said "hoy" / "mañana" / "pasado mañana", we'll use this to override the
+  // LLM's date selection on any tool call that takes a `date` arg.
+  const todayLocal      = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+  const dateOverride    = detectTemporalIntent(input.text, todayLocal)
 
   // Conversation history → neutral messages
   const messages: NeutralMessage[] = [
@@ -152,6 +216,22 @@ export async function runAgent(
           content:      'Error: argumentos inválidos (no es JSON válido).',
         })
         continue
+      }
+
+      // ── Date guard ─────────────────────────────────────────────────────
+      // If the user said "hoy" / "mañana" / "pasado mañana" but the LLM
+      // emitted a different `date`, override it. This is the only way to
+      // make the assistant's date math reliable on Llama 3.x — the prompt
+      // alone doesn't bind it strongly enough.
+      if (dateOverride && DATE_TOOLS.has(tc.name) && typeof parsedArgs.date === 'string') {
+        const llmDate = parsedArgs.date as string
+        if (llmDate !== dateOverride.date) {
+          console.warn(
+            `[VOICE-WORKER-AGENT] Date guard: user said ${dateOverride.reason} ` +
+            `but LLM passed date=${llmDate} → overriding to ${dateOverride.date}`,
+          )
+          parsedArgs.date = dateOverride.date
+        }
       }
 
       // Stable fingerprint with sorted keys
