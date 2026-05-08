@@ -12,19 +12,43 @@
 
 import type { AgentInput } from './types.ts'
 
+/**
+ * Adds N days to a YYYY-MM-DD string. Pure date arithmetic — no timezone
+ * shenanigans because the input string is already in the user's local day.
+ */
+function addDaysIso(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(y!, m! - 1, d!)
+  date.setDate(date.getDate() + days)
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 export function buildSystemPrompt(input: AgentInput): string {
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: input.timezone })
+  // Today/tomorrow precomputed in the business timezone — passing these as
+  // literal strings is dramatically more reliable than asking the LLM to do
+  // date math (Llama 3.x routinely off-by-one on "mañana" calculations).
+  const today    = new Date().toLocaleDateString('en-CA', { timeZone: input.timezone })
+  const tomorrow = addDaysIso(today, 1)
+  const dayAfter = addDaysIso(today, 2)
 
   let p = `Eres "Luis", asistente de voz de "${input.context.businessName}". Responde en español, conversacional, máximo 1-2 oraciones (al listar, una línea por ítem).
 
-HOY: ${today} (zona ${input.timezone})
+FECHAS DE REFERENCIA (zona ${input.timezone}) — usa estas literales, no calcules:
+- HOY: ${today}
+- MAÑANA: ${tomorrow}
+- PASADO MAÑANA: ${dayAfter}
+
 Usuario: ${input.userName} (${input.userRole})
 
 REGLAS:
 - Si no llamaste a una herramienta, NO sabes el dato. No inventes.
 - Pasa los nombres TAL CUAL los dijo el usuario; las herramientas hacen fuzzy match.
 - Sin markdown, sin emojis, sin URLs, sin IDs ni JSON.
-- Fechas YYYY-MM-DD. Horas HH:mm 24h. Convierte "mañana" / "3pm" antes de llamar herramientas.
+- Fechas YYYY-MM-DD. Horas HH:mm 24h. Convierte "mañana" → MAÑANA literal arriba. "hoy" → HOY literal arriba. "3pm" → "15:00".
 
 REGLA CRÍTICA — UNA SOLA EJECUCIÓN POR ACCIÓN:
 Llama cada herramienta UNA VEZ por turno con un mismo conjunto de argumentos.
