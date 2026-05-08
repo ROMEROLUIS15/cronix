@@ -80,39 +80,49 @@ describe('shieldOutput — code injection', () => {
   assertAllowed('Hora: 3:00 PM', 'safe: time mention')
 })
 
-// ── Data Exfiltration — PII ──────────────────────────────────────────────────
-describe('shieldOutput — PII leakage', () => {
+// ── Data Exfiltration — UUID ─────────────────────────────────────────────────
+describe('shieldOutput — UUID leakage', () => {
   assertBlocked(
     'El ID es 550e8400-e29b-41d4-a716-446655440000',
     'UUID leak'
   )
 
-  assertBlocked('Llama al +521234567890', 'phone leak (international)')
-  assertBlocked('Su número es 55 1234 5678', 'phone leak (spaced)')
-  assertBlocked('Teléfono: 12345678901', 'phone leak (11 digits)')
+  // Phone numbers are now ALLOWED — the system prompt explicitly instructs the
+  // assistant to relay client phone numbers when the owner asks for them.
+  assertAllowed('El teléfono de Luis es +521234567890', 'phone allowed (legitimate query)')
+  assertAllowed('Su número es 55 1234 5678',           'phone allowed (spaced)')
 
   // Safe variants
   assertAllowed('El cliente tiene 3 citas pendienteses', 'safe: number (count)')
-  assertAllowed('Código de confirmación: ABC123', 'safe: alphanumeric code (short)')
+  assertAllowed('Código de confirmación: ABC123',        'safe: alphanumeric code (short)')
 })
 
-// ── Tool Name Leakage ────────────────────────────────────────────────────────
+// ── Tool Name Leakage — only currently-registered tools ──────────────────────
+// Deprecated tool names (book_appointment, get_today_summary, etc.) are no
+// longer in the leak pattern because they don't exist in RealToolExecutor.
 describe('shieldOutput — tool name leakage', () => {
-  const toolNames = [
-    'get_today_summary', 'book_appointment', 'cancel_appointment',
-    'reschedule_appointment', 'register_payment', 'get_client_debt',
-    'get_client_appointments', 'get_inactive_clients', 'get_revenue_stats',
-    'get_monthly_forecast', 'send_reactivation_message', 'create_client',
-    'get_clients', 'get_staff', 'get_services', 'get_upcoming_gaps',
-    'confirm_booking', 'reschedule_booking', 'cancel_booking',
+  const registeredTools = [
+    'smart_schedule',
+    'confirm_booking',
+    'cancel_booking',
+    'reschedule_booking',
+    'get_appointments_by_date',
+    'get_available_slots',
+    'search_clients',
+    'delete_client',
+    'check_duplicate_clients',
   ]
 
-  for (const tool of toolNames) {
+  for (const tool of registeredTools) {
     assertBlocked(`Ejecuté ${tool} correctamente`, `tool_name_leak: ${tool}`)
   }
 
-  // Safe — tool names inside natural Spanish text should still be blocked
-  assertBlocked('book_appointment se ejecutó', 'tool name in sentence')
+  // Tool name in sentence still blocks
+  assertBlocked('smart_schedule se ejecutó', 'tool name in sentence')
+
+  // Deprecated tool names no longer block (they don't exist as tools anymore)
+  assertAllowed('Ejecuté get_today_summary correctamente', 'deprecated tool name no longer blocked')
+  assertAllowed('book_appointment ya no es una herramienta', 'deprecated tool name no longer blocked')
 })
 
 // ── False Positive Regression Tests ──────────────────────────────────────────
@@ -145,7 +155,7 @@ describe('shieldOutput — edge cases', () => {
   )
 
   assertBlocked(
-    'UUID: 123e4567-e89b-12d3-a456-426614174000 y phone: 5551234567',
-    'multiple PII patterns (first match wins)'
+    'UUID: 123e4567-e89b-12d3-a456-426614174000 dentro del mensaje',
+    'UUID still blocks even mid-sentence'
   )
 })

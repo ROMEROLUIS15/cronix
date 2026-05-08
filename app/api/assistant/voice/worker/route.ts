@@ -23,13 +23,10 @@ import { logger } from '@/lib/logger'
 import { jobStore } from '@/lib/ai/job-store'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getRepos } from '@/lib/repositories'
-import { createProductionOrchestrator } from '@/lib/ai/orchestrator/orchestrator-factory'
 import { sessionStore } from '@/lib/ai/session-store'
 import { checkTokenQuota, recordTokenUsage } from '@/lib/rate-limit/token-quota'
 import { createTtsProvider } from '@/lib/ai/providers/tts-factory'
-import { shieldOutput } from '@/lib/ai/output-shield'
-import type { AiInput, UserRole } from '@/lib/ai/orchestrator'
-import type { LlmMessage } from '@/lib/ai/providers/types'
+import { runVoiceAgent, type VoiceAgentInput, type UserRole } from '@/lib/ai/voice-agent'
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 
@@ -74,12 +71,14 @@ async function verifySignature(req: Request, rawBody: string): Promise<boolean> 
 async function generateAudio(text: string): Promise<string | null> {
   if (!ttsEngine) return null
   try {
-    const shielded = shieldOutput(text, 'worker')
+    // Truncate to ~220 chars at sentence boundary to keep TTS latency low.
+    // OutputShield removed in voice-agent rewrite — the model produces clean
+    // user-facing prose by design (no tool name leaks, no JSON, no IDs).
     const truncated = (() => {
-      if (shielded.length <= 220) return shielded
-      const cut     = shielded.slice(0, 220)
+      if (text.length <= 220) return text
+      const cut     = text.slice(0, 220)
       const lastDot = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('?'), cut.lastIndexOf('!'))
-      return lastDot > 80 ? shielded.slice(0, lastDot + 1) : cut
+      return lastDot > 80 ? text.slice(0, lastDot + 1) : cut
     })()
     const res = await ttsEngine.synthesize(truncated)
     return res.audioUrl ?? null
@@ -190,24 +189,25 @@ export async function POST(req: Request): Promise<Response> {
     const serverHistory  = session.messages
     const entityContext  = session.entities as Record<string, unknown>
 
-    // ── Build orchestrator input ──────────────────────────────────────────────
-    const aiInput: AiInput = {
+    // ── Build voice-agent input ───────────────────────────────────────────────
+    // History from session-store may have any role string — coerce to user/assistant only.
+    const filteredHistory = serverHistory
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+      .map((m) => ({
+        role:    m.role as 'user' | 'assistant',
+        content: m.content ?? '',
+      }))
+
+    const agentInput: VoiceAgentInput = {
       text:       input_text,
       userId:     user_id,
       businessId: business_id,
       userRole:   userRole as UserRole,
       timezone,
-      channel:    'web',
-      history:    serverHistory,
-      requestId:  job_id,
       userName,
-      entityContext,
+      history:    filteredHistory,
       context: {
-        businessId:  business_id,
         businessName,
-        timezone,
-        aiRules,
-        workingHours,
         services: (servicesRes.data ?? []).map((s) => ({
           id:           s.id,
           name:         s.name,
@@ -217,33 +217,30 @@ export async function POST(req: Request): Promise<Response> {
         activeAppointments: (todayApptRes.data ?? [])
           .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
           .map((a) => ({
-            id:          a.id,
             serviceName: (a.service as { name: string } | null)?.name ?? '',
             clientName:  (a.client as { name: string } | null)?.name ?? '',
             startAt:     a.start_at,
-            endAt:       a.end_at,
-            status:      a.status ?? 'pending',
           })),
+        ...(workingHours ? { workingHours } : {}),
+        ...(aiRules      ? { aiRules }      : {}),
       },
     }
 
-    // ── Run orchestrator ──────────────────────────────────────────────────────
-    const orchestrator = createProductionOrchestrator(admin, GROQ_API_KEY)
-    const output       = await orchestrator.process(aiInput)
+    // ── Run voice agent (single Vercel AI SDK call with native tool calling) ──
+    const output       = await runVoiceAgent(admin, agentInput)
+    const responseText = output.text
 
-    // Safety net: action with empty response → generic confirmation
-    const responseText = (output.actionPerformed && !output.text?.trim())
-      ? 'Listo, acción completada.'
-      : output.text
+    logger.info('VOICE-WORKER', 'Agent completed', {
+      job_id,
+      model:           output.modelUsed,
+      tokens:          output.tokens,
+      actionPerformed: output.actionPerformed,
+    })
 
-    // ── Persist session (strip tool messages before saving) ───────────────────
-    const cleanHistory: LlmMessage[] = output.history
-      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
-      .map((m) => ({ role: m.role, content: m.content ?? '' }))
-
+    // ── Persist session ───────────────────────────────────────────────────────
     void sessionStore.saveSession(user_id, {
-      messages:  cleanHistory,
-      entities:  entityContext,
+      messages: output.history,
+      entities: entityContext,
     })
 
     // ── Token accounting ──────────────────────────────────────────────────────
@@ -263,8 +260,8 @@ export async function POST(req: Request): Promise<Response> {
     logger.info('VOICE-WORKER', `Job completed`, {
       job_id,
       attempts,
-      toolCount: output.toolTrace.length,
-      hasAudio:  Boolean(audioUrl),
+      tokens:          output.tokens,
+      hasAudio:        Boolean(audioUrl),
       actionPerformed: output.actionPerformed,
     })
 

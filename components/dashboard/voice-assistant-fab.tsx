@@ -598,7 +598,11 @@ export function VoiceAssistantFab() {
         setState('processing')
         stream.getTracks().forEach(t => t.stop())
 
-        if (!hasSpokenRef.current || audioChunksRef.current.length === 0) {
+        // Only block if literally NO audio was captured. The VAD speech-detection
+        // gate (`hasSpokenRef`) was discarding valid audio on mobile because the
+        // noise-floor calibration races with the user starting to speak immediately
+        // after tapping. Whisper has its own empty-audio guard server-side.
+        if (audioChunksRef.current.length === 0) {
           setState('idle')
           return
         }
@@ -608,10 +612,14 @@ export function VoiceAssistantFab() {
 
       mediaRecorder.start(250)
 
-      // VAD — RMS-based voice activity detection with adaptive noise floor
+      // VAD — RMS-based voice activity detection with adaptive noise floor.
+      // MAX_RECORD_MS is a hard cap: after this, send what we have (no more waiting).
+      // Mobile users tap-and-talk immediately; calibration races with their voice
+      // and noise_floor gets set too high, so VAD speech detection is unreliable.
+      // Hard cap ensures we always send the captured audio, even if VAD failed.
       const MIN_RMS_FLOOR    = 5
       const SILENCE_DURATION = 600
-      const MAX_WAIT_MS      = 8000
+      const MAX_RECORD_MS    = 6000   // Hard cap on recording duration
       const startTime        = Date.now()
       const tdArray          = new Uint8Array(analyser.fftSize)
 
@@ -628,6 +636,13 @@ export function VoiceAssistantFab() {
 
         const elapsed = Date.now() - startTime
 
+        // Hard cap — always honored, regardless of VAD state.
+        // Sends whatever audio was captured to Whisper for server-side handling.
+        if (elapsed >= MAX_RECORD_MS) {
+          stopRecording()
+          return
+        }
+
         if (!calibrated) {
           noiseFloorSamples.push(rms)
           if (elapsed >= 400) {
@@ -642,10 +657,8 @@ export function VoiceAssistantFab() {
         if (!hasSpokenRef.current) {
           if (rms > noiseFloor) {
             hasSpokenRef.current = true
-          } else if (elapsed > MAX_WAIT_MS) {
-            stopRecording()
-            return
           }
+          // Removed the MAX_WAIT_MS branch — the hard cap above handles all timeouts.
         } else {
           if (rms < noiseFloor * 0.7) {
             if (!silenceTimerRef.current) {
