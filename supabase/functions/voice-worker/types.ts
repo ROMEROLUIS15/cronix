@@ -65,19 +65,8 @@ export interface AgentOutput {
   pendingNotifications: AppointmentNotification[]
 }
 
-// ── LLM message format (OpenAI-compatible) ─────────────────────────────────
-
-export interface LlmMessage {
-  role:           'system' | 'user' | 'assistant' | 'tool'
-  content:        string | null
-  tool_call_id?:  string
-  name?:          string
-  tool_calls?: Array<{
-    id:       string
-    type:     'function'
-    function: { name: string; arguments: string }
-  }>
-}
+// LlmMessage was removed — replaced by NeutralMessage in providers/ILLMProvider.ts.
+// Provider-specific message shapes live inside each provider's translator.
 
 // ── Tool execution contract ────────────────────────────────────────────────
 
