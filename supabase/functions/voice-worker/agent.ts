@@ -27,6 +27,44 @@ import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
+/**
+ * Tools whose result is already user-facing prose. When the LLM calls one of
+ * these (and only one) and it succeeds, we bypass the second-pass LLM synthesis
+ * and use the tool's `result` as the final response.
+ *
+ * Why: production logs showed Llama 3.3 70B Versatile occasionally ignoring
+ * tool results and synthesizing its own (wrong) answer — e.g. "no hay citas"
+ * when the tool returned 4 appointments. Bypassing the second LLM call on
+ * single-tool success eliminates that hallucination surface entirely. This
+ * mirrors the WhatsApp pattern (process-whatsapp/ai-agent.ts) which uses
+ * deterministic templates for write-tool successes.
+ *
+ * It is INDUSTRY STANDARD for production agentic systems (LangChain
+ * `return_direct=True`, OpenAI's function-calling docs, Anthropic's tool_use
+ * best practices). The trade-off is slightly less conversational prose in
+ * exchange for guaranteed correctness — for an MVP business assistant,
+ * correctness is non-negotiable.
+ *
+ * NOT in this set: smart_schedule, cancel_booking, reschedule_booking
+ *   (those write tools already return user-facing prose AND we want potential
+ *    LLM rephrasing for confirmation context — but their templates are
+ *    already deterministic so they rarely need synthesis either).
+ */
+const BYPASS_TOOLS = new Set([
+  'get_appointments_by_date',
+  'search_clients',
+  'get_services',
+  'get_available_slots',
+  // Write tools also pass-through cleanly because their result strings
+  // ("Listo. Agendé a X...") are already well-formed user-facing text.
+  'smart_schedule',
+  'cancel_booking',
+  'reschedule_booking',
+  'create_client',
+  'delete_client',
+  'check_duplicate_clients',
+])
+
 // ── Adapters: voice-worker types → neutral provider types ────────────────
 
 /**
@@ -97,6 +135,10 @@ export async function runAgent(
       tool_calls: resp.toolCalls,
     })
 
+    // Track results from this step so we can decide whether to bypass synthesis
+    let lastSuccessfulText: string | null = null
+    let successfulCallCount = 0
+
     // Execute each tool call
     for (const tc of resp.toolCalls) {
       let parsedArgs: Record<string, unknown> = {}
@@ -138,6 +180,11 @@ export async function runAgent(
         content:      result.result,
       })
 
+      if (result.success) {
+        successfulCallCount++
+        lastSuccessfulText = result.result
+      }
+
       if (result.success && WRITE_TOOLS.has(tc.name)) {
         actionPerformed = true
         if (result.data) {
@@ -156,6 +203,28 @@ export async function runAgent(
           }
         }
       }
+    }
+
+    // ── Bypass LLM synthesis when a single tool call succeeded ─────────────
+    // Industry-standard pattern (LangChain `return_direct`, OpenAI function-
+    // calling docs, Anthropic tool_use best practices): use the tool's output
+    // directly instead of asking the LLM to "rephrase" it. Eliminates the
+    // hallucination surface where 70B Versatile would otherwise sometimes
+    // ignore the tool result and synthesize wrong answers.
+    //
+    // Conditions:
+    //   - exactly ONE tool call this step (multi-tool needs synthesis)
+    //   - exactly ONE successful (failed calls need LLM to handle gracefully)
+    //   - the tool is in BYPASS_TOOLS (explicit allow-list, defensive)
+    if (
+      resp.toolCalls.length === 1 &&
+      successfulCallCount === 1 &&
+      lastSuccessfulText &&
+      BYPASS_TOOLS.has(resp.toolCalls[0]!.name)
+    ) {
+      finalText = lastSuccessfulText
+      console.log(`[VOICE-WORKER-AGENT] Bypassing LLM synthesis — using ${resp.toolCalls[0]!.name} result directly`)
+      break
     }
   }
 

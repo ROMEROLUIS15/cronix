@@ -502,9 +502,8 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
   if (error) return { success: false, result: `Error al consultar citas: ${error.message}` }
 
   const dateLabel = humanizeDate(args.date, ctx.timezone)
-  if (!data?.length) return { success: true, result: `EMPTY: no hay citas para el ${dateLabel}.` }
+  if (!data?.length) return { success: true, result: `No hay citas para el ${dateLabel}.` }
 
-  // Service name lookup: try direct FK first, then junction table.
   type AptRow = {
     start_at: string
     client?:  { name?: string } | null
@@ -528,13 +527,18 @@ async function getAppointmentsByDate(ctx: ToolContext, args: GetByDateArgs): Pro
     return `${time} ${cli} - ${svc}`
   })
 
-  // Diagnostic: log the first formatted line so we can confirm names land
-  // correctly in production (vs ending up as the fallback strings).
   console.log(`[VOICE-WORKER-TOOLS] First formatted line: "${lines[0] ?? ''}"`)
+
+  // User-facing string. The agent loop bypasses LLM synthesis when a single
+  // tool call succeeds (see READ_TOOLS_BYPASS in agent.ts) and uses this text
+  // directly as the spoken response. So this string MUST read naturally.
+  const opener = data.length === 1
+    ? `Tienes 1 cita el ${dateLabel}:`
+    : `Tienes ${data.length} citas el ${dateLabel}:`
 
   return {
     success: true,
-    result:  `COUNT=${data.length}. Citas del ${dateLabel}:\n${lines.join('\n')}`,
+    result:  `${opener}\n${lines.join('\n')}`,
   }
 }
 
