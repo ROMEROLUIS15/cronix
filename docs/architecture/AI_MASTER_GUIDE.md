@@ -13,7 +13,7 @@ Core design principles:
 - **Repository pattern**: All DB access behind typed interfaces (`IAppointmentQueryRepository`, `IClientRepository`, etc.).
 - **Result<T> contract**: Every repository and use case returns `Result<T>` — never throws.
 - **Stateless route handlers**: All state lives in Redis, never in module-level singletons.
-- **Deterministic behavior**: LLM outputs are constrained by runtime guardrails — hallucinations are intercepted, not trusted.
+- **Deterministic behavior**: LLM outputs are constrained by runtime guardrails — hallucinations are intercepted, not trusted. *(See [Anti-Hallucination Patterns](ANTI_HALLUCINATION_PATTERNS.md) for the 5 core pillars of our defensive architecture).*
 
 ---
 

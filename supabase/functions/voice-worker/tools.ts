@@ -594,19 +594,29 @@ async function searchClients(ctx: ToolContext, args: SearchClientsArgs): Promise
 
   const all = await getActiveClients(ctx)
   if (!all.length) {
-    return { success: true, result: `CLIENT_NOT_FOUND: "${args.query}" no existe. Si vas a agendar, usa client_name="${args.query}" — se registra automático.` }
+    // User-facing prose. Tool result is read directly via bypass — must
+    // sound natural when spoken aloud.
+    return { success: true, result: `No tengo a ${args.query} entre tus clientes. Si lo agendas, queda registrado automáticamente.` }
   }
 
   const found = fuzzyFind(all, args.query)
+
   if (found.status === 'found') {
-    const phone = found.match!.phone ? ` | tel. ${found.match!.phone}` : ''
-    return { success: true, result: `CLIENT_FOUND: ${found.match!.name}${phone}. Usa este nombre exacto si vas a agendar.` }
+    const m = found.match!
+    const phoneStr = m.phone ? `, su teléfono es ${m.phone}` : ', no tiene teléfono registrado'
+    return { success: true, result: `Sí, ${m.name} está entre tus clientes${phoneStr}.` }
   }
+
   if (found.status === 'ambiguous') {
-    const list = found.candidates!.map(c => `${c.name}${c.phone ? ` (tel. ${c.phone})` : ''}`).join(', ')
-    return { success: true, result: `MULTIPLE_CLIENTS: ${list}. Pregunta al usuario cuál.` }
+    const candidates = found.candidates!
+    const opener = `Tengo ${candidates.length} clientes con nombre similar a ${args.query}.`
+    const items  = candidates
+      .map(c => c.phone ? `${c.name}, teléfono ${c.phone}` : `${c.name}, sin teléfono registrado`)
+      .join('. ')
+    return { success: true, result: `${opener} ${items}. ¿A cuál te refieres?` }
   }
-  return { success: true, result: `CLIENT_NOT_FOUND: "${args.query}" no existe. Si vas a agendar, usa client_name="${args.query}" — se registra automático.` }
+
+  return { success: true, result: `No tengo a ${args.query} entre tus clientes. Si lo agendas, queda registrado automáticamente.` }
 }
 
 // ── Tool: get_services ─────────────────────────────────────────────────────

@@ -369,6 +369,7 @@ Los usuarios dictan nombres por voz. "Ana García" puede llegar como "Ana Garcia
 
 ## Documentación Adicional
 
+- [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md) — Los 5 pilares arquitectónicos para evitar alucinaciones en los Agentes de IA
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Arquitectura completa, ADRs, pipelines
 - [AI_FLOWS.md](./AI_FLOWS.md) — Flujos del sistema de IA, fast-paths, estado
 - [TESTING.md](./TESTING.md) — Guía de testing, cobertura, escenarios críticos

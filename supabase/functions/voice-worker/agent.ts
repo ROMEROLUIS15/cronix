@@ -180,6 +180,74 @@ function detectAppointmentListFastPath(
   return null
 }
 
+/**
+ * Detects "tengo (a/al/la/el) cliente X" / "busca a X" / "existe X" / "tienes a X"
+ * patterns and extracts the client name. Returns null when not a client lookup.
+ *
+ * Like detectAppointmentListFastPath, this lets us call search_clients
+ * deterministically without involving the LLM. Eliminates the case where the
+ * LLM might emit instructional text or fail to invoke the tool.
+ */
+function detectClientLookupFastPath(userText: string): { name: string } | null {
+  const t = userText.toLowerCase().trim()
+
+  // Reject write intents — fast path is read-only.
+  const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
+  const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
+  if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
+
+  // Words that look like names but aren't — defense against false positives
+  // (e.g. "tengo mañana" → captured "mañana" as if it were a name).
+  const NOT_A_NAME = new Set([
+    'hoy', 'mañana', 'manana', 'ayer', 'anteayer', 'pasado',
+    'lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo',
+    'cita', 'citas', 'agenda', 'algo', 'nada', 'tiempo', 'rato',
+    'algún', 'algun', 'alguna', 'alguien',
+  ])
+
+  // Patterns that ask about a client by name. Each captures the name segment.
+  // Order matters slightly — most specific first.
+  // The optional `alg[uú]n[oa]?\s+` group inside the prefix handles "algún cliente"
+  // even with the accent on "ú" (Speech-to-text often emits the accented form).
+  const PATTERNS: RegExp[] = [
+    // "tengo (a la|al|a) cliente X" / "tengo (a) X (entre mis clientes)?"
+    /\btengo\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
+    // "tienes (a) X" — informal you-form
+    /\btienes\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
+    // "existe (el|la) cliente X" / "existe X"
+    /\bexist[ea]\s+(?:el|la)?\s*(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+    // "busca (a) X" / "buscame (a) X" / "encuentra (a) X"
+    /\b(?:busca(?:me)?|encuentra|encu[eé]ntrame)\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+    // "hay (algún|alguna|un|una) cliente (llamad[oa]) X" / "hay alguien llamado X"
+    /\bhay\s+(?:alg[uú]n[oa]?\s+|un[ao]?\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
+    // "cuál es el teléfono de X" / "qué teléfono tiene X"
+    /\b(?:cu[aá]l\s+es\s+el\s+tel[eé]fono\s+de|qu[eé]\s+tel[eé]fono\s+tiene|tel[eé]fono\s+de)\s+(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+  ]
+
+  for (const re of PATTERNS) {
+    const m = t.match(re)
+    if (m && m[1]) {
+      const name = m[1].trim()
+        // Strip trailing punctuation
+        .replace(/[.,;:!?]+$/, '')
+        .trim()
+      // Need at least 2 chars and not look like noise
+      if (name.length < 2 || !/[a-záéíóúñ]/i.test(name)) continue
+
+      // Reject if every word in the captured "name" is a non-name token
+      // (temporal keyword, generic word, etc.). Protects against false
+      // positives like "tengo mañana?" → captured "mañana".
+      const words = name.split(/\s+/)
+      const allNoise = words.every(w => NOT_A_NAME.has(w.toLowerCase()))
+      if (allNoise) continue
+
+      return { name }
+    }
+  }
+
+  return null
+}
+
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -196,18 +264,20 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
-  // ── FAST PATH — total LLM bypass for simple "qué citas tengo X" queries
+  // ── FAST PATHS — total LLM bypass for unambiguous read queries
   //
   // The user's input text is unambiguous enough that we can answer correctly
   // without involving the LLM. Eliminates every class of LLM-induced bug:
   // wrong date math, hallucinated tool args, ignored tool results, looping.
   //
-  // Same philosophy as the junction-table SQL fix from earlier: when the
-  // answer is computable deterministically, compute it. Don't roll the dice.
-  const fastPath = detectAppointmentListFastPath(input.text, todayLocal)
-  if (fastPath) {
-    console.log(`[VOICE-WORKER-AGENT] FAST PATH: get_appointments_by_date date=${fastPath.date} (user said "${fastPath.reason}") — skipping LLM entirely`)
-    const result = await executeTool('get_appointments_by_date', { date: fastPath.date }, ctx)
+  // Same philosophy as the junction-table SQL fix earlier: when the answer
+  // is computable deterministically, compute it. Don't roll the dice.
+
+  // Fast path 1: appointment list ("qué citas tengo mañana")
+  const fastPathDate = detectAppointmentListFastPath(input.text, todayLocal)
+  if (fastPathDate) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH (appointments): date=${fastPathDate.date} (user said "${fastPathDate.reason}")`)
+    const result = await executeTool('get_appointments_by_date', { date: fastPathDate.date }, ctx)
     const text = result.success
       ? result.result
       : 'No pude consultar las citas en este momento. Intenta de nuevo en un momento.'
@@ -220,7 +290,29 @@ export async function runAgent(
       text,
       actionPerformed:      false,
       history:              newHistory,
-      modelUsed:            'fast-path/no-llm',
+      modelUsed:            'fast-path/appointments',
+      pendingNotifications: [],
+    }
+  }
+
+  // Fast path 2: client lookup ("tengo a María Dugarte?", "busca a Ada Monsalve")
+  const fastPathClient = detectClientLookupFastPath(input.text)
+  if (fastPathClient) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH (client lookup): name="${fastPathClient.name}"`)
+    const result = await executeTool('search_clients', { query: fastPathClient.name }, ctx)
+    const text = result.success
+      ? result.result
+      : 'No pude consultar la lista de clientes en este momento. Intenta de nuevo.'
+    const newHistory: AgentOutput['history'] = [
+      ...input.history,
+      { role: 'user',      content: input.text },
+      { role: 'assistant', content: text       },
+    ].slice(-30)
+    return {
+      text,
+      actionPerformed:      false,
+      history:              newHistory,
+      modelUsed:            'fast-path/client-lookup',
       pendingNotifications: [],
     }
   }
