@@ -188,7 +188,7 @@ async function getActiveServices(ctx: ToolContext): Promise<ServiceRow[]> {
     .from('services')
     .select('id, name, duration_min, price')
     .eq('business_id', ctx.businessId)
-    .eq('active', true)
+    .eq('is_active', true)
   if (error || !data) return []
   return data as ServiceRow[]
 }
@@ -619,6 +619,86 @@ async function searchClients(ctx: ToolContext, args: SearchClientsArgs): Promise
   return { success: true, result: `No tengo a ${args.query} entre tus clientes. Si lo agendas, queda registrado automáticamente.` }
 }
 
+// ── Tool: get_last_visit ───────────────────────────────────────────────────
+
+interface GetLastVisitArgs { client_name: string }
+
+interface LastVisitRow {
+  id:        string
+  start_at:  string
+  status:    string
+  service?:  { name?: string } | null
+  appointment_services?: Array<{ sort_order: number; service?: { name?: string } | null }>
+}
+
+async function getLastVisit(ctx: ToolContext, args: GetLastVisitArgs): Promise<ToolResult> {
+  if (!args.client_name) {
+    return { success: false, result: 'Necesito el nombre del cliente.' }
+  }
+
+  const resolution = await resolveClient(ctx, args.client_name)
+  if (resolution.status === 'not_found') {
+    return { success: true, result: `No tengo a ${args.client_name} entre tus clientes.` }
+  }
+  if (resolution.status === 'ambiguous') {
+    const names = resolution.candidates.map(c => c.name).join(', ')
+    return { success: true, result: `Hay varios clientes con nombre similar: ${names}. ¿A cuál te refieres?` }
+  }
+  const client = resolution.client
+
+  const nowISO = new Date().toISOString()
+  const { data, error } = await ctx.supabase
+    .from('appointments')
+    .select(`
+      id,
+      start_at,
+      status,
+      service:services(name),
+      appointment_services(sort_order, service:services(name))
+    `)
+    .eq('business_id', ctx.businessId)
+    .eq('client_id', client.id)
+    .lt('start_at', nowISO)
+    .order('start_at', { ascending: false })
+    .limit(1)
+
+  if (error) return { success: false, result: `Error al consultar la última visita: ${error.message}` }
+  if (!data?.length) {
+    return { success: true, result: `${client.name} no tiene visitas anteriores registradas.` }
+  }
+
+  const apt = data[0] as unknown as LastVisitRow
+  const isoDate = apt.start_at.slice(0, 10)
+  const dateLabel = humanizeDate(isoDate, ctx.timezone)
+
+  // Direct FK first; fall back to junction table.
+  const junctionServices = (apt.appointment_services ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+  const serviceName = apt.service?.name
+    ?? junctionServices[0]?.service?.name
+    ?? ''
+
+  const STATUS_PHRASE: Record<string, string> = {
+    completed: 'asistió y completó el servicio',
+    no_show:   'no asistió a la cita',
+    cancelled: 'la cita fue cancelada',
+    confirmed: 'la cita estaba confirmada',
+    pending:   'la cita estaba pendiente',
+  }
+  const statusPhrase = STATUS_PHRASE[apt.status] ?? 'tuvo una cita'
+  const svcPart = serviceName ? ` para ${serviceName}` : ''
+
+  return {
+    success: true,
+    result: `La última cita de ${client.name} fue el ${dateLabel}${svcPart}. ${capitalize(statusPhrase)}.`,
+  }
+}
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1)
+}
+
 // ── Tool: get_services ─────────────────────────────────────────────────────
 
 async function getServices(ctx: ToolContext): Promise<ToolResult> {
@@ -839,6 +919,18 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'get_last_visit',
+      description: 'Devuelve la última cita pasada de un cliente: fecha, servicio y si asistió, no asistió o fue cancelada.',
+      parameters: {
+        type: 'object',
+        properties: { client_name: { type: 'string', description: 'Nombre del cliente' } },
+        required: ['client_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_services',
       description: 'Lista los servicios del negocio.',
       parameters: { type: 'object', properties: {}, required: [] },
@@ -906,6 +998,7 @@ export async function executeTool(
       case 'reschedule_booking':       return await rescheduleBooking(ctx, args as unknown as RescheduleBookingArgs)
       case 'get_appointments_by_date': return await getAppointmentsByDate(ctx, args as unknown as GetByDateArgs)
       case 'search_clients':           return await searchClients(ctx, args as unknown as SearchClientsArgs)
+      case 'get_last_visit':           return await getLastVisit(ctx, args as unknown as GetLastVisitArgs)
       case 'get_services':             return await getServices(ctx)
       case 'create_client':            return await createClient(ctx, args as unknown as CreateClientArgs)
       case 'delete_client':            return await deleteClient(ctx, args as unknown as DeleteClientArgs)

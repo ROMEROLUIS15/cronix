@@ -248,6 +248,55 @@ function detectClientLookupFastPath(userText: string): { name: string } | null {
   return null
 }
 
+/**
+ * Detects "last visit" queries — "cuándo fue la última vez que atendí a X",
+ * "qué día fue la última cita de X", "última visita de X", etc.
+ *
+ * Returns { client_name } if matched, null otherwise. Same defensive pattern
+ * as detectClientLookupFastPath: rejects write verbs and noise-only captures.
+ */
+function detectLastVisitFastPath(userText: string): { client_name: string } | null {
+  const t = userText.toLowerCase().trim()
+
+  const WRITE = /\b(ag[eé]nd[aoeé]|reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé])\b/
+  if (WRITE.test(t)) return null
+
+  const NOT_A_NAME = new Set([
+    'hoy', 'mañana', 'manana', 'ayer', 'anteayer',
+    'cita', 'citas', 'algo', 'nada', 'algún', 'algun', 'alguien',
+  ])
+
+  // "última vez que atendí/se atendió/vino/asistió X"
+  // "última cita/visita de X"
+  // "cuándo vino X por última vez"
+  // "qué día fue la última vez (que) atendí X"
+  // "dime cuándo vino X" / "dime la última visita de X"
+  //
+  // Note: `\b` only recognises ASCII word chars in JS regex, so any pattern
+  // starting with an accented letter (like "última") must use `(?:^|\s)` as
+  // an anchor instead — `\b[uú]ltima` would never match in real input.
+  const PATTERNS: RegExp[] = [
+    /(?:^|\s)[uú]ltima\s+vez\s+que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]|fue\s+atendid[oa])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+    /(?:^|\s)[uú]ltima\s+(?:cita|visita)\s+(?:de|para|que\s+tuvo)\s+(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+    /\bcu[aá]ndo\s+(?:vino|fue\s+atendid[oa]|asisti[óo]|atend[ií])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+por\s+[uú]ltima\s+vez)?(?:\s*\?|\s*$)/i,
+    /\bqu[eé]\s+d[ií]a\s+(?:fue\s+)?(?:la\s+)?[uú]ltima\s+vez\s+que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]|fue\s+atendid[oa])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+    /\bdime\s+(?:la\s+[uú]ltima\s+(?:vez|cita|visita)\s+(?:que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]))?|cu[aá]ndo\s+(?:vino|atend[ií]|asisti[óo]|fue\s+atendid[oa]))\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
+  ]
+
+  for (const re of PATTERNS) {
+    const m = t.match(re)
+    if (m && m[1]) {
+      const name = m[1].trim().replace(/[.,;:!?]+$/, '').trim()
+      if (name.length < 2 || !/[a-záéíóúñ]/i.test(name)) continue
+      const words = name.split(/\s+/)
+      if (words.every(w => NOT_A_NAME.has(w.toLowerCase()))) continue
+      return { client_name: name }
+    }
+  }
+
+  return null
+}
+
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -291,6 +340,30 @@ export async function runAgent(
       actionPerformed:      false,
       history:              newHistory,
       modelUsed:            'fast-path/appointments',
+      pendingNotifications: [],
+    }
+  }
+
+  // Fast path 3: last visit ("cuándo fue la última vez que atendí a Ada Monsalve")
+  // Checked BEFORE client-lookup because "última vez que atendí a X" would also
+  // match the loose "X" capture in the client-lookup patterns otherwise.
+  const fastPathLastVisit = detectLastVisitFastPath(input.text)
+  if (fastPathLastVisit) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH (last visit): client="${fastPathLastVisit.client_name}"`)
+    const result = await executeTool('get_last_visit', { client_name: fastPathLastVisit.client_name }, ctx)
+    const text = result.success
+      ? result.result
+      : 'No pude consultar la última visita en este momento. Intenta de nuevo.'
+    const newHistory: AgentOutput['history'] = [
+      ...input.history,
+      { role: 'user',      content: input.text },
+      { role: 'assistant', content: text       },
+    ].slice(-30)
+    return {
+      text,
+      actionPerformed:      false,
+      history:              newHistory,
+      modelUsed:            'fast-path/last-visit',
       pendingNotifications: [],
     }
   }
