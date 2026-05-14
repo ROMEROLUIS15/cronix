@@ -290,14 +290,22 @@ export function VoiceAssistantFab() {
       const headers: Record<string, string> = { Authorization: `Bearer ${jwt}` }
       let body: BodyInit
 
+      // Send the locally-persisted chat history as a fallback. The edge
+      // function prefers Redis-stored session if Upstash is configured, but
+      // falls back to this when Redis isn't available — without it,
+      // anaphoric references like "borra al duplicado" lose context and
+      // the LLM hallucinates technical-sounding text.
+      const historyJson = JSON.stringify(chatHistory)
+
       if ('audio' in input) {
         const form = new FormData()
         form.append('audio',    input.audio, 'audio.webm')
         form.append('timezone', timezone)
+        form.append('history',  historyJson)
         body = form
       } else {
         headers['Content-Type'] = 'application/json'
-        body = JSON.stringify({ text: input.text, timezone })
+        body = JSON.stringify({ text: input.text, timezone, history: chatHistory })
       }
 
       const res = await fetch(VOICE_WORKER_URL, {

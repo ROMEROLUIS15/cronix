@@ -46,6 +46,24 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+/**
+ * Validates client-supplied conversation history. Untrusted input — must
+ * shape-check every entry, cap length, truncate over-long content, drop
+ * unknown roles. Output is safe to feed straight into the agent.
+ */
+function sanitiseClientHistory(raw: unknown): AgentInput['history'] {
+  if (!Array.isArray(raw)) return []
+  const out: AgentInput['history'] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as { role?: unknown; content?: unknown }
+    if ((e.role !== 'user' && e.role !== 'assistant') || typeof e.content !== 'string') continue
+    out.push({ role: e.role, content: e.content.slice(0, 2000) })
+    if (out.length >= 30) break
+  }
+  return out
+}
+
 // ── Supabase admin client (service role) ───────────────────────────────────
 
 function getAdminClient() {
@@ -168,18 +186,30 @@ async function handleRequest(req: Request): Promise<Response> {
   let inputText = ''
   let timezone  = 'UTC'
   let transcription = ''
+  let clientHistory: AgentInput['history'] = []
 
   const contentType = req.headers.get('content-type') ?? ''
   try {
     if (contentType.includes('application/json')) {
-      const body = await req.json() as { text?: string; timezone?: string }
+      const body = await req.json() as {
+        text?:     string
+        timezone?: string
+        history?:  AgentInput['history']
+      }
       inputText = (body.text ?? '').trim()
       timezone  = body.timezone ?? 'UTC'
+      clientHistory = sanitiseClientHistory(body.history)
       transcription = inputText
     } else {
       const form = await req.formData()
       const audio = form.get('audio') as Blob | null
       timezone    = (form.get('timezone') as string | null) ?? 'UTC'
+      const histRaw = form.get('history') as string | null
+      if (histRaw) {
+        try {
+          clientHistory = sanitiseClientHistory(JSON.parse(histRaw))
+        } catch { clientHistory = [] }
+      }
       if (!audio) return jsonResponse({ error: 'No audio provided' }, 400)
       inputText = await transcribe(audio)
       transcription = inputText
@@ -201,10 +231,19 @@ async function handleRequest(req: Request): Promise<Response> {
   let context: BusinessContext
   let history: AgentInput['history']
   try {
-    [context, history] = await Promise.all([
+    const [ctx, redisHistory] = await Promise.all([
       loadBusinessContext(supabase, userCtx.businessId, timezone),
       getSession(userCtx.userId).then(s => s.messages),
     ])
+    context = ctx
+    // Prefer Redis (server-side truth) when present; otherwise fall back to
+    // the client-supplied history. This is critical: when Upstash isn't
+    // configured, getSession always returns [] and anaphoric references
+    // ("borra al duplicado") would lose context, sending the LLM into
+    // hallucination territory. The FAB ships the last 15 turns from
+    // sessionStorage to keep that flow alive.
+    history = redisHistory.length > 0 ? redisHistory : clientHistory
+    console.log(`[VOICE-WORKER] history source=${redisHistory.length > 0 ? 'redis' : (clientHistory.length > 0 ? 'client' : 'empty')} length=${history.length}`)
   } catch (err) {
     console.error('[VOICE-WORKER] Context load failed', err)
     return jsonResponse({ error: 'No se pudo cargar el contexto del negocio' }, 500)
@@ -221,12 +260,20 @@ async function handleRequest(req: Request): Promise<Response> {
     history,
     context,
   }
+  // Build the user-side text corpus (current turn + recent user messages)
+  // so smart_schedule can reject hallucinated services. Capped to keep the
+  // string small — only the *user* side matters here, never assistant.
+  const userCorpusParts = [inputText]
+  for (const m of history) if (m.role === 'user') userCorpusParts.push(m.content)
+  const userTextCorpus = userCorpusParts.join(' ').slice(0, 4000)
+
   const toolCtx: ToolContext = {
     supabase,
     businessId:  userCtx.businessId,
     userId:      userCtx.userId,
     timezone,
     workingHours: context.workingHours ?? undefined,
+    userTextCorpus,
   }
 
   let agentResult

@@ -22,6 +22,12 @@ export interface ToolContext {
   userId:      string
   timezone:    string
   workingHours?: Record<string, { open: string; close: string } | null>
+  /**
+   * Concatenated user-side text from this turn + recent history. Used by
+   * smartSchedule to verify the LLM didn't hallucinate service_name when
+   * the user never actually mentioned a service.
+   */
+  userTextCorpus?: string
 }
 
 // ── Lightweight fuzzy matching (Levenshtein-based) ─────────────────────────
@@ -284,6 +290,21 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
   const missingLabel = firstMissingScheduleParam({ client_name, service_name, date, time })
   if (missingLabel) {
     return { success: false, result: `Para agendar necesito ${missingLabel}. ¿Me lo dices?` }
+  }
+
+  // Anti-hallucination guard: the LLM is allowed to NORMALISE what the user
+  // said ("corte" → "Corte de cabello") but it cannot invent a service the
+  // user never mentioned. We compare the FIRST WORD of service_name against
+  // the user's corpus (current turn + recent user messages from history).
+  // If absent, treat service as missing and ask. Same idea covers client_name
+  // when called via the LLM path — it must trace back to what the user said.
+  if (ctx.userTextCorpus) {
+    const corpus = ctx.userTextCorpus.toLowerCase()
+    const firstSvcWord = service_name.toLowerCase().replace(/[^a-záéíóúñ]/g, ' ').trim().split(/\s+/)[0]
+    if (firstSvcWord && firstSvcWord.length >= 3 && !corpus.includes(firstSvcWord)) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated service="${service_name}" (firstWord="${firstSvcWord}" not in user corpus)`)
+      return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?' }
+    }
   }
 
   // 1. Resolve client (auto-create if not found)
