@@ -178,7 +178,7 @@ async function getActiveClients(ctx: ToolContext): Promise<ClientRow[]> {
     .from('clients')
     .select('id, name, phone')
     .eq('business_id', ctx.businessId)
-    .eq('status', 'active')
+    .is('deleted_at', null)
   if (error || !data) return []
   return data as ClientRow[]
 }
@@ -264,7 +264,7 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
   } else {
     const { data: created, error } = await ctx.supabase
       .from('clients')
-      .insert({ business_id: ctx.businessId, name: client_name, status: 'active' })
+      .insert({ business_id: ctx.businessId, name: client_name })
       .select('id, name, phone')
       .single()
     if (error || !created) {
@@ -641,7 +641,6 @@ async function createClient(ctx: ToolContext, args: CreateClientArgs): Promise<T
       business_id: ctx.businessId,
       name:        args.name,
       phone:       args.phone ?? null,
-      status:      'active',
     })
     .select('id, name')
     .single()
