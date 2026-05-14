@@ -298,25 +298,62 @@ function detectLastVisitFastPath(userText: string): { client_name: string } | nu
 }
 
 /**
- * Detects "elimina/borra a [client] (cualquiera|alguno|uno|los duplicados)"
- * and "elimina/borra a [client] con teléfono [phone]". Returns the args we'll
- * forward to delete_client, or null if no pattern matches.
+ * Looks at recent assistant turns and pulls out the most recently-mentioned
+ * client name. Used by the delete fast path so anaphoric phrases like
+ * "borra al duplicado" can resolve to the client we just discussed.
  *
- * This is a deterministic bypass — when the user has clearly consented to
- * deleting a duplicate ("elimina a cualquiera de los dos"), going through
- * the LLM is the bug: it tends to either re-prompt for confirmation or hallucinate technical-sounding text. The fast path skips both failure
- * modes entirely.
+ * Matches three response shapes the assistant produces:
+ *   - "Tengo N clientes con nombre similar a X."        (search_clients ambiguous)
+ *   - "Tengo N clientes llamados X con el mismo..."     (delete_client ambiguous)
+ *   - "Sí, X está entre tus clientes..."                (search_clients found)
+ */
+function extractRecentClientNameFromHistory(
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i]!
+    if (msg.role !== 'assistant') continue
+    const t = msg.content
+
+    let m = t.match(/clientes\s+(?:con\s+nombre\s+similar\s+a|llamad[oa]s?)\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)(?:\s+(?:con|sin|y|que|en)\b|\s*[.,:!?])/i)
+    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
+
+    m = t.match(/s[ií],?\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)\s+est[áa]\s+entre\s+tus\s+clientes/i)
+    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
+
+    m = t.match(/(?:hay|tengo)\s+\d+\s+clientes?\s+(?:con\s+nombre\s+similar\s+a|llamad[oa]s?)\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)(?:\s+(?:con|sin|y|que|en)\b|\s*[.,:!?])/i)
+    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
+  }
+  return null
+}
+
+/**
+ * Detects three shapes of "delete client" intent and returns the args we
+ * forward to delete_client (or null if nothing matches):
+ *
+ *   A) "elimina a X con teléfono Y"   → { name, phone }
+ *   B) "elimina a X cualquiera|uno|los duplicados" → { name, any: true }
+ *   C) Anaphoric short form: "borra al duplicado", "elimina los duplicados",
+ *      "borra uno", "borra al otro" — no name in current turn. We pull the
+ *      client name from the most recent assistant message and treat it as
+ *      shape (B). This is what was missing before: the user's phrase
+ *      "borra al duplicado" had no explicit name, so the fast path bailed
+ *      and the LLM hallucinated.
+ *
+ * Bypassing the LLM is the whole point — for a deterministic action with
+ * explicit consent it has no upside and a clear downside (technical leakage,
+ * confirmation loops).
  */
 function detectDeleteClientFastPath(
   userText: string,
+  history:  Array<{ role: 'user' | 'assistant'; content: string }>,
 ): { name: string; any?: boolean; phone?: string } | null {
   const t = userText.toLowerCase().trim()
 
   // Verb roots covering elimina/eliminame/borra/borrame/quita/quitame/remueve.
   const VERB = /(?:elim[íi]nam?e?|b[óo]rrame?|borra|qu[íi]tame?|quita|rem[ueú]ve)/
 
-  // Phone variant: "elimina a X con teléfono 04XX..." or "...el teléfono X".
-  // Capture name as group 1 and phone (digits + space/+/-/parens) as group 2.
+  // (A) Phone variant: "elimina a X con teléfono 04XX..." or "...el teléfono X".
   const PHONE_RE = new RegExp(
     `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:con\\s+(?:el\\s+)?|de(?:l)?\\s+|que\\s+tiene\\s+(?:el\\s+)?)tel[eé]fono\\s+([\\d\\s+()-]{6,30})\\s*\\??$`,
     'i',
@@ -329,9 +366,8 @@ function detectDeleteClientFastPath(
     }
   }
 
-  // "any duplicate" variant: "elimina a X cualquiera|alguno|uno|los duplicados".
-  // Also accepts the consent-only form once the assistant has just asked
-  // ("¿elimino uno y dejo el otro?") and the user simply says "sí elimina uno".
+  // (B) "any duplicate" variant WITH explicit name:
+  // "elimina a X cualquiera|alguno|uno|los duplicados|el duplicado".
   const ANY_RE = new RegExp(
     `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:a\\s+)?(?:cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno|a?\\s*uno|los\\s+duplicados|el\\s+duplicado)\\b`,
     'i',
@@ -342,6 +378,22 @@ function detectDeleteClientFastPath(
       name: anyMatch[1].trim().replace(/[.,;:!?]+$/, '').trim(),
       any:  true,
     }
+  }
+
+  // (C) Anaphoric short form — no name in current turn.
+  // Accepts optional leading "sí" / "sí," for the case where the assistant
+  // just asked "¿elimino uno y dejo el otro?" and the user replied "sí, borra uno".
+  const SHORT_RE = new RegExp(
+    `^(?:s[ií],?\\s+)?${VERB.source}\\s+(?:a(?:l)?\\s+)?(?:los\\s+)?(?:duplicados?|el\\s+duplicado|otro|el\\s+otro|los\\s+otros|uno|cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno)\\s*\\??$`,
+    'i',
+  )
+  if (SHORT_RE.test(t)) {
+    const name = extractRecentClientNameFromHistory(history)
+    if (name) {
+      return { name, any: true }
+    }
+    // No context to resolve the reference — let the LLM ask "¿de qué cliente?"
+    return null
   }
 
   return null
@@ -422,7 +474,7 @@ export async function runAgent(
   // ("elimina a Luis Romero cualquiera", "borra a Luis con teléfono X").
   // Goes BEFORE client-lookup because "borra a Luis" loosely matches the
   // client-lookup verb set otherwise.
-  const fastPathDelete = detectDeleteClientFastPath(input.text)
+  const fastPathDelete = detectDeleteClientFastPath(input.text, input.history)
   if (fastPathDelete) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (delete client): name="${fastPathDelete.name}" any=${!!fastPathDelete.any} phone="${fastPathDelete.phone ?? ''}"`)
     const toolArgs: Record<string, unknown> = { client_name: fastPathDelete.name }
