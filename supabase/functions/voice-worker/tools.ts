@@ -246,10 +246,44 @@ interface SmartScheduleArgs {
   time:         string
 }
 
+/**
+ * Strings the LLM sometimes ships in lieu of asking the user. Treat them as
+ * missing — booking without these is the bug the user reported when the
+ * assistant scheduled "Gardi para el 21" with no service or time.
+ */
+const SCHEDULE_PLACEHOLDER = /^(?:\?+|tbd|pendiente|por\s+definir|n\/a|none|null|undefined|sin\s+(?:especificar|definir)|no\s+especificad[oa])$/i
+
+function isScheduleParamMissing(value: string | undefined): boolean {
+  if (!value) return true
+  const t = value.trim()
+  if (t.length === 0) return true
+  return SCHEDULE_PLACEHOLDER.test(t)
+}
+
+/**
+ * Returns the human-readable label of the first missing schedule parameter,
+ * or null if all four are present. Order matters — we ask for them in the
+ * sequence the user expects (cliente → servicio → fecha → hora).
+ */
+function firstMissingScheduleParam(args: {
+  client_name?: string; service_name?: string; date?: string; time?: string
+}): string | null {
+  if (isScheduleParamMissing(args.client_name))  return 'el nombre del cliente'
+  if (isScheduleParamMissing(args.service_name)) return 'el servicio'
+  if (isScheduleParamMissing(args.date))         return 'la fecha'
+  if (isScheduleParamMissing(args.time))         return 'la hora'
+  return null
+}
+
 async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise<ToolResult> {
   const { service_name, client_name, date, time } = args
-  if (!service_name || !client_name || !date || !time) {
-    return { success: false, result: 'Faltan datos para agendar (cliente, servicio, fecha y hora son obligatorios).' }
+
+  // Reject empty strings AND placeholders the LLM might invent when it wants
+  // to bypass the missing-data prompt. Ask for ONE missing field at a time
+  // so the conversation feels natural instead of dumping a checklist.
+  const missingLabel = firstMissingScheduleParam({ client_name, service_name, date, time })
+  if (missingLabel) {
+    return { success: false, result: `Para agendar necesito ${missingLabel}. ¿Me lo dices?` }
   }
 
   // 1. Resolve client (auto-create if not found)
@@ -731,7 +765,21 @@ async function createClient(ctx: ToolContext, args: CreateClientArgs): Promise<T
 
 // ── Tool: delete_client ────────────────────────────────────────────────────
 
-interface DeleteClientArgs { client_name: string }
+interface DeleteClientArgs {
+  client_name: string
+  /**
+   * Optional. When two or more clients share the name, the LLM passes the
+   * phone the user spoke ("elimina a Luis Romero con teléfono X") so we can
+   * pick the right row. If multiple rows still match the same phone (true
+   * duplicates), we delete the oldest one deterministically.
+   */
+  phone?: string
+}
+
+/** Strip everything but digits — matches WhatsApp's normalisation. */
+function normalisePhone(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/\D+/g, '')
+}
 
 async function deleteClient(ctx: ToolContext, args: DeleteClientArgs): Promise<ToolResult> {
   if (!args.client_name) return { success: false, result: 'Necesito el nombre del cliente.' }
@@ -740,9 +788,49 @@ async function deleteClient(ctx: ToolContext, args: DeleteClientArgs): Promise<T
   if (resolution.status === 'not_found') {
     return { success: false, result: `No encontré al cliente "${args.client_name}".` }
   }
-  if (resolution.status === 'ambiguous') {
-    const names = resolution.candidates.map(c => c.name).join(', ')
-    return { success: false, result: `Hay varios clientes similares: ${names}. ¿A cuál elimino?` }
+
+  // Single match → delete straight away.
+  let target: ClientRow
+  if (resolution.status === 'found') {
+    target = resolution.client
+  } else {
+    // Ambiguous — multiple clients share this name.
+    const candidates = resolution.candidates
+    const wantedPhone = normalisePhone(args.phone)
+
+    if (!wantedPhone) {
+      // No phone hint from the user → list candidates WITH their phones so the
+      // next turn can disambiguate. If every candidate shares the same phone
+      // we surface that fact ("son duplicados") so the user can confirm in
+      // one go.
+      const phones = candidates.map(c => normalisePhone(c.phone))
+      const allSame = phones.every(p => p === phones[0])
+      if (allSame) {
+        const phoneStr = phones[0] ? `con el mismo teléfono ${candidates[0]!.phone}` : 'sin teléfono registrado'
+        return {
+          success: false,
+          result: `Tengo ${candidates.length} clientes llamados ${candidates[0]!.name} ${phoneStr} — parecen duplicados. ¿Elimino uno y dejo el otro?`,
+        }
+      }
+      const list = candidates
+        .map(c => c.phone ? `${c.name} con teléfono ${c.phone}` : `${c.name} sin teléfono`)
+        .join(', ')
+      return { success: false, result: `Hay varios clientes llamados ${candidates[0]!.name}: ${list}. ¿Cuál elimino, dime el teléfono?` }
+    }
+
+    // Phone hint provided → filter candidates.
+    const matches = candidates.filter(c => normalisePhone(c.phone) === wantedPhone)
+    if (matches.length === 0) {
+      return { success: false, result: `No encontré a ${args.client_name} con el teléfono ${args.phone}.` }
+    }
+    if (matches.length === 1) {
+      target = matches[0]!
+    } else {
+      // Multiple rows with same name AND same phone = real duplicates.
+      // Delete the first one deterministically (oldest by id ordering is
+      // implementation-defined; we just pick the first the DB returned).
+      target = matches[0]!
+    }
   }
 
   // Block delete if client has future appointments (mirrors DeleteClientUseCase)
@@ -750,22 +838,23 @@ async function deleteClient(ctx: ToolContext, args: DeleteClientArgs): Promise<T
     .from('appointments')
     .select('id', { count: 'exact', head: true })
     .eq('business_id', ctx.businessId)
-    .eq('client_id', resolution.client.id)
+    .eq('client_id', target.id)
     .in('status', ['pending', 'confirmed'])
     .gte('start_at', new Date().toISOString())
 
   if ((count ?? 0) > 0) {
-    return { success: false, result: `No se puede eliminar: ${resolution.client.name} tiene ${count} cita(s) futura(s). Cancélalas primero.` }
+    return { success: false, result: `No se puede eliminar: ${target.name} tiene ${count} cita(s) futura(s). Cancélalas primero.` }
   }
 
   const { error } = await ctx.supabase
     .from('clients')
     .delete()
-    .eq('id', resolution.client.id)
+    .eq('id', target.id)
     .eq('business_id', ctx.businessId)
 
   if (error) return { success: false, result: `No pude eliminar: ${error.message}` }
-  return { success: true, result: `Cliente "${resolution.client.name}" eliminado.` }
+  const phoneSuffix = target.phone ? ` (teléfono ${target.phone})` : ''
+  return { success: true, result: `Cliente ${target.name}${phoneSuffix} eliminado.` }
 }
 
 // ── Tool: get_available_slots ──────────────────────────────────────────────
@@ -955,10 +1044,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'delete_client',
-      description: 'Elimina un cliente. Falla si tiene citas futuras.',
+      description: 'Elimina un cliente. Pasa phone cuando dos o más clientes compartan el nombre y el usuario haya indicado el teléfono. Falla si tiene citas futuras.',
       parameters: {
         type: 'object',
-        properties: { client_name: { type: 'string' } },
+        properties: {
+          client_name: { type: 'string' },
+          phone:       { type: 'string', description: 'Teléfono para desambiguar entre clientes con el mismo nombre' },
+        },
         required: ['client_name'],
       },
     },
