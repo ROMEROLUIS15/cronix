@@ -774,6 +774,14 @@ interface DeleteClientArgs {
    * duplicates), we delete the oldest one deterministically.
    */
   phone?: string
+  /**
+   * Set when the user has given explicit consent to remove a duplicate
+   * ("elimina a cualquiera", "borra los duplicados", "elimina uno"). When
+   * true AND every ambiguous candidate shares the same phone, we skip the
+   * "are they duplicates?" prompt and just delete the first one — without
+   * this flag the assistant would loop on the confirmation question.
+   */
+  any_duplicate?: boolean
 }
 
 /** Strip everything but digits — matches WhatsApp's normalisation. */
@@ -806,29 +814,31 @@ async function deleteClient(ctx: ToolContext, args: DeleteClientArgs): Promise<T
       const phones = candidates.map(c => normalisePhone(c.phone))
       const allSame = phones.every(p => p === phones[0])
       if (allSame) {
-        const phoneStr = phones[0] ? `con el mismo teléfono ${candidates[0]!.phone}` : 'sin teléfono registrado'
-        return {
-          success: false,
-          result: `Tengo ${candidates.length} clientes llamados ${candidates[0]!.name} ${phoneStr} — parecen duplicados. ¿Elimino uno y dejo el otro?`,
+        // If the user already said "cualquiera" / "los duplicados", skip the
+        // confirmation question and delete the first one straight away.
+        if (args.any_duplicate) {
+          target = candidates[0]!
+        } else {
+          const phoneStr = phones[0] ? `con el mismo teléfono ${candidates[0]!.phone}` : 'sin teléfono registrado'
+          return {
+            success: false,
+            result: `Tengo ${candidates.length} clientes llamados ${candidates[0]!.name} ${phoneStr} — parecen duplicados. ¿Elimino uno y dejo el otro?`,
+          }
         }
+      } else {
+        const list = candidates
+          .map(c => c.phone ? `${c.name} con teléfono ${c.phone}` : `${c.name} sin teléfono`)
+          .join(', ')
+        return { success: false, result: `Hay varios clientes llamados ${candidates[0]!.name}: ${list}. ¿Cuál elimino, dime el teléfono?` }
       }
-      const list = candidates
-        .map(c => c.phone ? `${c.name} con teléfono ${c.phone}` : `${c.name} sin teléfono`)
-        .join(', ')
-      return { success: false, result: `Hay varios clientes llamados ${candidates[0]!.name}: ${list}. ¿Cuál elimino, dime el teléfono?` }
-    }
-
-    // Phone hint provided → filter candidates.
-    const matches = candidates.filter(c => normalisePhone(c.phone) === wantedPhone)
-    if (matches.length === 0) {
-      return { success: false, result: `No encontré a ${args.client_name} con el teléfono ${args.phone}.` }
-    }
-    if (matches.length === 1) {
-      target = matches[0]!
     } else {
-      // Multiple rows with same name AND same phone = real duplicates.
-      // Delete the first one deterministically (oldest by id ordering is
-      // implementation-defined; we just pick the first the DB returned).
+      // Phone hint provided → filter candidates.
+      const matches = candidates.filter(c => normalisePhone(c.phone) === wantedPhone)
+      if (matches.length === 0) {
+        return { success: false, result: `No encontré a ${args.client_name} con el teléfono ${args.phone}.` }
+      }
+      // 1+ matches → take the first deterministically. When multiple rows
+      // share name+phone they are real duplicates and any of them is fine.
       target = matches[0]!
     }
   }
@@ -1044,12 +1054,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'delete_client',
-      description: 'Elimina un cliente. Pasa phone cuando dos o más clientes compartan el nombre y el usuario haya indicado el teléfono. Falla si tiene citas futuras.',
+      description: 'Elimina un cliente. Pasa phone cuando dos clientes compartan el nombre. Pasa any_duplicate=true cuando el usuario diga "elimina a cualquiera" / "borra los duplicados" / "elimina uno". Falla si tiene citas futuras.',
       parameters: {
         type: 'object',
         properties: {
-          client_name: { type: 'string' },
-          phone:       { type: 'string', description: 'Teléfono para desambiguar entre clientes con el mismo nombre' },
+          client_name:   { type: 'string' },
+          phone:         { type: 'string',  description: 'Teléfono para desambiguar entre clientes con el mismo nombre' },
+          any_duplicate: { type: 'boolean', description: 'true cuando el usuario consintió borrar uno de los duplicados sin importar cuál' },
         },
         required: ['client_name'],
       },

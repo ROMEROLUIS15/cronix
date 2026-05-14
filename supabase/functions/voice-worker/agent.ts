@@ -297,6 +297,56 @@ function detectLastVisitFastPath(userText: string): { client_name: string } | nu
   return null
 }
 
+/**
+ * Detects "elimina/borra a [client] (cualquiera|alguno|uno|los duplicados)"
+ * and "elimina/borra a [client] con teléfono [phone]". Returns the args we'll
+ * forward to delete_client, or null if no pattern matches.
+ *
+ * This is a deterministic bypass — when the user has clearly consented to
+ * deleting a duplicate ("elimina a cualquiera de los dos"), going through
+ * the LLM is the bug: it tends to either re-prompt for confirmation or hallucinate technical-sounding text. The fast path skips both failure
+ * modes entirely.
+ */
+function detectDeleteClientFastPath(
+  userText: string,
+): { name: string; any?: boolean; phone?: string } | null {
+  const t = userText.toLowerCase().trim()
+
+  // Verb roots covering elimina/eliminame/borra/borrame/quita/quitame/remueve.
+  const VERB = /(?:elim[íi]nam?e?|b[óo]rrame?|borra|qu[íi]tame?|quita|rem[ueú]ve)/
+
+  // Phone variant: "elimina a X con teléfono 04XX..." or "...el teléfono X".
+  // Capture name as group 1 and phone (digits + space/+/-/parens) as group 2.
+  const PHONE_RE = new RegExp(
+    `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:con\\s+(?:el\\s+)?|de(?:l)?\\s+|que\\s+tiene\\s+(?:el\\s+)?)tel[eé]fono\\s+([\\d\\s+()-]{6,30})\\s*\\??$`,
+    'i',
+  )
+  const phoneMatch = t.match(PHONE_RE)
+  if (phoneMatch && phoneMatch[1]) {
+    return {
+      name:  phoneMatch[1].trim().replace(/[.,;:!?]+$/, '').trim(),
+      phone: phoneMatch[2]!.trim(),
+    }
+  }
+
+  // "any duplicate" variant: "elimina a X cualquiera|alguno|uno|los duplicados".
+  // Also accepts the consent-only form once the assistant has just asked
+  // ("¿elimino uno y dejo el otro?") and the user simply says "sí elimina uno".
+  const ANY_RE = new RegExp(
+    `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:a\\s+)?(?:cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno|a?\\s*uno|los\\s+duplicados|el\\s+duplicado)\\b`,
+    'i',
+  )
+  const anyMatch = t.match(ANY_RE)
+  if (anyMatch && anyMatch[1]) {
+    return {
+      name: anyMatch[1].trim().replace(/[.,;:!?]+$/, '').trim(),
+      any:  true,
+    }
+  }
+
+  return null
+}
+
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -364,6 +414,34 @@ export async function runAgent(
       actionPerformed:      false,
       history:              newHistory,
       modelUsed:            'fast-path/last-visit',
+      pendingNotifications: [],
+    }
+  }
+
+  // Fast path 4: delete client with explicit consent for duplicates
+  // ("elimina a Luis Romero cualquiera", "borra a Luis con teléfono X").
+  // Goes BEFORE client-lookup because "borra a Luis" loosely matches the
+  // client-lookup verb set otherwise.
+  const fastPathDelete = detectDeleteClientFastPath(input.text)
+  if (fastPathDelete) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH (delete client): name="${fastPathDelete.name}" any=${!!fastPathDelete.any} phone="${fastPathDelete.phone ?? ''}"`)
+    const toolArgs: Record<string, unknown> = { client_name: fastPathDelete.name }
+    if (fastPathDelete.any)   toolArgs.any_duplicate = true
+    if (fastPathDelete.phone) toolArgs.phone         = fastPathDelete.phone
+    const result = await executeTool('delete_client', toolArgs, ctx)
+    const text = result.success
+      ? result.result
+      : (result.result || 'No pude eliminar al cliente en este momento. Intenta de nuevo.')
+    const newHistory: AgentOutput['history'] = [
+      ...input.history,
+      { role: 'user',      content: input.text },
+      { role: 'assistant', content: text       },
+    ].slice(-30)
+    return {
+      text,
+      actionPerformed:      result.success,
+      history:              newHistory,
+      modelUsed:            'fast-path/delete-client',
       pendingNotifications: [],
     }
   }
