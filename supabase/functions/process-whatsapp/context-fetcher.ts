@@ -31,11 +31,14 @@ export async function getClientByPhone(
   const { data } = await supabase
     .rpc('fn_find_client_by_phone', {
       p_business_id:  businessId,
-      p_phone_digits: digits,
+      p_phone:        digits,
     })
 
-  if (!data || (data as ClientRow[]).length === 0) return null
-  return (data as ClientRow[])[0]
+  if (!data || (data as Record<string, unknown>[]).length === 0) return null
+  const row = (data as Record<string, unknown>[])[0] as {
+    client_id: string; client_name: string; client_phone: string
+  }
+  return { id: row.client_id, name: row.client_name }
 }
 
 /**
@@ -111,7 +114,7 @@ export async function getBookedSlots(
   timezone:   string
 ): Promise<Array<{ start_at: string; end_at: string }>> {
   const now      = new Date()
-  const in7days  = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const in14days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
   const { data } = await supabase
     .from('appointments')
@@ -119,7 +122,7 @@ export async function getBookedSlots(
     .eq('business_id', businessId)
     .not('status', 'in', '("cancelled","no_show")')
     .gte('start_at', now.toISOString())
-    .lte('start_at', in7days.toISOString())
+    .lte('start_at', in14days.toISOString())
     .order('start_at', { ascending: true })
 
   if (!data) return []

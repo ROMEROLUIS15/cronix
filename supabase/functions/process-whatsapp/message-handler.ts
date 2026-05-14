@@ -256,7 +256,7 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     const [activeAppointments, history, bookedSlots] = await Promise.all([
       client ? getActiveAppointments(business.id, client.id) : Promise.resolve([]),
-      getConversationHistory(business.id, sender, 2),
+      getConversationHistory(business.id, sender, 6),
       getBookedSlots(business.id, timezone),
     ])
 
