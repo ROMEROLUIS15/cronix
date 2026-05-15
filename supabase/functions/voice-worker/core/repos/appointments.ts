@@ -56,17 +56,34 @@ export async function findAppointmentById(
   return row
 }
 
+/**
+ * Two query modes:
+ *
+ *  - When `date` is given, look at that single day only (the user named a
+ *    specific date, so a miss on that day is genuinely "no encontré").
+ *  - When `date` is NOT given, scan ALL upcoming active appointments for
+ *    this client from today onward and return the next one. The previous
+ *    "default to today" behaviour caused "cancela la cita de Gardi" to
+ *    fail whenever Gardi's appointment was scheduled for any day other
+ *    than today — which is the common case.
+ *
+ * Multiple candidates on the same day → time disambiguator when supplied,
+ * otherwise an ambiguity error listing the times. Multiple candidates
+ * across different days → list the dates and ask which one to act on.
+ */
 export async function findAppointmentByClientName(
   ctx:    ToolContext,
   client: ClientRow,
   date?:  string,
   time?:  string,
 ): Promise<AppointmentForLookup | { error: string }> {
-  const targetDate = date ?? new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
-  const startISO   = localToUTC(targetDate, '00:00', ctx.timezone)
-  const endISO     = localToUTC(targetDate, '23:59', ctx.timezone)
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+  const startISO   = localToUTC(date ?? todayLocal, '00:00', ctx.timezone)
+  const endISO     = date
+    ? localToUTC(date, '23:59', ctx.timezone)
+    : localToUTC(addDaysIso(todayLocal, 365), '23:59', ctx.timezone)   // open future window
 
-  const q = ctx.supabase
+  const { data, error } = await ctx.supabase
     .from('appointments')
     .select('id, start_at, end_at, client_id, service_id, appointment_services(service_id, sort_order)')
     .eq('business_id', ctx.businessId)
@@ -76,18 +93,37 @@ export async function findAppointmentByClientName(
     .lte('start_at', endISO)
     .order('start_at')
 
-  const { data, error } = await q
   if (error) return { error: `Error buscando cita: ${error.message}` }
   const list = (data ?? []) as unknown as AppointmentForLookup[]
-  if (list.length === 0) return { error: `No encontré cita activa de ${client.name} el ${targetDate}.` }
+
+  if (list.length === 0) {
+    return date
+      ? { error: `No encontré cita activa de ${client.name} el ${date}.` }
+      : { error: `${client.name} no tiene citas activas próximas.` }
+  }
   if (list.length === 1) return list[0]!
 
+  // Disambiguation: prefer time match within a single day; otherwise enumerate.
   if (time) {
     const matched = list.find(a => formatTimeFromISO(a.start_at, ctx.timezone).startsWith(time.split(':')[0]!))
     if (matched) return matched
   }
-  const labels = list.slice(0, 3).map(a => formatTimeFromISO(a.start_at, ctx.timezone)).join(', ')
-  return { error: `${client.name} tiene varias citas el ${targetDate}: ${labels}. ¿Cuál cancelo?` }
+
+  const sameDay = list.every(a => a.start_at.slice(0, 10) === list[0]!.start_at.slice(0, 10))
+  if (sameDay) {
+    const labels = list.slice(0, 3).map(a => formatTimeFromISO(a.start_at, ctx.timezone)).join(', ')
+    return { error: `${client.name} tiene varias citas el ${list[0]!.start_at.slice(0, 10)}: ${labels}. ¿Cuál?` }
+  }
+  const labels = list.slice(0, 3).map(a => a.start_at.slice(0, 10)).join(', ')
+  return { error: `${client.name} tiene varias citas próximas: ${labels}. ¿Cuál fecha?` }
+}
+
+function addDaysIso(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(Date.UTC(y!, m! - 1, d!))
+  date.setUTCDate(date.getUTCDate() + days)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
 }
 
 /**
