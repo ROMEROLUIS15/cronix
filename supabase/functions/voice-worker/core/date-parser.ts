@@ -155,7 +155,7 @@ export function parseDateExpression(text: string, today: string): ParsedDate | n
   // weekday to be at the end or followed by a non-weekday connector to keep
   // scope tight.
   const wdRe = new RegExp(
-    `\\b(?:el\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+)(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
+    `\\b(?:el\\s+|del\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+|en\\s+el\\s+)(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
   )
   const wdM = t.match(wdRe)
   if (wdM) {

@@ -24,6 +24,7 @@ import { TOOL_DEFINITIONS, WRITE_TOOLS, executeTool, type ToolContext } from './
 import { getProvider }                                from './providers/registry.ts'
 import type { NeutralMessage, NeutralTool } from './providers/ILLMProvider.ts'
 import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType } from './types.ts'
+import { detectFastPath as registryDetect } from './capabilities/_shared/registry.ts'
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
@@ -415,23 +416,28 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
-  // ── FAST PATHS — total LLM bypass for unambiguous read queries
+  // ── FAST PATHS — total LLM bypass for unambiguous queries
   //
   // The user's input text is unambiguous enough that we can answer correctly
   // without involving the LLM. Eliminates every class of LLM-induced bug:
   // wrong date math, hallucinated tool args, ignored tool results, looping.
-  //
-  // Same philosophy as the junction-table SQL fix earlier: when the answer
-  // is computable deterministically, compute it. Don't roll the dice.
 
-  // Fast path 1: appointment list ("qué citas tengo mañana")
-  const fastPathDate = detectAppointmentListFastPath(input.text, todayLocal)
-  if (fastPathDate) {
-    console.log(`[VOICE-WORKER-AGENT] FAST PATH (appointments): date=${fastPathDate.date} (user said "${fastPathDate.reason}")`)
-    const result = await executeTool('get_appointments_by_date', { date: fastPathDate.date }, ctx)
+  // Registry-backed fast paths (list-appointments, search-clients).
+  // Remaining intents still go through the inline detectors below until
+  // their capabilities migrate.
+  const registryHit = registryDetect({
+    text:     input.text,
+    today:    todayLocal,
+    timezone: ctx.timezone,
+    history:  input.history,
+    lastRef:  null,  // populated in C10 when the schedule capability writes lastRef
+  })
+  if (registryHit) {
+    console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}): args=${JSON.stringify(registryHit.args)}`)
+    const result = await executeTool(registryHit.capability.name, registryHit.args, ctx)
     const text = result.success
       ? result.result
-      : 'No pude consultar las citas en este momento. Intenta de nuevo en un momento.'
+      : (result.result || 'No pude completar esa consulta en este momento. Intenta de nuevo.')
     const newHistory: AgentOutput['history'] = [
       ...input.history,
       { role: 'user',      content: input.text },
@@ -441,7 +447,7 @@ export async function runAgent(
       text,
       actionPerformed:      false,
       history:              newHistory,
-      modelUsed:            'fast-path/appointments',
+      modelUsed:            `fast-path/${registryHit.capability.name}`,
       pendingNotifications: [],
     }
   }
@@ -472,8 +478,6 @@ export async function runAgent(
 
   // Fast path 4: delete client with explicit consent for duplicates
   // ("elimina a Luis Romero cualquiera", "borra a Luis con teléfono X").
-  // Goes BEFORE client-lookup because "borra a Luis" loosely matches the
-  // client-lookup verb set otherwise.
   const fastPathDelete = detectDeleteClientFastPath(input.text, input.history)
   if (fastPathDelete) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (delete client): name="${fastPathDelete.name}" any=${!!fastPathDelete.any} phone="${fastPathDelete.phone ?? ''}"`)
@@ -494,28 +498,6 @@ export async function runAgent(
       actionPerformed:      result.success,
       history:              newHistory,
       modelUsed:            'fast-path/delete-client',
-      pendingNotifications: [],
-    }
-  }
-
-  // Fast path 2: client lookup ("tengo a María Dugarte?", "busca a Ada Monsalve")
-  const fastPathClient = detectClientLookupFastPath(input.text)
-  if (fastPathClient) {
-    console.log(`[VOICE-WORKER-AGENT] FAST PATH (client lookup): name="${fastPathClient.name}"`)
-    const result = await executeTool('search_clients', { query: fastPathClient.name }, ctx)
-    const text = result.success
-      ? result.result
-      : 'No pude consultar la lista de clientes en este momento. Intenta de nuevo.'
-    const newHistory: AgentOutput['history'] = [
-      ...input.history,
-      { role: 'user',      content: input.text },
-      { role: 'assistant', content: text       },
-    ].slice(-30)
-    return {
-      text,
-      actionPerformed:      false,
-      history:              newHistory,
-      modelUsed:            'fast-path/client-lookup',
       pendingNotifications: [],
     }
   }
