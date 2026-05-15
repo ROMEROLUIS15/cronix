@@ -13,7 +13,7 @@ import type { ToolResult, BookingEventData } from './types.ts'
 import type { ToolContext } from './core/tool-context.ts'
 
 import { normalize, tokens } from './core/fuzzy.ts'
-import { userMentionedTime } from './core/time-parser.ts'
+import { parseTimeExpression, userMentionedTime } from './core/time-parser.ts'
 import { parseDateExpression } from './core/date-parser.ts'
 import {
   localToUTC, buildEndISO, humanizeDate, formatTimeFromISO,
@@ -64,7 +64,25 @@ function firstMissingScheduleParam(args: {
 }
 
 async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise<ToolResult> {
-  const { service_name, client_name, date, time } = args
+  let { service_name, client_name, date, time } = args
+
+  // Deterministic date/time override: prefer what the user actually said
+  // (parsed from the corpus) over what the LLM emitted. Llama 3.x has a
+  // strong bias for "09:00" and "today" when it lacks a real value, which
+  // is exactly what was producing bookings at hours the user never named.
+  if (ctx.userTextCorpus) {
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+    const userDate = parseDateExpression(ctx.userTextCorpus, todayLocal)?.date
+    const userTime = parseTimeExpression(ctx.userTextCorpus)?.time
+    if (userDate && userDate !== date) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule date override: LLM="${date}" → user="${userDate}"`)
+      date = userDate
+    }
+    if (userTime && userTime !== time) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule time override: LLM="${time}" → user="${userTime}"`)
+      time = userTime
+    }
+  }
 
   const missingLabel = firstMissingScheduleParam({ client_name, service_name, date, time })
   if (missingLabel) {

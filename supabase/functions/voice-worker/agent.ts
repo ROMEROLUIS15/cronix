@@ -567,8 +567,12 @@ export async function runAgent(
       tool_calls: resp.toolCalls,
     })
 
-    // Track results from this step so we can decide whether to bypass synthesis
-    let lastSuccessfulText: string | null = null
+    // Track results from this step so we can decide whether to bypass synthesis.
+    // We capture the tool's result text whether it succeeded or not — every
+    // tool in BYPASS_TOOLS returns user-facing prose on both branches, so
+    // bypassing on failure preserves the tool's own error message (e.g.
+    // "¿A qué hora?") instead of letting the LLM rewrite or ignore it.
+    let lastResultText:    string | null = null
     let successfulCallCount = 0
 
     // Execute each tool call
@@ -628,9 +632,9 @@ export async function runAgent(
         content:      result.result,
       })
 
-      if (result.success) {
-        successfulCallCount++
-        lastSuccessfulText = result.result
+      if (result.success) successfulCallCount++
+      if (BYPASS_TOOLS.has(tc.name) && result.result) {
+        lastResultText = result.result
       }
 
       if (result.success && WRITE_TOOLS.has(tc.name)) {
@@ -670,25 +674,20 @@ export async function runAgent(
       }
     }
 
-    // ── Bypass LLM synthesis when a single tool call succeeded ─────────────
+    // ── Bypass LLM synthesis when the tool returned prose ─────────────────
     // Industry-standard pattern (LangChain `return_direct`, OpenAI function-
-    // calling docs, Anthropic tool_use best practices): use the tool's output
-    // directly instead of asking the LLM to "rephrase" it. Eliminates the
-    // hallucination surface where 70B Versatile would otherwise sometimes
-    // ignore the tool result and synthesize wrong answers.
-    //
-    // Conditions:
-    //   - exactly ONE tool call this step (multi-tool needs synthesis)
-    //   - exactly ONE successful (failed calls need LLM to handle gracefully)
-    //   - the tool is in BYPASS_TOOLS (explicit allow-list, defensive)
+    // calling docs). Use the tool's output directly instead of asking the
+    // LLM to rephrase. Bypass on BOTH success and failure for tools whose
+    // failure result is also user-facing prose ("¿A qué hora?", "Hay varios
+    // clientes similares: …") — otherwise Llama 3.x will rewrite or
+    // outright ignore the tool's question and book against bad data anyway.
     if (
       resp.toolCalls.length === 1 &&
-      successfulCallCount === 1 &&
-      lastSuccessfulText &&
+      lastResultText &&
       BYPASS_TOOLS.has(resp.toolCalls[0]!.name)
     ) {
-      finalText = lastSuccessfulText
-      console.log(`[VOICE-WORKER-AGENT] Bypassing LLM synthesis — using ${resp.toolCalls[0]!.name} result directly`)
+      finalText = lastResultText
+      console.log(`[VOICE-WORKER-AGENT] Bypassing LLM synthesis — using ${resp.toolCalls[0]!.name} result directly (success=${successfulCallCount === 1})`)
       break
     }
   }

@@ -265,12 +265,29 @@ async function handleRequest(req: Request): Promise<Response> {
       time:          sessionLastRef.time,
     } : null,
   }
-  // Build the user-side text corpus (current turn + recent user messages)
-  // so smart_schedule can reject hallucinated services. Capped to keep the
-  // string small — only the *user* side matters here, never assistant.
+  // Build the user-side text corpus for anti-hallucination guards.
+  //
+  // CRITICAL: the corpus must reset at the boundary of the previous booking
+  // action. The FAB persists the last 15 turns in sessionStorage which
+  // survives page reloads, so without a cutoff the corpus would carry
+  // "a las 3pm" tokens from yesterday's bookings into today's, defeating
+  // the guard for any subsequent schedule attempt. We cut at the most
+  // recent assistant turn that starts with "Listo." (the deterministic
+  // completion prefix shared by smart_schedule, cancel_booking and
+  // reschedule_booking results).
+  let cutoff = -1
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i]
+    if (msg && msg.role === 'assistant' && /^\s*listo\b/i.test(msg.content)) {
+      cutoff = i
+      break
+    }
+  }
+  const relevantHistory = history.slice(cutoff + 1)
   const userCorpusParts = [inputText]
-  for (const m of history) if (m.role === 'user') userCorpusParts.push(m.content)
+  for (const m of relevantHistory) if (m.role === 'user') userCorpusParts.push(m.content)
   const userTextCorpus = userCorpusParts.join(' ').slice(0, 4000)
+  console.log(`[VOICE-WORKER] corpus cutoff=${cutoff} relevantTurns=${relevantHistory.length} corpus="${userTextCorpus.slice(0, 120)}"`)
 
   const toolCtx: ToolContext = {
     supabase,
