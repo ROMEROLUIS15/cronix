@@ -36,11 +36,26 @@ async function redisFetch<T>(path: string[]): Promise<T | null> {
   }
 }
 
+/**
+ * SET via Upstash pipeline-style POST. The previous path-encoded GET
+ * (/set/{k}/{v}) silently dropped session writes once the encoded JSON
+ * exceeded the URL length limit (~5KB after percent-encoding). For a
+ * 30-turn conversation history that ceiling is reached fast, which left
+ * the agent stateless between turns even when Upstash was configured.
+ *
+ * POSTing the command array keeps the value in the request body where
+ * Upstash accepts payloads up to 1MB.
+ */
 async function redisSet(key: string, value: string, ttlSeconds: number): Promise<void> {
   if (!isRedisAvailable()) return
   try {
-    await fetch(`${REDIS_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSeconds}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    await fetch(`${REDIS_URL}/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(['SET', key, value, 'EX', ttlSeconds]),
     })
   } catch {
     /* silent — session loss is non-critical */
