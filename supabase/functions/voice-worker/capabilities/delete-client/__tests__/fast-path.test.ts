@@ -101,6 +101,42 @@ describe('detectDeleteClient — (C) anaphoric verb (pulls name from history)', 
     const out = detectDeleteClient('elimina el primero', DUP_PROMPT_HISTORY)
     expect(out?.client_name).toBe('Luis Romero')
   })
+  // Regression: "elimina AL primero" (a+el contraction) used to miss the
+  // alternation and bounce to the LLM, which then asked search_clients
+  // again and answered "no tengo a luis romero entre tus clientes".
+  it('"elimina al primero" (a+el contraction)', () => {
+    const out = detectDeleteClient('elimina al primero', DUP_PROMPT_HISTORY)
+    expect(out?.client_name).toBe('Luis Romero')
+    expect(out?.any_duplicate).toBe(true)
+  })
+  it('"elimina a la primera"', () => {
+    const out = detectDeleteClient('elimina a la primera', DUP_PROMPT_HISTORY)
+    expect(out?.client_name).toBe('Luis Romero')
+  })
+  it('"elimina al segundo"', () => {
+    const out = detectDeleteClient('elimina al segundo', DUP_PROMPT_HISTORY)
+    expect(out?.client_name).toBe('Luis Romero')
+  })
+  it('"borra al otro"', () => {
+    const out = detectDeleteClient('borra al otro', DUP_PROMPT_HISTORY)
+    expect(out?.client_name).toBe('Luis Romero')
+  })
+  it('"elimina primero" (bare ordinal)', () => {
+    const out = detectDeleteClient('elimina primero', DUP_PROMPT_HISTORY)
+    expect(out?.client_name).toBe('Luis Romero')
+  })
+  // Anaphora must also resolve after a search-clients ambiguity ("Tengo N
+  // clientes con nombre similar a X. ... ¿A cuál te refieres?"), not just
+  // after the explicit deletion-prompt.
+  it('"elimina al primero" after search-clients ambiguity', () => {
+    const SEARCH_AMBIG_HISTORY: SessionMessage[] = [
+      { role: 'user',      content: 'tengo a luis romero entre mis clientes?' },
+      { role: 'assistant', content: 'Tengo 2 clientes con nombre similar a luis romero. Luis Romero, teléfono 04141234567. Luis Romero, teléfono 04249876543. ¿A cuál te refieres?' },
+    ]
+    const out = detectDeleteClient('elimina al primero', SEARCH_AMBIG_HISTORY)
+    expect(out?.client_name).toBe('luis romero')
+    expect(out?.any_duplicate).toBe(true)
+  })
   it('anaphoric verb without resolvable history → null', () => {
     expect(detectDeleteClient('borra al duplicado', NOISE_HISTORY)).toBeNull()
   })

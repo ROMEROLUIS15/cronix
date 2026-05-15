@@ -45,8 +45,16 @@ const ANY_RE = new RegExp(
 )
 
 // (C) Anaphoric verb form — no name in current turn.
+//
+// Accepts the determiner/preposition prefix in any of its natural forms:
+//   "elimina el primero", "elimina al primero", "elimina primero",
+//   "elimina la primera", "elimina a la primera", "elimina al otro",
+//   "elimina uno", "elimina al duplicado", "elimina los duplicados".
+//
+// Previous version only matched "el primero" / "la primera" literally and
+// missed the very common Spanish form "al primero" (a + el contraction).
 const SHORT_VERB_RE = new RegExp(
-  `^(?:s[ií],?\\s+)?${VERB.source}\\s+(?:a(?:l)?\\s+)?(?:los\\s+)?(?:duplicados?|el\\s+duplicado|otro|el\\s+otro|los\\s+otros|uno|cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno|el\\s+primero|la\\s+primera|el\\s+segundo|la\\s+segunda)\\s*\\.?\\??$`,
+  `^(?:s[ií],?\\s+)?${VERB.source}\\s+(?:a\\s+la\\s+|a\\s+los\\s+|a\\s+las\\s+|al\\s+|a\\s+|el\\s+|la\\s+|los\\s+|las\\s+)?(?:duplicados?|otros?|otra|uno|una|alguno|cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|primer[oa]|segund[oa]|tercer[oa])\\s*\\.?\\??$`,
   'i',
 )
 
