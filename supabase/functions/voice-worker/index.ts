@@ -118,7 +118,7 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
 
   const [bizRes, servicesRes, apptsRes] = await Promise.all([
     supabase.from('businesses').select('name, settings').eq('id', businessId).single(),
-    supabase.from('services').select('id, name, duration_min, price').eq('business_id', businessId).eq('active', true),
+    supabase.from('services').select('id, name, duration_min, price').eq('business_id', businessId).eq('is_active', true),
     supabase.from('appointments')
       .select('start_at, client:clients(name), service:services(name)')
       .eq('business_id', businessId)
