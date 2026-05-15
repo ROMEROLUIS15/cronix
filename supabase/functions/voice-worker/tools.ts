@@ -64,16 +64,55 @@ interface FuzzyMatch<T extends { name: string }> {
   candidates?: T[]
 }
 
-const FUZZY_THRESHOLD       = 0.65
-const FUZZY_AMBIGUOUS_GAP   = 0.10  // if top 2 within this gap → ambiguous
+const FUZZY_THRESHOLD       = 0.72
+const FUZZY_AMBIGUOUS_GAP   = 0.10
 
+/** Tokenises a normalised string into word-length>=2 tokens. */
+function tokens(s: string): string[] {
+  return normalize(s).split(/[^a-z0-9]+/).filter(t => t.length >= 2)
+}
+
+/**
+ * Token overlap check: at least one query token must match a candidate token
+ * either exactly or by a strong prefix (>=3 chars). Kills cross-name false
+ * positives like "Luis Romero" matching "Estefany Zulura" through pure
+ * Levenshtein noise.
+ */
+function shareToken(queryTokens: string[], candidateTokens: string[]): boolean {
+  for (const q of queryTokens) {
+    for (const c of candidateTokens) {
+      if (q === c) return true
+      if (q.length >= 4 && c.startsWith(q)) return true
+      if (c.length >= 4 && q.startsWith(c)) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Conservative fuzzy match:
+ *  - similarity ≥ threshold (Levenshtein-based)
+ *  - AND at least one shared token (or strong prefix)
+ *
+ * The previous `includes(needle)` shortcut was actively harmful: short
+ * needles like "lui" matched any candidate containing those three letters
+ * in sequence, which is how "Luis Romero" was falling onto "Estefany Zulura"
+ * via the contiguous "lu" / "zul" run. Token gating eliminates that class
+ * of false positive entirely while still allowing typo recovery.
+ */
 function fuzzyFind<T extends { name: string }>(items: T[], query: string): FuzzyMatch<T> {
   if (!items.length) return { status: 'not_found' }
-  const needle = normalize(query)
+  const needle  = normalize(query)
+  const qTokens = tokens(query)
+  if (qTokens.length === 0) return { status: 'not_found' }
 
   const scored = items
-    .map(item => ({ item, score: similarity(normalize(item.name), needle) }))
-    .filter(s => s.score >= FUZZY_THRESHOLD || normalize(s.item.name).includes(needle))
+    .map(item => ({
+      item,
+      score:  similarity(normalize(item.name), needle),
+      tokens: tokens(item.name),
+    }))
+    .filter(s => s.score >= FUZZY_THRESHOLD && shareToken(qTokens, s.tokens))
     .sort((a, b) => b.score - a.score)
 
   if (scored.length === 0) return { status: 'not_found' }
@@ -292,18 +331,30 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
     return { success: false, result: `Para agendar necesito ${missingLabel}. ¿Me lo dices?` }
   }
 
-  // Anti-hallucination guard: the LLM is allowed to NORMALISE what the user
-  // said ("corte" → "Corte de cabello") but it cannot invent a service the
-  // user never mentioned. We compare the FIRST WORD of service_name against
-  // the user's corpus (current turn + recent user messages from history).
-  // If absent, treat service as missing and ask. Same idea covers client_name
-  // when called via the LLM path — it must trace back to what the user said.
+  // Anti-hallucination guards: the LLM is allowed to NORMALISE what the user
+  // said ("corte" → "Corte de cabello") but it cannot invent a name the user
+  // never mentioned. Both service_name AND client_name must trace back to at
+  // least one token the user actually said in this turn or a recent user turn.
+  //
+  // The client guard catches the failure mode where the LLM substitutes a
+  // client it has seen recently in context (e.g. one shown in CITAS DE HOY
+  // or in a previous turn) for the one the user actually requested.
   if (ctx.userTextCorpus) {
-    const corpus = ctx.userTextCorpus.toLowerCase()
-    const firstSvcWord = service_name.toLowerCase().replace(/[^a-záéíóúñ]/g, ' ').trim().split(/\s+/)[0]
-    if (firstSvcWord && firstSvcWord.length >= 3 && !corpus.includes(firstSvcWord)) {
-      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated service="${service_name}" (firstWord="${firstSvcWord}" not in user corpus)`)
+    const corpus = normalize(ctx.userTextCorpus)
+    const inCorpus = (name: string): boolean => {
+      const ts = tokens(name)
+      if (ts.length === 0) return false
+      // At least ONE non-trivial token of the name must appear in the corpus
+      // (length >= 3 to skip articles / connectors).
+      return ts.some(t => t.length >= 3 && corpus.includes(t))
+    }
+    if (!inCorpus(service_name)) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated service="${service_name}" (no token in user corpus)`)
       return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?' }
+    }
+    if (!inCorpus(client_name)) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated client="${client_name}" (no token in user corpus)`)
+      return { success: false, result: 'Para agendar necesito el nombre del cliente. ¿A quién agendo?' }
     }
   }
 
