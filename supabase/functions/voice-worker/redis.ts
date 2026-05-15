@@ -1,8 +1,5 @@
 /**
- * Upstash Redis REST client + session storage for the voice-worker.
- *
- * Uses the same Redis instance as the rest of the app (Vercel-side already
- * uses Upstash). Identical key namespaces so the two paths stay consistent.
+ * Upstash Redis REST primitives + rate limiting.
  *
  * Required env vars (Supabase secrets):
  *   UPSTASH_REDIS_REST_URL
@@ -10,27 +7,30 @@
  *
  * If env vars are missing, all functions degrade silently to no-ops so the
  * voice agent still responds (just without persistence between turns).
+ *
+ * Session-shape concerns live in core/session.ts — this file is purely
+ * transport.
  */
 
 const REDIS_URL   = Deno.env.get('UPSTASH_REDIS_REST_URL')   ?? ''
 const REDIS_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN') ?? ''
 
-const SESSION_TTL = 60 * 30 // 30 minutes — matches the legacy Vercel session-store
-const RATE_LIMIT_TTL = 60   // 60 seconds for sliding window
+const RATE_LIMIT_TTL = 60   // seconds, sliding window
 
 export const isRedisAvailable = (): boolean => Boolean(REDIS_URL && REDIS_TOKEN)
 
-// ── Low-level REST helpers ─────────────────────────────────────────────────
+// ── Low-level primitives ───────────────────────────────────────────────────
 
-async function redisFetch<T>(path: string[]): Promise<T | null> {
+/** GET a single key. Returns the raw string value or null. */
+export async function redisGet(key: string): Promise<string | null> {
   if (!isRedisAvailable()) return null
   try {
-    const res = await fetch(`${REDIS_URL}/${path.map(encodeURIComponent).join('/')}`, {
+    const res = await fetch(`${REDIS_URL}/get/${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
     })
     if (!res.ok) return null
-    const json = await res.json() as { result: T }
-    return json.result
+    const json = await res.json() as { result: string | null }
+    return json.result ?? null
   } catch {
     return null
   }
@@ -38,15 +38,12 @@ async function redisFetch<T>(path: string[]): Promise<T | null> {
 
 /**
  * SET via Upstash pipeline-style POST. The previous path-encoded GET
- * (/set/{k}/{v}) silently dropped session writes once the encoded JSON
- * exceeded the URL length limit (~5KB after percent-encoding). For a
- * 30-turn conversation history that ceiling is reached fast, which left
- * the agent stateless between turns even when Upstash was configured.
- *
- * POSTing the command array keeps the value in the request body where
- * Upstash accepts payloads up to 1MB.
+ * (/set/{k}/{v}) silently dropped writes once the encoded JSON exceeded
+ * the URL length limit (~5KB after percent-encoding). POSTing the command
+ * array keeps the value in the request body where Upstash accepts payloads
+ * up to 1MB.
  */
-async function redisSet(key: string, value: string, ttlSeconds: number): Promise<void> {
+export async function redisSet(key: string, value: string, ttlSeconds: number): Promise<void> {
   if (!isRedisAvailable()) return
   try {
     await fetch(`${REDIS_URL}/`, {
@@ -62,37 +59,8 @@ async function redisSet(key: string, value: string, ttlSeconds: number): Promise
   }
 }
 
-// ── Session storage ────────────────────────────────────────────────────────
-
-interface Session {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
-}
-
-const sessionKey = (userId: string) => `ai:session:${userId}`
-
-export async function getSession(userId: string): Promise<Session> {
-  const raw = await redisFetch<string>(['get', sessionKey(userId)])
-  if (!raw) return { messages: [] }
-  try {
-    const parsed = JSON.parse(raw) as Session
-    return parsed.messages ? parsed : { messages: [] }
-  } catch {
-    return { messages: [] }
-  }
-}
-
-export async function saveSession(userId: string, session: Session): Promise<void> {
-  // Cap history to last 30 turns to bound prompt size.
-  const trimmed: Session = { messages: session.messages.slice(-30) }
-  await redisSet(sessionKey(userId), JSON.stringify(trimmed), SESSION_TTL)
-}
-
 // ── Rate limiting (sliding window via INCR + EX) ───────────────────────────
 
-/**
- * Returns { allowed, retryAfter }. Uses a fixed 60-second window with a per-user
- * counter. Same algorithm as Vercel-side `redisRateLimit`, kept simple here.
- */
 export async function checkRateLimit(
   userId:    string,
   maxPerMin: number = 30,
@@ -101,7 +69,6 @@ export async function checkRateLimit(
 
   const key = `rl:voice:${userId}`
   try {
-    // INCR returns the new count
     const incrRes = await fetch(`${REDIS_URL}/incr/${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
     })
@@ -109,7 +76,6 @@ export async function checkRateLimit(
     const incrJson = await incrRes.json() as { result: number }
     const count = incrJson.result
 
-    // First hit → set expiry
     if (count === 1) {
       await fetch(`${REDIS_URL}/expire/${encodeURIComponent(key)}/${RATE_LIMIT_TTL}`, {
         headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
@@ -117,7 +83,6 @@ export async function checkRateLimit(
     }
 
     if (count > maxPerMin) {
-      // Read TTL for retry hint
       const ttlRes = await fetch(`${REDIS_URL}/ttl/${encodeURIComponent(key)}`, {
         headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
       })
@@ -127,7 +92,6 @@ export async function checkRateLimit(
 
     return { allowed: true, retryAfter: 0 }
   } catch {
-    // Fail open — Redis blip should not block the user
     return { allowed: true, retryAfter: 0 }
   }
 }

@@ -25,7 +25,8 @@ import { transcribe }            from './stt.ts'
 import { synthesizeAudio }       from './tts.ts'
 import { runAgent }              from './agent.ts'
 import { dispatchBellNotification } from './notifications.ts'
-import { getSession, saveSession, checkRateLimit } from './redis.ts'
+import { checkRateLimit }         from './redis.ts'
+import { loadSession, saveSession } from './core/session.ts'
 import type { ToolContext }      from './tools.ts'
 import type {
   AgentInput, BusinessContext, UserRole, VoiceWorkerResponse,
@@ -227,23 +228,20 @@ async function handleRequest(req: Request): Promise<Response> {
 
   console.log(`[VOICE-WORKER] Request: user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
 
-  // 4. Load context + history in parallel
+  // 4. Load context + session in parallel.
+  // The session cascade lives in core/session.ts: Redis → client-history → []
   let context: BusinessContext
   let history: AgentInput['history']
+  let sessionLastRef: import('./core/session.ts').LastReferencedAppointment | null = null
   try {
-    const [ctx, redisHistory] = await Promise.all([
+    const [ctx, sessionResult] = await Promise.all([
       loadBusinessContext(supabase, userCtx.businessId, timezone),
-      getSession(userCtx.userId).then(s => s.messages),
+      loadSession(userCtx.userId, clientHistory),
     ])
-    context = ctx
-    // Prefer Redis (server-side truth) when present; otherwise fall back to
-    // the client-supplied history. This is critical: when Upstash isn't
-    // configured, getSession always returns [] and anaphoric references
-    // ("borra al duplicado") would lose context, sending the LLM into
-    // hallucination territory. The FAB ships the last 15 turns from
-    // sessionStorage to keep that flow alive.
-    history = redisHistory.length > 0 ? redisHistory : clientHistory
-    console.log(`[VOICE-WORKER] history source=${redisHistory.length > 0 ? 'redis' : (clientHistory.length > 0 ? 'client' : 'empty')} length=${history.length}`)
+    context        = ctx
+    history        = sessionResult.session.messages
+    sessionLastRef = sessionResult.session.lastRef ?? null
+    console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '∅'}`)
   } catch (err) {
     console.error('[VOICE-WORKER] Context load failed', err)
     return jsonResponse({ error: 'No se pudo cargar el contexto del negocio' }, 500)
@@ -284,9 +282,14 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: 'El asistente falló al procesar tu solicitud. Intenta de nuevo.' }, 500)
   }
 
-  // 6. Side-effects in parallel: save session + fire notifications
+  // 6. Side-effects in parallel: save session + fire notifications.
+  // lastRef is preserved across turns until either explicitly cleared by a
+  // capability or aged out by pruneStaleRef inside core/session.ts.
   await Promise.all([
-    saveSession(userCtx.userId, { messages: agentResult.history }),
+    saveSession(userCtx.userId, {
+      messages: agentResult.history,
+      lastRef:  sessionLastRef,
+    }),
     ...agentResult.pendingNotifications.map(n => dispatchBellNotification(supabase, n)),
   ])
 
