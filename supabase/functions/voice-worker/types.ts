@@ -54,6 +54,19 @@ export interface AgentInput {
   timezone:   string
   history:    Array<{ role: 'user' | 'assistant'; content: string }>
   context:    BusinessContext
+  /**
+   * Most recent appointment the agent created / rescheduled / cancelled
+   * within the session TTL. Capabilities like reschedule and cancel use
+   * this as the implicit subject when the user says "reagéndala" /
+   * "cancélala" without naming a client.
+   */
+  lastRef?: {
+    appointmentId: string
+    clientName:    string
+    serviceName:   string
+    date:          string
+    time:          string
+  } | null
 }
 
 export interface AgentOutput {
@@ -63,6 +76,19 @@ export interface AgentOutput {
   modelUsed:       string
   /** Bell notifications captured during this turn (fired AFTER response). */
   pendingNotifications: AppointmentNotification[]
+  /**
+   * Set when this turn successfully wrote an appointment (created /
+   * rescheduled / cancelled). index.ts persists it into the session so
+   * follow-up anaphoric turns ("reagéndala", "cancélala") can resolve
+   * without forcing the user to repeat the client name.
+   */
+  lastRefCandidate?: {
+    appointmentId: string
+    clientName:    string
+    serviceName:   string
+    date:          string
+    time:          string
+  } | null
 }
 
 // LlmMessage was removed — replaced by NeutralMessage in providers/ILLMProvider.ts.

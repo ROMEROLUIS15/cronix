@@ -422,15 +422,17 @@ export async function runAgent(
   // without involving the LLM. Eliminates every class of LLM-induced bug:
   // wrong date math, hallucinated tool args, ignored tool results, looping.
 
-  // Registry-backed fast paths (list-appointments, search-clients).
-  // Remaining intents still go through the inline detectors below until
-  // their capabilities migrate.
+  // Registry-backed fast paths. Remaining intents still go through the
+  // inline detectors below until their capabilities migrate.
+  const fastPathLastRef = input.lastRef
+    ? { ...input.lastRef, setAt: Date.now() }
+    : null
   const registryHit = registryDetect({
     text:     input.text,
     today:    todayLocal,
     timezone: ctx.timezone,
     history:  input.history,
-    lastRef:  null,  // populated in C10 when the schedule capability writes lastRef
+    lastRef:  fastPathLastRef,
   })
   if (registryHit) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}): args=${JSON.stringify(registryHit.args)}`)
@@ -443,12 +445,25 @@ export async function runAgent(
       { role: 'user',      content: input.text },
       { role: 'assistant', content: text       },
     ].slice(-30)
+    // Write tools called via fast path: surface their data so the session
+    // captures the new lastRef. Reads return null candidate, preserving
+    // whatever was there.
+    const lastRefCandidate = (registryHit.capability.isWrite && result.success && result.data)
+      ? {
+          appointmentId: result.data.appointmentId,
+          clientName:    result.data.clientName,
+          serviceName:   result.data.serviceName,
+          date:          result.data.date,
+          time:          result.data.time,
+        }
+      : null
     return {
       text,
-      actionPerformed:      false,
+      actionPerformed:      registryHit.capability.isWrite && result.success,
       history:              newHistory,
       modelUsed:            `fast-path/${registryHit.capability.name}`,
       pendingNotifications: [],
+      lastRefCandidate,
     }
   }
 
@@ -473,6 +488,7 @@ export async function runAgent(
       history:              newHistory,
       modelUsed:            'fast-path/last-visit',
       pendingNotifications: [],
+      lastRefCandidate:     null,
     }
   }
 
@@ -499,6 +515,7 @@ export async function runAgent(
       history:              newHistory,
       modelUsed:            'fast-path/delete-client',
       pendingNotifications: [],
+      lastRefCandidate:     null,
     }
   }
 
@@ -524,6 +541,7 @@ export async function runAgent(
   const pendingNotifications: AppointmentNotification[] = []
   let modelUsed               = 'unknown'
   let finalText               = ''
+  let lastRefCandidate: AgentOutput['lastRefCandidate'] = null
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const resp = await provider.chat({
@@ -631,6 +649,23 @@ export async function runAgent(
               time:        result.data.time,
             })
           }
+          // Capture the most recent appointment so the next turn can resolve
+          // anaphoric "reagéndala" / "cancélala" without forcing the user to
+          // name the client again. Cancellations also count — they update
+          // the conversation's frame of reference.
+          if (result.data.action !== 'cancelled') {
+            lastRefCandidate = {
+              appointmentId: result.data.appointmentId,
+              clientName:    result.data.clientName,
+              serviceName:   result.data.serviceName,
+              date:          result.data.date,
+              time:          result.data.time,
+            }
+          } else {
+            // After a cancel we deliberately clear lastRef — the appointment
+            // is gone, so anaphoric follow-ups would be nonsense.
+            lastRefCandidate = null
+          }
         }
       }
     }
@@ -678,5 +713,6 @@ export async function runAgent(
     history:              newHistory,
     modelUsed,
     pendingNotifications,
+    lastRefCandidate,
   }
 }

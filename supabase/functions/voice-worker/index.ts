@@ -257,6 +257,13 @@ async function handleRequest(req: Request): Promise<Response> {
     timezone,
     history,
     context,
+    lastRef:    sessionLastRef ? {
+      appointmentId: sessionLastRef.appointmentId,
+      clientName:    sessionLastRef.clientName,
+      serviceName:   sessionLastRef.serviceName,
+      date:          sessionLastRef.date,
+      time:          sessionLastRef.time,
+    } : null,
   }
   // Build the user-side text corpus (current turn + recent user messages)
   // so smart_schedule can reject hallucinated services. Capped to keep the
@@ -283,12 +290,16 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // 6. Side-effects in parallel: save session + fire notifications.
-  // lastRef is preserved across turns until either explicitly cleared by a
-  // capability or aged out by pruneStaleRef inside core/session.ts.
+  // If the agent reported a new lastRefCandidate this turn, that wins;
+  // otherwise the previous ref is preserved (pruneStaleRef ages it out at
+  // ten minutes inside core/session.ts).
+  const nextLastRef = agentResult.lastRefCandidate
+    ? { ...agentResult.lastRefCandidate, setAt: Date.now() }
+    : sessionLastRef
   await Promise.all([
     saveSession(userCtx.userId, {
       messages: agentResult.history,
-      lastRef:  sessionLastRef,
+      lastRef:  nextLastRef,
     }),
     ...agentResult.pendingNotifications.map(n => dispatchBellNotification(supabase, n)),
   ])

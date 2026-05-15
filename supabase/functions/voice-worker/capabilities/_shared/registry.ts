@@ -10,10 +10,17 @@ import type { ToolResult }  from '../../types.ts'
 
 import { listAppointmentsCapability } from '../list-appointments/index.ts'
 import { searchClientsCapability }    from '../search-clients/index.ts'
+import { rescheduleCapability }       from '../reschedule/index.ts'
+import { cancelCapability }           from '../cancel/index.ts'
 
+// Order matters — earlier entries take priority. Reschedule before cancel
+// because "cancela y reagenda" could otherwise be hijacked by the cancel
+// detector before the user finishes the sentence.
 // deno-lint-ignore no-explicit-any
 const CAPABILITIES: ICapability<any>[] = [
   listAppointmentsCapability,
+  rescheduleCapability,
+  cancelCapability,
   searchClientsCapability,
 ]
 
