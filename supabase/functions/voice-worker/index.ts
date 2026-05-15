@@ -183,28 +183,61 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: `Demasiadas solicitudes. Reintenta en ${rl.retryAfter}s.` }, 429)
   }
 
-  // 3. Parse payload (audio multipart OR text json)
-  let inputText = ''
-  let timezone  = 'UTC'
+  // 3. Parse payload (audio multipart OR text json).
+  // For the audio path: STT (Deepgram Nova-2, ~300–700ms) and business context
+  // loading (2 Supabase queries, ~100–200ms) run in parallel via Promise.all.
+  // The two are independent — context only needs businessId (resolved above).
+  // Text path (Web Speech API, desktop): context loads immediately since there
+  // is no STT roundtrip to overlap with.
+  let inputText     = ''
+  let timezone      = 'UTC'
   let transcription = ''
   let clientHistory: AgentInput['history'] = []
+
+  let context: BusinessContext
+  let history: AgentInput['history']
+  let sessionLastRef: import('./core/session.ts').LastReferencedAppointment | null = null
 
   const contentType = req.headers.get('content-type') ?? ''
   try {
     if (contentType.includes('application/json')) {
+      // ── Text path (Web Speech API / desktop) ──────────────────────────────
+      // No STT roundtrip — parse body first, then load context.
       const body = await req.json() as {
         text?:     string
         timezone?: string
         history?:  AgentInput['history']
       }
-      inputText = (body.text ?? '').trim()
-      timezone  = body.timezone ?? 'UTC'
+      inputText     = (body.text ?? '').trim()
+      timezone      = body.timezone ?? 'UTC'
       clientHistory = sanitiseClientHistory(body.history)
       transcription = inputText
+
+      // Noise / gibberish guard (text path)
+      const MEANINGFUL_TEXT = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
+      if (inputText.length < 3 || !MEANINGFUL_TEXT.test(inputText)) {
+        return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
+      }
+
+      console.log(`[VOICE-WORKER] Request (text): user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
+
+      // Load context sequentially — nothing to parallelize in the text path.
+      const [ctx, sessionResult] = await Promise.all([
+        loadBusinessContext(supabase, userCtx.businessId, timezone),
+        loadSession(userCtx.userId, clientHistory),
+      ])
+      context        = ctx
+      history        = sessionResult.session.messages
+      sessionLastRef = sessionResult.session.lastRef ?? null
+      console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '∅'}`)
+
     } else {
-      const form = await req.formData()
-      const audio = form.get('audio') as Blob | null
-      timezone    = (form.get('timezone') as string | null) ?? 'UTC'
+      // ── Audio path (MediaRecorder / mobile) ───────────────────────────────
+      // STT (Deepgram, 300–700ms) and context loading (Supabase, ~100–200ms)
+      // are independent — run them in parallel for a free ~300–700ms gain.
+      const form    = await req.formData()
+      const audio   = form.get('audio') as Blob | null
+      timezone      = (form.get('timezone') as string | null) ?? 'UTC'
       const histRaw = form.get('history') as string | null
       if (histRaw) {
         try {
@@ -212,39 +245,34 @@ async function handleRequest(req: Request): Promise<Response> {
         } catch { clientHistory = [] }
       }
       if (!audio) return jsonResponse({ error: 'No audio provided' }, 400)
-      inputText = await transcribe(audio)
-      transcription = inputText
+
+      // Fire STT and context load simultaneously.
+      const [transcript, [ctx, sessionResult]] = await Promise.all([
+        transcribe(audio),
+        Promise.all([
+          loadBusinessContext(supabase, userCtx.businessId, timezone),
+          loadSession(userCtx.userId, clientHistory),
+        ]),
+      ])
+
+      inputText     = transcript
+      transcription = transcript
+      context       = ctx
+      history       = sessionResult.session.messages
+      sessionLastRef = sessionResult.session.lastRef ?? null
+
+      // Noise / gibberish guard (audio path — applied after STT resolves)
+      const MEANINGFUL_AUDIO = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
+      if (inputText.length < 3 || !MEANINGFUL_AUDIO.test(inputText)) {
+        return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
+      }
+
+      console.log(`[VOICE-WORKER] Request (audio): user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
+      console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '\u2205'}`)
     }
   } catch (err) {
-    console.error('[VOICE-WORKER] Payload parse failed', err)
-    return jsonResponse({ error: 'Payload inválido' }, 400)
-  }
-
-  // Noise / gibberish guard
-  const MEANINGFUL = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
-  if (inputText.length < 3 || !MEANINGFUL.test(inputText)) {
-    return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
-  }
-
-  console.log(`[VOICE-WORKER] Request: user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
-
-  // 4. Load context + session in parallel.
-  // The session cascade lives in core/session.ts: Redis → client-history → []
-  let context: BusinessContext
-  let history: AgentInput['history']
-  let sessionLastRef: import('./core/session.ts').LastReferencedAppointment | null = null
-  try {
-    const [ctx, sessionResult] = await Promise.all([
-      loadBusinessContext(supabase, userCtx.businessId, timezone),
-      loadSession(userCtx.userId, clientHistory),
-    ])
-    context        = ctx
-    history        = sessionResult.session.messages
-    sessionLastRef = sessionResult.session.lastRef ?? null
-    console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '∅'}`)
-  } catch (err) {
-    console.error('[VOICE-WORKER] Context load failed', err)
-    return jsonResponse({ error: 'No se pudo cargar el contexto del negocio' }, 500)
+    console.error('[VOICE-WORKER] Payload parse or context load failed', err)
+    return jsonResponse({ error: 'Payload inválido o error de contexto' }, 400)
   }
 
   // 5. Run the agent

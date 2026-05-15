@@ -610,7 +610,7 @@ export function VoiceAssistantFab() {
 
         if (!calibrated) {
           noiseFloorSamples.push(rms)
-          if (elapsed >= 400) {
+          if (elapsed >= 200) {  // 200ms ≈ 12 samples at 60fps — sufficient for noise floor
             const avg = noiseFloorSamples.reduce((a, b) => a + b, 0) / noiseFloorSamples.length
             noiseFloor = Math.max(MIN_RMS_FLOOR, avg * 2.5)
             calibrated = true
