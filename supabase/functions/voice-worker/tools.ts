@@ -13,6 +13,8 @@ import type { ToolResult, BookingEventData } from './types.ts'
 import type { ToolContext } from './core/tool-context.ts'
 
 import { normalize, tokens } from './core/fuzzy.ts'
+import { userMentionedTime } from './core/time-parser.ts'
+import { parseDateExpression } from './core/date-parser.ts'
 import {
   localToUTC, buildEndISO, humanizeDate, formatTimeFromISO,
 } from './core/time-format.ts'
@@ -69,10 +71,11 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
     return { success: false, result: `Para agendar necesito ${missingLabel}. ¿Me lo dices?` }
   }
 
-  // Anti-hallucination guards: at least one non-trivial token of both
-  // service_name and client_name must appear in what the user actually said
-  // this turn or recently. Prevents the LLM from substituting a name from
-  // ambient context (e.g. CITAS DE HOY entries) for what the user requested.
+  // Anti-hallucination guards: each of the four schedule params must trace
+  // back to something the user actually said this turn (or recently in
+  // history). Llama 3.x routinely fills missing slots with plausible
+  // defaults — most often 09:00 for time and today for date — which is how
+  // bookings were ending up at the wrong hour or wrong day.
   if (ctx.userTextCorpus) {
     const corpus = normalize(ctx.userTextCorpus)
     const inCorpus = (name: string): boolean => {
@@ -87,6 +90,15 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
     if (!inCorpus(client_name)) {
       console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated client="${client_name}" (no token in user corpus)`)
       return { success: false, result: 'Para agendar necesito el nombre del cliente. ¿A quién agendo?' }
+    }
+    if (!userMentionedTime(ctx.userTextCorpus)) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated time="${time}" (user never said a time)`)
+      return { success: false, result: 'Para agendar necesito la hora. ¿A qué hora?' }
+    }
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+    if (!parseDateExpression(ctx.userTextCorpus, todayLocal)) {
+      console.log(`[VOICE-WORKER-TOOLS] smart_schedule REJECTED — hallucinated date="${date}" (user never said a date)`)
+      return { success: false, result: 'Para agendar necesito la fecha. ¿Para qué día?' }
     }
   }
 
