@@ -25,7 +25,13 @@ export const rescheduleCapability: ICapability<RescheduleArgs> = {
     },
   },
   detectFastPath(input: FastPathInput) {
-    return detectReschedule(input.text, input.today, input.lastRef)
+    return detectReschedule(
+      input.text,
+      input.today,
+      input.lastRef
+        ? { clientName: input.lastRef.clientName, appointmentId: input.lastRef.appointmentId }
+        : null,
+    )
   },
   execute: executeReschedule,
 }

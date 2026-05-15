@@ -20,9 +20,16 @@ import { parseTimeExpression } from '../../core/time-parser.ts'
 import { normalize }           from '../../core/fuzzy.ts'
 
 export interface RescheduleArgs extends Record<string, unknown> {
-  client_name: string
-  new_date?:   string
-  new_time?:   string
+  client_name:    string
+  /**
+   * Set when the fast path resolved the appointment via lastRef.
+   * The tool looks up by this ID directly and skips the date-based search,
+   * which avoids the "no encontré cita activa" bug when the existing
+   * appointment is for a day other than today.
+   */
+  appointment_id?: string
+  new_date?:      string
+  new_time?:      string
 }
 
 /** Verb roots. */
@@ -43,7 +50,7 @@ const EXPLICIT_CLIENT = new RegExp(
 export function detectReschedule(
   text:    string,
   today:   string,
-  lastRef: { clientName: string } | null,
+  lastRef: { clientName: string; appointmentId?: string } | null,
 ): RescheduleArgs | null {
   const t = normalize(text)
 
@@ -54,7 +61,12 @@ export function detectReschedule(
   // Anaphoric path first — pronoun-suffixed verbs look like bare verbs to the
   // explicit regex if checked in the wrong order.
   if (ANAPHORIC.test(t) && lastRef) {
-    return { client_name: lastRef.clientName, new_date: newDate, new_time: newTime }
+    return {
+      client_name:    lastRef.clientName,
+      appointment_id: lastRef.appointmentId,
+      new_date:       newDate,
+      new_time:       newTime,
+    }
   }
 
   const m = t.match(EXPLICIT_CLIENT)

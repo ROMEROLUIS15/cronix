@@ -86,6 +86,11 @@ FLUJO AGENDAR (4 PARÁMETROS OBLIGATORIOS): cliente + servicio + fecha + hora.
   • SOLO cuando tengas los 4 reales (no placeholders) → smart_schedule(service_name, client_name, date, time) UNA SOLA VEZ.
 - Después del éxito → "Listo. Agendé a [cliente] para [servicio] el [fecha] a las [hora]." y TERMINA.
 
+CLIENTE NO EXISTE EN LA BASE DE DATOS:
+- Si smart_schedule devuelve "No tengo a [X] entre tus clientes. ¿Quieres que lo registre…?" → repite esa pregunta y espera respuesta.
+- Cuando el usuario responda afirmativamente ("sí", "regístralo", "sí, agenda") → vuelve a llamar smart_schedule con TODOS los parámetros anteriores Y register_new_client=true.
+- Si el usuario dice no → no llames la herramienta, ofrece corregir el nombre.
+
 ELIMINAR CLIENTE CON DUPLICADOS:
 - Si delete_client devuelve "Hay varios clientes llamados X: A con teléfono N1, B con teléfono N2" → repite esa lista al usuario y pregunta el teléfono.
 - Cuando el usuario responda con el teléfono → llama delete_client(client_name, phone) con el phone del usuario.

@@ -31,6 +31,9 @@ export interface FastPathInput {
   lastRef: LastReferencedAppointment | null
 }
 
+// Re-export so capabilities can import the canonical type from the shared module.
+export type { LastReferencedAppointment } from '../../core/session.ts'
+
 export interface ToolDefinition {
   type: 'function'
   function: {

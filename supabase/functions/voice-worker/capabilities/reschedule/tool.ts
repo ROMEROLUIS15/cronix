@@ -3,13 +3,17 @@ import type { ToolResult, BookingEventData }  from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
 import { resolveClient } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
-import { findAppointmentByClientName, findConflicts, resolveAppointmentServiceId } from '../../core/repos/appointments.ts'
+import {
+  findAppointmentByClientName, findAppointmentById, findConflicts, resolveAppointmentServiceId,
+} from '../../core/repos/appointments.ts'
 
 export interface RescheduleArgs extends Record<string, unknown> {
   client_name: string
-  /** Existing appointment date — optional disambiguator. */
+  /** When supplied (anaphoric path), look up directly by ID. */
+  appointment_id?: string
+  /** Existing appointment date — optional disambiguator (explicit path). */
   date?:       string
-  /** Existing appointment time — optional disambiguator. */
+  /** Existing appointment time — optional disambiguator (explicit path). */
   time?:       string
   new_date?:   string
   new_time?:   string
@@ -26,17 +30,37 @@ export async function executeReschedule(
     return { success: false, result: '¿Para qué fecha y hora la reagendo?' }
   }
 
-  const resolution = await resolveClient(ctx, args.client_name)
-  if (resolution.status !== 'found') {
-    if (resolution.status === 'ambiguous') {
-      const names = resolution.candidates.map(c => c.name).join(', ')
-      return { success: false, result: `Hay varios clientes similares: ${names}. ¿Cuál?` }
-    }
-    return { success: false, result: `No encontré al cliente "${args.client_name}".` }
-  }
+  // Two lookup paths:
+  //   - anaphoric: we know the exact appointment_id from lastRef, so the
+  //     date-based search is skipped entirely. Client comes from the row.
+  //   - explicit: the user named the client, so we resolve it and search by
+  //     name + optional date/time disambiguator.
+  let apt: Awaited<ReturnType<typeof findAppointmentById>>
+  let clientName: string
 
-  const apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
-  if ('error' in apt) return { success: false, result: apt.error }
+  if (args.appointment_id) {
+    apt = await findAppointmentById(ctx, args.appointment_id)
+    if ('error' in apt) return { success: false, result: apt.error }
+    // Recover the client's display name from the appointment row.
+    const { data: cli } = await ctx.supabase
+      .from('clients')
+      .select('name')
+      .eq('id', apt.client_id!)
+      .single()
+    clientName = (cli as { name?: string } | null)?.name ?? args.client_name
+  } else {
+    const resolution = await resolveClient(ctx, args.client_name)
+    if (resolution.status !== 'found') {
+      if (resolution.status === 'ambiguous') {
+        const names = resolution.candidates.map(c => c.name).join(', ')
+        return { success: false, result: `Hay varios clientes similares: ${names}. ¿Cuál?` }
+      }
+      return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+    }
+    apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
+    if ('error' in apt) return { success: false, result: apt.error }
+    clientName = resolution.client.name
+  }
 
   let durationMin = 60
   let serviceName = 'Servicio'
@@ -74,7 +98,7 @@ export async function executeReschedule(
 
   const data: BookingEventData = {
     appointmentId: apt.id,
-    clientName:    resolution.client.name,
+    clientName,
     serviceName,
     date: finalDate,
     time: finalTime,
@@ -82,7 +106,7 @@ export async function executeReschedule(
   }
   return {
     success: true,
-    result:  `Listo. Reagendé la cita de ${resolution.client.name} para el ${finalDate} a las ${finalTime}.`,
+    result:  `Listo. Reagendé la cita de ${clientName} para el ${finalDate} a las ${finalTime}.`,
     data,
   }
 }

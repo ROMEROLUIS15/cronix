@@ -23,7 +23,13 @@ export const cancelCapability: ICapability<CancelArgs> = {
     },
   },
   detectFastPath(input: FastPathInput) {
-    return detectCancel(input.text, input.today, input.lastRef)
+    return detectCancel(
+      input.text,
+      input.today,
+      input.lastRef
+        ? { clientName: input.lastRef.clientName, appointmentId: input.lastRef.appointmentId }
+        : null,
+    )
   },
   execute: executeCancel,
 }

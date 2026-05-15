@@ -37,6 +37,14 @@ interface SmartScheduleArgs {
   client_name:  string
   date:         string
   time:         string
+  /**
+   * Set true when the user has explicitly consented to registering the
+   * client because they aren't in the database yet ("sí, regístralo y
+   * agenda"). When false/missing and the client doesn't exist, the tool
+   * refuses and asks first — STT name mishears would otherwise create
+   * duplicates.
+   */
+  register_new_client?: boolean
 }
 
 /**
@@ -120,16 +128,24 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
     }
   }
 
-  // 1. Resolve client (auto-create if not found)
-  let client: ClientRow
+  // 1. Resolve client.
+  //
+  // No silent auto-create. STT routinely mishears Spanish names (the user
+  // reported "Lizeth" → "Licey") and the token-gated fuzzy match correctly
+  // refuses to bridge "Licey" → "Lizeth" because they share no real token.
+  // The previous auto-create branch then inserted "Licey" as a new client
+  // and booked against the wrong entity, leaving a duplicate in the
+  // database. We now refuse and ask for confirmation.
   const resolution = await resolveClient(ctx, client_name)
   if (resolution.status === 'ambiguous') {
     const names = resolution.candidates.map(c => c.name).join(', ')
     return { success: false, result: `Hay varios clientes con nombre similar: ${names}. ¿Cuál es?` }
   }
+  let client: ClientRow
   if (resolution.status === 'found') {
     client = resolution.client
-  } else {
+  } else if (args.register_new_client) {
+    // Explicit user consent — create now then schedule.
     const { data: created, error } = await ctx.supabase
       .from('clients')
       .insert({ business_id: ctx.businessId, name: client_name })
@@ -139,6 +155,11 @@ async function smartSchedule(ctx: ToolContext, args: SmartScheduleArgs): Promise
       return { success: false, result: `No pude registrar a ${client_name}: ${error?.message ?? 'error desconocido'}` }
     }
     client = created as ClientRow
+  } else {
+    return {
+      success: false,
+      result:  `No tengo a ${client_name} entre tus clientes. ¿Quieres que lo registre como cliente nuevo y luego agende?`,
+    }
   }
 
   // 2. Resolve service
@@ -676,10 +697,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          service_name: { type: 'string', description: 'Nombre del servicio' },
-          client_name:  { type: 'string', description: 'Nombre del cliente' },
-          date:         { type: 'string', description: 'YYYY-MM-DD' },
-          time:         { type: 'string', description: 'HH:mm 24h' },
+          service_name:        { type: 'string',  description: 'Nombre del servicio' },
+          client_name:         { type: 'string',  description: 'Nombre del cliente' },
+          date:                { type: 'string',  description: 'YYYY-MM-DD' },
+          time:                { type: 'string',  description: 'HH:mm 24h' },
+          register_new_client: { type: 'boolean', description: 'true SOLO cuando el usuario confirma explícitamente que registres un cliente que no existe (ej: dijo "sí, regístralo y agenda")' },
         },
         required: ['service_name', 'client_name', 'date', 'time'],
       },

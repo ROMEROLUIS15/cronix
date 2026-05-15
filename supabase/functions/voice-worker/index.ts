@@ -267,18 +267,22 @@ async function handleRequest(req: Request): Promise<Response> {
   }
   // Build the user-side text corpus for anti-hallucination guards.
   //
-  // CRITICAL: the corpus must reset at the boundary of the previous booking
-  // action. The FAB persists the last 15 turns in sessionStorage which
-  // survives page reloads, so without a cutoff the corpus would carry
-  // "a las 3pm" tokens from yesterday's bookings into today's, defeating
-  // the guard for any subsequent schedule attempt. We cut at the most
-  // recent assistant turn that starts with "Listo." (the deterministic
-  // completion prefix shared by smart_schedule, cancel_booking and
-  // reschedule_booking results).
+  // CRITICAL: cut the corpus at the previous "frame boundary" so tokens from
+  // unrelated past attempts can't leak into the current guard. A frame
+  // boundary is any assistant turn that ISN'T asking a question — a
+  // completion ("Listo. Agendé..."), an error ("No encontré cita activa..."),
+  // a listing answer, anything that closes the previous intent. Assistant
+  // questions ("¿Para qué servicio?", "Hay varios, ¿cuál?") keep the frame
+  // open so multi-turn param collection still works.
+  //
+  // The earlier "cut on Listo. only" rule failed when a reschedule attempt
+  // errored out and left "sábado a las 5pm" tokens in the corpus, which the
+  // next unrelated schedule attempt then picked up via the deterministic
+  // override.
   let cutoff = -1
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i]
-    if (msg && msg.role === 'assistant' && /^\s*listo\b/i.test(msg.content)) {
+    if (msg && msg.role === 'assistant' && !/[?¿]/.test(msg.content)) {
       cutoff = i
       break
     }

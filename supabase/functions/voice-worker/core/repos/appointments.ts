@@ -31,6 +31,31 @@ export async function findConflicts(
   return (data?.length ?? 0) > 0
 }
 
+/**
+ * Looks up an appointment by ID (and business) — used by anaphoric
+ * reschedule/cancel which already know the exact appointment from the
+ * lastRef. Skips the date-based search entirely, sidestepping the
+ * "search today" fallback that misfires on appointments scheduled for
+ * any other day.
+ */
+export async function findAppointmentById(
+  ctx: ToolContext,
+  id:  string,
+): Promise<AppointmentForLookup | { error: string }> {
+  const { data, error } = await ctx.supabase
+    .from('appointments')
+    .select('id, start_at, end_at, client_id, service_id, appointment_services(service_id, sort_order), status')
+    .eq('business_id', ctx.businessId)
+    .eq('id', id)
+    .single()
+  if (error || !data) return { error: 'La cita no existe o ya fue eliminada.' }
+  // Reject if the appointment is already cancelled — anaphoric "cancélala"
+  // on a cancelled appointment would otherwise look like success.
+  const row = data as AppointmentForLookup & { status?: string }
+  if (row.status === 'cancelled') return { error: 'Esa cita ya estaba cancelada.' }
+  return row
+}
+
 export async function findAppointmentByClientName(
   ctx:    ToolContext,
   client: ClientRow,

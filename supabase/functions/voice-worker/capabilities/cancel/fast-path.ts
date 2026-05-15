@@ -13,9 +13,11 @@ import { parseTimeExpression } from '../../core/time-parser.ts'
 import { normalize }           from '../../core/fuzzy.ts'
 
 export interface CancelArgs extends Record<string, unknown> {
-  client_name: string
-  date?:       string
-  time?:       string
+  client_name:    string
+  /** When supplied (anaphoric path), the tool looks up by ID directly. */
+  appointment_id?: string
+  date?:          string
+  time?:          string
 }
 
 const BASE = /(?:cancel|quita|elimina|borra)/
@@ -45,7 +47,7 @@ const NOT_A_NAME = new Set([
 export function detectCancel(
   text:    string,
   today:   string,
-  lastRef: { clientName: string } | null,
+  lastRef: { clientName: string; appointmentId?: string } | null,
 ): CancelArgs | null {
   const t = normalize(text)
 
@@ -54,7 +56,11 @@ export function detectCancel(
 
   // Anaphoric first — pronoun-attached verb or "esa cita" reference.
   if ((ANAPHORIC_VERB.test(t) || ANAPHORIC_PHRASE.test(t)) && lastRef) {
-    return { client_name: lastRef.clientName, date, time }
+    return {
+      client_name:    lastRef.clientName,
+      appointment_id: lastRef.appointmentId,
+      date, time,
+    }
   }
 
   const m = t.match(EXPLICIT_CLIENT)
