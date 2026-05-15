@@ -48,15 +48,24 @@ function truncateForTts(text: string): string {
 export async function synthesizeAudio(text: string): Promise<string | null> {
   if (!DEEPGRAM_KEY || !text?.trim()) return null
 
+  // Hard timeout on the provider call. Without it a hung Deepgram socket
+  // pins the whole Edge Function until Supabase's 150s ceiling, which the
+  // FAB sees as an infinite spinner (no fetch timeout on the client either).
+  // 10s is generous — typical Aura latency is 200-800ms.
+  const TTS_TIMEOUT_MS = 10_000
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), TTS_TIMEOUT_MS)
+
   try {
     const truncated = truncateForTts(text)
     const res = await fetch(`https://api.deepgram.com/v1/speak?model=${DEEPGRAM_MODEL}`, {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        Authorization: `Token ${DEEPGRAM_KEY}`,
+        Authorization:  `Token ${DEEPGRAM_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text: truncated }),
+      body:   JSON.stringify({ text: truncated }),
+      signal: ctrl.signal,
     })
 
     if (!res.ok) {
@@ -65,10 +74,18 @@ export async function synthesizeAudio(text: string): Promise<string | null> {
     }
 
     const buffer = await res.arrayBuffer()
-    const b64    = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    // Safe iterative encode — avoids RangeError: Maximum call stack size exceeded
+    // that the spread operator (`...new Uint8Array`) triggers on buffers >1 MB
+    // (≈ TTS responses longer than ~60s). reduce() is O(n) with no stack growth.
+    const b64 = btoa(
+      new Uint8Array(buffer).reduce((acc, byte) => acc + String.fromCharCode(byte), '')
+    )
     return `data:audio/mpeg;base64,${b64}`
   } catch (err) {
-    console.warn(`[VOICE-WORKER-TTS] Synthesis threw: ${err instanceof Error ? err.message : String(err)}`)
+    const isAbort = err instanceof DOMException && err.name === 'AbortError'
+    console.warn(`[VOICE-WORKER-TTS] Synthesis ${isAbort ? `timed out after ${TTS_TIMEOUT_MS}ms` : 'threw'}: ${err instanceof Error ? err.message : String(err)}`)
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }

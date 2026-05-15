@@ -45,15 +45,20 @@ export async function executeDeleteClient(
     if (!wantedPhone) {
       const phones = candidates.map(c => normalisePhone(c.phone))
       const allSame = phones.every(p => p === phones[0])
-      if (allSame) {
-        if (args.any_duplicate) {
-          target = candidates[0]!
-        } else {
-          const phoneStr = phones[0] ? `con el mismo teléfono ${candidates[0]!.phone}` : 'sin teléfono registrado'
-          return {
-            success: false,
-            result: `Tengo ${candidates.length} clientes llamados ${candidates[0]!.name} ${phoneStr} — parecen duplicados. ¿Elimino uno y dejo el otro?`,
-          }
+      // any_duplicate=true is the user's explicit consent after they've seen
+      // the disambiguation list and answered with an ordinal/anaphoric
+      // pick ("el primero", "al otro", "cualquiera"). Whether phones match
+      // or not, the user already accepted the candidate list — picking the
+      // first one matches what the fast path detected. If we kept asking
+      // for a phone here the FAB bounces between "¿Cuál elimino?" turns and
+      // the user never gets to delete.
+      if (args.any_duplicate) {
+        target = candidates[0]!
+      } else if (allSame) {
+        const phoneStr = phones[0] ? `con el mismo teléfono ${candidates[0]!.phone}` : 'sin teléfono registrado'
+        return {
+          success: false,
+          result: `Tengo ${candidates.length} clientes llamados ${candidates[0]!.name} ${phoneStr} — parecen duplicados. ¿Elimino uno y dejo el otro?`,
         }
       } else {
         const list = candidates
