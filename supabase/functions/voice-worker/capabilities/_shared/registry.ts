@@ -12,16 +12,29 @@ import { listAppointmentsCapability } from '../list-appointments/index.ts'
 import { searchClientsCapability }    from '../search-clients/index.ts'
 import { rescheduleCapability }       from '../reschedule/index.ts'
 import { cancelCapability }           from '../cancel/index.ts'
+import { scheduleCapability }         from '../schedule/index.ts'
+import { deleteClientCapability }     from '../delete-client/index.ts'
+import { lastVisitCapability }        from '../last-visit/index.ts'
+import { getServicesCapability }      from '../get-services/index.ts'
+import { createClientCapability }     from '../create-client/index.ts'
+import { availableSlotsCapability }   from '../available-slots/index.ts'
 
-// Order matters — earlier entries take priority. Reschedule before cancel
-// because "cancela y reagenda" could otherwise be hijacked by the cancel
-// detector before the user finishes the sentence.
+// Order matters — earlier entries take priority. Reschedule and cancel before
+// schedule because "reagenda" / "cancela y reagenda" share the verb-suffix
+// space with "agenda" and would be misrouted otherwise. List before all so
+// "qué citas tengo mañana" doesn't trigger schedule's date+time presence.
 // deno-lint-ignore no-explicit-any
 const CAPABILITIES: ICapability<any>[] = [
   listAppointmentsCapability,
   rescheduleCapability,
   cancelCapability,
+  deleteClientCapability,
+  scheduleCapability,
+  lastVisitCapability,    // must precede searchClients: "última cita de X" would hit search's loose name regex
   searchClientsCapability,
+  getServicesCapability,
+  createClientCapability,
+  availableSlotsCapability,
 ]
 
 const byName = new Map(CAPABILITIES.map(c => [c.name, c]))
@@ -59,12 +72,25 @@ export function detectFastPath(input: FastPathInput): {
   return null
 }
 
+/**
+ * Dispatcher used by both the LLM path and the fast path. Looks up the tool
+ * by name, runs it, and wraps thrown exceptions in a uniform error ToolResult
+ * so callers never see a bare reject.
+ */
 export async function executeByName(
   toolName: string,
   args:     Record<string, unknown>,
   ctx:      ToolContext,
-): Promise<ToolResult | null> {
+): Promise<ToolResult> {
   const cap = byName.get(toolName)
-  if (!cap) return null
-  return cap.execute(ctx, args)
+  if (!cap) {
+    return { success: false, result: `Tool desconocida: ${toolName}`, error: 'TOOL_NOT_FOUND' }
+  }
+  try {
+    return await cap.execute(ctx, args)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[VOICE-WORKER-REGISTRY] ${toolName} threw: ${msg}`)
+    return { success: false, result: 'Error interno al ejecutar la acción.', error: msg }
+  }
 }

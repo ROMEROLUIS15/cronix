@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fuzzyFind } from '../fuzzy.ts'
+import { fuzzyFind, phoneticKey } from '../fuzzy.ts'
 
 /**
  * Adversarial test harness — captures the actual matching contract,
@@ -97,6 +97,100 @@ describe('fuzzyFind — ambiguity and tie-breaking', () => {
     )
     expect(out.status).toBe('found')
     expect(out.match?.name).toBe('Gardi Suárez')
+  })
+})
+
+describe('phoneticKey — Spanish equivalences', () => {
+  it('z and s collapse', () => {
+    expect(phoneticKey('lizet')).toBe(phoneticKey('liset'))
+  })
+  it('c before e/i collapses to s', () => {
+    expect(phoneticKey('lisset')).toBe(phoneticKey('licet'))
+    expect(phoneticKey('cecilia')).toBe(phoneticKey('sesilia'))
+  })
+  it('silent h is dropped', () => {
+    expect(phoneticKey('lizeth')).toBe(phoneticKey('lizet'))
+    expect(phoneticKey('hugo')).toBe(phoneticKey('ugo'))
+  })
+  it('v and b collapse', () => {
+    expect(phoneticKey('vazquez')).toBe(phoneticKey('bazquez'))
+  })
+  it('double letters collapse to single', () => {
+    expect(phoneticKey('lisseth')).toBe(phoneticKey('liseth'))
+  })
+  it('Lisset / Lizet / Lisseth / Lizeth all share the same key', () => {
+    const k = phoneticKey('lisset')
+    expect(phoneticKey('lizet')).toBe(k)
+    expect(phoneticKey('lisseth')).toBe(k)
+    expect(phoneticKey('lizeth')).toBe(k)
+    expect(phoneticKey('licet')).toBe(k)
+    expect(phoneticKey('liceth')).toBe(k)
+  })
+  it('cross-name guard: Licey and Lizeth produce DIFFERENT keys', () => {
+    // Licey → "lisey" (c→s before e, no doubles), Lizeth → "liset"
+    expect(phoneticKey('licey')).not.toBe(phoneticKey('lizeth'))
+  })
+  it('cross-name guard: Cardi (hard c) ≠ Sardi', () => {
+    // c before a stays as c — Cardi is not phonetically equivalent to Sardi
+    expect(phoneticKey('cardi')).not.toBe(phoneticKey('sardi'))
+  })
+})
+
+describe('fuzzyFind — phonetic STT variants of the same name', () => {
+  const lizet = c('1', 'Lizet Gómez')
+
+  it('"Lisset" → "Lizet Gómez"', () => {
+    const out = fuzzyFind([lizet], 'Lisset')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lizet Gómez')
+  })
+  it('"Lisseth" → "Lizet Gómez"', () => {
+    const out = fuzzyFind([lizet], 'Lisseth')
+    expect(out.status).toBe('found')
+  })
+  it('"Lizeth" → "Lizet Gómez"', () => {
+    const out = fuzzyFind([lizet], 'Lizeth')
+    expect(out.status).toBe('found')
+  })
+  it('"Lise" → "Lizet Gómez" (phonetic prefix overlap)', () => {
+    const out = fuzzyFind([lizet], 'Lise')
+    expect(out.status).toBe('found')
+  })
+  it('"Cecilia" → "Sesilia Pérez" (c↔s before e/i)', () => {
+    const out = fuzzyFind([c('1', 'Sesilia Pérez')], 'Cecilia')
+    expect(out.status).toBe('found')
+  })
+  it('"Vázquez" → "Bázquez García" (v↔b)', () => {
+    const out = fuzzyFind([c('1', 'Bázquez García')], 'Vázquez')
+    expect(out.status).toBe('found')
+  })
+  it('Lui → Luis Romero (existing 4-char prefix path still works)', () => {
+    const out = fuzzyFind([c('1', 'Luis Romero')], 'Lui')
+    // 3-char tokens are too short to gate; expected not_found.
+    expect(out.status).toBe('not_found')
+  })
+  it('"Luis" exact token in two "Luis Romero" entries → ambiguous', () => {
+    const out = fuzzyFind(
+      [c('1', 'Luis Romero'), c('2', 'Luis Romero')],
+      'Luis Romero',
+    )
+    expect(out.status).toBe('ambiguous')
+    expect(out.candidates?.length).toBe(2)
+  })
+})
+
+describe('fuzzyFind — cross-name false-positive guards still hold', () => {
+  it('"Licey" does NOT match "Lizeth Pérez"', () => {
+    const out = fuzzyFind([c('1', 'Lizeth Pérez')], 'Licey')
+    expect(out.status).toBe('not_found')
+  })
+  it('"Sardi" does NOT match "Cardi Suárez" (hard c)', () => {
+    const out = fuzzyFind([c('1', 'Cardi Suárez')], 'Sardi')
+    expect(out.status).toBe('not_found')
+  })
+  it('Estefany Zulura is not bridged from "Luis"', () => {
+    const out = fuzzyFind([c('1', 'Estefany Zulura')], 'Luis')
+    expect(out.status).toBe('not_found')
   })
 })
 

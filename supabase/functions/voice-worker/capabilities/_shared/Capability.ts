@@ -19,6 +19,13 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult } from '../../types.ts'
 import type { SessionMessage, LastReferencedAppointment } from '../../core/session.ts'
 
+export interface CatalogService {
+  id:           string
+  name:         string
+  duration_min: number
+  price:        number
+}
+
 export interface FastPathInput {
   /** Raw user text for the current turn. */
   text:    string
@@ -29,6 +36,8 @@ export interface FastPathInput {
   history: SessionMessage[]
   /** Most recent appointment the user/agent referenced, when fresh. */
   lastRef: LastReferencedAppointment | null
+  /** Active service catalog — needed so schedule fast-path can match service tokens deterministically. */
+  services: CatalogService[]
 }
 
 // Re-export so capabilities can import the canonical type from the shared module.

@@ -76,17 +76,22 @@ export function parseTimeExpression(text: string): ParsedTime | null {
   // Or "para las N", or bare "N de la mañana/tarde/noche".
   const hourWord = Object.keys(NUMBER_WORDS).join('|')
   const minuteWord = Object.keys(MINUTE_WORDS).join('|')
+  // Global flag so we can iterate every candidate. The first regex match used
+  // to win unconditionally, which broke "el 21 de mayo a las 4pm" — the bare
+  // "21" matched first, lacked an unambiguous marker, and the function bailed
+  // with null instead of trying "4pm" further along.
   const timeRe = new RegExp(
     `\\b(?:(?:a\\s+las?|para\\s+las?|las?)\\s+)?` +
     `(\\d{1,2}|${hourWord})` +
     `(?:\\s+(?:y\\s+(?:(\\d{1,2})|(${minuteWord}))|menos\\s+(?:cuarto|(\\d{1,2}))))?` +
     `(?:\\s*(am|pm|a\\.?\\s*m\\.?|p\\.?\\s*m\\.?)|\\s+de\\s+la\\s+(manana|tarde|noche|madrugada)|\\s+del\\s+mediodia)?`,
+    'g',
   )
-  const tm = t.match(timeRe)
-  if (tm) {
+
+  for (const tm of t.matchAll(timeRe)) {
     const hourTok = tm[1]!
     let hour = /^\d+$/.test(hourTok) ? parseInt(hourTok, 10) : (NUMBER_WORDS[hourTok] ?? NaN)
-    if (isNaN(hour) || hour < 0 || hour > 23) return null
+    if (isNaN(hour) || hour < 0 || hour > 23) continue
 
     let minute = 0
     if (tm[2]) {
@@ -99,7 +104,6 @@ export function parseTimeExpression(text: string): ParsedTime | null {
       minute = -15
     }
 
-    // Period suffix
     const period = tm[5]
     const franja = tm[6]
     let pm = false
@@ -114,36 +118,33 @@ export function parseTimeExpression(text: string): ParsedTime | null {
       if (franja === 'tarde' || franja === 'noche') pm = true
     }
 
-    // Apply am/pm
+    // Require an unambiguous trigger BEFORE applying am/pm or the salon
+    // heuristic — otherwise a bare "21" with no marker would mutate state
+    // and we'd accept noise. Skip and try the next match instead.
+    const hasUnambiguous =
+      /:|h|am|pm|a\.?\s*m|p\.?\s*m|manana|tarde|noche|madrugada|mediodia/.test(tm[0]!)
+      || /(a\s+las?|para\s+las?|^las?\s|\slas?\s)/.test(' ' + tm[0]!)
+    if (!hasUnambiguous) continue
+
     if (pm && hour < 12) hour += 12
     if (am && hour === 12) hour = 0
 
     // Handle "menos N"
     if (minute < 0) {
       const absMin = -minute
-      // shift to previous hour
       hour = (hour - 1 + 24) % 24
       minute = 60 - absMin
     }
 
-    if (minute < 0 || minute > 59) return null
+    if (minute < 0 || minute > 59) continue
 
-    // Heuristic: bare 1-7 with no period suffix → assume PM (salon hours)
+    // Heuristic: bare 1-7 with no period suffix → assume PM (salon hours).
+    // Requires "a las" / "las" / "para las" prefix to be safe.
     if (!period && !franja && hour >= 1 && hour <= 7) {
-      // Only when we matched a real time prefix ("a las", "las", "para las").
-      // A bare "3" without any of those is too risky — return null instead.
       const hasPrefix = /(a\s+las?|para\s+las?|^las?\s|\slas?\s)/.test(' ' + tm[0]!)
-      if (!hasPrefix) return null
+      if (!hasPrefix) continue
       hour += 12
     }
-
-    // Require an unambiguous trigger: either a digit:digit form, "h", a period
-    // suffix, a franja, or one of the "las/a las/para las" prefixes. A bare
-    // "3" by itself is too ambiguous to count as a time.
-    const hasUnambiguous =
-      /:|h|am|pm|a\.?\s*m|p\.?\s*m|manana|tarde|noche|madrugada|mediodia/.test(tm[0]!)
-      || /(a\s+las?|para\s+las?|^las?\s|\slas?\s)/.test(' ' + tm[0]!)
-    if (!hasUnambiguous) return null
 
     return { time: `${pad2(hour)}:${pad2(minute)}`, reason: tm[0]! }
   }

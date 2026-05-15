@@ -39,13 +39,82 @@ export function tokens(s: string): string[] {
   return normalize(s).split(/[^a-z0-9]+/).filter(t => t.length >= 2)
 }
 
+/**
+ * Spanish phonetic skeleton for an already-normalised token. Collapses the
+ * orthographic and STT variations that map to the same spoken name so the
+ * resolver treats them as equivalent:
+ *
+ *   z / c(before e,i)  → s     (Lizet / Lisset / Licet → liset)
+ *   silent h           → Ø     (Lisseth / Liseth      → liset)
+ *   v                  → b     (Vázquez / Bázquez     → baskes)
+ *   ll                 → y     (Yolanda / Llolanda    → yolanda)
+ *   qu                 → k     (Vázquez               → baskes)
+ *   double letters     → single (Lisseth → liseth → liset)
+ *
+ * Order matters: drop `h` first (otherwise "ch" survives), do `c(e|i)→s`
+ * BEFORE `c→k` would mis-route (we keep `c` outside e/i untouched), and
+ * collapse doubles last so per-letter rewrites can land double consonants
+ * first.
+ *
+ * Intentionally NOT bridged:
+ *   - c before a/o/u stays as c (Cardi ≠ Sardi — different names)
+ *   - trailing -t is preserved (otherwise Pat/Pa would collide)
+ *   - rr stays distinct from r (Pera vs Perra are different words)
+ */
+export function phoneticKey(token: string): string {
+  let s = token.toLowerCase()
+  s = s.replace(/h/g, '')
+  s = s.replace(/c([ei])/g, 's$1')
+  s = s.replace(/z/g, 's')
+  s = s.replace(/v/g, 'b')
+  s = s.replace(/ll/g, 'y')
+  s = s.replace(/qu/g, 'k')
+  s = s.replace(/(.)\1+/g, '$1')
+  return s
+}
+
+/**
+ * True when two tokens share a stem, either literally or phonetically:
+ *
+ *   1. literal equality                                  ("luis" === "luis")
+ *   2. ≥4-char prefix overlap (either direction)         ("lui" → "luis")
+ *   3. phonetic-key equality                             ("lisset" ↔ "lizet")
+ *   4. ≥4-char phonetic-prefix overlap (either direction) ("lise"  → "lizet")
+ *
+ * The 4-char floor protects against short overlaps bridging unrelated names
+ * ("ana" vs "anastasia" — `shareToken` says yes; "an" alone — says no).
+ */
 export function shareToken(queryTokens: string[], candidateTokens: string[]): boolean {
   for (const q of queryTokens) {
+    const qPhon = phoneticKey(q)
     for (const c of candidateTokens) {
       if (q === c) return true
       if (q.length >= 4 && c.startsWith(q)) return true
       if (c.length >= 4 && q.startsWith(c)) return true
+      const cPhon = phoneticKey(c)
+      if (qPhon === cPhon) return true
+      if (qPhon.length >= 4 && cPhon.startsWith(qPhon)) return true
+      if (cPhon.length >= 4 && qPhon.startsWith(cPhon)) return true
     }
+  }
+  return false
+}
+
+/**
+ * True when any query token matches any candidate token either literally or
+ * via its phonetic key. Used by fuzzyFind to flag "exact-token" tier: a
+ * phonetic spelling collision deserves the same priority as a literal
+ * collision, otherwise "Lisset" against "Lizet Pérez" falls into the lower
+ * similarity-only tier and loses to coincidental neighbours.
+ */
+function hasExactOrPhoneticTokenMatch(
+  queryTokens: string[],
+  candidateSet: Set<string>,
+  candidatePhoneticSet: Set<string>,
+): boolean {
+  for (const q of queryTokens) {
+    if (candidateSet.has(q)) return true
+    if (candidatePhoneticSet.has(phoneticKey(q))) return true
   }
   return false
 }
@@ -91,11 +160,12 @@ export function fuzzyFind<T extends { name: string }>(items: T[], query: string)
     .map(item => {
       const cTokens = tokens(item.name)
       const cSet    = new Set(cTokens)
+      const cPhonSet = new Set(cTokens.map(phoneticKey))
       return {
         item,
         score:           similarity(normalize(item.name), needle),
         tokens:          cTokens,
-        exactTokenMatch: qTokens.some(q => cSet.has(q)),
+        exactTokenMatch: hasExactOrPhoneticTokenMatch(qTokens, cSet, cPhonSet),
       }
     })
     .filter(s => {

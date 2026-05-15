@@ -19,62 +19,32 @@
  *   GEMINI_API_KEY  — Gemini
  */
 
-import { buildSystemPrompt }                          from './prompt.ts'
-import { TOOL_DEFINITIONS, WRITE_TOOLS, executeTool, type ToolContext } from './tools.ts'
-import { getProvider }                                from './providers/registry.ts'
+import { buildSystemPrompt } from './prompt.ts'
+import type { ToolContext }  from './core/tool-context.ts'
+import { getProvider }       from './providers/registry.ts'
 import type { NeutralMessage, NeutralTool } from './providers/ILLMProvider.ts'
 import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType } from './types.ts'
-import { detectFastPath as registryDetect } from './capabilities/_shared/registry.ts'
+import {
+  detectFastPath as registryDetect,
+  executeByName,
+  getToolDefinitions,
+  WRITE_CAPABILITIES,
+  BYPASS_CAPABILITIES,
+} from './capabilities/_shared/registry.ts'
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
-/**
- * Tools whose result is already user-facing prose. When the LLM calls one of
- * these (and only one) and it succeeds, we bypass the second-pass LLM synthesis
- * and use the tool's `result` as the final response.
- *
- * Why: production logs showed Llama 3.3 70B Versatile occasionally ignoring
- * tool results and synthesizing its own (wrong) answer — e.g. "no hay citas"
- * when the tool returned 4 appointments. Bypassing the second LLM call on
- * single-tool success eliminates that hallucination surface entirely. This
- * mirrors the WhatsApp pattern (process-whatsapp/ai-agent.ts) which uses
- * deterministic templates for write-tool successes.
- *
- * It is INDUSTRY STANDARD for production agentic systems (LangChain
- * `return_direct=True`, OpenAI's function-calling docs, Anthropic's tool_use
- * best practices). The trade-off is slightly less conversational prose in
- * exchange for guaranteed correctness — for an MVP business assistant,
- * correctness is non-negotiable.
- *
- * NOT in this set: smart_schedule, cancel_booking, reschedule_booking
- *   (those write tools already return user-facing prose AND we want potential
- *    LLM rephrasing for confirmation context — but their templates are
- *    already deterministic so they rarely need synthesis either).
- */
-const BYPASS_TOOLS = new Set([
-  'get_appointments_by_date',
-  'search_clients',
-  'get_services',
-  'get_available_slots',
-  // Write tools also pass-through cleanly because their result strings
-  // ("Listo. Agendé a X...") are already well-formed user-facing text.
-  'smart_schedule',
-  'cancel_booking',
-  'reschedule_booking',
-  'create_client',
-  'delete_client',
-  'check_duplicate_clients',
-])
-
-// ── Adapters: voice-worker types → neutral provider types ────────────────
-
-/**
- * The TOOL_DEFINITIONS in tools.ts already match the neutral schema shape.
- * This adapter is a structural cast so downstream changes to NeutralTool
- * remain a single point of breakage instead of being scattered.
- */
+// ── Adapter: capability definitions → neutral provider tool shape ────────
+//
+// When a capability succeeds and was the sole tool call, the agent bypasses
+// the LLM second pass and speaks the tool's `result` directly. Why: Llama
+// 3.3 70B Versatile occasionally ignored tool results and synthesised its
+// own (wrong) answer. Bypassing eliminates that hallucination surface.
+// Industry-standard pattern (LangChain `return_direct=True`, OpenAI tool-use
+// docs). The bypass set comes from the registry's `bypassLLM` flag — every
+// current capability opts in because their results are already prose.
 function toNeutralTools(): NeutralTool[] {
-  return TOOL_DEFINITIONS.map(t => ({
+  return getToolDefinitions().map(t => ({
     name:        t.function.name,
     description: t.function.description,
     parameters:  t.function.parameters as NeutralTool['parameters'],
@@ -139,267 +109,6 @@ function detectTemporalIntent(userText: string, today: string): DateOverride | n
   return null
 }
 
-// ── Fast path — total LLM bypass for simple appointment-list queries ─────
-//
-// Same deterministic philosophy as the junction-table fix earlier: when the
-// user's intent is unambiguous from the input text alone, we don't need
-// the LLM at all. Call the tool directly with the right date, return the
-// tool's user-facing result. Zero room for the LLM to mess up.
-//
-// Triggers ONLY on the canonical read-list patterns. Anything ambiguous,
-// any write operation, any complex query — falls through to the normal
-// LLM flow unchanged. This is purely additive; nothing existing breaks.
-
-/** Detects "qué citas tengo {hoy|mañana|pasado mañana}" — read-list intent only. */
-function detectAppointmentListFastPath(
-  userText: string,
-  today: string,
-): { date: string; reason: string } | null {
-  const t = userText.toLowerCase()
-
-  // Reject if any write keyword is present — fast path is read-only.
-  //
-  // "agenda" is ambiguous: SUSTANTIVO (= calendar) vs VERBO conjugation. We
-  // only want to block the verb. The lookahead on agend(...) requires an
-  // unambiguously verbal suffix: -ar, -ame, -alo, -aste, -aron, -ado, etc.
-  // Bare "agenda" (e.g. "agenda de hoy") is left through to QUERY.
-  const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
-  const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
-  if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
-
-  // Must look like a query about appointments (not generic chitchat).
-  // Accepts: "qué citas tengo X", "citas de X", "agenda de X", "qué tengo X",
-  // "muéstrame las citas X", "cuáles son mis citas X"
-  const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que)\b|\bagenda\b|\bmis?\s+citas\b|\bqu[eé]\s+tengo\b|\bcu[aá]les\s+son\s+mis?\s+citas\b|\bmu[eé]strame\b)/
-  if (!QUERY.test(t)) return null
-
-  // Detect target date keyword. Order matters: "pasado mañana" before "mañana".
-  if (/\bpasado\s+ma[ñn]ana\b/.test(t)) return { date: addDaysIso(today, 2), reason: 'pasado mañana' }
-  if (/\bma[ñn]ana\b/.test(t))          return { date: addDaysIso(today, 1), reason: 'mañana' }
-  if (/\bhoy\b/.test(t))                return { date: today,                reason: 'hoy' }
-
-  return null
-}
-
-/**
- * Detects "tengo (a/al/la/el) cliente X" / "busca a X" / "existe X" / "tienes a X"
- * patterns and extracts the client name. Returns null when not a client lookup.
- *
- * Like detectAppointmentListFastPath, this lets us call search_clients
- * deterministically without involving the LLM. Eliminates the case where the
- * LLM might emit instructional text or fail to invoke the tool.
- */
-function detectClientLookupFastPath(userText: string): { name: string } | null {
-  const t = userText.toLowerCase().trim()
-
-  // Reject write intents — fast path is read-only.
-  const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
-  const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
-  if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
-
-  // Words that look like names but aren't — defense against false positives
-  // (e.g. "tengo mañana" → captured "mañana" as if it were a name).
-  const NOT_A_NAME = new Set([
-    'hoy', 'mañana', 'manana', 'ayer', 'anteayer', 'pasado',
-    'lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo',
-    'cita', 'citas', 'agenda', 'algo', 'nada', 'tiempo', 'rato',
-    'algún', 'algun', 'alguna', 'alguien',
-  ])
-
-  // Patterns that ask about a client by name. Each captures the name segment.
-  // Order matters slightly — most specific first.
-  // The optional `alg[uú]n[oa]?\s+` group inside the prefix handles "algún cliente"
-  // even with the accent on "ú" (Speech-to-text often emits the accented form).
-  const PATTERNS: RegExp[] = [
-    // "tengo (a la|al|a) cliente X" / "tengo (a) X (entre mis clientes)?"
-    /\btengo\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
-    // "tienes (a) X" — informal you-form
-    /\btienes\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
-    // "existe (el|la) cliente X" / "existe X"
-    /\bexist[ea]\s+(?:el|la)?\s*(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-    // "busca (a) X" / "buscame (a) X" / "encuentra (a) X"
-    /\b(?:busca(?:me)?|encuentra|encu[eé]ntrame)\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-    // "hay (algún|alguna|un|una) cliente (llamad[oa]) X" / "hay alguien llamado X"
-    /\bhay\s+(?:alg[uú]n[oa]?\s+|un[ao]?\s+)?(?:client[ea]\s+)?(?:llamad[oa]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+(?:entre|en|como|de)\s|\s*\?|\s*$)/i,
-    // "cuál es el teléfono de X" / "qué teléfono tiene X"
-    /\b(?:cu[aá]l\s+es\s+el\s+tel[eé]fono\s+de|qu[eé]\s+tel[eé]fono\s+tiene|tel[eé]fono\s+de)\s+(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-  ]
-
-  for (const re of PATTERNS) {
-    const m = t.match(re)
-    if (m && m[1]) {
-      const name = m[1].trim()
-        // Strip trailing punctuation
-        .replace(/[.,;:!?]+$/, '')
-        .trim()
-      // Need at least 2 chars and not look like noise
-      if (name.length < 2 || !/[a-záéíóúñ]/i.test(name)) continue
-
-      // Reject if every word in the captured "name" is a non-name token
-      // (temporal keyword, generic word, etc.). Protects against false
-      // positives like "tengo mañana?" → captured "mañana".
-      const words = name.split(/\s+/)
-      const allNoise = words.every(w => NOT_A_NAME.has(w.toLowerCase()))
-      if (allNoise) continue
-
-      return { name }
-    }
-  }
-
-  return null
-}
-
-/**
- * Detects "last visit" queries — "cuándo fue la última vez que atendí a X",
- * "qué día fue la última cita de X", "última visita de X", etc.
- *
- * Returns { client_name } if matched, null otherwise. Same defensive pattern
- * as detectClientLookupFastPath: rejects write verbs and noise-only captures.
- */
-function detectLastVisitFastPath(userText: string): { client_name: string } | null {
-  const t = userText.toLowerCase().trim()
-
-  const WRITE = /\b(ag[eé]nd[aoeé]|reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé])\b/
-  if (WRITE.test(t)) return null
-
-  const NOT_A_NAME = new Set([
-    'hoy', 'mañana', 'manana', 'ayer', 'anteayer',
-    'cita', 'citas', 'algo', 'nada', 'algún', 'algun', 'alguien',
-  ])
-
-  // "última vez que atendí/se atendió/vino/asistió X"
-  // "última cita/visita de X"
-  // "cuándo vino X por última vez"
-  // "qué día fue la última vez (que) atendí X"
-  // "dime cuándo vino X" / "dime la última visita de X"
-  //
-  // Note: `\b` only recognises ASCII word chars in JS regex, so any pattern
-  // starting with an accented letter (like "última") must use `(?:^|\s)` as
-  // an anchor instead — `\b[uú]ltima` would never match in real input.
-  const PATTERNS: RegExp[] = [
-    /(?:^|\s)[uú]ltima\s+vez\s+que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]|fue\s+atendid[oa])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-    /(?:^|\s)[uú]ltima\s+(?:cita|visita)\s+(?:de|para|que\s+tuvo)\s+(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-    /\bcu[aá]ndo\s+(?:vino|fue\s+atendid[oa]|asisti[óo]|atend[ií])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s+por\s+[uú]ltima\s+vez)?(?:\s*\?|\s*$)/i,
-    /\bqu[eé]\s+d[ií]a\s+(?:fue\s+)?(?:la\s+)?[uú]ltima\s+vez\s+que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]|fue\s+atendid[oa])\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-    /\bdime\s+(?:la\s+[uú]ltima\s+(?:vez|cita|visita)\s+(?:que\s+(?:se\s+)?(?:atend[ií](?:[óoaá]|\s+a)?|vino|asisti[óo]))?|cu[aá]ndo\s+(?:vino|atend[ií]|asisti[óo]|fue\s+atendid[oa]))\s+(?:al?\s+)?(?:la\s+)?(?:client[ea]\s+)?([a-záéíóúñ][a-záéíóúñ\s.'-]{1,80}?)(?:\s*\?|\s*$)/i,
-  ]
-
-  for (const re of PATTERNS) {
-    const m = t.match(re)
-    if (m && m[1]) {
-      const name = m[1].trim().replace(/[.,;:!?]+$/, '').trim()
-      if (name.length < 2 || !/[a-záéíóúñ]/i.test(name)) continue
-      const words = name.split(/\s+/)
-      if (words.every(w => NOT_A_NAME.has(w.toLowerCase()))) continue
-      return { client_name: name }
-    }
-  }
-
-  return null
-}
-
-/**
- * Looks at recent assistant turns and pulls out the most recently-mentioned
- * client name. Used by the delete fast path so anaphoric phrases like
- * "borra al duplicado" can resolve to the client we just discussed.
- *
- * Matches three response shapes the assistant produces:
- *   - "Tengo N clientes con nombre similar a X."        (search_clients ambiguous)
- *   - "Tengo N clientes llamados X con el mismo..."     (delete_client ambiguous)
- *   - "Sí, X está entre tus clientes..."                (search_clients found)
- */
-function extractRecentClientNameFromHistory(
-  history: Array<{ role: 'user' | 'assistant'; content: string }>,
-): string | null {
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i]!
-    if (msg.role !== 'assistant') continue
-    const t = msg.content
-
-    let m = t.match(/clientes\s+(?:con\s+nombre\s+similar\s+a|llamad[oa]s?)\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)(?:\s+(?:con|sin|y|que|en)\b|\s*[.,:!?])/i)
-    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
-
-    m = t.match(/s[ií],?\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)\s+est[áa]\s+entre\s+tus\s+clientes/i)
-    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
-
-    m = t.match(/(?:hay|tengo)\s+\d+\s+clientes?\s+(?:con\s+nombre\s+similar\s+a|llamad[oa]s?)\s+([a-záéíóúñ][a-záéíóúñ\s.'-]{1,60}?)(?:\s+(?:con|sin|y|que|en)\b|\s*[.,:!?])/i)
-    if (m && m[1]) return m[1].trim().replace(/[.,;:!?]+$/, '').trim()
-  }
-  return null
-}
-
-/**
- * Detects three shapes of "delete client" intent and returns the args we
- * forward to delete_client (or null if nothing matches):
- *
- *   A) "elimina a X con teléfono Y"   → { name, phone }
- *   B) "elimina a X cualquiera|uno|los duplicados" → { name, any: true }
- *   C) Anaphoric short form: "borra al duplicado", "elimina los duplicados",
- *      "borra uno", "borra al otro" — no name in current turn. We pull the
- *      client name from the most recent assistant message and treat it as
- *      shape (B). This is what was missing before: the user's phrase
- *      "borra al duplicado" had no explicit name, so the fast path bailed
- *      and the LLM hallucinated.
- *
- * Bypassing the LLM is the whole point — for a deterministic action with
- * explicit consent it has no upside and a clear downside (technical leakage,
- * confirmation loops).
- */
-function detectDeleteClientFastPath(
-  userText: string,
-  history:  Array<{ role: 'user' | 'assistant'; content: string }>,
-): { name: string; any?: boolean; phone?: string } | null {
-  const t = userText.toLowerCase().trim()
-
-  // Verb roots covering elimina/eliminame/borra/borrame/quita/quitame/remueve.
-  const VERB = /(?:elim[íi]nam?e?|b[óo]rrame?|borra|qu[íi]tame?|quita|rem[ueú]ve)/
-
-  // (A) Phone variant: "elimina a X con teléfono 04XX..." or "...el teléfono X".
-  const PHONE_RE = new RegExp(
-    `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:con\\s+(?:el\\s+)?|de(?:l)?\\s+|que\\s+tiene\\s+(?:el\\s+)?)tel[eé]fono\\s+([\\d\\s+()-]{6,30})\\s*\\??$`,
-    'i',
-  )
-  const phoneMatch = t.match(PHONE_RE)
-  if (phoneMatch && phoneMatch[1]) {
-    return {
-      name:  phoneMatch[1].trim().replace(/[.,;:!?]+$/, '').trim(),
-      phone: phoneMatch[2]!.trim(),
-    }
-  }
-
-  // (B) "any duplicate" variant WITH explicit name:
-  // "elimina a X cualquiera|alguno|uno|los duplicados|el duplicado".
-  const ANY_RE = new RegExp(
-    `\\b${VERB.source}\\s+(?:al?\\s+)?(?:la\\s+)?(?:client[ea]\\s+)?([a-záéíóúñ][a-záéíóúñ\\s.'-]{1,80}?)\\s+(?:a\\s+)?(?:cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno|a?\\s*uno|los\\s+duplicados|el\\s+duplicado)\\b`,
-    'i',
-  )
-  const anyMatch = t.match(ANY_RE)
-  if (anyMatch && anyMatch[1]) {
-    return {
-      name: anyMatch[1].trim().replace(/[.,;:!?]+$/, '').trim(),
-      any:  true,
-    }
-  }
-
-  // (C) Anaphoric short form — no name in current turn.
-  // Accepts optional leading "sí" / "sí," for the case where the assistant
-  // just asked "¿elimino uno y dejo el otro?" and the user replied "sí, borra uno".
-  const SHORT_RE = new RegExp(
-    `^(?:s[ií],?\\s+)?${VERB.source}\\s+(?:a(?:l)?\\s+)?(?:los\\s+)?(?:duplicados?|el\\s+duplicado|otro|el\\s+otro|los\\s+otros|uno|cualquiera(?:\\s+de\\s+(?:los|las)\\s+(?:dos|tres))?|alguno)\\s*\\??$`,
-    'i',
-  )
-  if (SHORT_RE.test(t)) {
-    const name = extractRecentClientNameFromHistory(history)
-    if (name) {
-      return { name, any: true }
-    }
-    // No context to resolve the reference — let the LLM ask "¿de qué cliente?"
-    return null
-  }
-
-  return null
-}
-
 // ── Notification building (post-write side effect) ───────────────────────
 
 const ACTION_TO_EVENT_TYPE: Record<string, NotificationType> = {
@@ -433,10 +142,11 @@ export async function runAgent(
     timezone: ctx.timezone,
     history:  input.history,
     lastRef:  fastPathLastRef,
+    services: input.context.services,
   })
   if (registryHit) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}): args=${JSON.stringify(registryHit.args)}`)
-    const result = await executeTool(registryHit.capability.name, registryHit.args, ctx)
+    const result = await executeByName(registryHit.capability.name, registryHit.args, ctx)
     const text = result.success
       ? result.result
       : (result.result || 'No pude completar esa consulta en este momento. Intenta de nuevo.')
@@ -446,76 +156,44 @@ export async function runAgent(
       { role: 'assistant', content: text       },
     ].slice(-30)
     // Write tools called via fast path: surface their data so the session
-    // captures the new lastRef. Reads return null candidate, preserving
-    // whatever was there.
-    const lastRefCandidate = (registryHit.capability.isWrite && result.success && result.data)
-      ? {
-          appointmentId: result.data.appointmentId,
-          clientName:    result.data.clientName,
-          serviceName:   result.data.serviceName,
-          date:          result.data.date,
-          time:          result.data.time,
-        }
-      : null
+    // captures the new lastRef (skip cancellations — the appointment is
+    // gone so anaphoric follow-ups would be nonsense) and emit the bell
+    // notification the LLM path also emits. The LLM-path branch below
+    // mirrors this exact logic; both paths must stay in lock-step so the
+    // dashboard refreshes on every successful write regardless of route.
+    const fastPathNotifications: AppointmentNotification[] = []
+    let fastPathLastRefCandidate: AgentOutput['lastRefCandidate'] = null
+    if (registryHit.capability.isWrite && result.success && result.data) {
+      const eventType = ACTION_TO_EVENT_TYPE[result.data.action]
+      if (eventType) {
+        fastPathNotifications.push({
+          eventId:     crypto.randomUUID(),
+          type:        eventType,
+          businessId:  ctx.businessId,
+          userId:      ctx.userId,
+          clientName:  result.data.clientName,
+          serviceName: result.data.serviceName,
+          date:        result.data.date,
+          time:        result.data.time,
+        })
+      }
+      fastPathLastRefCandidate = result.data.action === 'cancelled'
+        ? null
+        : {
+            appointmentId: result.data.appointmentId,
+            clientName:    result.data.clientName,
+            serviceName:   result.data.serviceName,
+            date:          result.data.date,
+            time:          result.data.time,
+          }
+    }
     return {
       text,
       actionPerformed:      registryHit.capability.isWrite && result.success,
       history:              newHistory,
       modelUsed:            `fast-path/${registryHit.capability.name}`,
-      pendingNotifications: [],
-      lastRefCandidate,
-    }
-  }
-
-  // Fast path 3: last visit ("cuándo fue la última vez que atendí a Ada Monsalve")
-  // Checked BEFORE client-lookup because "última vez que atendí a X" would also
-  // match the loose "X" capture in the client-lookup patterns otherwise.
-  const fastPathLastVisit = detectLastVisitFastPath(input.text)
-  if (fastPathLastVisit) {
-    console.log(`[VOICE-WORKER-AGENT] FAST PATH (last visit): client="${fastPathLastVisit.client_name}"`)
-    const result = await executeTool('get_last_visit', { client_name: fastPathLastVisit.client_name }, ctx)
-    const text = result.success
-      ? result.result
-      : 'No pude consultar la última visita en este momento. Intenta de nuevo.'
-    const newHistory: AgentOutput['history'] = [
-      ...input.history,
-      { role: 'user',      content: input.text },
-      { role: 'assistant', content: text       },
-    ].slice(-30)
-    return {
-      text,
-      actionPerformed:      false,
-      history:              newHistory,
-      modelUsed:            'fast-path/last-visit',
-      pendingNotifications: [],
-      lastRefCandidate:     null,
-    }
-  }
-
-  // Fast path 4: delete client with explicit consent for duplicates
-  // ("elimina a Luis Romero cualquiera", "borra a Luis con teléfono X").
-  const fastPathDelete = detectDeleteClientFastPath(input.text, input.history)
-  if (fastPathDelete) {
-    console.log(`[VOICE-WORKER-AGENT] FAST PATH (delete client): name="${fastPathDelete.name}" any=${!!fastPathDelete.any} phone="${fastPathDelete.phone ?? ''}"`)
-    const toolArgs: Record<string, unknown> = { client_name: fastPathDelete.name }
-    if (fastPathDelete.any)   toolArgs.any_duplicate = true
-    if (fastPathDelete.phone) toolArgs.phone         = fastPathDelete.phone
-    const result = await executeTool('delete_client', toolArgs, ctx)
-    const text = result.success
-      ? result.result
-      : (result.result || 'No pude eliminar al cliente en este momento. Intenta de nuevo.')
-    const newHistory: AgentOutput['history'] = [
-      ...input.history,
-      { role: 'user',      content: input.text },
-      { role: 'assistant', content: text       },
-    ].slice(-30)
-    return {
-      text,
-      actionPerformed:      result.success,
-      history:              newHistory,
-      modelUsed:            'fast-path/delete-client',
-      pendingNotifications: [],
-      lastRefCandidate:     null,
+      pendingNotifications: fastPathNotifications,
+      lastRefCandidate:     fastPathLastRefCandidate,
     }
   }
 
@@ -569,7 +247,7 @@ export async function runAgent(
 
     // Track results from this step so we can decide whether to bypass synthesis.
     // We capture the tool's result text whether it succeeded or not — every
-    // tool in BYPASS_TOOLS returns user-facing prose on both branches, so
+    // tool in BYPASS_CAPABILITIES returns user-facing prose on both branches, so
     // bypassing on failure preserves the tool's own error message (e.g.
     // "¿A qué hora?") instead of letting the LLM rewrite or ignore it.
     let lastResultText:    string | null = null
@@ -624,7 +302,7 @@ export async function runAgent(
       }
       executedFingerprints.add(fp)
 
-      const result = await executeTool(tc.name, parsedArgs, ctx)
+      const result = await executeByName(tc.name, parsedArgs, ctx)
       messages.push({
         role:         'tool',
         tool_call_id: tc.id,
@@ -633,11 +311,11 @@ export async function runAgent(
       })
 
       if (result.success) successfulCallCount++
-      if (BYPASS_TOOLS.has(tc.name) && result.result) {
+      if (BYPASS_CAPABILITIES.has(tc.name) && result.result) {
         lastResultText = result.result
       }
 
-      if (result.success && WRITE_TOOLS.has(tc.name)) {
+      if (result.success && WRITE_CAPABILITIES.has(tc.name)) {
         actionPerformed = true
         if (result.data) {
           const eventType = ACTION_TO_EVENT_TYPE[result.data.action]
@@ -684,7 +362,7 @@ export async function runAgent(
     if (
       resp.toolCalls.length === 1 &&
       lastResultText &&
-      BYPASS_TOOLS.has(resp.toolCalls[0]!.name)
+      BYPASS_CAPABILITIES.has(resp.toolCalls[0]!.name)
     ) {
       finalText = lastResultText
       console.log(`[VOICE-WORKER-AGENT] Bypassing LLM synthesis — using ${resp.toolCalls[0]!.name} result directly (success=${successfulCallCount === 1})`)

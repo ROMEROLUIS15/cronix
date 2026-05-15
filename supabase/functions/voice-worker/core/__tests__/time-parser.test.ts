@@ -96,3 +96,18 @@ describe('userMentionedTime', () => {
     expect(userMentionedTime('tengo 3 servicios')).toBe(false)
   })
 })
+
+describe('parseTimeExpression — skips noise to find unambiguous time later in text', () => {
+  it('"el 21 de mayo a las 4pm" → 16:00 (must skip "21")', () => {
+    expect(parseTimeExpression('el 21 de mayo a las 4pm')?.time).toBe('16:00')
+  })
+  it('"reserva a María para tinte el 21 de mayo a las 4pm" → 16:00', () => {
+    expect(parseTimeExpression('reserva a María para tinte el 21 de mayo a las 4pm')?.time).toBe('16:00')
+  })
+  it('"agéndame el 30 de junio a las 10am" → 10:00', () => {
+    expect(parseTimeExpression('agéndame el 30 de junio a las 10am')?.time).toBe('10:00')
+  })
+  it('"tengo 5 citas mañana a las 3 de la tarde" → 15:00', () => {
+    expect(parseTimeExpression('tengo 5 citas mañana a las 3 de la tarde')?.time).toBe('15:00')
+  })
+})

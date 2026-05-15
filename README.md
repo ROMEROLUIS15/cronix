@@ -25,60 +25,51 @@ La plataforma incluye un **dashboard web** con su propio asistente de voz para q
 ## Arquitectura
 
 ```
-                    ┌──────────────────────────────┐
-                    │          CHANNELS             │
-                    │                              │
-   Owner (voz) ────► DashboardBookingAdapter       │
-                    │         ↓                   │
-   Cliente (WA) ───► WhatsApp Adapter (Deno)       │
-                    └─────────────┬────────────────┘
-                                  │ TenantContext
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │  TenantEnforcer (security)   │
-                    │  verifica ownership en DB    │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │       BookingEngine          │
-                    │  (único core de negocio)     │
-                    │  ├── Zod validation          │
-                    │  ├── ClientResolver          │
-                    │  ├── ServiceResolver         │
-                    │  ├── localToUTC              │
-                    │  └── UseCases               │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │       Repositories           │
-                    │  (Supabase + RLS + cache)    │
-                    └──────────────────────────────┘
+                    ┌────────────────────────────────────────────┐
+                    │                CHANNELS                    │
+                    │                                            │
+   Owner (voz) ─────► voice-worker Edge Function (Deno)          │
+                    │   capability registry + LLM fallback       │
+                    │                                            │
+   Cliente (WA) ────► process-whatsapp Edge Function (Deno)      │
+                    │   → BookingEngine (lib/ai/core)            │
+                    └─────────────────────┬──────────────────────┘
+                                          │
+                                          ▼
+                    ┌────────────────────────────────────────────┐
+                    │   TenantEnforcer / business-router         │
+                    │   (Supabase service role + RLS)            │
+                    └─────────────────────┬──────────────────────┘
+                                          │
+                                          ▼
+                    ┌────────────────────────────────────────────┐
+                    │              Repositories                  │
+                    │   Supabase (PostgreSQL + RLS)              │
+                    │   + Upstash Redis (sesión + cache)         │
+                    └────────────────────────────────────────────┘
 ```
 
-**Principio clave**: ambos canales (Dashboard y WhatsApp) usan el mismo `BookingEngine`. La lógica de negocio nunca se duplica.
+**Principio clave**: cada canal owna su agente, pero ambos comparten contratos (`ToolResult`, schemas Zod en WhatsApp, `ICapability` en voz). La lógica de negocio nunca se duplica entre lecturas y escrituras de un mismo canal.
 
 ---
 
-## Flujo de Ejecución (End-to-End)
+## Flujo de Ejecución (Voz del Dashboard — End-to-End)
 
 ```
-1. Input del usuario (voz o texto)
-2. STT: Deepgram (voz) → texto
-3. DecisionEngine: fast-path o LLM?
-   ├── Fast-path: detecta intento claro → ejecuta directo (0 tokens LLM)
-   └── LLM path: Groq API → tool call → ejecutar tool
-4. DashboardBookingAdapter.execute(toolName, args, userId, businessId)
-5. TenantEnforcer.verify(businessId, userId) → TenantContext
-6. BookingEngine.dispatch(ctx, toolName, args)
-   ├── Zod: valida args
-   ├── ClientResolver: nombre → UUID (fuzzy match)
-   ├── ServiceResolver: nombre → UUID (4 estrategias)
-   ├── localToUTC: convierte hora local → UTC
-   └── UseCase.execute: conflict check → create
-7. cache.invalidate(businessId, 'appointments')
-8. Respuesta → TTS → audio al usuario
+1. Input del usuario (voz multipart o texto JSON)  →  POST /functions/v1/voice-worker
+2. JWT verify + rate limit (Upstash, 30/min)
+3. STT: Groq Whisper (sólo si llega audio)
+4. Carga paralela:  business context  +  sesión Redis (history + lastRef)
+5. agent.ts:
+   ├── FAST PATH         registry.detectFastPath() → ejecuta capability sin LLM
+   └── LLM PATH          provider.chat() → tool_calls
+                         ├── Date guard (override "hoy" / "mañana" / "pasado mañana")
+                         ├── Dedup fingerprint (tool + args canónicos)
+                         ├── Capability.execute(ctx, args)
+                         └── Bypass-LLM: si la tool produce prosa, se devuelve tal cual
+6. saveSession() + dispatchBellNotification() en paralelo
+7. TTS: Deepgram → data:audio/mp3;base64
+8. Respuesta JSON { text, audioUrl, actionPerformed, transcription, modelUsed }
 ```
 
 ---
@@ -89,9 +80,9 @@ La plataforma incluye un **dashboard web** con su propio asistente de voz para q
 |------|-----------|-----------|
 | Frontend | Next.js 15 + React 19 | Dashboard web |
 | API | Next.js API Routes | Endpoints REST |
-| AI LLM | Groq (Llama 3) | Razonamiento + tool calls |
-| AI STT | Deepgram | Voz → texto |
-| AI TTS | ElevenLabs | Texto → voz |
+| AI LLM | Groq (Llama 3.3 70B) + Gemini fallback | Razonamiento + tool calls |
+| AI STT | Groq Whisper (voice-worker) · Deepgram (WhatsApp) | Voz → texto |
+| AI TTS | Deepgram (voice-worker) · ElevenLabs (legacy) | Texto → voz |
 | DB | Supabase (PostgreSQL + RLS) | Datos + autenticación |
 | Cache | Upstash Redis | Estado conversacional + cache |
 | Edge | Supabase Edge Functions (Deno) | WhatsApp agent |
@@ -129,9 +120,9 @@ cronix/
 │
 ├── lib/
 │   ├── ai/
-│   │   ├── core/                 # ← NÚCLEO (channel-agnostic)
+│   │   ├── core/                 # ← NÚCLEO compartido (WhatsApp)
 │   │   │   ├── booking/
-│   │   │   │   ├── BookingEngine.ts    # Único source of truth
+│   │   │   │   ├── BookingEngine.ts    # Único source of truth para WA
 │   │   │   │   ├── ClientResolver.ts   # Fuzzy name → UUID
 │   │   │   │   └── ServiceResolver.ts  # 4-strategy service match
 │   │   │   ├── contracts/
@@ -143,25 +134,11 @@ cronix/
 │   │   │   │   └── timezone.ts         # localToUTC canónico
 │   │   │   └── __tests__/              # Unit + adversarial tests
 │   │   │
-│   │   ├── adapters/             # ← CHANNEL BRIDGES
-│   │   │   ├── dashboard/
-│   │   │   │   └── DashboardBookingAdapter.ts
-│   │   │   └── __tests__/
-│   │   │       ├── DashboardBookingAdapter.test.ts
-│   │   │       └── integration-flow.test.ts
-│   │   │
-│   │   ├── orchestrator/         # ← PIPELINE
-│   │   │   ├── decision-engine.ts      # Fast-path vs LLM
-│   │   │   ├── execution-engine.ts     # Tool execution
-│   │   │   ├── LlmBridge.ts           # Groq API wrapper
-│   │   │   ├── state-manager.ts        # ConversationState
-│   │   │   └── tool-adapter/
-│   │   │       └── RealToolExecutor.ts # → DashboardBookingAdapter
-│   │   │
-│   │   ├── agents/dashboard/     # Agent config + prompts
+│   │   ├── tools/                # Tool definitions consumidas por WA
 │   │   ├── providers/            # Deepgram, ElevenLabs, Groq
 │   │   ├── circuit-breaker.ts    # Resiliencia LLM
-│   │   └── fuzzy-match.ts        # Levenshtein puro (no deps)
+│   │   ├── fuzzy-match.ts        # Levenshtein puro (no deps)
+│   │   └── with-tenant-guard.ts
 │   │
 │   ├── repositories/             # ← DATA LAYER
 │   │   ├── SupabaseAppointmentRepository.ts
@@ -187,9 +164,46 @@ cronix/
 │
 ├── supabase/
 │   └── functions/
-│       ├── process-whatsapp/     # WhatsApp AI agent (Deno)
-│       ├── cron-reminders/       # Recordatorios automáticos
-│       └── _shared/              # Helpers compartidos
+│       ├── voice-worker/                 # ← Asistente de voz del dashboard (Deno)
+│       │   ├── index.ts                  # HTTP handler + corpus + sesión
+│       │   ├── agent.ts                  # Loop fast-path → LLM → bypass synthesis
+│       │   ├── prompt.ts                 # System prompt + constraints negativos
+│       │   ├── stt.ts / tts.ts           # Groq Whisper · Deepgram TTS
+│       │   ├── redis.ts                  # Rate-limit + sesión Upstash
+│       │   ├── notifications.ts          # Bell notifications (post-write)
+│       │   ├── core/
+│       │   │   ├── session.ts            # Cascade Redis → client-history → []
+│       │   │   ├── tool-context.ts       # ToolContext compartido por capabilities
+│       │   │   ├── fuzzy.ts              # Match difuso (clientes/servicios)
+│       │   │   ├── time-format.ts        # Hora local en español
+│       │   │   ├── time-parser.ts        # Parser determinista de horas
+│       │   │   ├── date-parser.ts        # Parser determinista de fechas ES
+│       │   │   ├── repos/                # Acceso a appointments/clients/services
+│       │   │   └── __tests__/            # Fuzzy + time + date specs
+│       │   ├── providers/                # ILLMProvider · Groq · Gemini · registry
+│       │   └── capabilities/             # ← UN intent por carpeta
+│       │       ├── _shared/
+│       │       │   ├── Capability.ts     # Contrato ICapability + FastPathInput
+│       │       │   ├── registry.ts       # detectFastPath + executeByName
+│       │       │   └── __tests__/
+│       │       ├── schedule/             # smart_schedule (write)
+│       │       ├── reschedule/           # reschedule_booking (write, anafórico)
+│       │       ├── cancel/               # cancel_booking (write, anafórico)
+│       │       ├── list-appointments/    # get_appointments_by_date (read)
+│       │       ├── available-slots/     # get_available_slots (read)
+│       │       ├── search-clients/       # search_clients (read)
+│       │       ├── last-visit/           # get_last_visit (read)
+│       │       ├── get-services/         # list_services (read)
+│       │       ├── create-client/        # create_client (write)
+│       │       └── delete-client/        # delete_client (write con consent)
+│       │
+│       ├── process-whatsapp/             # WhatsApp AI agent (Deno + BookingEngine)
+│       ├── whatsapp-webhook/             # Webhook Meta + HMAC
+│       ├── whatsapp-service/             # Outbound send
+│       ├── cron-reminders/               # Recordatorios automáticos
+│       ├── push-notify/                  # Web Push fan-out
+│       ├── embed-text/                   # Embeddings auxiliares
+│       └── _shared/                      # booking-adapter, helpers
 │
 ├── __tests__/
 │   ├── components/
@@ -314,40 +328,45 @@ Row Level Security en todas las tablas. Incluso si las capas superiores fallaran
 
 ---
 
-## Manejo de IA — Determinismo vs LLM
+## Manejo de IA — 5 Capas Anti-Alucinación
 
-### Fast-Paths (0 tokens LLM)
+Detalle completo en [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md). En código real:
 
-El sistema detecta intenciones claras y las ejecuta directamente:
-- "sí" + estado `awaiting_confirmation` → ejecutar borrador
-- "¿qué tengo hoy?" → `get_appointments_by_date`
-- Booking completo con todos los datos → `confirm_booking` directo
+1. **Input Bypass / Fast Paths** — `capabilities/_shared/registry.ts → detectFastPath()` enruta intenciones claras (ej: "¿qué tengo mañana?", "reagéndala a las 5") al ejecutor sin pasar por el LLM. 0 tokens, latencia <500 ms.
+2. **Response Bypass / Template-Based Response** — flag `bypassLLM` en `ICapability`. `agent.ts` salta la segunda pasada del LLM y entrega la prosa de la tool tal cual (`BYPASS_CAPABILITIES`). Elimina el riesgo de que Llama reescriba el resultado.
+3. **Transactional RAG (Direct Grounding)** — `index.ts → loadBusinessContext()` inyecta catálogo de servicios, horarios y citas del día activas en el system prompt. Sin embeddings, sin `ai_memories`: la "memoria RAM" es la DB en vivo.
+4. **Context Audit (Corpus + Frame Cutoff)** — `index.ts` corta el corpus en el último "frame boundary" (asistente cerrando intent) y solo carga citas con `.gte/.lte` del día. Evita que tokens de turnos pasados contaminen los guards.
+5. **Date Guards + Negative Constraints** — `detectTemporalIntent()` en `agent.ts` sobre-escribe `date` cuando el usuario dijo "hoy" / "mañana" / "pasado mañana", y `prompt.ts` aplica directivas tipo "si no llamaste a la tool, NO SABES". Última línea de defensa frente a alucinación de parámetros.
 
-### Fallback LLM (Groq Llama 3)
+Capa extra (no contada como pilar): **per-turn dedup** mediante fingerprint `(tool + args canónicos)` para evitar dobles bookings si el modelo entra en bucle.
 
-Cuando el input es ambiguo o faltan datos, el sistema delega al LLM con:
-- Contexto del negocio (servicios, horarios)
-- Historial de la conversación
-- Tool definitions tipadas por Zod
+### Fallback LLM (Groq Llama 3.3 70B · Gemini fallback)
+
+Cuando el input es ambiguo o faltan datos, el agente delega al provider (`providers/registry.ts`) con:
+- Contexto del negocio (servicios activos, horarios, citas del día)
+- Historial saneado (Redis → client-history → vacío)
+- Definiciones de tools desde `getToolDefinitions()` (cada capability las expone)
 
 ### Resiliencia
 
-- Circuit Breaker: 5 fallos → open (cooldown configurable)
-- Never throws: `BookingEngine.dispatch()` siempre retorna `ToolResult`
-- Cache degradation: Redis down → booking sigue funcionando
+- Provider failover: `LLM_PROVIDER=gemini,groq` → Gemini primario, Groq backup
+- Rate limit Upstash: 30 req/min/usuario
+- Sesión degradable: si Redis cae, la conversación sigue con el `history` del cliente
+- `executeByName()` nunca lanza — todo error se serializa como `ToolResult`
 
 ---
 
 ## Decisiones Técnicas Clave
 
-### Por qué un solo BookingEngine
+### Por qué capabilities en lugar de un god-file
 
-Antes, la lógica de booking estaba duplicada en 3 lugares:
-- `RealToolExecutor.ts` (dashboard)
-- `appointment.tools.ts` (legacy)
-- `process-whatsapp/tool-executor.ts` (WhatsApp)
+El antiguo `tools.ts` concentraba detección de fast-path, schema LLM y acceso a DB para todos los intents. Cada cambio tocaba el archivo y los regexes se pisaban entre sí.
 
-Un cambio en la validación de tiempo requería actualizarlo en 3 lugares. Ahora hay uno solo. Los tests lo cubren una vez. Los bugs se corrigen una vez.
+Ahora cada intent vive en una carpeta `capabilities/<intent>/` con tres piezas: `fast-path.ts`, `tool.ts` (ejecución) y `index.ts` que expone una `ICapability`. El registry decide orden y prioridad — añadir un intent es un import + una línea en el array.
+
+### Por qué BookingEngine sigue vivo (sólo en WhatsApp)
+
+El canal WhatsApp es transaccional puro: webhook → tool call → respuesta. Sigue usando `BookingEngine` (Zod + UseCases + RLS) como single source of truth. El canal de voz, en cambio, es conversacional y depende fuertemente de fast-paths anafóricos ("reagéndala", "cancélala"), por lo que se trasladó a la arquitectura capability-based dentro de la Edge Function.
 
 ### Por qué Phantom Types para TenantContext
 

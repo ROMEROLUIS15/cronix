@@ -28,7 +28,11 @@
       "Bash(git fetch *)",
       "Bash(git symbolic-ref *)",
       "Bash(git rev-list *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(npx supabase *)",
+      "Bash(grep -n \"de mayo\\\\|de mes\\\\|de\\\\s\\\\\\\\\\\\\\\\d\\\\\\\\\\\\\\\\d\" \"supabase/functions/voice-worker/core/date-parser.ts\")",
+      "Bash(npx tsx *)",
+      "Bash(grep -n \"pm\\\\|PM\\\\|p\\\\\\\\\\\\\\\\.?m\" \"supabase/functions/voice-worker/core/time-parser.ts\")"
     ]
   }
 }

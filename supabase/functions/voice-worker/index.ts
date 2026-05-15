@@ -27,7 +27,7 @@ import { runAgent }              from './agent.ts'
 import { dispatchBellNotification } from './notifications.ts'
 import { checkRateLimit }         from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
-import type { ToolContext }      from './tools.ts'
+import type { ToolContext }      from './core/tool-context.ts'
 import type {
   AgentInput, BusinessContext, UserRole, VoiceWorkerResponse,
 } from './types.ts'
