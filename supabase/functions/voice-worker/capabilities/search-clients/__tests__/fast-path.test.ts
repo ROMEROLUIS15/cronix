@@ -62,6 +62,18 @@ describe('search-clients fast path — noise rejections', () => {
   it('"tengo algo" → null', () => {
     expect(detectSearchClients('tengo algo')).toBeNull()
   })
+  // Defensive guard — agenda phrases must never leak into name capture even
+  // if list-appointments fails to match first (regression from the
+  // "no tengo a 'para mañana' entre tus clientes" production answer).
+  it('"qué clientes tengo para mañana" → null (preposition + date)', () => {
+    expect(detectSearchClients('qué clientes tengo para mañana')).toBeNull()
+  })
+  it('"tengo para hoy" → null', () => {
+    expect(detectSearchClients('tengo para hoy')).toBeNull()
+  })
+  it('"tengo el viernes" → null', () => {
+    expect(detectSearchClients('tengo el viernes')).toBeNull()
+  })
   it('plain greeting → null', () => {
     expect(detectSearchClients('hola luis')).toBeNull()
   })

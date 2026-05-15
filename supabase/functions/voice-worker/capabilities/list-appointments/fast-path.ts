@@ -18,7 +18,10 @@ export interface ListAppointmentsArgs extends Record<string, unknown> {
 const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
 const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
 
-const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|dentro)\b|\bagenda\b|\bmis?\s+citas\b|\bqu[eé]\s+tengo\b|\bcu[aá]les\s+son\s+mis?\s+citas\b|\bmu[eé]strame\b|\blist[aoeé]\s+(?:mis\s+)?citas\b)/
+// Includes "qué/cuántos clientes (tengo|hay|atiendo)" because in colloquial
+// Spanish the owner uses "clientes" as a synonym for "citas" when asking
+// the agenda ("qué clientes tengo mañana" = "what bookings tomorrow").
+const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|dentro)\b|\bagenda\b|\bmis?\s+citas\b|\bqu[eé]\s+tengo\b|\bcu[aá]les\s+son\s+mis?\s+citas\b|\bmu[eé]strame\b|\blist[aoeé]\s+(?:mis\s+)?citas\b|\b(?:qu[eé]|cu[aá]ntos?)\s+clientes?\s+(?:tengo|hay|atiendo|atender[eé]|atender[ée]mos)\b|\bclientes?\s+(?:tengo|hay|para|del|de\s+hoy|de\s+ma[ñn]ana)\b)/
 
 export function detectListAppointments(text: string, today: string): ListAppointmentsArgs | null {
   const t = text.toLowerCase()

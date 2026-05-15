@@ -16,6 +16,10 @@ const NOT_A_NAME = new Set([
   'lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo',
   'cita', 'citas', 'agenda', 'algo', 'nada', 'tiempo', 'rato',
   'algún', 'algun', 'alguna', 'alguien',
+  // Prepositions / determiners that leak from agenda questions like
+  // "qué clientes tengo PARA MAÑANA" — preventing a stray "para mañana"
+  // from being treated as a client name when list-appointments misses.
+  'para', 'por', 'en', 'el', 'la', 'los', 'las', 'un', 'una', 'al', 'del',
 ])
 
 const PATTERNS: RegExp[] = [

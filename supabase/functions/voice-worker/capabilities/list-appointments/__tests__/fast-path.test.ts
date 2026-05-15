@@ -34,6 +34,19 @@ describe('list-appointments fast path — read intents', () => {
   it('"citas en 3 días"', () => {
     expect(detectListAppointments('citas en 3 días', TODAY)?.date).toBe('2026-05-16')
   })
+  // Colloquial "clientes" used as synonym for "citas" when asking the agenda.
+  it('"qué clientes tengo mañana" → +1', () => {
+    expect(detectListAppointments('qué clientes tengo mañana', TODAY)?.date).toBe('2026-05-14')
+  })
+  it('"qué clientes tengo para mañana" → +1', () => {
+    expect(detectListAppointments('qué clientes tengo para mañana', TODAY)?.date).toBe('2026-05-14')
+  })
+  it('"cuántos clientes tengo hoy" → today', () => {
+    expect(detectListAppointments('cuántos clientes tengo hoy', TODAY)?.date).toBe('2026-05-13')
+  })
+  it('"clientes para mañana" → +1', () => {
+    expect(detectListAppointments('clientes para mañana', TODAY)?.date).toBe('2026-05-14')
+  })
 })
 
 describe('list-appointments fast path — non-matches', () => {
