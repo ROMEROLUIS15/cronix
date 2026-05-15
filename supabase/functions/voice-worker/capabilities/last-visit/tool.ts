@@ -1,8 +1,17 @@
 /**
- * get_last_visit — returns the client's most recent past appointment with
- * its date, service, and attendance status. Selects both the direct FK on
- * appointments and the appointment_services junction so rows that store the
- * service only via the junction still render correctly.
+ * get_last_visit — returns the client's most recent *attended* past
+ * appointment with its date and service. By definition, a cancelled or
+ * no-show appointment is not a "visit" — the client didn't actually
+ * come in. We filter those out at the DB layer and only consider
+ * statuses where the client was (or was expected to be) present:
+ *
+ *   - completed  → asistió y se cerró el servicio
+ *   - confirmed  → confirmada (en muchos negocios queda así tras la visita)
+ *   - pending    → quedó como pendiente (presencia probable, sin cierre formal)
+ *
+ * Hard exclusions: cancelled, no_show. If all of the client's history is
+ * cancelled / no-show, we say so explicitly instead of pretending the
+ * cancellation was the "last visit".
  */
 
 import type { ToolContext } from '../../core/tool-context.ts'
@@ -22,12 +31,13 @@ interface LastVisitRow {
   appointment_services?: Array<{ sort_order: number; service?: { name?: string } | null }>
 }
 
+/** Statuses we treat as "the client actually visited". */
+const ATTENDED_STATUSES = ['completed', 'confirmed', 'pending'] as const
+
 const STATUS_PHRASE: Record<string, string> = {
   completed: 'asistió y completó el servicio',
-  no_show:   'no asistió a la cita',
-  cancelled: 'la cita fue cancelada',
-  confirmed: 'la cita estaba confirmada',
-  pending:   'la cita estaba pendiente',
+  confirmed: 'la cita quedó confirmada',
+  pending:   'la cita quedó pendiente de cierre',
 }
 
 function capitalize(s: string): string {
@@ -53,6 +63,8 @@ export async function executeLastVisit(
   const client = resolution.client
 
   const nowISO = new Date().toISOString()
+  // Only attended statuses count as "última visita". Cancelled / no_show
+  // appointments mean the client never came in — they cannot be the answer.
   const { data, error } = await ctx.supabase
     .from('appointments')
     .select(`
@@ -63,11 +75,24 @@ export async function executeLastVisit(
     .eq('business_id', ctx.businessId)
     .eq('client_id', client.id)
     .lt('start_at', nowISO)
+    .in('status', ATTENDED_STATUSES as unknown as string[])
     .order('start_at', { ascending: false })
     .limit(1)
 
   if (error) return { success: false, result: `Error al consultar la última visita: ${error.message}` }
   if (!data?.length) {
+    // Distinguish "no past appointments at all" from "all past were cancelled".
+    // A second cheap query tells us which message to use without breaking the
+    // hot path for clients that just have no history.
+    const { count: anyPastCount } = await ctx.supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', ctx.businessId)
+      .eq('client_id', client.id)
+      .lt('start_at', nowISO)
+    if ((anyPastCount ?? 0) > 0) {
+      return { success: true, result: `${client.name} no tiene visitas asistidas: todas sus citas pasadas fueron canceladas o no asistió.` }
+    }
     return { success: true, result: `${client.name} no tiene visitas anteriores registradas.` }
   }
 
@@ -82,11 +107,11 @@ export async function executeLastVisit(
     ?? junctionServices[0]?.service?.name
     ?? ''
 
-  const statusPhrase = STATUS_PHRASE[apt.status] ?? 'tuvo una cita'
+  const statusPhrase = STATUS_PHRASE[apt.status] ?? 'asistió a su cita'
   const svcPart = serviceName ? ` para ${serviceName}` : ''
 
   return {
     success: true,
-    result: `La última cita de ${client.name} fue el ${dateLabel}${svcPart}. ${capitalize(statusPhrase)}.`,
+    result: `La última visita asistida de ${client.name} fue el ${dateLabel}${svcPart}. ${capitalize(statusPhrase)}.`,
   }
 }

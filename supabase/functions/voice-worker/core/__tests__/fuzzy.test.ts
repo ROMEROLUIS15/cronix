@@ -179,6 +179,26 @@ describe('fuzzyFind — phonetic STT variants of the same name', () => {
   })
 })
 
+describe('fuzzyFind — silent-consonant bridging (the Lisbeth regression)', () => {
+  // The b in "Lisbeth" / "Lizbeth" is silent in spoken Spanish — STT may
+  // transcribe the same audio as "Liseth" / "Lizeth". The phonetic key
+  // rewrites z→s and drops h, so Lisbeth → "lisbet" and Liseth → "liset".
+  // Rule 5 (Levenshtein ≤ 1 between phonetic keys of length ≥ 5) bridges
+  // them without false-positives on unrelated short names.
+  it('"Lizeth" finds "Lisbeth Pérez"', () => {
+    const out = fuzzyFind([c('1', 'Lisbeth Pérez')], 'Lizeth')
+    expect(out.status).toBe('found')
+  })
+  it('"Liseth" finds "Lizbeth Martínez"', () => {
+    const out = fuzzyFind([c('1', 'Lizbeth Martínez')], 'Liseth')
+    expect(out.status).toBe('found')
+  })
+  it('"Lisbeth" finds "Lizeth Gómez"', () => {
+    const out = fuzzyFind([c('1', 'Lizeth Gómez')], 'Lisbeth')
+    expect(out.status).toBe('found')
+  })
+})
+
 describe('fuzzyFind — cross-name false-positive guards still hold', () => {
   it('"Licey" does NOT match "Lizeth Pérez"', () => {
     const out = fuzzyFind([c('1', 'Lizeth Pérez')], 'Licey')

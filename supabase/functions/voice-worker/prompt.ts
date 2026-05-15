@@ -92,9 +92,9 @@ CLIENTE NO EXISTE EN LA BASE DE DATOS:
 - Si el usuario dice no → no llames la herramienta, ofrece corregir el nombre.
 
 ELIMINAR CLIENTE CON DUPLICADOS:
-- Si delete_client devuelve "Hay varios clientes llamados X: A con teléfono N1, B con teléfono N2" → repite esa lista al usuario y pregunta el teléfono.
-- Cuando el usuario responda con el teléfono → llama delete_client(client_name, phone) con el phone del usuario.
-- Si delete_client dice "parecen duplicados" (ambos con mismo teléfono) y el usuario confirma "sí, elimina uno" → llama delete_client(client_name, phone) con ese teléfono compartido; la herramienta borra uno automáticamente.
+- Si delete_client (o search_clients) devolvió una lista de clientes con el mismo nombre y el usuario responde con un PICK ORDINAL O ANAFÓRICO — "el primero" / "al primero" / "la primera" / "el segundo" / "al otro" / "uno" / "cualquiera" / "el de teléfono 04xx" — significa que ya consintió eliminar uno de los candidatos. NO vuelvas a preguntar el teléfono; llama delete_client(client_name=<el nombre que se estaba listando>, any_duplicate=true) DIRECTAMENTE. La herramienta picará el primer candidato. Si el usuario dijo un teléfono concreto, pásalo como phone en lugar de any_duplicate.
+- Si delete_client devuelve "Hay varios clientes llamados X..." y el usuario aún NO ha picado → repite la lista y pregunta "¿Cuál elimino? Dime el teléfono o el orden (primero, segundo)".
+- Si delete_client dice "parecen duplicados" (ambos con mismo teléfono) y el usuario confirma → llama delete_client(client_name, any_duplicate=true). La herramienta borra uno automáticamente.
 
 FLUJO CANCELAR: confirma primero ("¿Cancelo la cita de X del [fecha]?") y espera "sí" → cancel_booking UNA vez → "Cancelado."
 
@@ -105,7 +105,7 @@ CONSULTAS:
   • REGLA OBLIGATORIA: Si COUNT=0 (o el texto empieza con "EMPTY:") → di "No hay citas para ese día."
   • Si COUNT≥1 → REPITE TEXTUALMENTE las líneas de citas que devolvió la herramienta, una por línea. NO digas "no hay citas" cuando COUNT≥1. NO inventes datos. Lee N del COUNT antes de responder.
 - TELÉFONO/CLIENTE: search_clients UNA vez y retransmite el número completo tal como aparece.
-- ÚLTIMA VISITA: get_last_visit UNA vez con el nombre del cliente. La herramienta devuelve fecha + servicio + si asistió, no asistió o fue cancelada. Repite literalmente lo que devuelve.`
+- ÚLTIMA VISITA: get_last_visit UNA vez con el nombre del cliente. La herramienta sólo cuenta visitas EFECTIVAMENTE ASISTIDAS (completed / confirmed / pending) — ya descarta citas canceladas y no-shows. Repite literalmente lo que devuelve. NUNCA digas que una cita cancelada fue "la última vez que atendió" al cliente.`
 
   if (input.context.services.length > 0) {
     p += '\n\nSERVICIOS DISPONIBLES: ' + input.context.services

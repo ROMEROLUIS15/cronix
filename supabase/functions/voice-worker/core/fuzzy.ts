@@ -80,9 +80,17 @@ export function phoneticKey(token: string): string {
  *   2. ≥4-char prefix overlap (either direction)         ("lui" → "luis")
  *   3. phonetic-key equality                             ("lisset" ↔ "lizet")
  *   4. ≥4-char phonetic-prefix overlap (either direction) ("lise"  → "lizet")
+ *   5. phonetic-key Levenshtein ≤ 1 (both ≥5 chars)      ("lisbet" ↔ "liset")
  *
- * The 4-char floor protects against short overlaps bridging unrelated names
- * ("ana" vs "anastasia" — `shareToken` says yes; "an" alone — says no).
+ * Rule (5) bridges names that share an essentially identical phonetic
+ * skeleton modulo one silent consonant or vowel — Lisbeth / Liseth /
+ * Lizbeth / Lizet are all heard the same way in spoken Spanish but
+ * differ by one letter ('b') after the phonetic rewrites. Floor of 5
+ * chars + 1-edit cap keeps the bar tight enough that unrelated short
+ * names ("ana" / "anastasia") don't collide.
+ *
+ * The 4-char floor on rules (2) and (4) protects against short overlaps
+ * bridging unrelated names ("an" alone — says no).
  */
 export function shareToken(queryTokens: string[], candidateTokens: string[]): boolean {
   for (const q of queryTokens) {
@@ -95,6 +103,14 @@ export function shareToken(queryTokens: string[], candidateTokens: string[]): bo
       if (qPhon === cPhon) return true
       if (qPhon.length >= 4 && cPhon.startsWith(qPhon)) return true
       if (cPhon.length >= 4 && qPhon.startsWith(cPhon)) return true
+      // Rule 5: bridge silent-consonant variants like Lisbeth/Liseth where
+      // one phonetic key has a single extra letter compared to the other.
+      // Restricted to PURE INSERTION/DELETION of one char on a key of length
+      // ≥ 6 — that's strict enough to keep Licey ↔ Lizeth and Sardi ↔ Cardi
+      // (both length-5 substitutions) apart.
+      if (Math.max(qPhon.length, cPhon.length) >= 6 &&
+          Math.abs(qPhon.length - cPhon.length) === 1 &&
+          levenshtein(qPhon, cPhon) === 1) return true
     }
   }
   return false
