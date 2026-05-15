@@ -6,7 +6,8 @@
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-green?logo=supabase)](https://supabase.com)
-[![Groq](https://img.shields.io/badge/Groq-Llama%203-orange)](https://groq.com)
+[![Groq](https://img.shields.io/badge/Groq-Llama%203.3%2070B-orange)](https://groq.com)
+[![Deepgram](https://img.shields.io/badge/Deepgram-Nova--2%20%2B%20Aura--2-blue)](https://deepgram.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://typescriptlang.org)
 [![Tests](https://img.shields.io/badge/Tests-1276%20passed-green)](./TESTING.md)
 
@@ -80,12 +81,12 @@ La plataforma incluye un **dashboard web** con su propio asistente de voz para q
 |------|-----------|-----------|
 | Frontend | Next.js 15 + React 19 | Dashboard web |
 | API | Next.js API Routes | Endpoints REST |
-| AI LLM | Groq (Llama 3.3 70B) + Gemini fallback | Razonamiento + tool calls |
-| AI STT | Groq Whisper (voice-worker) · Deepgram (WhatsApp) | Voz → texto |
-| AI TTS | Deepgram (voice-worker) · ElevenLabs (legacy) | Texto → voz |
+| AI LLM | Groq `llama-3.3-70b-versatile` (+ `llama-3.1-8b-instant` fallback) · Gemini `2.0-flash` opcional | Razonamiento + tool calls |
+| AI STT | Deepgram Nova-2 (`language=es`) | Voz → texto |
+| AI TTS | Deepgram Aura-2 (`aura-2-nestor-es`) | Texto → voz |
 | DB | Supabase (PostgreSQL + RLS) | Datos + autenticación |
 | Cache | Upstash Redis | Estado conversacional + cache |
-| Edge | Supabase Edge Functions (Deno) | WhatsApp agent |
+| Edge | Supabase Edge Functions (Deno) | voice-worker · process-whatsapp · whatsapp-webhook · whatsapp-service · cron-reminders · push-notify · embed-text |
 | Queue | QStash (Upstash) | Cola async para webhooks |
 | Auth | Supabase Auth + Passkeys | Autenticación multifactor |
 | Monitoreo | Sentry + Axiom | Errores + logs estructurados |
@@ -99,9 +100,16 @@ La plataforma incluye un **dashboard web** con su propio asistente de voz para q
 cronix/
 ├── app/
 │   ├── api/
-│   │   ├── assistant/voice/      # Endpoints del asistente de voz
-│   │   ├── webhooks/             # WhatsApp, NOWPayments webhooks
+│   │   ├── assistant/
+│   │   │   ├── token/            # JWT corto para llamar voice-worker
+│   │   │   ├── proactive/        # Mensajes proactivos del FAB
+│   │   │   └── tts/              # TTS server-side helper
+│   │   ├── webhooks/nowpayments/ # Webhook de pagos cripto
+│   │   ├── queue/                # Workers QStash (process-saas-payment)
+│   │   ├── cron/                 # Cron handlers (check-subscriptions)
 │   │   ├── passkey/              # Autenticación con passkeys
+│   │   ├── admin/                # Endpoints administrativos
+│   │   ├── activity/             # Feed de actividad
 │   │   └── health/               # Health check
 │   ├── auth/callback/            # OAuth + email confirmation handler
 │   └── [locale]/                 # Páginas del dashboard (i18n)
@@ -135,7 +143,7 @@ cronix/
 │   │   │   └── __tests__/              # Unit + adversarial tests
 │   │   │
 │   │   ├── tools/                # Tool definitions consumidas por WA
-│   │   ├── providers/            # Deepgram, ElevenLabs, Groq
+│   │   ├── providers/            # Deepgram, Groq (elevenlabs-provider.ts: legacy, no importado)
 │   │   ├── circuit-breaker.ts    # Resiliencia LLM
 │   │   ├── fuzzy-match.ts        # Levenshtein puro (no deps)
 │   │   └── with-tenant-guard.ts
@@ -252,9 +260,10 @@ UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 
 # AI Providers
-GROQ_API_KEY=
-DEEPGRAM_API_KEY=
-ELEVENLABS_API_KEY=
+LLM_API_KEY=                # Groq (comma-separated → key rotation)
+GEMINI_API_KEY=             # opcional — sólo si LLM_PROVIDER incluye gemini
+LLM_PROVIDER=groq           # "groq" | "gemini" | "gemini,groq"
+DEEPGRAM_AURA_API_KEY=      # Nova-2 (STT) + Aura-2 (TTS)
 
 # Queue
 QSTASH_TOKEN=

@@ -111,7 +111,7 @@ El dueño del negocio usa el asistente de voz en el dashboard.
    └── logger.info('ADAPTER', 'Tool succeeded', { durationMs })
 
 5. ExecResult → StateManager.update(state, result)
-6. Respuesta TTS → ElevenLabs → audio al usuario
+6. Respuesta TTS → Deepgram Aura-2 → audio al usuario
 ```
 
 ### Ejemplo Real: "Agéndame a Juan Pérez mañana a las 3"
