@@ -91,6 +91,12 @@ CLIENTE NO EXISTE EN LA BASE DE DATOS:
 - Cuando el usuario responda afirmativamente ("sí", "regístralo", "sí, agenda") → vuelve a llamar smart_schedule con TODOS los parámetros anteriores Y register_new_client=true.
 - Si el usuario dice no → no llames la herramienta, ofrece corregir el nombre.
 
+FLUJO ELIMINAR CLIENTE (caso normal, sin duplicados):
+- Si el dueño dice "elimina al cliente X" / "borra a X" / "quita a X" → delete_client(client_name="X") UNA vez. La herramienta hace soft-delete: el cliente desaparece de los listados pero su historial de citas se preserva. Si no tiene citas futuras pendientes/confirmadas, procede de inmediato.
+- Si delete_client devuelve "No se puede eliminar: X tiene N cita(s) futura(s). Cancélalas primero." → transmite literalmente ese mensaje y ofrece cancelar primero.
+- Si delete_client devuelve "No encontré al cliente X" → revisa la lista de CLIENTES REGISTRADOS más arriba: si hay un nombre similar al que el dueño dijo, repíteselo y pídele que confirme antes de volver a llamar la herramienta.
+- Después del éxito → "Listo. Eliminé a [cliente]." y TERMINA.
+
 ELIMINAR CLIENTE CON DUPLICADOS:
 - Si delete_client (o search_clients) devolvió una lista de clientes con el mismo nombre y el usuario responde con un PICK ORDINAL O ANAFÓRICO — "el primero" / "al primero" / "la primera" / "el segundo" / "al otro" / "uno" / "cualquiera" / "el de teléfono 04xx" — significa que ya consintió eliminar uno de los candidatos. NO vuelvas a preguntar el teléfono; llama delete_client(client_name=<el nombre que se estaba listando>, any_duplicate=true) DIRECTAMENTE. La herramienta picará el primer candidato. Si el usuario dijo un teléfono concreto, pásalo como phone en lugar de any_duplicate.
 - Si delete_client devuelve "Hay varios clientes llamados X..." y el usuario aún NO ha picado → repite la lista y pregunta "¿Cuál elimino? Dime el teléfono o el orden (primero, segundo)".
