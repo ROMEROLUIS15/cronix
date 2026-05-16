@@ -179,6 +179,63 @@ describe('fuzzyFind — phonetic STT variants of the same name', () => {
   })
 })
 
+describe('fuzzyFind — coexistence: similar-sounding but distinct names in the same DB', () => {
+  // The realistic LatAm case: a business has BOTH a "Lisbeth" and a
+  // "Lizeth"/"Liset"/"Lisset" as separate clients. The matcher must:
+  //   - find Lisbeth when asked for Lisbeth (not Lizeth)
+  //   - find Lizeth when asked for Lizeth/Liseth/Liceth/Lisset (not Lisbeth)
+  //   - never cross-bridge between them
+  // The same principle must hold for ANY pair of distinct-but-similar names.
+  const DB = [
+    c('1', 'Lisbeth Pérez'),
+    c('2', 'Lizeth Sánchez'),
+  ]
+
+  it('"Lisbeth" → only Lisbeth Pérez', () => {
+    const out = fuzzyFind(DB, 'Lisbeth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisbeth Pérez')
+  })
+  it('"Lizbeth" → only Lisbeth Pérez (z→s collapses, b survives)', () => {
+    const out = fuzzyFind(DB, 'Lizbeth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisbeth Pérez')
+  })
+  it('"Lizeth" → only Lizeth Sánchez', () => {
+    const out = fuzzyFind(DB, 'Lizeth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lizeth Sánchez')
+  })
+  it('"Liseth" → only Lizeth Sánchez', () => {
+    const out = fuzzyFind(DB, 'Liseth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lizeth Sánchez')
+  })
+  it('"Liceth" → only Lizeth Sánchez', () => {
+    const out = fuzzyFind(DB, 'Liceth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lizeth Sánchez')
+  })
+  it('"Lisset" → only Lizeth Sánchez', () => {
+    const out = fuzzyFind(DB, 'Lisset')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lizeth Sánchez')
+  })
+
+  // Same principle applies to other LatAm name pairs that sound close
+  // but are different identities.
+  it('Pedro and Petro coexist as separate clients', () => {
+    const db = [c('1', 'Pedro Gómez'), c('2', 'Petro Rivas')]
+    expect(fuzzyFind(db, 'Pedro').match?.name).toBe('Pedro Gómez')
+    expect(fuzzyFind(db, 'Petro').match?.name).toBe('Petro Rivas')
+  })
+  it('Cardi and Sardi coexist (hard c stays distinct from s)', () => {
+    const db = [c('1', 'Cardi Suárez'), c('2', 'Sardi Mejía')]
+    expect(fuzzyFind(db, 'Cardi').match?.name).toBe('Cardi Suárez')
+    expect(fuzzyFind(db, 'Sardi').match?.name).toBe('Sardi Mejía')
+  })
+})
+
 describe('fuzzyFind — Lisbeth is its own name (precision over recall)', () => {
   // The 'b' in Lisbeth/Lizbeth is part of the name's identity in the
   // customer database, even though it sounds close to Liseth/Lizeth in
