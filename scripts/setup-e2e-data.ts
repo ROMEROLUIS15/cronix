@@ -76,6 +76,10 @@ async function setupTestData() {
     .maybeSingle()
 
   let bizId: string
+  // Pin to Venezuela: PaymentMethodModal only shows Pago Móvil for VE businesses
+  // (isVenezuelanBusiness checks timezone === 'America/Caracas'). Payment-flow
+  // e2e tests assert all 3 methods are visible, so the fixture must be VE.
+  const VE_TIMEZONE = 'America/Caracas'
   if (!existingBiz) {
     const { data: newBiz, error: bizErr } = await supabase
       .from('businesses')
@@ -84,6 +88,7 @@ async function setupTestData() {
         slug:     TEST_SLUG,
         category: 'Tech',
         owner_id: userId,
+        timezone: VE_TIMEZONE,
       })
       .select('id')
       .single()
@@ -92,7 +97,12 @@ async function setupTestData() {
     console.log('✅ Business created:', bizId)
   } else {
     bizId = existingBiz.id
-    console.log('✅ Business already exists:', bizId)
+    const { error: tzErr } = await supabase
+      .from('businesses')
+      .update({ timezone: VE_TIMEZONE })
+      .eq('id', bizId)
+    if (tzErr) console.log('⚠️  Business timezone update note:', tzErr.message)
+    else console.log('✅ Business already exists (timezone pinned to', VE_TIMEZONE + ')')
   }
 
   // ── Step 3: Link user to business in public.users ─────────────────────────
