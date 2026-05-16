@@ -179,22 +179,30 @@ describe('fuzzyFind — phonetic STT variants of the same name', () => {
   })
 })
 
-describe('fuzzyFind — silent-consonant bridging (the Lisbeth regression)', () => {
-  // The b in "Lisbeth" / "Lizbeth" is silent in spoken Spanish — STT may
-  // transcribe the same audio as "Liseth" / "Lizeth". The phonetic key
-  // rewrites z→s and drops h, so Lisbeth → "lisbet" and Liseth → "liset".
-  // Rule 5 (Levenshtein ≤ 1 between phonetic keys of length ≥ 5) bridges
-  // them without false-positives on unrelated short names.
-  it('"Lizeth" finds "Lisbeth Pérez"', () => {
+describe('fuzzyFind — Lisbeth is its own name (precision over recall)', () => {
+  // The 'b' in Lisbeth/Lizbeth is part of the name's identity in the
+  // customer database, even though it sounds close to Liseth/Lizeth in
+  // spoken Spanish. Bridging them would risk acting on the wrong client
+  // (deleting / rescheduling the wrong person). The fuzzy matcher
+  // intentionally treats them as distinct names.
+  it('"Lizeth" does NOT match "Lisbeth Pérez"', () => {
     const out = fuzzyFind([c('1', 'Lisbeth Pérez')], 'Lizeth')
-    expect(out.status).toBe('found')
+    expect(out.status).toBe('not_found')
   })
-  it('"Liseth" finds "Lizbeth Martínez"', () => {
+  it('"Liseth" does NOT match "Lizbeth Martínez"', () => {
     const out = fuzzyFind([c('1', 'Lizbeth Martínez')], 'Liseth')
+    expect(out.status).toBe('not_found')
+  })
+  it('"Lisbeth" does NOT match "Lizeth Gómez"', () => {
+    const out = fuzzyFind([c('1', 'Lizeth Gómez')], 'Lisbeth')
+    expect(out.status).toBe('not_found')
+  })
+  it('"Lizeth" still finds the actual "Lizeth Sánchez"', () => {
+    const out = fuzzyFind([c('1', 'Lizeth Sánchez')], 'Lizeth')
     expect(out.status).toBe('found')
   })
-  it('"Lisbeth" finds "Lizeth Gómez"', () => {
-    const out = fuzzyFind([c('1', 'Lizeth Gómez')], 'Lisbeth')
+  it('"Liceth" still finds "Lizeth Sánchez" (orthographic variant of the same name)', () => {
+    const out = fuzzyFind([c('1', 'Lizeth Sánchez')], 'Liceth')
     expect(out.status).toBe('found')
   })
 })
