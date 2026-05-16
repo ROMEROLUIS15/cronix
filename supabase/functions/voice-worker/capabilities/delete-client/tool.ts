@@ -1,5 +1,5 @@
 /**
- * delete_client — removes a client by name, with explicit-consent handling
+ * delete_client — soft-deletes a client by name, with explicit-consent handling
  * for duplicate disambiguation.
  *
  * Three lookup branches:
@@ -12,6 +12,13 @@
  * Refuses if the target has future pending/confirmed appointments. The user
  * must cancel those first — silently deleting a client with bookings would
  * orphan rows and confuse the dashboard.
+ *
+ * The deletion is soft: we set `deleted_at = now()`. The FK on
+ * `appointments.client_id` would block a hard DELETE for any client with
+ * historical (cancelled, completed, past) appointments, and we want to keep
+ * those rows for reporting. All reads filter `deleted_at IS NULL`, and the
+ * partial unique index on `(business_id, phone) WHERE deleted_at IS NULL`
+ * lets the same phone be reused after deletion.
  */
 
 import type { ToolContext } from '../../core/tool-context.ts'
@@ -89,9 +96,10 @@ export async function executeDeleteClient(
 
   const { error } = await ctx.supabase
     .from('clients')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', target.id)
     .eq('business_id', ctx.businessId)
+    .is('deleted_at', null)
 
   if (error) return { success: false, result: `No pude eliminar: ${error.message}` }
   const phoneSuffix = target.phone ? ` (teléfono ${target.phone})` : ''

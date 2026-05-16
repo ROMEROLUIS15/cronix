@@ -23,7 +23,14 @@ export async function executeCreateClient(
     .single()
 
   if (error || !data) {
-    return { success: false, result: `No se pudo registrar: ${error?.message ?? 'desconocido'}` }
+    const msg = error?.message ?? 'desconocido'
+    if (msg.includes('idx_clients_business_phone_digits')) {
+      return { success: false, result: `Ya tienes un cliente activo con el teléfono ${args.phone}.` }
+    }
+    if (msg.includes('idx_clients_business_email_norm')) {
+      return { success: false, result: 'Ya tienes un cliente activo con ese correo.' }
+    }
+    return { success: false, result: `No se pudo registrar: ${msg}` }
   }
   return { success: true, result: `Cliente "${(data as { name: string }).name}" registrado.` }
 }
