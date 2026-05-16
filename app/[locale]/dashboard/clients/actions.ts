@@ -71,20 +71,8 @@ export async function createNewClient(input: {
   email?: string
   tags?: string[]
 }): Promise<{ error: string | null }> {
-  // Check duplicate phone
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
-  const { data: existing } = await supabase
-    .from('clients')
-    .select('id, name')
-    .eq('business_id', input.businessId)
-    .eq('phone', input.phone)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  if (existing) {
-    return { error: `El número ya está registrado para el cliente "${existing.name}".` }
-  }
 
   // Plan limit check
   const { data: biz } = await supabase
@@ -115,7 +103,19 @@ export async function createNewClient(input: {
     email: input.email,
   })
 
-  if (result.error) return { error: 'Error al crear el cliente: ' + result.error }
+  if (result.error) {
+    // DB-level unique constraints enforce phone+email uniqueness per business
+    // (idx_clients_business_phone_digits / idx_clients_business_email_norm).
+    // Map the constraint name to a friendly message so the UI never surfaces
+    // raw Postgres errors.
+    if (result.error.includes('idx_clients_business_phone_digits')) {
+      return { error: 'Ya tienes un cliente activo con ese número de teléfono.' }
+    }
+    if (result.error.includes('idx_clients_business_email_norm')) {
+      return { error: 'Ya tienes un cliente activo con ese correo.' }
+    }
+    return { error: 'Error al crear el cliente: ' + result.error }
+  }
 
   const { notificationForNewClient } = await import('@/lib/use-cases/notifications.use-case')
   const notifPayload = notificationForNewClient(input.businessId, input.name, input.phone)
