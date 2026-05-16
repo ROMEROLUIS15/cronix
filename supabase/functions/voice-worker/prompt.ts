@@ -122,6 +122,19 @@ CONSULTAS:
     }
   }
 
+  // Client roster — the LLM uses this to map STT mishearings back to a real
+  // registered name. CRITICAL: never invoke a tool with a client_name that
+  // isn't on this list verbatim. If the closest match is uncertain, ask the
+  // user to confirm before calling delete_client / smart_schedule / cancel /
+  // reschedule. Names are listed verbatim so phonetic variants
+  // (Lisset / Lizeth / Liset) keep their identity.
+  if (input.context.activeClients.length > 0) {
+    p += '\n\nCLIENTES REGISTRADOS (usa SIEMPRE el nombre exacto de esta lista al llamar herramientas):'
+    const names = input.context.activeClients.map(c => c.name).join(', ')
+    p += `\n${names}`
+    p += '\n\nSi lo que escuchaste no coincide con ningún nombre de la lista, repite lo que entendiste al usuario y pídele que confirme — NUNCA llames una herramienta con un nombre inventado.'
+  }
+
   if (input.context.workingHours) {
     const dayNames: Record<string, string> = {
       monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fuzzyFind, phoneticKey } from '../fuzzy.ts'
+import { fuzzyFind, phoneticKey, WRITE_CONFIDENCE_THRESHOLD } from '../fuzzy.ts'
 
 /**
  * Adversarial test harness — captures the actual matching contract,
@@ -343,5 +343,100 @@ describe('fuzzyFind — degenerate inputs', () => {
   })
   it('one-letter query → not_found (token < 2 chars filtered)', () => {
     expect(fuzzyFind([c('1', 'Pedro')], 'p').status).toBe('not_found')
+  })
+})
+
+// ─── Confidence surface — Fase B contract ──────────────────────────────────
+
+describe('fuzzyFind — confidence is exposed and well-formed', () => {
+  it('exact literal token match → confidence ≥ 0.90 (write-tool acts)', () => {
+    const out = fuzzyFind([c('1', 'Pedro Pérez')], 'Pedro')
+    expect(out.status).toBe('found')
+    expect(out.confidence ?? 0).toBeGreaterThanOrEqual(WRITE_CONFIDENCE_THRESHOLD)
+  })
+  it('phonetic-key match → confidence ≥ 0.90 (write-tool acts)', () => {
+    const out = fuzzyFind([c('1', 'Lisset')], 'Liceth')
+    expect(out.status).toBe('found')
+    expect(out.confidence ?? 0).toBeGreaterThanOrEqual(WRITE_CONFIDENCE_THRESHOLD)
+  })
+  it('found result always carries candidates array', () => {
+    const out = fuzzyFind([c('1', 'Pedro Pérez'), c('2', 'Pedro Gómez')], 'Pedro')
+    expect(out.candidates?.length).toBeGreaterThanOrEqual(1)
+  })
+  it('found result reports a gap to second-best candidate', () => {
+    const out = fuzzyFind([c('1', 'Pedro Pérez')], 'Pedro')
+    expect(typeof out.gap).toBe('number')
+  })
+  it('not_found does NOT include confidence (no match to score)', () => {
+    const out = fuzzyFind([c('1', 'Pedro Pérez')], 'Estefania')
+    expect(out.status).toBe('not_found')
+    expect(out.confidence).toBeUndefined()
+  })
+})
+
+// ─── STT-plausible variants on real RS STUDIO clients (Fase D corpus) ────
+
+describe('fuzzyFind — STT-plausible variants on real RS STUDIO clients', () => {
+  // Same snapshot as the "real production DB (RS STUDIO)" block above.
+  // This block layers in the kinds of mistakes Deepgram Nova-2 actually
+  // produces on Spanish proper nouns (vowel swap, terminal-letter loss,
+  // accented-vowel collapse, "h" insertion/loss) and asserts the matcher
+  // still locks on the right registered client with write-tool-grade
+  // confidence. If a variant intentionally crosses into a different name
+  // (Lisbeth vs Lisset, Cardi vs Sardi) we expect not_found instead.
+  const RS_STUDIO: { id: string; name: string }[] = [
+    c('1', 'Girling'),
+    c('2', 'Liliana Contreras'),
+    c('3', 'Lisette'),
+    c('4', 'Lisset'),
+    c('5', 'Mayela Cliente'),
+    c('6', 'Paola Pérez Cliente'),
+    c('7', 'Wendy Carolina Dugarte Hu'),
+    c('8', 'Yoselen Alarcon Cliente'),
+  ]
+
+  // Each entry: STT variant → expected canonical name in the roster.
+  const VARIANTS: Array<{ heard: string; expected: string; reason: string }> = [
+    { heard: 'Liliana',  expected: 'Liliana Contreras',         reason: 'first-name only' },
+    { heard: 'Liliana Contrera', expected: 'Liliana Contreras', reason: 'terminal -s loss' },
+    { heard: 'Liseth',   expected: 'Lisset',                    reason: 'phonetic z↔s, h drop' },
+    { heard: 'Liset',    expected: 'Lisset',                    reason: 'double-letter collapse' },
+    { heard: 'Lizeth',   expected: 'Lisset',                    reason: 'z↔s, h drop, t/th equiv' },
+    { heard: 'Mayela',   expected: 'Mayela Cliente',            reason: 'first-name only' },
+    { heard: 'Paola',    expected: 'Paola Pérez Cliente',       reason: 'first-name only' },
+    { heard: 'Wendy',    expected: 'Wendy Carolina Dugarte Hu', reason: 'first-name only' },
+    { heard: 'Yoselen',  expected: 'Yoselen Alarcon Cliente',   reason: 'first-name only' },
+    { heard: 'Girling',  expected: 'Girling',                   reason: 'literal exact' },
+  ]
+
+  for (const v of VARIANTS) {
+    it(`"${v.heard}" → ${v.expected} (${v.reason})`, () => {
+      const out = fuzzyFind(RS_STUDIO, v.heard)
+      expect(out.status).toBe('found')
+      expect(out.match?.name).toBe(v.expected)
+      // Variants on real client names must reach the write-tool bar so the
+      // owner can act ("elimina a Liseth") without an extra confirmation.
+      expect(out.confidence ?? 0).toBeGreaterThanOrEqual(WRITE_CONFIDENCE_THRESHOLD)
+    })
+  }
+
+  // Lisset and Lisette must remain distinct — both are real, separate clients.
+  it('"Lisette" → Lisette (literal exact wins over Lisset)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Lisette')
+    expect(out.match?.name).toBe('Lisette')
+  })
+
+  // Cross-name guards remain in force even with the new confidence surface.
+  it('"Lisbeth" stays not_found against RS_STUDIO (Lisbeth ≠ Lisset)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Lisbeth')
+    expect(out.status).toBe('not_found')
+  })
+})
+
+// Anchor the public constants used by write-tools so a refactor doesn't
+// silently move the bar.
+describe('fuzzy — public thresholds', () => {
+  it('WRITE_CONFIDENCE_THRESHOLD is the documented 0.80', () => {
+    expect(WRITE_CONFIDENCE_THRESHOLD).toBe(0.80)
   })
 })

@@ -23,7 +23,7 @@
 
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
-import { type ClientRow, resolveClient, normalisePhone } from '../../core/repos/clients.ts'
+import { type ClientRow, resolveClient, normalisePhone, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 
 export interface DeleteClientArgs extends Record<string, unknown> {
   client_name:    string
@@ -39,11 +39,21 @@ export async function executeDeleteClient(
 
   const resolution = await resolveClient(ctx, args.client_name)
   if (resolution.status === 'not_found') {
-    return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+    return {
+      success:          false,
+      result:           `No encontré al cliente "${args.client_name}".`,
+      fallthroughToLLM: true,
+    }
   }
 
   let target: ClientRow
   if (resolution.status === 'found') {
+    // Low-confidence match on a destructive op: confirm before deleting,
+    // UNLESS the user already consented via any_duplicate / phone (those
+    // paths went through the deliberate disambiguation UX).
+    if (needsConfirmation(resolution) && !args.any_duplicate && !args.phone) {
+      return { success: false, result: formatConfirmationPrompt(resolution, args.client_name) }
+    }
     target = resolution.client
   } else {
     const candidates = resolution.candidates

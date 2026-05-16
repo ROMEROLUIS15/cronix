@@ -22,6 +22,7 @@ import { serve }       from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
 import { transcribe }            from './stt.ts'
+import { getClientFirstNamesForBoost } from './core/repos/clients.ts'
 import { synthesizeAudio }       from './tts.ts'
 import { runAgent }              from './agent.ts'
 import { dispatchBellNotification } from './notifications.ts'
@@ -117,7 +118,7 @@ async function resolveUserAndBusiness(supabase: any, authHeader: string): Promis
 async function loadBusinessContext(supabase: any, businessId: string, timezone: string): Promise<BusinessContext> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: timezone })
 
-  const [bizRes, servicesRes, apptsRes] = await Promise.all([
+  const [bizRes, servicesRes, apptsRes, clientsRes] = await Promise.all([
     supabase.from('businesses').select('name, settings').eq('id', businessId).single(),
     supabase.from('services').select('id, name, duration_min, price').eq('business_id', businessId).eq('is_active', true),
     supabase.from('appointments')
@@ -127,6 +128,13 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
       .gte('start_at', `${todayLocal}T00:00:00`)
       .lte('start_at', `${todayLocal}T23:59:59`)
       .order('start_at'),
+    supabase.from('clients')
+      .select('id, name, phone')
+      .eq('business_id', businessId)
+      .is('deleted_at', null)
+      .order('last_visit_at', { ascending: false, nullsFirst: false })
+      .order('created_at',    { ascending: false })
+      .limit(100),
   ])
 
   const settings = (bizRes.data?.settings ?? {}) as Record<string, unknown>
@@ -149,6 +157,11 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
       startAt:     a.start_at as string,
       clientName:  ((a.client  as { name?: string } | null)?.name) ?? '',
       serviceName: ((a.service as { name?: string } | null)?.name) ?? '',
+    })),
+    activeClients: (clientsRes.data ?? []).map((c: Record<string, unknown>) => ({
+      id:    c.id    as string,
+      name:  c.name  as string,
+      phone: (c.phone as string | null) ?? null,
     })),
   }
 }
@@ -246,9 +259,15 @@ async function handleRequest(req: Request): Promise<Response> {
       }
       if (!audio) return jsonResponse({ error: 'No audio provided' }, 400)
 
-      // Fire STT and context load simultaneously.
+      // Fire STT, context load AND keyword-boost roster simultaneously.
+      // The boost roster is a small query (~50ms) that biases Deepgram toward
+      // the business's real client first-names — STT accuracy on proper nouns
+      // depends on it. Running it in parallel preserves the existing parallel
+      // gain and adds negligible latency.
       const [transcript, [ctx, sessionResult]] = await Promise.all([
-        transcribe(audio),
+        getClientFirstNamesForBoost(supabase, userCtx.businessId)
+          .catch(() => [] as string[])
+          .then(keywords => transcribe(audio, { keywords })),
         Promise.all([
           loadBusinessContext(supabase, userCtx.businessId, timezone),
           loadSession(userCtx.userId, clientHistory),

@@ -1,6 +1,6 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData } from '../../types.ts'
-import { resolveClient } from '../../core/repos/clients.ts'
+import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
 import {
   findAppointmentByClientName, findAppointmentById, resolveAppointmentServiceId,
@@ -41,7 +41,14 @@ export async function executeCancel(
         const names = resolution.candidates.map(c => c.name).join(', ')
         return { success: false, result: `Hay varios clientes similares: ${names}. ¿Cuál?` }
       }
-      return { success: false, result: `No encontré al cliente "${args.client_name}".` }
+      return {
+        success:          false,
+        result:           `No encontré al cliente "${args.client_name}".`,
+        fallthroughToLLM: true,
+      }
+    }
+    if (needsConfirmation(resolution)) {
+      return { success: false, result: formatConfirmationPrompt(resolution, args.client_name) }
     }
     apt = await findAppointmentByClientName(ctx, resolution.client, args.date, args.time)
     if ('error' in apt) return { success: false, result: apt.error }

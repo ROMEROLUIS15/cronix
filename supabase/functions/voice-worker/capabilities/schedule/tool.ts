@@ -20,7 +20,7 @@ import { normalize, tokens }       from '../../core/fuzzy.ts'
 import { parseDateExpression }     from '../../core/date-parser.ts'
 import { parseTimeExpression, userMentionedTime } from '../../core/time-parser.ts'
 import {
-  type ClientRow, resolveClient,
+  type ClientRow, resolveClient, needsConfirmation, formatConfirmationPrompt,
 } from '../../core/repos/clients.ts'
 import { getActiveServices, resolveService } from '../../core/repos/services.ts'
 import { findConflicts } from '../../core/repos/appointments.ts'
@@ -108,6 +108,9 @@ export async function executeSchedule(
   }
   let client: ClientRow
   if (resolution.status === 'found') {
+    if (needsConfirmation(resolution)) {
+      return { success: false, result: formatConfirmationPrompt(resolution, client_name) }
+    }
     client = resolution.client
   } else if (args.register_new_client) {
     const { data: created, error } = await ctx.supabase

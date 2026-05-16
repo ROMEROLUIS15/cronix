@@ -21,7 +21,22 @@ const DEEPGRAM_KEY = Deno.env.get('DEEPGRAM_AURA_API_KEY')
   ?? Deno.env.get('DEEPGRAM_API_KEY')
   ?? ''
 
-const DEEPGRAM_URL = 'https://api.deepgram.com/v1/listen?model=nova-2&language=es&smart_format=true'
+const DEEPGRAM_BASE = 'https://api.deepgram.com/v1/listen?model=nova-2&language=es&smart_format=true'
+
+/**
+ * Builds the Deepgram URL with optional keyword bias. Nova-2 supports
+ * `keywords=word:intensity` as repeated query params — intensity 2 is the
+ * recommended boost for proper nouns we want recovered even when the audio is
+ * ambiguous. Keywords are URL-encoded; non-ASCII chars (accented Spanish
+ * names) are handled by encodeURIComponent.
+ */
+function buildDeepgramUrl(keywords: string[]): string {
+  if (!keywords.length) return DEEPGRAM_BASE
+  const params = keywords
+    .map(k => `keywords=${encodeURIComponent(`${k}:2`)}`)
+    .join('&')
+  return `${DEEPGRAM_BASE}&${params}`
+}
 
 /**
  * Sniffs the first 16 bytes for known audio magic numbers — used only for
@@ -40,7 +55,17 @@ function detectAudioFormat(head: Uint8Array): string {
   return 'unknown'
 }
 
-export async function transcribe(audio: Blob): Promise<string> {
+export interface TranscribeOptions {
+  /**
+   * First-name tokens of active clients in the caller's business. Passed as
+   * Deepgram keyword boosts so the recogniser is biased toward real names the
+   * business uses, instead of falling back to common Spanish words that sound
+   * similar.
+   */
+  keywords?: string[]
+}
+
+export async function transcribe(audio: Blob, options: TranscribeOptions = {}): Promise<string> {
   if (!DEEPGRAM_KEY) {
     throw new Error('DEEPGRAM_AURA_API_KEY not set')
   }
@@ -57,7 +82,8 @@ export async function transcribe(audio: Blob): Promise<string> {
   // otherwise fall back to a generic webm guess.
   const mime     = audio.type || 'audio/webm'
 
-  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, mime=${mime}, container=${detected}, head=${headHex}`)
+  const keywords = options.keywords ?? []
+  console.log(`[VOICE-WORKER-STT] Audio: ${audio.size}b, mime=${mime}, container=${detected}, head=${headHex}, keywords=${keywords.length}`)
 
   // Reject obviously broken audio (< 1 KB is almost always truncated).
   if (audio.size < 1024) {
@@ -65,7 +91,8 @@ export async function transcribe(audio: Blob): Promise<string> {
     return ''
   }
 
-  const res = await fetch(DEEPGRAM_URL, {
+  const url = buildDeepgramUrl(keywords)
+  const res = await fetch(url, {
     method:  'POST',
     headers: {
       Authorization:  `Token ${DEEPGRAM_KEY}`,

@@ -147,6 +147,13 @@ export async function runAgent(
   if (registryHit) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}): args=${JSON.stringify(registryHit.args)}`)
     const result = await executeByName(registryHit.capability.name, registryHit.args, ctx)
+    // Tools may set fallthroughToLLM=true when they can't resolve a client by
+    // the STT-mangled name and the LLM (with the activeClients roster in
+    // context) has a better chance at mapping it. Skip the fast-path bypass
+    // and let the LLM branch below take the turn.
+    if (result.fallthroughToLLM) {
+      console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}) → falling through to LLM (not_found)`)
+    } else {
     const text = result.success
       ? result.result
       : (result.result || 'No pude completar esa consulta en este momento. Intenta de nuevo.')
@@ -194,6 +201,7 @@ export async function runAgent(
       modelUsed:            `fast-path/${registryHit.capability.name}`,
       pendingNotifications: fastPathNotifications,
       lastRefCandidate:     fastPathLastRefCandidate,
+    }
     }
   }
 

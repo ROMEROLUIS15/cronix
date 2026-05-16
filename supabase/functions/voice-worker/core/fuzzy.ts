@@ -130,10 +130,48 @@ export interface FuzzyMatch<T extends { name: string }> {
   status: 'found' | 'ambiguous' | 'not_found'
   match?: T
   candidates?: T[]
+  /**
+   * Confidence of the top match in [0, 1]. Used by write-tools to decide
+   * whether to act or ask the user to confirm. An exact-token (literal or
+   * phonetic) match is floored at 0.90 — even if the candidate string is
+   * much longer than the query, the user clearly named a registered token.
+   * A similarity-only match returns the raw normalised similarity.
+   */
+  confidence?: number
+  /**
+   * Gap between the top and second-best candidate's similarity. Lets callers
+   * detect borderline matches even when status is 'found'.
+   */
+  gap?: number
 }
 
 export const FUZZY_THRESHOLD     = 0.72
 export const FUZZY_AMBIGUOUS_GAP = 0.10
+
+/**
+ * Confidence floor for matches that hit the exact-token tier. The actual
+ * similarity for "Luis" → "Luis Romero" is ~0.42 because of length asymmetry,
+ * yet the user clearly named that client. Floor the confidence to 0.90 so
+ * downstream write-tools (delete, schedule, cancel, reschedule) treat
+ * exact-token hits as high-confidence even when raw similarity is low.
+ */
+export const FUZZY_EXACT_TOKEN_CONFIDENCE = 0.90
+
+/**
+ * Minimum confidence a destructive / write capability requires before acting
+ * without a confirmation prompt. Below this, the tool surfaces the candidate
+ * list and asks the user to disambiguate. Reads (last-visit, list-appointments,
+ * search-clients) intentionally do not gate on this — they may be wrong but
+ * are never destructive, and forcing a confirmation on every soft query would
+ * destroy the agent's UX.
+ */
+export const WRITE_CONFIDENCE_THRESHOLD = 0.80
+
+function computeConfidence(top: { score: number; exactTokenMatch: boolean }): number {
+  return top.exactTokenMatch
+    ? Math.max(top.score, FUZZY_EXACT_TOKEN_CONFIDENCE)
+    : top.score
+}
 
 /**
  * Two-tier match. A candidate qualifies if EITHER:
@@ -187,24 +225,39 @@ export function fuzzyFind<T extends { name: string }>(items: T[], query: string)
     })
 
   if (scored.length === 0) return { status: 'not_found' }
-  if (scored.length === 1) return { status: 'found', match: scored[0]!.item }
+  // Always surface the top-5 candidates so write-tools can confirm with the
+  // user when confidence is borderline. The match field still designates the
+  // primary pick for 'found'; candidates is purely informational there.
+  const topCandidates = scored.slice(0, 5).map(s => s.item)
+  if (scored.length === 1) {
+    return {
+      status:     'found',
+      match:      scored[0]!.item,
+      candidates: topCandidates,
+      confidence: computeConfidence(scored[0]!),
+      gap:        1, // no competitor — treat as maximally separated
+    }
+  }
 
   const [first, second] = scored
+  const gap        = first!.score - second!.score
+  const confidence = computeConfidence(first!)
+
   // Two exact-token matches → ambiguous unless one clearly dominates the score.
   // "luis" with two "Luis ..." clients in the DB belongs here.
   if (first!.exactTokenMatch && second!.exactTokenMatch) {
-    if (first!.score - second!.score >= FUZZY_AMBIGUOUS_GAP) {
-      return { status: 'found', match: first!.item }
+    if (gap >= FUZZY_AMBIGUOUS_GAP) {
+      return { status: 'found', match: first!.item, candidates: topCandidates, confidence, gap }
     }
-    return { status: 'ambiguous', candidates: scored.slice(0, 5).map(s => s.item) }
+    return { status: 'ambiguous', candidates: topCandidates, confidence, gap }
   }
   // Mixed (one exact-token + similarity-only competitors) → exact-token wins.
   if (first!.exactTokenMatch && !second!.exactTokenMatch) {
-    return { status: 'found', match: first!.item }
+    return { status: 'found', match: first!.item, candidates: topCandidates, confidence, gap }
   }
   // Pure similarity-only matches → standard gap-based decision.
-  if (first!.score - second!.score >= FUZZY_AMBIGUOUS_GAP) {
-    return { status: 'found', match: first!.item }
+  if (gap >= FUZZY_AMBIGUOUS_GAP) {
+    return { status: 'found', match: first!.item, candidates: topCandidates, confidence, gap }
   }
-  return { status: 'ambiguous', candidates: scored.slice(0, 5).map(s => s.item) }
+  return { status: 'ambiguous', candidates: topCandidates, confidence, gap }
 }

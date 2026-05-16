@@ -43,6 +43,18 @@ export interface BusinessContext {
     clientName:  string
     serviceName: string
   }>
+  /**
+   * Most-recently-active clients of the business — the LLM uses this as the
+   * authoritative roster of registered names. When the STT mishears a name
+   * (e.g., "Bicet" for "Lisset") the model maps back to the right registered
+   * client by consulting this list rather than echoing the STT verbatim.
+   * Capped at 100, ordered last_visit_at DESC NULLS LAST, created_at DESC.
+   */
+  activeClients: Array<{
+    id:    string
+    name:  string
+    phone: string | null
+  }>
 }
 
 export interface AgentInput {
@@ -104,6 +116,14 @@ export interface ToolResult {
   data?:   BookingEventData
   /** Optional error code for logging. */
   error?:  string
+  /**
+   * When true, the agent's fast-path branch should NOT short-circuit on this
+   * result and should instead fall through to the LLM so it can rescue the
+   * intent using the activeClients roster. Used today by write-tools that
+   * fail with `not_found` on a client name — the LLM may know the STT
+   * mishearing maps to a real roster entry.
+   */
+  fallthroughToLLM?: boolean
 }
 
 export interface BookingEventData {
