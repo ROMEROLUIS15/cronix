@@ -7,40 +7,60 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.4"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
       ai_memories: {
         Row: {
-          business_id: string
-          content: string
+          business_id: string | null
+          content: string | null
           created_at: string | null
           embedding: string | null
           id: string
           metadata: Json | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
-          business_id: string
-          content: string
+          business_id?: string | null
+          content?: string | null
           created_at?: string | null
           embedding?: string | null
           id?: string
           metadata?: Json | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
-          business_id?: string
-          content?: string
+          business_id?: string | null
+          content?: string | null
           created_at?: string | null
           embedding?: string | null
           id?: string
           metadata?: Json | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -58,6 +78,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_tool_audit_log: {
+        Row: {
+          args_fingerprint: string | null
+          business_id: string
+          created_at: string
+          duration_ms: number | null
+          id: string
+          result_status: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          args_fingerprint?: string | null
+          business_id: string
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          result_status: string
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          args_fingerprint?: string | null
+          business_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          result_status?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       appointment_reminders: {
         Row: {
@@ -235,6 +288,7 @@ export type Database = {
       businesses: {
         Row: {
           address: string | null
+          bonus_appointments_limit: number | null
           category: string
           created_at: string | null
           id: string
@@ -243,10 +297,10 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          phone_digits: string | null
           plan: Database["public"]["Enums"]["business_plan"] | null
           referral_code: string | null
           referred_by_id: string | null
-          bonus_appointments_limit: number | null
           settings: Json | null
           slug: string | null
           subscription_ends_at: string | null
@@ -255,6 +309,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          bonus_appointments_limit?: number | null
           category: string
           created_at?: string | null
           id?: string
@@ -263,10 +318,10 @@ export type Database = {
           name: string
           owner_id: string
           phone?: string | null
+          phone_digits?: string | null
           plan?: Database["public"]["Enums"]["business_plan"] | null
           referral_code?: string | null
           referred_by_id?: string | null
-          bonus_appointments_limit?: number | null
           settings?: Json | null
           slug?: string | null
           subscription_ends_at?: string | null
@@ -275,6 +330,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          bonus_appointments_limit?: number | null
           category?: string
           created_at?: string | null
           id?: string
@@ -283,17 +339,25 @@ export type Database = {
           name?: string
           owner_id?: string
           phone?: string | null
+          phone_digits?: string | null
           plan?: Database["public"]["Enums"]["business_plan"] | null
           referral_code?: string | null
           referred_by_id?: string | null
-          bonus_appointments_limit?: number | null
           settings?: Json | null
           slug?: string | null
           subscription_ends_at?: string | null
           timezone?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "businesses_referred_by_id_fkey"
+            columns: ["referred_by_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clients: {
         Row: {
@@ -303,11 +367,13 @@ export type Database = {
           created_at: string | null
           deleted_at: string | null
           email: string | null
+          email_norm: string | null
           id: string
           last_visit_at: string | null
           name: string
           notes: string | null
           phone: string | null
+          phone_digits: string | null
           tags: string[] | null
           total_appointments: number | null
           total_spent: number | null
@@ -320,11 +386,13 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           email?: string | null
+          email_norm?: string | null
           id?: string
           last_visit_at?: string | null
           name: string
           notes?: string | null
           phone?: string | null
+          phone_digits?: string | null
           tags?: string[] | null
           total_appointments?: number | null
           total_spent?: number | null
@@ -337,11 +405,13 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           email?: string | null
+          email_norm?: string | null
           id?: string
           last_visit_at?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
+          phone_digits?: string | null
           tags?: string[] | null
           total_appointments?: number | null
           total_spent?: number | null
@@ -457,6 +527,8 @@ export type Database = {
           business_id: string
           content: string
           created_at: string | null
+          event_id: string | null
+          expires_at: string | null
           id: string
           is_read: boolean | null
           metadata: Json | null
@@ -468,6 +540,8 @@ export type Database = {
           business_id: string
           content: string
           created_at?: string | null
+          event_id?: string | null
+          expires_at?: string | null
           id?: string
           is_read?: boolean | null
           metadata?: Json | null
@@ -479,6 +553,8 @@ export type Database = {
           business_id?: string
           content?: string
           created_at?: string | null
+          event_id?: string | null
+          expires_at?: string | null
           id?: string
           is_read?: boolean | null
           metadata?: Json | null
@@ -517,6 +593,65 @@ export type Database = {
         }
         Relationships: []
       }
+      saas_invoices: {
+        Row: {
+          admin_notes: string | null
+          amount_usd: number
+          business_id: string
+          created_at: string
+          crypto_amount: number | null
+          crypto_currency: string | null
+          id: string
+          np_invoice_id: string | null
+          np_payment_id: string | null
+          payment_method: string
+          plan_purchased: Database["public"]["Enums"]["business_plan"]
+          reference_number: string | null
+          status: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount_usd: number
+          business_id: string
+          created_at?: string
+          crypto_amount?: number | null
+          crypto_currency?: string | null
+          id?: string
+          np_invoice_id?: string | null
+          np_payment_id?: string | null
+          payment_method?: string
+          plan_purchased: Database["public"]["Enums"]["business_plan"]
+          reference_number?: string | null
+          status?: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          amount_usd?: number
+          business_id?: string
+          created_at?: string
+          crypto_amount?: number | null
+          crypto_currency?: string | null
+          id?: string
+          np_invoice_id?: string | null
+          np_payment_id?: string | null
+          payment_method?: string
+          plan_purchased?: Database["public"]["Enums"]["business_plan"]
+          reference_number?: string | null
+          status?: Database["public"]["Enums"]["saas_invoice_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saas_invoices_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_health: {
         Row: {
           failure_count: number
@@ -538,66 +673,6 @@ export type Database = {
         }
         Relationships: []
       }
-      saas_invoices: {
-        Row: {
-          amount_usd: number
-          business_id: string
-          created_at: string
-          crypto_amount: number | null
-          crypto_currency: string | null
-          id: string
-          np_invoice_id: string | null
-          np_payment_id: string | null
-          plan_purchased: Database["public"]["Enums"]["business_plan"]
-          status: Database["public"]["Enums"]["saas_invoice_status"]
-          updated_at: string
-          payment_method: string
-          reference_number: string | null
-          admin_notes: string | null
-        }
-        Insert: {
-          amount_usd: number
-          business_id: string
-          created_at?: string
-          crypto_amount?: number | null
-          crypto_currency?: string | null
-          id?: string
-          np_invoice_id?: string | null
-          np_payment_id?: string | null
-          plan_purchased: Database["public"]["Enums"]["business_plan"]
-          status?: Database["public"]["Enums"]["saas_invoice_status"]
-          updated_at?: string
-          payment_method?: string
-          reference_number?: string | null
-          admin_notes?: string | null
-        }
-        Update: {
-          amount_usd?: number
-          business_id?: string
-          created_at?: string
-          crypto_amount?: number | null
-          crypto_currency?: string | null
-          id?: string
-          np_invoice_id?: string | null
-          np_payment_id?: string | null
-          plan_purchased?: Database["public"]["Enums"]["business_plan"]
-          status?: Database["public"]["Enums"]["saas_invoice_status"]
-          updated_at?: string
-          payment_method?: string
-          reference_number?: string | null
-          admin_notes?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "saas_invoices_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-
       services: {
         Row: {
           business_id: string
@@ -657,6 +732,7 @@ export type Database = {
           created_at: string | null
           discount: number | null
           id: string
+          idempotency_key: string | null
           method: Database["public"]["Enums"]["payment_method"]
           net_amount: number
           notes: string | null
@@ -671,6 +747,7 @@ export type Database = {
           created_at?: string | null
           discount?: number | null
           id?: string
+          idempotency_key?: string | null
           method: Database["public"]["Enums"]["payment_method"]
           net_amount: number
           notes?: string | null
@@ -685,6 +762,7 @@ export type Database = {
           created_at?: string | null
           discount?: number | null
           id?: string
+          idempotency_key?: string | null
           method?: Database["public"]["Enums"]["payment_method"]
           net_amount?: number
           notes?: string | null
@@ -902,7 +980,7 @@ export type Database = {
           created_at: string | null
           error: string | null
           id: string
-          payload: Json
+          payload: Json | null
           retry_count: number | null
           service_type: string | null
           updated_at: string | null
@@ -911,7 +989,7 @@ export type Database = {
           created_at?: string | null
           error?: string | null
           id?: string
-          payload: Json
+          payload?: Json | null
           retry_count?: number | null
           service_type?: string | null
           updated_at?: string | null
@@ -920,7 +998,7 @@ export type Database = {
           created_at?: string | null
           error?: string | null
           id?: string
-          payload?: Json
+          payload?: Json | null
           retry_count?: number | null
           service_type?: string | null
           updated_at?: string | null
@@ -948,19 +1026,16 @@ export type Database = {
       wa_sessions: {
         Row: {
           business_id: string
-          created_at: string | null
           sender_phone: string
           updated_at: string | null
         }
         Insert: {
           business_id: string
-          created_at?: string | null
           sender_phone: string
           updated_at?: string | null
         }
         Update: {
           business_id?: string
-          created_at?: string | null
           sender_phone?: string
           updated_at?: string | null
         }
@@ -977,17 +1052,17 @@ export type Database = {
       wa_token_usage: {
         Row: {
           business_id: string
-          total_tokens: number
+          total_tokens: number | null
           usage_date: string
         }
         Insert: {
           business_id: string
-          total_tokens?: number
+          total_tokens?: number | null
           usage_date?: string
         }
         Update: {
           business_id?: string
-          total_tokens?: number
+          total_tokens?: number | null
           usage_date?: string
         }
         Relationships: [
@@ -1020,6 +1095,45 @@ export type Database = {
       }
     }
     Views: {
+      pg_all_foreign_keys: {
+        Row: {
+          fk_columns: unknown[] | null
+          fk_constraint_name: unknown
+          fk_schema_name: unknown
+          fk_table_name: unknown
+          fk_table_oid: unknown
+          is_deferrable: boolean | null
+          is_deferred: boolean | null
+          match_type: string | null
+          on_delete: string | null
+          on_update: string | null
+          pk_columns: unknown[] | null
+          pk_constraint_name: unknown
+          pk_index_name: unknown
+          pk_schema_name: unknown
+          pk_table_name: unknown
+          pk_table_oid: unknown
+        }
+        Relationships: []
+      }
+      tap_funky: {
+        Row: {
+          args: string | null
+          is_definer: boolean | null
+          is_strict: boolean | null
+          is_visible: boolean | null
+          kind: unknown
+          langoid: unknown
+          name: unknown
+          oid: unknown
+          owner: unknown
+          returns: string | null
+          returns_set: boolean | null
+          schema: unknown
+          volatility: string | null
+        }
+        Relationships: []
+      }
       v_web_suspicious_activity: {
         Row: {
           identifier: string | null
@@ -1046,23 +1160,83 @@ export type Database = {
       }
     }
     Functions: {
+      _cleanup: { Args: never; Returns: boolean }
+      _contract_on: { Args: { "": string }; Returns: unknown }
+      _currtest: { Args: never; Returns: number }
+      _db_privs: { Args: never; Returns: unknown[] }
+      _extensions: { Args: never; Returns: unknown[] }
+      _get: { Args: { "": string }; Returns: number }
+      _get_latest: { Args: { "": string }; Returns: number[] }
+      _get_note: { Args: { "": string }; Returns: string }
+      _is_verbose: { Args: never; Returns: boolean }
+      _prokind: { Args: { p_oid: unknown }; Returns: unknown }
+      _query: { Args: { "": string }; Returns: string }
+      _refine_vol: { Args: { "": string }; Returns: string }
+      _retval: { Args: { "": string }; Returns: string }
+      _table_privs: { Args: never; Returns: unknown[] }
+      _temptypes: { Args: { "": string }; Returns: string }
+      _todo: { Args: never; Returns: string }
+      col_is_null:
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              schema_name: unknown
+              table_name: unknown
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              table_name: unknown
+            }
+            Returns: string
+          }
+      col_not_null:
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              schema_name: unknown
+              table_name: unknown
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              column_name: unknown
+              description?: string
+              table_name: unknown
+            }
+            Returns: string
+          }
+      current_business_id: { Args: never; Returns: string }
+      diag:
+        | {
+            Args: { msg: unknown }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.diag(msg => text), public.diag(msg => anyelement). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { msg: string }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.diag(msg => text), public.diag(msg => anyelement). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+      diag_test_name: { Args: { "": string }; Returns: string }
+      do_tap:
+        | { Args: never; Returns: string[] }
+        | { Args: { "": string }; Returns: string[] }
+      fail:
+        | { Args: never; Returns: string }
+        | { Args: { "": string }; Returns: string }
+      findfuncs: { Args: { "": string }; Returns: string[] }
+      finish: { Args: { exception_on_failure?: boolean }; Returns: string[] }
       fn_batch_create_transactions: {
-        Args: {
-          p_business_id: string
-          p_transactions: Json
-        }
-        Returns: Json
-      }
-      fn_create_business_and_link_owner: {
-        Args: {
-          p_owner_id: string
-          p_owner_name: string
-          p_owner_email: string
-          p_name: string
-          p_category: string
-          p_timezone: string
-          p_plan: string
-        }
+        Args: { p_business_id: string; p_transactions: Json }
         Returns: Json
       }
       fn_book_appointment_wa: {
@@ -1076,11 +1250,50 @@ export type Database = {
         Returns: Json
       }
       fn_clean_phone: { Args: { p_phone: string }; Returns: string }
-      fn_find_client_by_phone: {
-        Args: { p_business_id: string; p_phone_digits: string }
+      fn_create_business_and_link_owner:
+        | {
+            Args: {
+              p_category: string
+              p_name: string
+              p_owner_email: string
+              p_owner_id: string
+              p_owner_name: string
+              p_plan: string
+              p_timezone: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_category: string
+              p_name: string
+              p_owner_email: string
+              p_owner_id: string
+              p_owner_name: string
+              p_plan: string
+              p_referral_code?: string
+              p_timezone: string
+            }
+            Returns: Json
+          }
+      fn_finalize_paypal_payment: {
+        Args: { p_captured_amount: number; p_days?: number; p_order_id: string }
         Returns: {
-          id: string
-          name: string
+          business_id: string
+          invoice_id: string
+          plan_purchased: string
+          result_status: string
+        }[]
+      }
+      fn_find_client_by_phone: {
+        Args: { p_business_id: string; p_phone: string }
+        Returns: {
+          client_avatar_url: string
+          client_email: string
+          client_id: string
+          client_name: string
+          client_phone: string
+          match_type: string
         }[]
       }
       fn_get_available_slots:
@@ -1114,23 +1327,41 @@ export type Database = {
           timezone: string
         }[]
       }
+      fn_get_businesses_at_hour: {
+        Args: { p_hour: number }
+        Returns: {
+          id: string
+          name: string
+          phone: string
+          settings: Json
+          timezone: string
+        }[]
+      }
       fn_get_dashboard_stats: {
         Args: {
           p_business_id: string
-          p_today_start: string
-          p_today_end: string
           p_month_start: string
+          p_today_end: string
+          p_today_start: string
         }
         Returns: {
-          today_count: number
-          total_clients: number
           month_revenue: number
           pending_count: number
+          today_count: number
+          total_clients: number
         }[]
       }
       fn_mark_all_notifications_as_read: {
         Args: { target_business_id: string }
         Returns: undefined
+      }
+      fn_reschedule_appointment_wa: {
+        Args: {
+          p_appointment_id: string
+          p_business_id: string
+          p_new_start_at: string
+        }
+        Returns: Json
       }
       fn_reset_all_web_rate_limits: { Args: never; Returns: undefined }
       fn_wa_check_booking_limit: {
@@ -1164,10 +1395,19 @@ export type Database = {
       }
       fn_wa_gc_business_usage: { Args: never; Returns: undefined }
       fn_wa_gc_rate_limits: { Args: never; Returns: undefined }
-      fn_wa_report_service_failure: {
-        Args: { p_service_name: string; p_threshold?: number }
-        Returns: undefined
-      }
+      fn_wa_report_service_failure:
+        | {
+            Args: {
+              p_error?: string
+              p_service_name: string
+              p_threshold?: number
+            }
+            Returns: undefined
+          }
+        | {
+            Args: { p_service_name: string; p_threshold?: number }
+            Returns: undefined
+          }
       fn_wa_report_service_success: {
         Args: { p_service_name: string }
         Returns: undefined
@@ -1185,6 +1425,14 @@ export type Database = {
         Returns: boolean
       }
       fn_web_gc_rate_limits: { Args: never; Returns: undefined }
+      format_type_string: { Args: { "": string }; Returns: string }
+      get_clients_debts: {
+        Args: { p_business_id: string }
+        Returns: {
+          client_id: string
+          total_debt: number
+        }[]
+      }
       get_inactive_clients_rpc: {
         Args: { biz_id: string; sixty_days_ago: string }
         Returns: {
@@ -1194,6 +1442,11 @@ export type Database = {
         }[]
       }
       get_my_business_id: { Args: never; Returns: string }
+      has_unique: { Args: { "": string }; Returns: string }
+      in_todo: { Args: never; Returns: boolean }
+      is_empty: { Args: { "": string }; Returns: string }
+      isnt_empty: { Args: { "": string }; Returns: string }
+      lives_ok: { Args: { "": string }; Returns: string }
       match_memories: {
         Args: {
           match_count: number
@@ -1209,6 +1462,31 @@ export type Database = {
           similarity: number
         }[]
       }
+      no_plan: { Args: never; Returns: boolean[] }
+      num_failed: { Args: never; Returns: number }
+      os_name: { Args: never; Returns: string }
+      pass:
+        | { Args: never; Returns: string }
+        | { Args: { "": string }; Returns: string }
+      pg_version: { Args: never; Returns: string }
+      pg_version_num: { Args: never; Returns: number }
+      pgtap_version: { Args: never; Returns: number }
+      runtests:
+        | { Args: never; Returns: string[] }
+        | { Args: { "": string }; Returns: string[] }
+      skip:
+        | { Args: { "": string }; Returns: string }
+        | { Args: { how_many: number; why: string }; Returns: string }
+      throws_ok: { Args: { "": string }; Returns: string }
+      todo:
+        | { Args: { how_many: number }; Returns: boolean[] }
+        | { Args: { how_many: number; why: string }; Returns: boolean[] }
+        | { Args: { why: string }; Returns: boolean[] }
+        | { Args: { how_many: number; why: string }; Returns: boolean[] }
+      todo_end: { Args: never; Returns: boolean[] }
+      todo_start:
+        | { Args: never; Returns: boolean[] }
+        | { Args: { "": string }; Returns: boolean[] }
     }
     Enums: {
       appointment_status:
@@ -1240,7 +1518,9 @@ export type Database = {
       user_status: "pending" | "active" | "rejected"
     }
     CompositeTypes: {
-      [_ in never]: never
+      _time_trial_type: {
+        a_time: number | null
+      }
     }
   }
 }
@@ -1363,6 +1643,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       appointment_status: [
@@ -1384,6 +1667,15 @@ export const Constants = {
         "other",
       ],
       payment_method: ["cash", "card", "transfer", "qr", "other"],
+      saas_invoice_status: [
+        "waiting",
+        "confirming",
+        "finished",
+        "partially_paid",
+        "failed",
+        "expired",
+        "refunded",
+      ],
       user_role: ["owner", "employee", "platform_admin"],
       user_status: ["pending", "active", "rejected"],
     },

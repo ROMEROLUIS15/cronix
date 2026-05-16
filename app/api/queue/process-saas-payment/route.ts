@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
+import { applyReferralBonus, computeNextSubscriptionEnd } from '@/lib/payments/subscription-fulfillment';
 import { Database } from '@/types/database.types';
 
 const supabaseAdmin = createAdminClient();
@@ -20,52 +20,6 @@ function toInvoiceStatus(paymentStatus: string): InvoiceStatus {
     case 'expired':     return 'expired';
     default:            return 'waiting';
   }
-}
-
-async function applyReferralBonus(businessId: string): Promise<void> {
-  const { data: biz } = await supabaseAdmin
-    .from('businesses')
-    .select('referred_by_id')
-    .eq('id', businessId)
-    .single();
-
-  if (!biz?.referred_by_id) return;
-
-  // Bonus only on the first successful payment
-  const { count } = await supabaseAdmin
-    .from('saas_invoices')
-    .select('id', { count: 'exact', head: true })
-    .eq('business_id', businessId)
-    .eq('status', 'finished');
-
-  if (count !== 1) return;
-
-  const { data: referrer } = await supabaseAdmin
-    .from('businesses')
-    .select('id, plan, subscription_ends_at')
-    .eq('id', biz.referred_by_id)
-    .single();
-
-  if (!referrer || referrer.plan === 'free') return;
-
-  const now = new Date();
-  const currentEndsAt = referrer.subscription_ends_at
-    ? new Date(referrer.subscription_ends_at)
-    : now;
-  const baseDate = currentEndsAt > now ? currentEndsAt : now;
-  baseDate.setDate(baseDate.getDate() + REFERRAL_BONUS_DAYS);
-
-  await supabaseAdmin
-    .from('businesses')
-    .update({ subscription_ends_at: baseDate.toISOString(), updated_at: now.toISOString() })
-    .eq('id', referrer.id);
-
-  await supabaseAdmin.from('notifications').insert({
-    business_id: referrer.id,
-    title: '¡Mes gratis ganado! 🎁',
-    content: 'Un negocio que invitaste ha activado su plan Pro. Hemos añadido 30 días adicionales a tu suscripción.',
-    type: 'billing',
-  });
 }
 
 async function handler(req: Request) {
@@ -102,14 +56,19 @@ async function handler(req: Request) {
     }
 
     if (invoiceStatus === 'finished') {
-      const endsAt = new Date();
-      endsAt.setMonth(endsAt.getMonth() + 1);
+      const { data: biz } = await supabaseAdmin
+        .from('businesses')
+        .select('subscription_ends_at')
+        .eq('id', invoice.business_id)
+        .single();
+
+      const nextEndsAt = computeNextSubscriptionEnd(biz?.subscription_ends_at ?? null, 30);
 
       const { error: bizError } = await supabaseAdmin
         .from('businesses')
         .update({
           plan: invoice.plan_purchased,
-          subscription_ends_at: endsAt.toISOString(),
+          subscription_ends_at: nextEndsAt,
           updated_at: new Date().toISOString(),
         })
         .eq('id', invoice.business_id);
@@ -127,7 +86,7 @@ async function handler(req: Request) {
         metadata: { invoice_id: invoice.id },
       });
 
-      await applyReferralBonus(invoice.business_id);
+      await applyReferralBonus(supabaseAdmin, invoice.business_id);
     }
 
     if (invoiceStatus === 'partially_paid') {

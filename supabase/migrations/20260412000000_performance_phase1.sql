@@ -32,23 +32,30 @@ AS $$
         WHERE b.id = p_business_id
     ),
     svc AS (
-        SELECT COALESCE(duration_min, 30) AS duration_min
+        SELECT COALESCE(duration_min, 30)::int AS duration_min
         FROM public.services
         WHERE id = p_service_id
     ),
-    slots AS (
+    bounds AS (
         SELECT
-            (p_date + gs)::time AS slot_start_local,
-            (p_date + gs + (s.duration_min || ' minutes')::interval)::time AS slot_end_local,
-            (p_date + gs) AT TIME ZONE p_timezone AS slot_start_utc,
-            (p_date + gs + (s.duration_min || ' minutes')::interval) AT TIME ZONE p_timezone AS slot_end_utc
+            (p_date + bh.open_time::time)::timestamp        AS series_start,
+            (p_date + bh.close_time::time)::timestamp       AS series_end,
+            (s.duration_min * interval '1 minute')::interval AS svc_duration
         FROM biz_hours bh
         CROSS JOIN svc s
+    ),
+    slots AS (
+        SELECT
+            gs.slot_start::time                                       AS slot_start_local,
+            (gs.slot_start + b.svc_duration)::time                    AS slot_end_local,
+            gs.slot_start AT TIME ZONE p_timezone                     AS slot_start_utc,
+            (gs.slot_start + b.svc_duration) AT TIME ZONE p_timezone  AS slot_end_utc
+        FROM bounds b
         CROSS JOIN LATERAL generate_series(
-            bh.open_time::interval,
-            bh.close_time::interval - (s.duration_min || ' minutes')::interval,
-            '30 minutes'::interval
-        ) gs
+            b.series_start,
+            b.series_end - b.svc_duration,
+            interval '30 minutes'
+        ) AS gs(slot_start)
     )
     SELECT to_char(s.slot_start_local, 'HH24:MI') AS slot_time
     FROM slots s
@@ -122,6 +129,7 @@ BEGIN
         RAISE EXCEPTION 'Cannot add CHECK constraint: existing appointments violate end_at > start_at';
     END IF;
 END $$;
+ALTER TABLE public.appointments DROP CONSTRAINT IF EXISTS chk_appointment_time_order;
 ALTER TABLE public.appointments
     ADD CONSTRAINT chk_appointment_time_order CHECK (end_at > start_at);
 -- ─────────────────────────────────────────────────────────────────────────────

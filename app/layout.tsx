@@ -143,7 +143,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+                ${process.env.NODE_ENV === 'production' ? `
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+                ` : `
+                  // En dev: desregistrar cualquier SW legacy (de un build de prod previo)
+                  // para que no intercepte respuestas con CSPs viejos cacheados.
+                  navigator.serviceWorker.getRegistrations().then(function(regs){
+                    regs.forEach(function(r){ r.unregister(); });
+                  });
+                  if (window.caches) {
+                    caches.keys().then(function(keys){
+                      keys.forEach(function(k){ caches.delete(k); });
+                    });
+                  }
+                `}
               }
             `,
           }}

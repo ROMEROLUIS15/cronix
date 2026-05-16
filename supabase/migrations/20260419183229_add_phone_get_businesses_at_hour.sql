@@ -1,3 +1,4 @@
+DROP FUNCTION IF EXISTS public.fn_get_businesses_at_hour(integer);
 CREATE OR REPLACE FUNCTION public.fn_get_businesses_at_hour(
     p_hour int
 )

@@ -11,7 +11,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Loader2, X, Bitcoin, Smartphone, Copy, Check, ExternalLink } from 'lucide-react';
+import { Loader2, X, Bitcoin, Smartphone, Copy, Check, ExternalLink, CreditCard } from 'lucide-react';
+import { SiBinance, SiPaypal } from 'react-icons/si';
+import { PayPalScriptProvider, PayPalButtons, FUNDING } from "@paypal/react-paypal-js";
+import { createPayPalOrderAction, capturePayPalOrderAction } from './actions';
 import { Button } from '@/components/ui/button';
 import { usePaymentFlow }    from './use-payment-flow';
 import {
@@ -207,6 +210,7 @@ function MethodCard({
   badge,
   selected,
   onClick,
+  brandBg,
 }: {
   id: string;
   icon: React.ReactNode;
@@ -215,6 +219,7 @@ function MethodCard({
   badge?: string;
   selected: boolean;
   onClick: () => void;
+  brandBg?: string;
 }) {
   return (
     <button
@@ -229,7 +234,7 @@ function MethodCard({
     >
       <div
         className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center mt-0.5"
-        style={{ background: selected ? 'rgba(0,98,255,0.22)' : 'rgba(255,255,255,0.06)' }}
+        style={{ background: brandBg ? brandBg : (selected ? 'rgba(0,98,255,0.22)' : 'rgba(255,255,255,0.06)') }}
       >
         {icon}
       </div>
@@ -283,10 +288,11 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
 
   // Filter payment methods: Pago Móvil only for Venezuelan businesses
   const METHODS = useMemo(() => {
-    const all: { method: AnyPaymentMethod; icon: React.ReactNode }[] = [
-      { method: 'nowpayments',    icon: <Bitcoin    size={18} className="text-amber-400" /> },
-      { method: 'pago_movil',     icon: <Smartphone size={18} className="text-emerald-400" /> },
-      { method: 'binance_manual', icon: <Bitcoin    size={18} className="text-yellow-400" /> },
+    const all: { method: AnyPaymentMethod; icon: React.ReactNode; brandBg?: string }[] = [
+      { method: 'nowpayments',    icon: <Bitcoin size={20} className="text-amber-400" /> },
+      { method: 'paypal',         icon: <SiPaypal size={20} className="text-white" />, brandBg: '#003087' },
+      { method: 'pago_movil',     icon: <Smartphone size={20} className="text-emerald-400" /> },
+      { method: 'binance_manual', icon: <SiBinance size={20} className="text-[#12161C]" />, brandBg: '#FCD535' },
     ];
     if (!isVE) return all.filter((m) => m.method !== 'pago_movil');
     return all;
@@ -348,15 +354,17 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
             <>
               <p className="text-xs text-[#909098]">{t('selectMethod')}</p>
               <div className="space-y-2">
-                {METHODS.map(({ method, icon }) => {
+                {METHODS.map((mConfig) => {
+                  const { method, icon, brandBg } = mConfig;
                   const label    = t(`methods.${method}.label`);
                   const subtitle = t(`methods.${method}.subtitle`);
-                  const badge    = method === 'nowpayments' ? t('methods.nowpayments.badge') : undefined;
+                  const badge    = (method === 'nowpayments' || method === 'paypal') ? t(`methods.${method}.badge`) : undefined;
                   return (
                     <MethodCard
                       key={method}
-                      id={`method-${method}`}
+                      id={`btn-${method}`}
                       icon={icon}
+                      brandBg={brandBg}
                       label={label}
                       subtitle={subtitle}
                       badge={badge}
@@ -366,17 +374,102 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
                   );
                 })}
               </div>
-              <Button
-                id="payment-method-continue"
-                className="w-full h-11 font-semibold text-sm"
-                style={{ background: cfg.color }}
-                onClick={flow.handleContinue}
-                disabled={flow.loading}
-              >
-                {flow.loading
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : `${t('continueBtn')} →`}
-              </Button>
+              <div className="pt-2 relative">
+                {/* 
+                  Ocultamos los botones de PayPal usando CSS si no está seleccionado 
+                  para evitar que se recargue el iframe o lo desmontamos si preferimos.
+                  Desmontarlo es más limpio aunque tarde un poco en cargar al hacer click.
+                */}
+                {flow.method === 'paypal' ? (
+                  (!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID === 'test' || process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID === 'sb') ? (
+                    <div className="w-full py-3 flex flex-col items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-xs text-red-400 font-medium text-center px-4">
+                      <span>⚠️ Configura NEXT_PUBLIC_PAYPAL_CLIENT_ID en .env.local</span>
+                      <span className="text-[10px] text-red-400/70 mt-1">El botón no aparecerá hasta usar un ID real.</span>
+                    </div>
+                  ) : (
+                    <div className="w-full px-3 pt-3 pb-1 rounded-xl bg-white/5 border border-white/10">
+                      <PayPalScriptProvider options={{
+                          clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
+                          currency: "USD"
+                        }}>
+                        {(() => {
+                          const createOrder = async () => {
+                            flow.setLoading(true);
+                            flow.setError(null);
+                            const res = await createPayPalOrderAction(plan);
+                            if (res.error || !res.orderId) {
+                              flow.setError(res.error || "Error al iniciar PayPal");
+                              flow.setLoading(false);
+                              throw new Error("No order ID");
+                            }
+                            flow.setLoading(false);
+                            return res.orderId;
+                          };
+                          const onApprove = async (data: { orderID: string }) => {
+                            flow.setLoading(true);
+                            const res = await capturePayPalOrderAction(data.orderID);
+                            flow.setLoading(false);
+                            if (res.error) {
+                              flow.setError(res.error);
+                            } else {
+                              flow.setStep('paypal_success');
+                            }
+                          };
+                          const onError = () => {
+                            flow.setError("Error al comunicarse con PayPal.");
+                            flow.setLoading(false);
+                          };
+                          return (
+                            <div className="flex flex-col gap-4 py-1">
+                              {/* Botón imitando estilo nativo Continuar (Azul) 
+                                  Solución precisa a los puntos blancos: El SDK de PayPal renderiza un fondo blanco 
+                                  detrás de sus botones con border-radius. Como CORS impide inyectar CSS en su iframe, 
+                                  creamos una ventana estricta (wrapper) de 44px con overflow-hidden, y hacemos que el iframe 
+                                  sea 4px más grande usando -inset-[2px] y height: 48. Esto actúa como una guillotina que corta 
+                                  físicamente los 2px exteriores del iframe en todos sus lados, eliminando los bordes blancos. */}
+                              <div className="relative w-full h-[44px] rounded-[4px] overflow-hidden bg-[#0070ba]">
+                                <div className="absolute -inset-[2px]">
+                                  <PayPalButtons
+                                    fundingSource={FUNDING.PAYPAL}
+                                    style={{ layout: "vertical", color: "blue", shape: "rect", label: "paypal", tagline: false, height: 48 }}
+                                    createOrder={createOrder}
+                                    onApprove={onApprove}
+                                    onError={onError}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* Botón imitando estilo nativo (Gris/Negro)
+                                  El wrapper le da un borde blanco para que contraste con el fondo oscuro */}
+                              <div className="flex flex-col rounded-[4px] overflow-hidden border border-white/25 bg-white">
+                                <PayPalButtons
+                                  fundingSource={FUNDING.CARD}
+                                  style={{ layout: "vertical", color: "black", shape: "rect", height: 44 }}
+                                  createOrder={createOrder}
+                                  onApprove={onApprove}
+                                  onError={onError}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </PayPalScriptProvider>
+                    </div>
+                  )
+                ) : (
+                  <Button
+                    id="payment-method-continue"
+                    className="w-full h-11 font-semibold text-sm"
+                    style={{ background: cfg.color }}
+                    onClick={flow.handleContinue}
+                    disabled={flow.loading}
+                  >
+                    {flow.loading
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : `${t('continueBtn')} →`}
+                  </Button>
+                )}
+              </div>
             </>
           )}
 
@@ -453,16 +546,23 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
           )}
 
           {/* ══ STEP 3: Success ════════════════════════════════════════════ */}
-          {flow.step === 'manual_success' && (
+          {(flow.step === 'manual_success' || flow.step === 'paypal_success') && (
             <div className="text-center py-4 space-y-3">
               <div className="text-5xl">✅</div>
-              <p className="text-white font-semibold text-sm">{t('successTitle')}</p>
-              <p className="text-xs text-[#909098] leading-relaxed max-w-[280px] mx-auto">
-                {t('successMsg', { plan: cfg.label })}
+              <p className="text-white font-semibold text-sm">
+                {flow.step === 'paypal_success' ? '¡Pago Exitoso!' : t('successTitle')}
               </p>
-              <p className="text-xs text-[#606068]">{t('successNote')}</p>
+              <p className="text-xs text-[#909098] leading-relaxed max-w-[280px] mx-auto">
+                {flow.step === 'paypal_success'
+                  ? `Tu suscripción al plan ${cfg.label} ha sido activada automáticamente.`
+                  : t('successMsg', { plan: cfg.label })
+                }
+              </p>
+              {flow.step === 'manual_success' && (
+                <p className="text-xs text-[#606068]">{t('successNote')}</p>
+              )}
               <Button
-                id="manual-payment-done"
+                id="payment-done"
                 className="w-full h-11 text-sm font-semibold mt-2"
                 style={{ background: cfg.color }}
                 onClick={onClose}

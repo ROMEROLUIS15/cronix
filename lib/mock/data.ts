@@ -17,6 +17,7 @@ export const mockBusiness: Business = {
   slug: 'agendo-premium',
   category: 'Barbería',
   phone: '+57 300 123 4567',
+  phone_digits: '573001234567',
   address: 'Calle 100 #15-20, Bogotá',
   logo_url: null,
   locale: 'es-CO',
@@ -128,7 +129,9 @@ export const mockClients: Client[] = [
     business_id: BUSINESS_ID,
     name: 'Juan Pérez',
     email: 'juan@example.com',
+    email_norm: 'juan@example.com',
     phone: '+57 321 000 0001',
+    phone_digits: '573210000001',
     avatar_url: null,
     notes: 'Cliente frecuente, prefiere corte bajo.',
     birthday: '1990-05-15',
@@ -145,7 +148,9 @@ export const mockClients: Client[] = [
     business_id: BUSINESS_ID,
     name: 'Andrés García',
     email: 'andres@example.com',
+    email_norm: 'andres@example.com',
     phone: '+57 321 000 0002',
+    phone_digits: '573210000002',
     avatar_url: null,
     notes: null,
     birthday: null,
@@ -270,7 +275,8 @@ export const mockTransactions: Transaction[] = [
     method: 'cash',
     notes: 'Pago en efectivo',
     paid_at: now,
-    created_at: now
+    created_at: now,
+    idempotency_key: null
   }
 ]
 

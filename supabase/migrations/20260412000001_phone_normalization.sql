@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_businesses_phone_digits
 -- BEFORE: 3 sequential full-scans applying fn_clean_phone() on column side
 -- AFTER:  Single index seek on phone_digits + one variant query with leading zero
 
+DROP FUNCTION IF EXISTS public.fn_find_client_by_phone(uuid, text);
 CREATE OR REPLACE FUNCTION public.fn_find_client_by_phone(
     p_business_id uuid,
     p_phone text

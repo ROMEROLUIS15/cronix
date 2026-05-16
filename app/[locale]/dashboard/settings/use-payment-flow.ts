@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { createSaaSCheckoutSession, submitManualPayment } from './actions';
 import type { Plan, AnyPaymentMethod, ManualPaymentMethod } from './payment-config';
 
-export type PaymentStep = 'choose_method' | 'manual_form' | 'manual_success';
+export type PaymentStep = 'choose_method' | 'manual_form' | 'manual_success' | 'paypal_success';
 
 export interface PaymentFlowState {
   step:      PaymentStep;
@@ -31,6 +31,9 @@ export interface PaymentFlowActions {
   handleContinue:       () => Promise<void>;
   handleSubmitManual:   () => Promise<void>;
   goBack:               () => void;
+  setStep:              (step: PaymentStep) => void;
+  setLoading:           (loading: boolean) => void;
+  setError:             (error: string | null) => void;
 }
 
 export function usePaymentFlow(
@@ -99,5 +102,6 @@ export function usePaymentFlow(
     step, method, loading, error, reference,
     setMethod, setReference,
     handleContinue, handleSubmitManual, goBack,
+    setStep, setLoading, setError,
   };
 }

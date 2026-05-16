@@ -27,6 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_reminders_appointment
 -- ── Row Level Security ───────────────────────────────────────────────────────
 ALTER TABLE public.appointment_reminders ENABLE ROW LEVEL SECURITY;
 -- Business staff can read reminders for their own business
+DROP POLICY IF EXISTS "reminders_select_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_select_own_business"
   ON public.appointment_reminders FOR SELECT
   USING (
@@ -35,6 +36,7 @@ CREATE POLICY "reminders_select_own_business"
     )
   );
 -- Business staff can insert reminders for their own business
+DROP POLICY IF EXISTS "reminders_insert_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_insert_own_business"
   ON public.appointment_reminders FOR INSERT
   WITH CHECK (
@@ -43,6 +45,7 @@ CREATE POLICY "reminders_insert_own_business"
     )
   );
 -- Business staff can update (cancel) reminders for their own business
+DROP POLICY IF EXISTS "reminders_update_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_update_own_business"
   ON public.appointment_reminders FOR UPDATE
   USING (
@@ -51,6 +54,7 @@ CREATE POLICY "reminders_update_own_business"
     )
   );
 -- Business staff can delete pending reminders for their own business
+DROP POLICY IF EXISTS "reminders_delete_own_business" ON public.appointment_reminders;
 CREATE POLICY "reminders_delete_own_business"
   ON public.appointment_reminders FOR DELETE
   USING (

@@ -8,7 +8,7 @@
 
 export type Plan = 'pro' | 'enterprise';
 export type ManualPaymentMethod = 'pago_movil' | 'binance_manual';
-export type AnyPaymentMethod = 'nowpayments' | ManualPaymentMethod;
+export type AnyPaymentMethod = 'nowpayments' | 'paypal' | ManualPaymentMethod;
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
 
@@ -56,6 +56,12 @@ export const METHOD_META: Record<AnyPaymentMethod, MethodMeta> = {
     subtitle: 'USDT en red BSC. Se activa solo al confirmar en blockchain (1–3 min).',
     badge:    'Automático',
     color:    'text-amber-400',
+  },
+  paypal: {
+    label:    'PayPal (Automático)',
+    subtitle: 'Paga de forma segura con tu cuenta PayPal o tarjeta de crédito.',
+    badge:    'Automático',
+    color:    'text-blue-500',
   },
   pago_movil: {
     label:    'Pago Móvil (Venezuela)',

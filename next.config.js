@@ -30,8 +30,11 @@ const nextConfig = {
         headers: [
           // 🛡️ HSTS — force HTTPS for 1 year, include subdomains, allow preloading
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-          // 🛡️ COOP — isolate this browsing context group
-          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // 🛡️ COOP — isolate this browsing context group.
+          // `same-origin-allow-popups` permite que la ventana emergente de PayPal
+          // mantenga la referencia `window.opener` para postMessage al checkout.
+          // `same-origin` la cortaría y el flujo de pago se rompería en silencio.
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
           // 🛡️ CORP — restrict cross-origin resource sharing
           { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
           // Prevent MIME-type sniffing attacks
@@ -51,21 +54,23 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://*.supabase.co",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com",
               // ⚠️ 'unsafe-eval' is required for Next.js 14 App Router RSC hydration.
               // Removing it would break the app. Sentry also requires it for error capture.
               // Mitigation: COOP + CORP + X-Frame-Options prevent iframe-based XSS exfiltration.
               // TODO: Revisit when Next.js supports strict CSP with nonces (App Router limitation).
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' blob: data: https://*.supabase.co https://ui-avatars.com",
-              "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://*.sentry.io https://api.axiom.co wss://*.supabase.co",
+              "style-src 'self' 'unsafe-inline' https://*.paypal.com https://*.paypalobjects.com",
+              "img-src 'self' blob: data: https://*.supabase.co https://ui-avatars.com https://*.paypal.com https://*.paypalobjects.com",
+              "font-src 'self' data: https://*.paypal.com https://*.paypalobjects.com",
+              "connect-src 'self' https://*.supabase.co https://*.sentry.io https://api.axiom.co wss://*.supabase.co https://*.paypal.com",
               "worker-src 'self' blob:",
               // data: required for Deepgram TTS — audio is returned as base64 data URL
               "media-src 'self' blob: data:",
+              // PayPal hosted-fields y checkout popup necesitan iframes propios
+              "frame-src 'self' https://*.paypal.com",
               "object-src 'none'",
               "base-uri 'self'",
-              "form-action 'self'",
+              "form-action 'self' https://*.paypal.com",
               "frame-ancestors 'none'",
             ].join('; '),
           },

@@ -921,6 +921,7 @@
         "openBinance": "Binance Pay öffnen",
         "methods": {
           "nowpayments": { "label": "Kryptowährung (Automatisch)", "subtitle": "USDT im BSC-Netzwerk. Automatische Aktivierung nach Blockchain-Bestätigung (1–3 Min.).", "badge": "Automatisch" },
+          "paypal": { "label": "PayPal", "subtitle": "Bezahlen Sie sicher mit Ihrem PayPal-Konto oder Ihrer Kreditkarte.", "badge": "" },
           "pago_movil":     { "label": "Pago Móvil (Venezuela)", "subtitle": "Überweisen Sie in Bs. an die registrierte Nummer. Manuelle Aktivierung innerhalb von 24 Werktagen." },
           "binance_manual": { "label": "Binance Pay (Manuell)", "subtitle": "Senden Sie USDT mit Ihrer Binance Pay ID. Manuelle Aktivierung innerhalb von 24 Werktagen." }
         },

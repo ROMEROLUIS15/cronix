@@ -19,6 +19,7 @@ public/worker-*.js
 
 # Variables de entorno y Secretos (Seguridad CrÃ­tica)
 .env
+supabase_secrets.txt
 supabase/.env
 supabase/.env.test
 supabase/.env.prod_secrets
@@ -77,5 +78,5 @@ docs/architecture/TECHNICAL_DOCUMENTATION_ES.md
 *.tsbuildinfo
 next-env.d.ts
 
-# Auditorías internas
+# Auditorï¿½as internas
 CRONIX_AUDIT_REPORT.md

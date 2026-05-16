@@ -78,8 +78,8 @@ BEGIN
         SELECT 1 FROM public.appointments WHERE end_at <= start_at
     ) THEN
         RAISE WARNING 'Existing appointments violate end_at > start_at — constraint NOT added. Fix data first.';
-    ELSE
-        ALTER TABLE public.appointments
-            ADD CONSTRAINT chk_appointment_time_order CHECK (end_at > start_at);
     END IF;
 END $$;
+ALTER TABLE public.appointments DROP CONSTRAINT IF EXISTS chk_appointment_time_order;
+ALTER TABLE public.appointments
+    ADD CONSTRAINT chk_appointment_time_order CHECK (end_at > start_at);
