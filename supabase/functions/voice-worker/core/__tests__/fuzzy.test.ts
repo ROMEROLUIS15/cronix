@@ -179,6 +179,61 @@ describe('fuzzyFind — phonetic STT variants of the same name', () => {
   })
 })
 
+describe('fuzzyFind — real production DB (RS STUDIO)', () => {
+  // Snapshot of the actual client list reported by the user. Reproduces the
+  // exact "no es posible encontrar a Lizeth" scenario where two
+  // similar-sounding names (Lisset / Lisette) coexist and a third spelling
+  // (Lizeth) is dictated. Phonetic keys: Lisset→"liset", Lisette→"lisete";
+  // a query "Lizeth"→"liset" must lock on Lisset and never silently say
+  // not_found.
+  const RS_STUDIO: { id: string; name: string }[] = [
+    c('1', 'Girling'),
+    c('2', 'Liliana Contreras'),
+    c('3', 'Lisette'),
+    c('4', 'Lisset'),
+    c('5', 'Mayela Cliente'),
+    c('6', 'Paola Pérez Cliente'),
+    c('7', 'Wendy Carolina Dugarte Hu'),
+    c('8', 'Yoselen Alarcon Cliente'),
+  ]
+
+  it('"Lizeth" → Lisset (phonetic-key equality wins over prefix overlap)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Lizeth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisset')
+  })
+  it('"Liceth" → Lisset (orthographic variant of same phonetic key)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Liceth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisset')
+  })
+  it('"Liseth" → Lisset', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Liseth')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisset')
+  })
+  it('"Lisset" → Lisset (literal exact)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Lisset')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisset')
+  })
+  it('"Lisette" → Lisette (literal exact, NOT Lisset)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Lisette')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Lisette')
+  })
+  it('"Liliana" → Liliana Contreras (independent name, not bridged to Lisset)', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Liliana')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Liliana Contreras')
+  })
+  it('"Yoselen" → Yoselen Alarcon Cliente', () => {
+    const out = fuzzyFind(RS_STUDIO, 'Yoselen')
+    expect(out.status).toBe('found')
+    expect(out.match?.name).toBe('Yoselen Alarcon Cliente')
+  })
+})
+
 describe('fuzzyFind — coexistence: similar-sounding but distinct names in the same DB', () => {
   // The realistic LatAm case: a business has BOTH a "Lisbeth" and a
   // "Lizeth"/"Liset"/"Lisset" as separate clients. The matcher must:
