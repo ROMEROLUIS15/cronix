@@ -128,17 +128,21 @@ CONSULTAS:
     }
   }
 
-  // Client roster — the LLM uses this to map STT mishearings back to a real
-  // registered name. CRITICAL: never invoke a tool with a client_name that
-  // isn't on this list verbatim. If the closest match is uncertain, ask the
-  // user to confirm before calling delete_client / smart_schedule / cancel /
-  // reschedule. Names are listed verbatim so phonetic variants
-  // (Lisset / Lizeth / Liset) keep their identity.
+  // Client roster — the LLM uses this as a reference list, NOT a strict
+  // whitelist. The downstream resolver does phonetic + fuzzy matching across
+  // Spanish variants (z↔s, b↔v, h drop, double-letter collapse, prefix
+  // overlap) — names like "Lizeth", "Liceth", "Liseth" all bridge to the
+  // registered "Lisset". The LLM's job is to PASS THROUGH what the user said
+  // and let the resolver do the matching; ONLY when the resolver itself
+  // returns ambiguous or not_found should the agent ask the user to confirm.
   if (input.context.activeClients.length > 0) {
-    p += '\n\nCLIENTES REGISTRADOS (usa SIEMPRE el nombre exacto de esta lista al llamar herramientas):'
+    p += '\n\nCLIENTES REGISTRADOS DEL NEGOCIO (referencia — el resolver fonético admite variantes):'
     const names = input.context.activeClients.map(c => c.name).join(', ')
     p += `\n${names}`
-    p += '\n\nSi lo que escuchaste no coincide con ningún nombre de la lista, repite lo que entendiste al usuario y pídele que confirme — NUNCA llames una herramienta con un nombre inventado.'
+    p += '\n\nINSTRUCCIONES DE NOMBRES DE CLIENTE:'
+    p += '\n- Pasa a las herramientas el nombre TAL COMO LO DIJO el usuario. El resolver fonético del backend bridge-a variantes ortográficas y de pronunciación automáticamente (Lizeth↔Lisset, Liseth↔Lisset, Vázquez↔Bázquez, etc.).'
+    p += '\n- Solo pide confirmación al usuario cuando la HERRAMIENTA devuelva un mensaje del tipo "Hay varios clientes similares: …" o "No estoy seguro a quién te refieres". Entonces lee la lista y deja que el usuario elija.'
+    p += '\n- Si la herramienta devuelve "No encontré al cliente X", revisa la lista de arriba: si hay un nombre claramente parecido al que el usuario dijo, repítelo en voz alta y pídele que confirme antes de volver a llamar la herramienta. Pero por defecto, CONFÍA en el resolver — no rechaces preguntas por tu cuenta solo porque el nombre del usuario no aparece literal en la lista.'
   }
 
   if (input.context.workingHours) {
