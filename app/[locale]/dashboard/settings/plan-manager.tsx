@@ -69,6 +69,22 @@ export function PlanManager({
     return <span>{val}</span>;
   };
 
+  const renderButtonText = (icon: React.ReactNode, text: string) => {
+    // Extraemos solo la acción ("Activar Pro") y omitimos el precio
+    const mainText = text.split(' — ')[0];
+    
+    return (
+      <div className="flex items-center justify-center gap-1">
+        <div className="flex-shrink-0 flex items-center justify-center">
+          {icon}
+        </div>
+        <span className="leading-tight text-center whitespace-nowrap tracking-tight">
+          {mainText}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <>
       <Card style={{ border: '1px solid rgba(0,98,255,0.2)' }}>
@@ -194,19 +210,30 @@ export function PlanManager({
                       ))}
                     </div>
                     {/* CTA buttons inside mobile card */}
+                    {plan.upgradePlan === null && (
+                      <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
+                        <Button
+                          type="button"
+                          className="w-full h-auto min-h-[44px] py-2 text-xs font-semibold pointer-events-none opacity-100"
+                          style={{ background: 'rgba(144,144,152,0.08)', color: '#909098', border: '1px solid rgba(144,144,152,0.2)' }}
+                          tabIndex={-1}
+                        >
+                          {renderButtonText(<Check size={14} />, 'Plan Básico')}
+                        </Button>
+                      </div>
+                    )}
                     {plan.upgradePlan === 'pro' && (
                       <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
                         <Button
                           id="mobile-activate-pro"
-                          className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-11 text-xs font-semibold"
+                          className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-auto min-h-[44px] py-2 text-xs font-semibold"
                           onClick={() => openPayment('pro')}
                           disabled={currentPlan === 'pro' || currentPlan === 'enterprise'}
                         >
-                          {currentPlan === 'pro' ? (
-                            <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
-                          ) : (
-                            <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
-                          )}
+                          {currentPlan === 'pro' 
+                            ? renderButtonText(<Zap size={14} />, t('proActive'))
+                            : renderButtonText(<Zap size={14} />, t('activatePro'))
+                          }
                         </Button>
                       </div>
                     )}
@@ -214,16 +241,15 @@ export function PlanManager({
                       <div className="p-4 pt-2 border-t border-[#2E2E33]/50">
                         <Button
                           id="mobile-activate-enterprise"
-                          className="w-full h-11 text-xs font-semibold"
+                          className="w-full h-auto min-h-[44px] py-2 text-xs font-semibold"
                           style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
                           onClick={() => openPayment('enterprise')}
                           disabled={currentPlan === 'enterprise'}
                         >
-                          {currentPlan === 'enterprise' ? (
-                            <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
-                          ) : (
-                            <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
-                          )}
+                          {currentPlan === 'enterprise' 
+                            ? renderButtonText(<Crown size={14} />, t('enterpriseActive'))
+                            : renderButtonText(<Crown size={14} />, t('activateEnterprise'))
+                          }
                         </Button>
                       </div>
                     )}
@@ -232,14 +258,14 @@ export function PlanManager({
               </div>
 
               {/* ── Desktop: comparison table ── */}
-              <div className="hidden sm:block overflow-x-auto rounded-xl border border-[#2E2E33]">
-                <table className="w-full text-sm min-w-[420px]">
+              <div className="hidden sm:block overflow-hidden rounded-xl border border-[#2E2E33]">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="bg-[#16161A] text-xs font-semibold uppercase tracking-wider">
-                      <th className="p-3 text-left text-[#909098]">{t('tableFeature')}</th>
-                      <th className="p-3 text-center text-[#909098]">Free</th>
-                      <th className="p-3 text-center text-[#0062FF]">Pro</th>
-                      <th className="p-3 text-center text-[#A855F7]">Enterprise</th>
+                      <th className="p-3 text-left text-[#909098] w-[25%]">{t('tableFeature')}</th>
+                      <th className="p-3 text-center text-[#909098] w-[25%]">Free</th>
+                      <th className="p-3 text-center text-[#0062FF] w-[25%]">Pro</th>
+                      <th className="p-3 text-center text-[#A855F7] w-[25%]">Enterprise</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -262,34 +288,41 @@ export function PlanManager({
                     </tr>
                     <tr className="border-t border-[#2E2E33] bg-[#16161A]">
                       <td className="p-3"></td>
-                      <td className="p-3 text-center"></td>
-                      <td className="p-3 text-center">
+                      <td className="p-3 text-center h-1">
+                        <Button
+                          type="button"
+                          className="w-full h-full min-h-[44px] text-xs font-semibold pointer-events-none opacity-100 px-1"
+                          style={{ background: 'rgba(144,144,152,0.08)', color: '#909098', border: '1px solid rgba(144,144,152,0.2)' }}
+                          tabIndex={-1}
+                        >
+                          {renderButtonText(<Check size={14} />, 'Plan Básico')}
+                        </Button>
+                      </td>
+                      <td className="p-3 text-center h-1">
                         <Button
                           id="desktop-activate-pro"
-                          className="w-full bg-[#0062FF] hover:bg-[#0050CC] text-white h-10 text-xs font-semibold"
+                          className="w-full h-full min-h-[44px] bg-[#0062FF] hover:bg-[#0050CC] text-white text-xs font-semibold px-1"
                           onClick={() => openPayment('pro')}
                           disabled={currentPlan === 'pro' || currentPlan === 'enterprise'}
                         >
-                          {currentPlan === 'pro' ? (
-                            <><Zap size={14} className="mr-1.5" />{t('proActive')}</>
-                          ) : (
-                            <><Zap size={14} className="mr-1.5" />{t('activatePro')}</>
-                          )}
+                          {currentPlan === 'pro' 
+                            ? renderButtonText(<Zap size={14} />, t('proActive'))
+                            : renderButtonText(<Zap size={14} />, t('activatePro'))
+                          }
                         </Button>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="p-3 text-center h-1">
                         <Button
                           id="desktop-activate-enterprise"
-                          className="w-full h-10 text-xs font-semibold"
+                          className="w-full h-full min-h-[44px] text-xs font-semibold px-1"
                           style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
                           onClick={() => openPayment('enterprise')}
                           disabled={currentPlan === 'enterprise'}
                         >
-                          {currentPlan === 'enterprise' ? (
-                            <><Crown size={14} className="mr-1.5" />{t('enterpriseActive')}</>
-                          ) : (
-                            <><Crown size={14} className="mr-1.5" />{t('activateEnterprise')}</>
-                          )}
+                          {currentPlan === 'enterprise' 
+                            ? renderButtonText(<Crown size={14} />, t('enterpriseActive'))
+                            : renderButtonText(<Crown size={14} />, t('activateEnterprise'))
+                          }
                         </Button>
                       </td>
                     </tr>
