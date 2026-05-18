@@ -11,6 +11,7 @@ export type IntentName =
   | 'reschedule_appointment'
   | 'check_availability'
   | 'list_appointments'
+  | 'pricing_inquiry'
   | 'greeting'
   | 'affirmation'
   | 'negation'

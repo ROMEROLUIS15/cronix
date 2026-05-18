@@ -56,6 +56,20 @@ export const INTENT_DEFINITIONS: ReadonlyArray<IntentDefinition> = [
       { text: 'cuándo tienen libre esta semana' },
       { text: 'hay espacio para mañana' },
       { text: 'a qué hora pueden atenderme' },
+      { text: 'hay turno hoy' },
+      { text: 'tienes hueco esta tarde' },
+      { text: 'k tal hay disponibilidad' },
+    ],
+  },
+  {
+    name:        'pricing_inquiry',
+    description: 'Cliente pregunta por el precio de un servicio.',
+    examples: [
+      { text: 'cuánto cuesta' },
+      { text: 'cuál es el precio' },
+      { text: 'qué precio tiene' },
+      { text: 'cuánto vale la manicura' },
+      { text: 'cuánto sale' },
     ],
   },
   {
