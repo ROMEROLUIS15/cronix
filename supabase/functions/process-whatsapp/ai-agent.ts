@@ -39,9 +39,12 @@ import { BOOKING_TOOLS, executeToolCall }                         from "./tool-e
 import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
 import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
+import { createTracer, shortHash } from "../_shared/observability/index.ts"
+import type { TraceOutcome, ToolStepStatus } from "../_shared/observability/contracts.ts"
 
 // Single instance per cold start. Stateless — safe to share across requests.
 const memoryEngine = createMemoryEngine()
+const tracer       = createTracer()
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -159,6 +162,13 @@ export async function runAgentLoop(
 
   addBreadcrumb('Memory recall completed', 'memory', 'info', { hits: recalled.length })
 
+  // ── Open the per-turn trace (closed in the finally block below) ───────────
+  const trace = tracer.start(
+    { businessId: business.id, channel: 'whatsapp', actorKind: 'client_phone', actorKey: sender },
+    await shortHash(userText),
+    { memory_hits: recalled.length },
+  )
+
   // Build initial messages array
   const messages: AgentMessage[] = [
     { role: 'system', content: buildMinimalSystemPrompt(context, customerName, recalled) },
@@ -197,6 +207,7 @@ export async function runAgentLoop(
       business: business.name,
     })
 
+    const llmStart = Date.now()
     const { response, tokens } = await callLlm(
       SMALL_MODEL,
       messages,
@@ -208,6 +219,12 @@ export async function runAgentLoop(
     totalTokens += tokens
 
     const assistantMsg = response.choices?.[0]?.message
+    trace.recordLlmStep({
+      model:        SMALL_MODEL,
+      latencyMs:    Date.now() - llmStart,
+      tokens,
+      hadToolCalls: Boolean(assistantMsg?.tool_calls?.length),
+    })
     if (!assistantMsg) break
 
     // ── Embedded function recovery ─────────────────────────────────────────
@@ -290,13 +307,27 @@ export async function runAgentLoop(
 
       const parsedResult = (() => { try { return JSON.parse(toolResult) } catch { return toolResult } })()
 
+      const toolSuccess = parsedResult?.success !== false
       toolCallsTrace.push({
         step,
         tool:        toolCall.function.name,
         args:        (() => { try { return JSON.parse(toolCall.function.arguments) } catch { return toolCall.function.arguments } })(),
         result:      parsedResult,
         duration_ms: Date.now() - stepStart,
-        success:     parsedResult?.success !== false,
+        success:     toolSuccess,
+      })
+
+      const toolStatus: ToolStepStatus =
+        toolSuccess ? 'success'
+        : String(parsedResult?.error ?? '').includes('RATE_LIMIT') ? 'rate_limited'
+        : 'error'
+
+      trace.recordToolCall({
+        tool:            toolCall.function.name,
+        durationMs:      Date.now() - stepStart,
+        status:          toolStatus,
+        argsFingerprint: await shortHash(toolCall.function.arguments),
+        errorCode:       toolSuccess ? undefined : String(parsedResult?.error ?? 'UNKNOWN').slice(0, 64),
       })
 
       messages.push({
@@ -403,6 +434,25 @@ export async function runAgentLoop(
       : null
     finalText = deterministic ?? INTERNAL_SYNTAX_FALLBACK
   }
+
+  // ── Close the trace (awaited — Edge runtime may terminate after return) ───
+  const lastFailedError = lastToolParsed?.success === false
+    ? String(lastToolParsed?.error ?? '')
+    : ''
+  const outcome: TraceOutcome = (() => {
+    if (loopExhausted)                                          return 'error'
+    if (actionPerformed && lastToolParsed?.success === true)    return 'success'
+    if (lastFailedError.includes('RATE_LIMIT'))                 return 'rate_limited'
+    if (actionPerformed && lastToolParsed?.success === false)   return 'failure'
+    if (!actionPerformed && !loopText)                          return 'no_action'
+    return 'success'
+  })()
+
+  await trace.finish({
+    outcome,
+    errorCode:    lastFailedError ? lastFailedError.slice(0, 64) : undefined,
+    finalTextSha: await shortHash(finalText),
+  })
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }
 }
