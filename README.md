@@ -2,14 +2,15 @@
 
 # Cronix
 
-**Plataforma SaaS de agendamiento inteligente para negocios de servicios**
+**Plataforma SaaS de agendamiento inteligente para negocios de servicios — con WhatsApp + voz, pagos integrados y dashboard tiempo real**
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
-[![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-green?logo=supabase)](https://supabase.com)
-[![Groq](https://img.shields.io/badge/Groq-Llama%203.3%2070B-orange)](https://groq.com)
-[![Deepgram](https://img.shields.io/badge/Deepgram-Nova--2%20%2B%20Aura--2-blue)](https://deepgram.com)
+[![React](https://img.shields.io/badge/React-19-149eca?logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://typescriptlang.org)
-[![Tests](https://img.shields.io/badge/Tests-1276%20passed-green)](./TESTING.md)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Edge-green?logo=supabase)](https://supabase.com)
+[![Vercel](https://img.shields.io/badge/Vercel-Production-black?logo=vercel)](https://vercel.com)
+[![PayPal](https://img.shields.io/badge/PayPal-Integrated-0070ba?logo=paypal)](./PAYPAL_INTEGRATION_GUIDE.md)
+[![Tests](https://img.shields.io/badge/Tests-1338%20passed-green)](./TESTING.md)
 
 </div>
 
@@ -17,313 +18,450 @@
 
 ## ¿Qué es Cronix?
 
-Cronix permite a negocios de servicios (peluquerías, clínicas, estudios, spas) recibir reservas 24/7 a través de **WhatsApp**, con un agente de IA que entiende lenguaje natural, gestiona conflictos de horario y envía confirmaciones automáticas.
+Cronix es una plataforma SaaS para negocios de servicios (peluquerías, barberías, clínicas, estudios, spas) que combina:
 
-La plataforma incluye un **dashboard web** con su propio asistente de voz para que el dueño gestione agenda, clientes y finanzas desde el navegador.
-
----
-
-## Arquitectura
-
-```
-                    ┌────────────────────────────────────────────┐
-                    │                CHANNELS                    │
-                    │                                            │
-   Owner (voz) ─────► voice-worker Edge Function (Deno)          │
-                    │   capability registry + LLM fallback       │
-                    │                                            │
-   Cliente (WA) ────► process-whatsapp Edge Function (Deno)      │
-                    │   → BookingEngine (lib/ai/core)            │
-                    └─────────────────────┬──────────────────────┘
-                                          │
-                                          ▼
-                    ┌────────────────────────────────────────────┐
-                    │   TenantEnforcer / business-router         │
-                    │   (Supabase service role + RLS)            │
-                    └─────────────────────┬──────────────────────┘
-                                          │
-                                          ▼
-                    ┌────────────────────────────────────────────┐
-                    │              Repositories                  │
-                    │   Supabase (PostgreSQL + RLS)              │
-                    │   + Upstash Redis (sesión + cache)         │
-                    └────────────────────────────────────────────┘
-```
-
-**Principio clave**: cada canal owna su agente, pero ambos comparten contratos (`ToolResult`, schemas Zod en WhatsApp, `ICapability` en voz). La lógica de negocio nunca se duplica entre lecturas y escrituras de un mismo canal.
+- **Agendamiento inteligente por WhatsApp** — un agente de IA recibe reservas 24/7, entiende lenguaje natural, gestiona conflictos de horario y envía confirmaciones.
+- **Dashboard web con asistente de voz** — el dueño gestiona agenda, clientes y finanzas desde el navegador, hablándole al sistema.
+- **Pagos integrados (PayPal + cripto + manuales)** — los negocios pagan su suscripción Pro/Enterprise con tarjeta, PayPal o transferencia, y reciben confirmación instantánea con red de seguridad anti-fallos.
+- **Sistema de referidos** — los negocios ganan meses gratis invitando a otros.
+- **Aislamiento multi-tenant en 4 capas** — Phantom types + TenantEnforcer + repositorios filtrados + RLS de Postgres.
 
 ---
 
-## Flujo de Ejecución (Voz del Dashboard — End-to-End)
-
-```
-1. Input del usuario (voz multipart o texto JSON)  →  POST /functions/v1/voice-worker
-2. JWT verify + rate limit (Upstash, 30/min)
-3. STT: Groq Whisper (sólo si llega audio)
-4. Carga paralela:  business context  +  sesión Redis (history + lastRef)
-5. agent.ts:
-   ├── FAST PATH         registry.detectFastPath() → ejecuta capability sin LLM
-   └── LLM PATH          provider.chat() → tool_calls
-                         ├── Date guard (override "hoy" / "mañana" / "pasado mañana")
-                         ├── Dedup fingerprint (tool + args canónicos)
-                         ├── Capability.execute(ctx, args)
-                         └── Bypass-LLM: si la tool produce prosa, se devuelve tal cual
-6. saveSession() + dispatchBellNotification() en paralelo
-7. TTS: Deepgram → data:audio/mp3;base64
-8. Respuesta JSON { text, audioUrl, actionPerformed, transcription, modelUsed }
-```
-
----
-
-## Stack Tecnológico
+## Stack tecnológico
 
 | Capa | Tecnología | Propósito |
 |------|-----------|-----------|
-| Frontend | Next.js 15 + React 19 | Dashboard web |
-| API | Next.js API Routes | Endpoints REST |
-| AI LLM | Groq `llama-3.3-70b-versatile` (+ `llama-3.1-8b-instant` fallback) · Gemini `2.0-flash` opcional | Razonamiento + tool calls |
+| Framework | Next.js 15 (App Router) + React 19 + Turbopack | Frontend + API Routes + Server Actions |
+| Lenguaje | TypeScript 5 (strict) | Tipado estricto, sin `any` en producción |
+| UI | Tailwind CSS 3 · Framer Motion · lucide-react · shadcn-style components | Estilos + animaciones + iconografía |
+| State | TanStack Query 5 · React Hook Form · Zod | Server-state, formularios, validación |
+| i18n | next-intl 4 | 6 idiomas: es, en, fr, de, it, pt |
+| DB | Supabase (PostgreSQL 15 + RLS) | Datos + autenticación + realtime |
+| Cache & Sesión | Upstash Redis | Sesión conversacional + rate limit |
+| Edge runtime | Supabase Edge Functions (Deno) | voice-worker, process-whatsapp, cron-reminders, push-notify, embed-text |
+| Async queue | QStash (Upstash) | Webhooks NOWPayments + tareas diferidas |
+| Auth | Supabase Auth + WebAuthn (Passkeys) | Multi-factor opcional |
+| AI LLM | Groq `llama-3.3-70b-versatile` + `llama-3.1-8b-instant` fallback · Gemini `2.0-flash` opcional | Razonamiento + tool-calling |
 | AI STT | Deepgram Nova-2 (`language=es`) | Voz → texto |
 | AI TTS | Deepgram Aura-2 (`aura-2-nestor-es`) | Texto → voz |
-| DB | Supabase (PostgreSQL + RLS) | Datos + autenticación |
-| Cache | Upstash Redis | Estado conversacional + cache |
-| Edge | Supabase Edge Functions (Deno) | voice-worker · process-whatsapp · whatsapp-webhook · whatsapp-service · cron-reminders · push-notify · embed-text |
-| Queue | QStash (Upstash) | Cola async para webhooks |
-| Auth | Supabase Auth + Passkeys | Autenticación multifactor |
-| Monitoreo | Sentry + Axiom | Errores + logs estructurados |
-| Deploy | Vercel | Frontend + API |
+| Pagos PayPal | `@paypal/react-paypal-js` + REST API + Webhooks | Tarjeta/PayPal — ver [PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md) |
+| Pagos cripto | NOWPayments API + webhooks vía QStash | USDT (BSC) sin custodia |
+| Pagos manuales | Pago Móvil (Venezuela) · Binance Pay | Verificación admin |
+| PWA | `@ducanh2912/next-pwa` (custom service worker) | App instalable + offline |
+| Push notifications | Web Push + VAPID | Notificaciones nativas browser/PWA |
+| Observabilidad | Sentry · Axiom · Vercel Logs | Errores + métricas + logs estructurados |
+| Testing | Vitest · React Testing Library · Playwright · MSW | Unit + integration + E2E |
+| Quality gates | ESLint · Husky · lint-staged · pre-push hook | Pre-commit + pre-push automatizados |
+| Deploy | Vercel (frontend + API) · Supabase (DB + edge) | Production |
 
 ---
 
-## Árbol del Proyecto
+## Arquitectura de alto nivel
+
+```
+                    ┌─────────────────────────────────────────────────┐
+                    │                CHANNELS                         │
+                    │                                                 │
+   Owner (voz) ─────► voice-worker Edge Function (Deno)               │
+                    │   capability registry + LLM fallback            │
+                    │                                                 │
+   Cliente (WA) ────► process-whatsapp Edge Function (Deno)           │
+                    │   → BookingEngine (lib/ai/core)                 │
+                    │                                                 │
+   Cliente (web) ───► Next.js Dashboard (Server Components + RSC)     │
+                    └─────────────────────┬───────────────────────────┘
+                                          │
+                                          ▼
+                    ┌─────────────────────────────────────────────────┐
+                    │   TenantEnforcer / business-router              │
+                    │   (Supabase service role + RLS verification)    │
+                    └─────────────────────┬───────────────────────────┘
+                                          │
+                                          ▼
+                    ┌─────────────────────────────────────────────────┐
+                    │              Repositories                       │
+                    │   Supabase (PostgreSQL + RLS)                   │
+                    │   + Upstash Redis (sesión + cache)              │
+                    └─────────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────────────────────────┐
+                    │              PAYMENTS                           │
+                    │                                                 │
+   PayPal popup ────► /api/webhooks/paypal (async safety net)         │
+                    │   → fn_finalize_paypal_payment (RPC atómica)    │
+                    │                                                 │
+   NOWPayments ─────► /api/webhooks/nowpayments → QStash → /api/queue │
+                    │                                                 │
+   Manual review ───► /dashboard/admin/payments (platform_admin only) │
+                    └─────────────────────────────────────────────────┘
+```
+
+**Principios clave:**
+
+- **Cada canal owna su agente, pero comparten contratos** (`ToolResult`, schemas Zod en WhatsApp, `ICapability` en voz).
+- **La lógica de negocio nunca se duplica** entre lecturas y escrituras del mismo canal.
+- **Los pagos tienen doble vía de fulfillment** (frontend + webhook async) con idempotencia garantizada en Postgres.
+
+---
+
+## Módulos Core
+
+### 🤖 Agente WhatsApp (`process-whatsapp`)
+
+Recibe webhook de Meta → verifica HMAC → enruta al business correcto → ejecuta `BookingEngine` (Zod + UseCases + RLS) → responde por API de WhatsApp Cloud.
+
+- Documentación: [`docs/WHATSAPP_AI_ARCHITECTURE.md`](./docs/WHATSAPP_AI_ARCHITECTURE.md)
+- Código: `supabase/functions/process-whatsapp/`, `lib/ai/core/`
+- Tests: `__tests__/ai/`, `lib/ai/core/__tests__/`
+
+### 🎙️ Asistente de voz dashboard (`voice-worker`)
+
+Edge Function Deno con capability registry, fast-paths anafóricos ("reagéndala", "cancélala") y fallback LLM. STT/TTS via Deepgram.
+
+- Documentación: [`AI_FLOWS.md`](./AI_FLOWS.md)
+- Código: `supabase/functions/voice-worker/`
+- Tests: `supabase/functions/voice-worker/**/__tests__/`
+
+### 💳 Sistema de pagos
+
+Tres pasarelas convergiendo a una misma tabla `saas_invoices` con estados unificados (`waiting → confirming → finished | failed | expired`).
+
+| Pasarela | Webhook | Idempotencia | Doc |
+|---|---|---|---|
+| **PayPal** | `/api/webhooks/paypal` (firma verificada) | RPC `fn_finalize_paypal_payment` con `FOR UPDATE` | **[PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md)** |
+| **NOWPayments** (cripto) | `/api/webhooks/nowpayments` → QStash → `/api/queue/process-saas-payment` | Status-based `toInvoiceStatus()` | `app/api/queue/process-saas-payment/route.ts` |
+| **Pago Móvil / Binance** | No aplica (manual) | Verificación admin en `/dashboard/admin/payments` | `app/[locale]/dashboard/admin/payments/` |
+
+- Helper compartido: `lib/payments/subscription-fulfillment.ts` (lógica aditiva de fechas, applyReferralBonus).
+- Documentación general: [`docs/architecture/PAYMENTS_AND_PLANS.md`](./docs/architecture/PAYMENTS_AND_PLANS.md)
+- **Documentación PayPal completa: [`PAYPAL_INTEGRATION_GUIDE.md`](./PAYPAL_INTEGRATION_GUIDE.md)** — arquitectura, config, suite de pruebas y runbook.
+
+### 🎁 Programa de referidos
+
+Cada business genera un código único. Cuando un referido completa su primer pago, el referidor recibe 30 días gratis automáticamente (`applyReferralBonus`).
+
+- Código: `lib/referrals/rewards.ts`, `app/[locale]/dashboard/plans/`
+- Tests: `__tests__/components/referral-client.test.tsx`
+
+### 🔔 Notificaciones in-app
+
+Tabla `notifications` con CHECK constraint en `type IN ('info','success','warning','error')`. Bell con badge realtime via Supabase subscriptions.
+
+- Hook: `lib/hooks/use-in-app-notifications.ts`
+- Tabla: migración `20260403233000_in_app_notifications.sql`
+
+### 🛡️ Seguridad multi-tenant
+
+Cuatro capas independientes — ver sección [Seguridad](#seguridad-multi-tenant) abajo.
+
+---
+
+## Estructura del proyecto
 
 ```
 cronix/
 ├── app/
 │   ├── api/
-│   │   ├── assistant/
-│   │   │   ├── token/            # JWT corto para llamar voice-worker
-│   │   │   ├── proactive/        # Mensajes proactivos del FAB
-│   │   │   └── tts/              # TTS server-side helper
-│   │   ├── webhooks/nowpayments/ # Webhook de pagos cripto
-│   │   ├── queue/                # Workers QStash (process-saas-payment)
-│   │   ├── cron/                 # Cron handlers (check-subscriptions)
-│   │   ├── passkey/              # Autenticación con passkeys
-│   │   ├── admin/                # Endpoints administrativos
-│   │   ├── activity/             # Feed de actividad
-│   │   └── health/               # Health check
-│   ├── auth/callback/            # OAuth + email confirmation handler
-│   └── [locale]/                 # Páginas del dashboard (i18n)
-│       ├── invite/[code]/        # Landing pública de invitación referidos
-│       ├── register/             # Registro — captura ?ref= y pasa referred_by_id
+│   │   ├── webhooks/
+│   │   │   ├── paypal/route.ts          # ← Webhook PayPal con firma verificada
+│   │   │   └── nowpayments/route.ts     # ← Webhook cripto
+│   │   ├── queue/process-saas-payment/  # ← Worker QStash (cripto)
+│   │   ├── cron/check-subscriptions/    # ← Vencimientos
+│   │   ├── assistant/                   # ← Voice-worker proxy
+│   │   ├── passkey/                     # ← WebAuthn
+│   │   ├── admin/                       # ← Endpoints admin
+│   │   └── health/
+│   ├── auth/callback/                   # ← OAuth + email confirmation
+│   └── [locale]/
+│       ├── invite/[code]/               # ← Landing pública referidos
+│       ├── register/                    # ← Captura ?ref=
 │       ├── login/
-│       ├── forgot-password/
 │       └── dashboard/
-│           ├── plans/            # Plan actual + programa de referidos (unificado)
-│           ├── referrals/        # Redirect → /dashboard/plans
+│           ├── plans/                   # ← Plan actual + referidos
+│           ├── settings/
+│           │   ├── payment-method-modal.tsx  # ← UI botones PayPal
+│           │   └── actions.ts                # ← Server actions PayPal/cripto
+│           ├── admin/payments/          # ← Approve/reject manual payments
 │           ├── appointments/
 │           ├── clients/
 │           ├── finances/
-│           ├── settings/
 │           └── profile/
 │
 ├── lib/
+│   ├── payments/
+│   │   ├── paypal.ts                       # ← SDK adapter + verifyWebhookSignature
+│   │   ├── subscription-fulfillment.ts     # ← Helper compartido (paypal + cripto)
+│   │   ├── nowpayments.ts                  # ← Cripto SDK
+│   │   └── bcv-rate.ts                     # ← Tasa BCV para Pago Móvil
+│   │
 │   ├── ai/
-│   │   ├── core/                 # ← NÚCLEO compartido (WhatsApp)
-│   │   │   ├── booking/
-│   │   │   │   ├── BookingEngine.ts    # Único source of truth para WA
-│   │   │   │   ├── ClientResolver.ts   # Fuzzy name → UUID
-│   │   │   │   └── ServiceResolver.ts  # 4-strategy service match
-│   │   │   ├── contracts/
-│   │   │   │   ├── tool-result.ts      # ToolResult<T> unificado
-│   │   │   │   └── tool-schemas.ts     # Zod schemas (fuente única)
-│   │   │   ├── security/
-│   │   │   │   └── TenantEnforcer.ts   # Phantom type + DB verify
-│   │   │   ├── utils/
-│   │   │   │   └── timezone.ts         # localToUTC canónico
-│   │   │   └── __tests__/              # Unit + adversarial tests
-│   │   │
-│   │   ├── tools/                # Tool definitions consumidas por WA
-│   │   ├── providers/            # Deepgram, Groq (elevenlabs-provider.ts: legacy, no importado)
-│   │   ├── circuit-breaker.ts    # Resiliencia LLM
-│   │   ├── fuzzy-match.ts        # Levenshtein puro (no deps)
-│   │   └── with-tenant-guard.ts
+│   │   ├── core/                        # ← Núcleo compartido (WhatsApp)
+│   │   │   ├── booking/BookingEngine.ts
+│   │   │   ├── contracts/{tool-result, tool-schemas}.ts
+│   │   │   ├── security/TenantEnforcer.ts
+│   │   │   └── utils/timezone.ts
+│   │   ├── tools/                       # ← Tool definitions WhatsApp
+│   │   └── providers/                   # ← Groq, Deepgram
 │   │
-│   ├── repositories/             # ← DATA LAYER
-│   │   ├── SupabaseAppointmentRepository.ts
-│   │   ├── SupabaseClientRepository.ts
-│   │   ├── SupabaseServiceRepository.ts
-│   │   ├── SupabaseFinanceRepository.ts
-│   │   ├── SupabaseUserRepository.ts
-│   │   ├── SupabaseBusinessRepository.ts  # +getByReferralCode()
-│   │   ├── SupabaseNotificationRepository.ts
-│   │   ├── SupabaseReminderRepository.ts
-│   │   └── __tests__/
-│   │
+│   ├── repositories/                    # ← Data layer (DIP)
 │   ├── domain/
-│   │   ├── use-cases/            # Business logic (channel-free)
-│   │   ├── repositories/         # Interfaces (contratos)
-│   │   │   └── IBusinessRepository.ts  # +getByReferralCode(), +referred_by_id en create()
+│   │   ├── use-cases/                   # ← Business logic (channel-free)
+│   │   ├── repositories/                # ← Interfaces (contratos)
 │   │   └── errors/
-│   │
-│   ├── referrals/
-│   │   └── rewards.ts            # getReferralRewardInfo() — lógica pura
-│   │
-│   └── cache.ts                  # Redis abstraction
+│   ├── referrals/rewards.ts
+│   ├── plans/plan-limits.ts
+│   └── supabase/                        # ← Clients (server, client, middleware, admin)
 │
 ├── supabase/
-│   └── functions/
-│       ├── voice-worker/                 # ← Asistente de voz del dashboard (Deno)
-│       │   ├── index.ts                  # HTTP handler + corpus + sesión
-│       │   ├── agent.ts                  # Loop fast-path → LLM → bypass synthesis
-│       │   ├── prompt.ts                 # System prompt + constraints negativos
-│       │   ├── stt.ts / tts.ts           # Groq Whisper · Deepgram TTS
-│       │   ├── redis.ts                  # Rate-limit + sesión Upstash
-│       │   ├── notifications.ts          # Bell notifications (post-write)
-│       │   ├── core/
-│       │   │   ├── session.ts            # Cascade Redis → client-history → []
-│       │   │   ├── tool-context.ts       # ToolContext compartido por capabilities
-│       │   │   ├── fuzzy.ts              # Match difuso (clientes/servicios)
-│       │   │   ├── time-format.ts        # Hora local en español
-│       │   │   ├── time-parser.ts        # Parser determinista de horas
-│       │   │   ├── date-parser.ts        # Parser determinista de fechas ES
-│       │   │   ├── repos/                # Acceso a appointments/clients/services
-│       │   │   └── __tests__/            # Fuzzy + time + date specs
-│       │   ├── providers/                # ILLMProvider · Groq · Gemini · registry
-│       │   └── capabilities/             # ← UN intent por carpeta
-│       │       ├── _shared/
-│       │       │   ├── Capability.ts     # Contrato ICapability + FastPathInput
-│       │       │   ├── registry.ts       # detectFastPath + executeByName
-│       │       │   └── __tests__/
-│       │       ├── schedule/             # smart_schedule (write)
-│       │       ├── reschedule/           # reschedule_booking (write, anafórico)
-│       │       ├── cancel/               # cancel_booking (write, anafórico)
-│       │       ├── list-appointments/    # get_appointments_by_date (read)
-│       │       ├── available-slots/     # get_available_slots (read)
-│       │       ├── search-clients/       # search_clients (read)
-│       │       ├── last-visit/           # get_last_visit (read)
-│       │       ├── get-services/         # list_services (read)
-│       │       ├── create-client/        # create_client (write)
-│       │       └── delete-client/        # delete_client (write con consent)
-│       │
-│       ├── process-whatsapp/             # WhatsApp AI agent (Deno + BookingEngine)
-│       ├── whatsapp-webhook/             # Webhook Meta + HMAC
-│       ├── whatsapp-service/             # Outbound send
-│       ├── cron-reminders/               # Recordatorios automáticos
-│       ├── push-notify/                  # Web Push fan-out
-│       ├── embed-text/                   # Embeddings auxiliares
-│       └── _shared/                      # booking-adapter, helpers
+│   ├── functions/
+│   │   ├── voice-worker/                # ← Asistente voz dashboard (Deno)
+│   │   ├── process-whatsapp/            # ← Agente WhatsApp (Deno)
+│   │   ├── whatsapp-webhook/            # ← Meta webhook
+│   │   ├── whatsapp-service/            # ← Outbound
+│   │   ├── cron-reminders/
+│   │   ├── push-notify/
+│   │   └── embed-text/
+│   └── migrations/
+│       ├── 20260516130000_paypal_finalize_rpc.sql  # ← RPC atómica PayPal
+│       ├── 20260504100000_referral_system.sql
+│       ├── 20260430120000_saas_invoices.sql
+│       └── ... (60+ migraciones versionadas)
 │
-├── __tests__/
+├── tests/
+│   ├── e2e/                             # ← Playwright (smoke, payment-flow, voice)
+│   └── integration/                     # ← Vitest integration (repos contra DB real)
+│
+├── __tests__/                           # ← Vitest unit tests (1338 tests)
+│   ├── domain/use-cases/
 │   ├── components/
-│   │   └── referral-client.test.tsx   # 32 tests — link /invite/[code]
-│   ├── domain/
-│   ├── unit/
-│   ├── rate-limit/
-│   └── edge-functions/
+│   ├── ai/
+│   ├── validations/
+│   └── unit/
 │
-├── ARCHITECTURE.md               # Referencia técnica completa
-├── AI_FLOWS.md                   # Flujos del sistema de IA
-├── TESTING.md                    # Guía de testing
-└── CHANGELOG.md
+├── messages/                            # ← i18n (es, en, fr, de, it, pt)
+├── docs/
+│   ├── architecture/
+│   │   ├── PAYMENTS_AND_PLANS.md
+│   │   ├── AI_MASTER_GUIDE.md
+│   │   ├── FRONTEND_ARCHITECTURE_AND_STATE.md
+│   │   └── ANTI_HALLUCINATION_PATTERNS.md
+│   ├── operations/
+│   └── security/
+│
+├── PAYPAL_INTEGRATION_GUIDE.md          # ← Manual completo de PayPal
+├── ARCHITECTURE.md                      # ← Referencia técnica completa
+├── AI_FLOWS.md                          # ← Flujos del sistema de IA
+├── TESTING.md                           # ← Guía de testing
+├── CHANGELOG.md
+└── README.md                            # ← Este archivo
 ```
 
 ---
 
-## Cómo Correr el Proyecto
+## Instalación y levantamiento local
 
 ### Requisitos
 
-- Node.js 20+
-- pnpm o npm
-- Cuenta Supabase
-- Cuenta Upstash Redis
+- **Node.js 20+** (LTS recomendado)
+- **npm** (o pnpm/yarn compatible)
+- **Docker Desktop** — necesario para Supabase local (`npx supabase start`)
+- **Cuenta Supabase** (para enlazar el proyecto remoto)
+- **Cuenta Upstash Redis** (sesión conversacional, rate limit)
+- **Cuenta Groq** (LLM principal) — opcional Gemini como fallback
+- **Cuenta Deepgram** (STT + TTS para voz)
+- **Cuenta PayPal Developer** (Sandbox al menos) — ver [PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md)
 
-### Instalación
+### Pasos
 
 ```bash
-git clone <repo>
+git clone https://github.com/ROMEROLUIS15/cronix.git
 cd cronix
 npm install
-cp .env.example .env.local
+cp .env.local.example .env.local
+# Edita .env.local con tus credenciales (ver sección Variables de entorno)
 ```
 
-### Variables de Entorno
+### Stack local
 
 ```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+# 1. Levantar Supabase local (Docker debe estar corriendo)
+npx supabase start
 
-# Redis (Upstash)
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
+# 2. Aplicar migraciones (opcional, se aplican automáticamente en start)
+npx supabase db reset
 
-# AI Providers
-LLM_API_KEY=                # Groq (comma-separated → key rotation)
-GEMINI_API_KEY=             # opcional — sólo si LLM_PROVIDER incluye gemini
-LLM_PROVIDER=groq           # "groq" | "gemini" | "gemini,groq"
-DEEPGRAM_AURA_API_KEY=      # Nova-2 (STT) + Aura-2 (TTS)
+# 3. Regenerar tipos TypeScript desde el schema local
+npx supabase gen types typescript --local > types/database.types.ts
 
-# Queue
-QSTASH_TOKEN=
-QSTASH_CURRENT_SIGNING_KEY=
-QSTASH_NEXT_SIGNING_KEY=
-
-# Observabilidad (opcional)
-NEXT_PUBLIC_AXIOM_DATASET=
-AXIOM_TOKEN=
-NEXT_PUBLIC_SENTRY_DSN=
+# 4. Iniciar dev server (Next.js + Turbopack)
+npm run dev
 ```
 
-### Desarrollo
+Abre `http://localhost:3000`. Supabase Studio queda en `http://127.0.0.1:54323`.
+
+### Scripts disponibles
 
 ```bash
-npm run dev          # Servidor local con Turbopack
-npm run typecheck    # TypeScript sin emit
-npm run lint         # ESLint
+npm run dev               # Dev server con Turbopack
+npm run build             # Build producción
+npm run start             # Servidor producción
+npm run lint              # ESLint
+npm run typecheck         # TypeScript --noEmit
+npm test                  # Vitest unit tests
+npm run test:watch        # Vitest watch mode
+npm run test:integration  # Tests integración (contra Supabase local)
+npm run test:e2e          # Playwright E2E (requiere dev server)
+npm run test:e2e:smoke    # Solo tests smoke
+npm run test:coverage     # Coverage report
+npm run e2e:setup         # Sembrar datos E2E
 ```
+
+### Gates de calidad automatizados
+
+- **Pre-commit (Husky + lint-staged):** ESLint `--fix` sobre archivos staged.
+- **Pre-push:** ESLint completo + `tsc --noEmit` + `vitest run`. Si alguno falla, el push se cancela. **No usar `--no-verify`.**
 
 ---
 
-## Cómo Correr Tests
+## Variables de entorno
+
+`.env.local.example` documenta todas. Resumen por área:
+
+### Supabase
 
 ```bash
-npm test                    # Todos los tests
-npm run test:watch          # Watch mode
-npm run test:coverage       # Con cobertura
-
-# Por categoría
-npx vitest run lib/ai/core/__tests__/
-npx vitest run lib/ai/adapters/__tests__/
-npx vitest run lib/repositories/__tests__/
-
-# E2E (requiere servidor corriendo)
-npm run test:e2e
+NEXT_PUBLIC_SUPABASE_URL=https://TU_PROYECTO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=TU_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=TU_SERVICE_ROLE_KEY
+DB_PASSWORD="TU_DB_PASSWORD"
 ```
 
-**Estado actual**: 82 test files, 1276 tests, 100% passing.
+### Auth (Google OAuth)
+
+```bash
+ID_CLIENTE_GOOGLE=TU_GOOGLE_CLIENT_ID
+SECRETO_CLIENTE_GOOGLE=TU_GOOGLE_CLIENT_SECRET
+```
+
+### WhatsApp Cloud API (Meta)
+
+```bash
+WHATSAPP_ACCESS_TOKEN=TU_META_ACCESS_TOKEN
+WHATSAPP_PHONE_NUMBER_ID=TU_PHONE_NUMBER_ID
+WHATSAPP_BUSINESS_ACCOUNT_ID=TU_BUSINESS_ACCOUNT_ID
+WHATSAPP_APP_SECRET=TU_APP_SECRET
+WHATSAPP_VERIFY_TOKEN=TU_VERIFY_TOKEN
+```
+
+### AI
+
+```bash
+LLM_API_KEY=TU_GROQ_API_KEY              # comma-separated → key rotation
+CEREBRAS_API_KEY=TU_CEREBRAS_KEY         # opcional
+DEEPGRAM_AURA_API_KEY=TU_DEEPGRAM_KEY    # STT (Nova-2) + TTS (Aura-2)
+# GEMINI_API_KEY=TU_GEMINI_KEY           # opcional fallback
+```
+
+### Redis & QStash (Upstash)
+
+```bash
+UPSTASH_REDIS_REST_URL=https://TU-UPSTASH.upstash.io
+UPSTASH_REDIS_REST_TOKEN=TU_REDIS_TOKEN
+QSTASH_TOKEN=TU_QSTASH_TOKEN
+QSTASH_CURRENT_SIGNING_KEY=TU_CURRENT_KEY
+QSTASH_NEXT_SIGNING_KEY=TU_NEXT_KEY
+QSTASH_URL=https://qstash.upstash.io
+```
+
+### Pagos
+
+```bash
+# PayPal — ver PAYPAL_INTEGRATION_GUIDE.md
+NEXT_PUBLIC_PAYPAL_CLIENT_ID=TU_CLIENT_ID
+PAYPAL_CLIENT_SECRET=TU_CLIENT_SECRET
+PAYPAL_WEBHOOK_ID=TU_WEBHOOK_ID
+# PAYPAL_ENV=live                        # ← opt-in explícito, default Sandbox
+
+# NOWPayments (cripto)
+NOWPAYMENTS_API_KEY=TU_NP_API_KEY
+NOWPAYMENTS_IPN_SECRET=TU_NP_IPN_SECRET
+NOWPAYMENTS_API_URL=https://api.nowpayments.io/v1
+```
+
+### Push notifications (VAPID)
+
+```bash
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=TU_VAPID_PUBLIC
+VAPID_PRIVATE_KEY=TU_VAPID_PRIVATE
+VAPID_SUBJECT=mailto:soporte@TU_DOMINIO
+CRON_SECRET=TU_CRON_SECRET
+```
+
+### Observabilidad
+
+```bash
+NEXT_PUBLIC_SENTRY_DSN=TU_SENTRY_DSN
+SENTRY_DSN=TU_SENTRY_DSN
+SENTRY_AUTH_TOKEN=TU_SENTRY_TOKEN
+SENTRY_ORG=TU_ORG
+SENTRY_PROJECT=TU_PROYECTO
+HELICONE_API_KEY=TU_HELICONE_KEY        # opcional
+NEXT_PUBLIC_AXIOM_DATASET=TU_DATASET
+AXIOM_TOKEN=TU_AXIOM_TOKEN
+```
+
+### Site config
+
+```bash
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+APP_URL=http://localhost:3000
+```
+
+### E2E testing
+
+```bash
+E2E_TEST_EMAIL=TU_TEST_EMAIL
+E2E_TEST_PASSWORD=TU_TEST_PASSWORD
+```
+
+> **Importante:** `.env.local` está en `.gitignore`. **NUNCA commitees credenciales reales.** Para diferencias entre Sandbox/Live de PayPal, consulta el detalle en [PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md).
 
 ---
 
-## Seguridad Multitenant
+## Tests
 
-El sistema implementa **4 capas independientes** de aislamiento entre negocios:
+```bash
+npm test                          # 82 archivos · 1338 tests · ~38s
+npm run test:integration          # 2 archivos · 13 tests · contra Supabase local
+npm run test:e2e                  # Playwright (requiere dev server)
+npm run test:e2e:smoke            # Suite reducida
+```
 
-### Capa 1: Phantom Type (TypeScript)
+**Estado actual:** 1338 tests unitarios + 13 integration + suite E2E. 100% passing en `main`.
 
-`TenantContext` solo puede construirse a través de `TenantEnforcer.verify()`. El compilador rechaza cualquier intento de construirlo directamente. No existe workaround en código de producción.
+Detalle de estrategia, cobertura y escenarios críticos: [TESTING.md](./TESTING.md).
 
-### Capa 2: TenantEnforcer (Runtime DB Check)
+---
 
-```typescript
+## Seguridad multi-tenant
+
+El sistema implementa **4 capas independientes** de aislamiento entre negocios. Falla en una capa NO compromete las otras.
+
+### Capa 1 — Phantom Type (TypeScript compile-time)
+
+`TenantContext` solo puede construirse mediante `TenantEnforcer.verify()`. El compilador rechaza cualquier intento de construirlo directamente. No existe workaround en código de producción.
+
+### Capa 2 — TenantEnforcer (Runtime DB check)
+
+```ts
 const ctx = await TenantEnforcer.verify(requestedBusinessId, authUserId, timezone)
-// ↑ Si el usuario no es dueño del businessId → throws UNAUTHORIZED
+// Si el usuario no es dueño del businessId → throws UNAUTHORIZED
 ```
 
-### Capa 3: Repositorios Filtrados
+### Capa 3 — Repositorios filtrados
 
-```typescript
+```ts
 // TODAS las queries incluyen:
 .eq('business_id', ctx.businessId)
 
@@ -331,74 +469,84 @@ const ctx = await TenantEnforcer.verify(requestedBusinessId, authUserId, timezon
 if (apt.business_id !== businessId) throw new Error('Ownership mismatch')
 ```
 
-### Capa 4: Supabase RLS
+### Capa 4 — Supabase Row Level Security
 
-Row Level Security en todas las tablas. Incluso si las capas superiores fallaran, la DB rechazaría accesos no autorizados.
-
----
-
-## Manejo de IA — 5 Capas Anti-Alucinación
-
-Detalle completo en [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md). En código real:
-
-1. **Input Bypass / Fast Paths** — `capabilities/_shared/registry.ts → detectFastPath()` enruta intenciones claras (ej: "¿qué tengo mañana?", "reagéndala a las 5") al ejecutor sin pasar por el LLM. 0 tokens, latencia <500 ms.
-2. **Response Bypass / Template-Based Response** — flag `bypassLLM` en `ICapability`. `agent.ts` salta la segunda pasada del LLM y entrega la prosa de la tool tal cual (`BYPASS_CAPABILITIES`). Elimina el riesgo de que Llama reescriba el resultado.
-3. **Transactional RAG (Direct Grounding)** — `index.ts → loadBusinessContext()` inyecta catálogo de servicios, horarios y citas del día activas en el system prompt. Sin embeddings, sin `ai_memories`: la "memoria RAM" es la DB en vivo.
-4. **Context Audit (Corpus + Frame Cutoff)** — `index.ts` corta el corpus en el último "frame boundary" (asistente cerrando intent) y solo carga citas con `.gte/.lte` del día. Evita que tokens de turnos pasados contaminen los guards.
-5. **Date Guards + Negative Constraints** — `detectTemporalIntent()` en `agent.ts` sobre-escribe `date` cuando el usuario dijo "hoy" / "mañana" / "pasado mañana", y `prompt.ts` aplica directivas tipo "si no llamaste a la tool, NO SABES". Última línea de defensa frente a alucinación de parámetros.
-
-Capa extra (no contada como pilar): **per-turn dedup** mediante fingerprint `(tool + args canónicos)` para evitar dobles bookings si el modelo entra en bucle.
-
-### Fallback LLM (Groq Llama 3.3 70B · Gemini fallback)
-
-Cuando el input es ambiguo o faltan datos, el agente delega al provider (`providers/registry.ts`) con:
-- Contexto del negocio (servicios activos, horarios, citas del día)
-- Historial saneado (Redis → client-history → vacío)
-- Definiciones de tools desde `getToolDefinitions()` (cada capability las expone)
-
-### Resiliencia
-
-- Provider failover: `LLM_PROVIDER=gemini,groq` → Gemini primario, Groq backup
-- Rate limit Upstash: 30 req/min/usuario
-- Sesión degradable: si Redis cae, la conversación sigue con el `history` del cliente
-- `executeByName()` nunca lanza — todo error se serializa como `ToolResult`
+RLS en todas las tablas (`businesses`, `clients`, `appointments`, `saas_invoices`, `notifications`, etc). Aun si las capas superiores fallaran, la DB rechazaría accesos no autorizados.
 
 ---
 
-## Decisiones Técnicas Clave
+## Patrones anti-alucinación (IA)
+
+Detalle completo en [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md). Resumen:
+
+1. **Input Bypass / Fast Paths** — intenciones claras ("¿qué tengo mañana?") se ejecutan sin pasar por el LLM. 0 tokens.
+2. **Response Bypass** — flag `bypassLLM` en `ICapability`. El agente entrega la prosa de la tool tal cual, sin re-síntesis del LLM.
+3. **Transactional RAG (Direct Grounding)** — el system prompt inyecta catálogo, horarios y citas del día en vivo desde la DB.
+4. **Context Audit (Corpus + Frame Cutoff)** — el corpus se corta en el último "frame boundary" para que tokens viejos no contaminen los guards.
+5. **Date Guards + Negative Constraints** — `detectTemporalIntent()` sobreescribe parámetros del LLM cuando el usuario dijo "hoy/mañana/pasado mañana".
+
+Más una capa de **per-turn dedup** mediante fingerprint `(tool + args canónicos)` que evita dobles bookings si el modelo entra en bucle.
+
+---
+
+## Decisiones técnicas clave
+
+### Por qué doble vía de fulfillment (frontend + webhook) en PayPal
+
+Si el usuario cierra la pestaña a mitad de pago, el frontend nunca confirma con el servidor pero PayPal ya cobró. El webhook async garantiza que el plan se active aun en ese caso. **Idempotencia garantizada en Postgres** vía `FOR UPDATE` lock. Detalle en [PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md#2-por-qué-webhook-async--frontend-dual-path).
+
+### Por qué `PAYPAL_ENV=live` es opt-in explícito
+
+Vercel pone `NODE_ENV=production` en todos los deploys (incluyendo previews). Si usáramos `NODE_ENV` como señal de "Live", cualquier PR cobraría dinero real al desplegar su preview. Hacer Live opt-in explícito previene cobros accidentales.
 
 ### Por qué capabilities en lugar de un god-file
 
-El antiguo `tools.ts` concentraba detección de fast-path, schema LLM y acceso a DB para todos los intents. Cada cambio tocaba el archivo y los regexes se pisaban entre sí.
+El antiguo `tools.ts` concentraba detección de fast-path, schema LLM y acceso a DB. Cada cambio tocaba el archivo entero. Ahora cada intent vive en `capabilities/<intent>/` con `fast-path.ts`, `tool.ts` y `index.ts` que exponen una `ICapability`. Añadir un intent = import + línea en el array.
 
-Ahora cada intent vive en una carpeta `capabilities/<intent>/` con tres piezas: `fast-path.ts`, `tool.ts` (ejecución) y `index.ts` que expone una `ICapability`. El registry decide orden y prioridad — añadir un intent es un import + una línea en el array.
+### Por qué `BookingEngine` sigue vivo (solo WhatsApp)
 
-### Por qué BookingEngine sigue vivo (sólo en WhatsApp)
+WhatsApp es transaccional puro: webhook → tool call → respuesta. Usa `BookingEngine` (Zod + UseCases + RLS) como single source of truth. El canal de voz, en cambio, es conversacional con fast-paths anafóricos pesados ("reagéndala") y migró a capability-based.
 
-El canal WhatsApp es transaccional puro: webhook → tool call → respuesta. Sigue usando `BookingEngine` (Zod + UseCases + RLS) como single source of truth. El canal de voz, en cambio, es conversacional y depende fuertemente de fast-paths anafóricos ("reagéndala", "cancélala"), por lo que se trasladó a la arquitectura capability-based dentro de la Edge Function.
-
-### Por qué Phantom Types para TenantContext
+### Por qué Phantom Types para `TenantContext`
 
 Un `string` businessId podría olvidarse de verificar. Un `TenantContext` no puede existir sin verificación — es imposible tipográficamente, no solo por convención.
 
-### Por qué Zod en vez de validación manual
+### Por qué Zod como fuente única
 
-Los schemas Zod son la fuente de verdad para:
-1. Validación runtime de args del LLM
-2. Definiciones de tools para la API del LLM
+Los schemas Zod son fuente de verdad para:
+1. Validación runtime de args del LLM.
+2. Definiciones de tools para la API del LLM.
 
 Si cambia el schema, ambos se actualizan automáticamente.
 
-### Por qué fuzzy matching en ClientResolver
+---
 
-Los usuarios dictan nombres por voz. "Ana García" puede llegar como "Ana Garcia", "Ana Garzia", o "Ana". El threshold 0.45 tolera errores de transcripción sin introducir falsos positivos en negocios con pocos clientes.
+## Documentación adicional
+
+### Módulos
+- **[PAYPAL_INTEGRATION_GUIDE.md](./PAYPAL_INTEGRATION_GUIDE.md)** — Manual completo de la pasarela PayPal (arquitectura, config, suite de pruebas, runbook).
+- [docs/architecture/PAYMENTS_AND_PLANS.md](./docs/architecture/PAYMENTS_AND_PLANS.md) — Sistema de pagos y planes (general).
+- [docs/WHATSAPP_AI_ARCHITECTURE.md](./docs/WHATSAPP_AI_ARCHITECTURE.md) — Agente WhatsApp end-to-end.
+- [AI_FLOWS.md](./AI_FLOWS.md) — Flujos del sistema de IA, fast-paths, estado.
+
+### Referencia técnica
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Arquitectura completa, ADRs, pipelines.
+- [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md) — Los 5 pilares anti-alucinación.
+- [docs/architecture/AI_MASTER_GUIDE.md](./docs/architecture/AI_MASTER_GUIDE.md) — Guía maestra del sistema de IA.
+- [docs/architecture/FRONTEND_ARCHITECTURE_AND_STATE.md](./docs/architecture/FRONTEND_ARCHITECTURE_AND_STATE.md) — Frontend y manejo de estado.
+- [docs/security/SECURITY_AND_RATE_LIMITS.md](./docs/security/SECURITY_AND_RATE_LIMITS.md) — Seguridad y rate limits.
+
+### Calidad
+- [TESTING.md](./TESTING.md) — Guía de testing, cobertura, escenarios críticos.
+- [TESTING_GUIDE.md](./TESTING_GUIDE.md) — Guía operativa de tests.
+- [CHANGELOG.md](./CHANGELOG.md) — Historial de cambios.
+
+### Operación
+- [docs/operations/CI_CD_GATEKEEPER.md](./docs/operations/CI_CD_GATEKEEPER.md) — Gates pre-commit/pre-push.
+- [SECURITY_FINAL_REPORT.md](./SECURITY_FINAL_REPORT.md) — Reporte final de seguridad.
 
 ---
 
-## Documentación Adicional
+## Licencia
 
-- [docs/architecture/ANTI_HALLUCINATION_PATTERNS.md](./docs/architecture/ANTI_HALLUCINATION_PATTERNS.md) — Los 5 pilares arquitectónicos para evitar alucinaciones en los Agentes de IA
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — Arquitectura completa, ADRs, pipelines
-- [AI_FLOWS.md](./AI_FLOWS.md) — Flujos del sistema de IA, fast-paths, estado
-- [TESTING.md](./TESTING.md) — Guía de testing, cobertura, escenarios críticos
-- [CHANGELOG.md](./CHANGELOG.md) — Historial de cambios
+Proyecto privado. Todos los derechos reservados.
