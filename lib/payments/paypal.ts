@@ -157,10 +157,20 @@ export async function verifyWebhookSignature(
   });
 
   if (!verifyRes.ok) {
-    console.error('[PayPal Webhook] Verification API error:', verifyRes.status);
+    const errorBody = await verifyRes.text().catch(() => '<unreadable>');
+    console.error('[PayPal Webhook] Verification API error:', {
+      status: verifyRes.status,
+      body: errorBody,
+      sentWebhookIdLength: webhookId.length,
+      sentWebhookIdFirstChars: webhookId.substring(0, 8),
+      apiBase: PAYPAL_API_BASE,
+    });
     return false;
   }
 
   const verifyData = await verifyRes.json();
+  if (verifyData.verification_status !== 'SUCCESS') {
+    console.warn('[PayPal Webhook] Verification status not SUCCESS:', verifyData);
+  }
   return verifyData.verification_status === 'SUCCESS';
 }
