@@ -37,6 +37,11 @@ import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
 import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
+import { createMemoryEngine }   from "../_shared/memory/index.ts"
+import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
+
+// Single instance per cold start. Stateless — safe to share across requests.
+const memoryEngine = createMemoryEngine()
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -143,9 +148,20 @@ export async function runAgentLoop(
   // Cap history at 14 messages (~7 turns) for much better memory
   const cappedHistory = context.history.slice(-14)
 
+  // ── Memory recall (degrades to [] on failure — never blocks the loop) ─────
+  const memoryScope: MemoryScope = {
+    businessId: business.id,
+    actorKind:  'client_phone',
+    actorKey:   sender,
+  }
+  const recalled: ReadonlyArray<MemoryRecord> =
+    await memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 })
+
+  addBreadcrumb('Memory recall completed', 'memory', 'info', { hits: recalled.length })
+
   // Build initial messages array
   const messages: AgentMessage[] = [
-    { role: 'system', content: buildMinimalSystemPrompt(context, customerName) },
+    { role: 'system', content: buildMinimalSystemPrompt(context, customerName, recalled) },
     // Inject conversation history (convert 'model' role to 'assistant')
     ...cappedHistory.map(h => ({
       role:    (h.role === 'model' ? 'assistant' : h.role) as AgentMessage['role'],
@@ -334,6 +350,17 @@ export async function runAgentLoop(
       business.timezone,
     )
     addBreadcrumb('Skipped final LLM pass (success template used)', 'agent', 'info', { tool: lastTrace?.tool, loop_exhausted: loopExhausted })
+
+    // Fire-and-forget: persist the episode. Never awaited inside the response path.
+    void memoryEngine.write(memoryScope, {
+      kind:    'episodic',
+      content: `Cliente ${customerName}: ${lastTrace?.tool ?? 'acción'} — ${userText}`,
+      metadata: {
+        tool:   lastTrace?.tool,
+        result: lastToolParsed,
+      },
+      ttlDays: 180,
+    })
   } else if (actionPerformed && lastToolParsed?.success === false) {
     // Tool failed with a known error — return deterministic message, NO second LLM call
     // A second LLM call here is the root cause of the 400→circuit breaker→503 loop
