@@ -1,0 +1,5 @@
+{
+  "_": "Run `npx tsx scripts/seed-intent-embeddings.ts` to populate this file.",
+  "dimensions": 384,
+  "prototypes": []
+}
