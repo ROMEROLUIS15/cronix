@@ -321,6 +321,12 @@ entrypoint = "./functions/process-whatsapp/index.ts"
 [functions.cron-reminders]
 verify_jwt = false
 
+[functions.embed-text]
+# Internal embedding endpoint (Supabase.ai gte-small).
+# Called from server-side code (Memory, Router) with the service_role key.
+# JWT verification is disabled so we don't need to forward user JWTs.
+verify_jwt = false
+
 [functions.whatsapp-service]
 verify_jwt = false
 

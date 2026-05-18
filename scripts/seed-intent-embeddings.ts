@@ -41,7 +41,13 @@ const OUT_FILES = [
 ]
 
 async function main(): Promise<void> {
-  const embedder = new SupabaseEdgeEmbedder(`${SUPABASE_URL}/functions/v1/embed-text`, SERVICE_KEY!)
+  // 30s timeout: cold-starts on the embed-text function can be slow the first time.
+  const embedder = new SupabaseEdgeEmbedder(
+    `${SUPABASE_URL}/functions/v1/embed-text`,
+    SERVICE_KEY!,
+    fetch,
+    30_000,
+  )
   const prototypes: IntentPrototype[] = []
 
   let total = 0
