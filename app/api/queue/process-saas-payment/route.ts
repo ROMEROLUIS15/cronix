@@ -82,7 +82,7 @@ async function handler(req: Request) {
         business_id: invoice.business_id,
         title: '¡Pago Confirmado! 🎉',
         content: `Tu plan ${invoice.plan_purchased.toUpperCase()} ha sido activado exitosamente.`,
-        type: 'billing',
+        type: 'success',
         metadata: { invoice_id: invoice.id },
       });
 
@@ -94,7 +94,7 @@ async function handler(req: Request) {
         business_id: invoice.business_id,
         title: 'Pago Incompleto (Cripto)',
         content: `Recibimos un pago parcial de ${cryptoAmount} ${cryptoCurrency?.toUpperCase()}. Contacta a soporte para completar la activación de tu plan.`,
-        type: 'alert',
+        type: 'warning',
         metadata: { invoice_id: invoice.id, amount_received: cryptoAmount },
       });
     }

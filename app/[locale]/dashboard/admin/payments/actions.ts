@@ -65,7 +65,7 @@ export async function approveManualPayment(
       business_id: invoice.business_id,
       title: '¡Pago Confirmado! 🎉',
       content: `Tu plan ${invoice.plan_purchased.toUpperCase()} ha sido activado exitosamente. ¡Bienvenido!`,
-      type: 'billing',
+      type: 'success',
       metadata: { invoice_id: invoice.id },
     });
 
@@ -118,7 +118,7 @@ export async function rejectManualPayment(
       business_id: invoice.business_id,
       title: 'Pago No Verificado',
       content: `No pudimos verificar tu pago manual. Razón: ${reason}. Contáctanos si crees que es un error.`,
-      type: 'alert',
+      type: 'error',
       metadata: { invoice_id: invoice.id },
     });
 

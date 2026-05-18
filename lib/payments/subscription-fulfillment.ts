@@ -48,7 +48,7 @@ export async function applyReferralBonus(
     business_id: referrer.id,
     title: '¡Mes gratis ganado! 🎁',
     content: 'Un negocio que invitaste ha activado su plan Pro. Hemos añadido 30 días adicionales a tu suscripción.',
-    type: 'billing',
+    type: 'success',
   });
 }
 
@@ -113,13 +113,18 @@ export async function finalizePayPalPayment(
       return { status: 'already_processed' };
     case 'completed':
       // Side effects best-effort fuera de la transacción
-      await supabaseAdmin.from('notifications').insert({
-        business_id: row.business_id,
-        title: '¡Pago Confirmado! 🎉',
-        content: `Tu plan ${row.plan_purchased.toUpperCase()} ha sido activado exitosamente.`,
-        type: 'billing',
-        metadata: { invoice_id: row.invoice_id, payment_method: 'paypal' },
-      });
+      {
+        const { error: notifError } = await supabaseAdmin.from('notifications').insert({
+          business_id: row.business_id,
+          title: '¡Pago Confirmado! 🎉',
+          content: `Tu plan ${row.plan_purchased.toUpperCase()} ha sido activado exitosamente.`,
+          type: 'success',
+          metadata: { invoice_id: row.invoice_id, payment_method: 'paypal' },
+        });
+        if (notifError) {
+          console.error('[Fulfillment] Notification insert failed:', notifError);
+        }
+      }
       await applyReferralBonus(supabaseAdmin, row.business_id);
       return { status: 'completed', invoiceId: row.invoice_id, businessId: row.business_id };
     default:
