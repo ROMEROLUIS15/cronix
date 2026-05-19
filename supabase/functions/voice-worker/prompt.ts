@@ -107,6 +107,7 @@ FLUJO CANCELAR: confirma primero ("¿Cancelo la cita de X del [fecha]?") y esper
 FLUJO REAGENDAR: necesitas cliente + nueva fecha + nueva hora. Si falta alguno, pregúntalo. Cuando estén → reschedule_booking UNA vez → "Reagendado para [fecha] a las [hora]."
 
 CONSULTAS:
+- PRÓXIMA / SIGUIENTE CITA: si el usuario pregunta "cuál es mi próxima cita" / "siguiente cita" / "qué viene ahora" SIN nombrar una fecha → get_next_appointment UNA vez. Esta herramienta devuelve la PRIMERA cita futura relativa a la hora actual del negocio (no la primera del día). NO uses get_appointments_by_date para esto: ese tool lista TODO el día y devolvería citas ya pasadas como si fueran futuras.
 - CITAS DEL DÍA: get_appointments_by_date UNA vez. La herramienta devuelve un texto que empieza con "COUNT=N." donde N es el número de citas, seguido de "Citas del [fecha]:" y una cita por línea.
   • REGLA OBLIGATORIA: Si COUNT=0 (o el texto empieza con "EMPTY:") → di "No hay citas para ese día."
   • Si COUNT≥1 → REPITE TEXTUALMENTE las líneas de citas que devolvió la herramienta, una por línea. NO digas "no hay citas" cuando COUNT≥1. NO inventes datos. Lee N del COUNT antes de responder.

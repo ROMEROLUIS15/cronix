@@ -12,10 +12,15 @@ export interface PushSubscription {
 }
 
 export interface PushPayload {
-  title?: string
-  body?:  string
-  url?:   string
-  icon?:  string
+  title?:     string
+  body?:      string
+  url?:       string
+  icon?:      string
+  badge?:     string
+  image?:     string
+  tag?:       string
+  renotify?:  boolean
+  timestamp?: number
 }
 
 // ── Base64url helpers ─────────────────────────────────────────────────────────

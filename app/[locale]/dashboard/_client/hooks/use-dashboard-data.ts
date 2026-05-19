@@ -11,7 +11,6 @@ import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths } from 'date-fns'
 import { getBrowserContainer } from '@/lib/browser-container'
-import { createClient } from '@/lib/supabase/client'
 import {
   notificationForAppointmentConfirmed,
   notificationForAppointmentCancelled,
@@ -29,6 +28,17 @@ interface UseDashboardDataProps {
   businessId: string | null
   initialStats: DashboardStats
   initialHasServices: boolean
+  /**
+   * Server-pre-fetched appointments for the current month range. When provided,
+   * React Query uses them as initialData so the calendar paints filled on the
+   * first frame instead of waiting for the client-side fetch. Only valid for
+   * the initial range — month navigation still fetches normally.
+   */
+  initialMonthApts?: AppointmentWithRelations[]
+  /** YYYY-MM-DD start of the range matching initialMonthApts. */
+  initialRangeStart?: string
+  /** YYYY-MM-DD end of the range matching initialMonthApts. */
+  initialRangeEnd?: string
 }
 
 export interface UseDashboardDataReturn {
@@ -65,6 +75,9 @@ export function useDashboardData({
   businessId,
   initialStats,
   initialHasServices,
+  initialMonthApts,
+  initialRangeStart,
+  initialRangeEnd,
 }: UseDashboardDataProps): UseDashboardDataReturn {
   const queryClient = useQueryClient()
 
@@ -83,7 +96,14 @@ export function useDashboardData({
 
   // ── React Query: data fetching ──────────────────────────────────────────
 
-  // Month appointments
+  // Month appointments. The current visible range only receives SSR initialData
+  // when it matches what the server pre-fetched (initial mount); navigating to
+  // a different month falls back to a normal client fetch.
+  const useInitialMonthData =
+    !!initialMonthApts
+    && initialRangeStart === rangeStart
+    && initialRangeEnd   === rangeEnd
+
   const { data: monthApts = [], isLoading: loadingApts } = useQuery({
     queryKey: ['appointments', businessId, rangeStart, rangeEnd],
     queryFn: async () => {
@@ -95,6 +115,7 @@ export function useDashboardData({
     },
     enabled: !!businessId,
     staleTime: 5 * 60 * 1000,
+    ...(useInitialMonthData ? { initialData: initialMonthApts } : {}),
   })
 
   // Dashboard stats
@@ -175,35 +196,19 @@ export function useDashboardData({
     },
   })
 
-  // ── Realtime: refresh calendar when WhatsApp agent mutates appointments ─
-  useEffect(() => {
-    if (!businessId) return
-
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`appointments-${businessId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments',
-          filter: `business_id=eq.${businessId}`,
-        },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['appointments', businessId] })
-          void queryClient.invalidateQueries({ queryKey: ['dashboard-stats', businessId] })
-        },
-      )
-      .subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [businessId, queryClient])
+  // Realtime appointment invalidation lives in <VoiceAssistantFab/> on the
+  // dashboard layout — `cronix-realtime-{businessId}` already listens to every
+  // event on the appointments table and invalidates the same React Query keys.
+  // Subscribing here again would open a second WebSocket channel for the same
+  // events and trigger duplicate invalidations on every write. Don't do it.
 
   // ── Auto-Completion Hook ────────────────────────────────────────────────
-  // Ubicado aquí abajo para tener acceso a updateStatusMutation
+  // Walk past appointments whose end_at is in the past, fire-and-forget the
+  // status updates in parallel. Previously this was a sequential `for await`
+  // loop: with N expired rows the dashboard paid N serial Supabase round-trips
+  // before settling, each one re-triggering invalidations through the realtime
+  // channel. Promise.allSettled fans them out concurrently and lets the rest
+  // of the UI carry on.
   useEffect(() => {
     if (loadingApts || !businessId || !monthApts || monthApts.length === 0) return
 
@@ -218,18 +223,13 @@ export function useDashboardData({
 
     if (expired.length === 0) return
 
-    const runAutoCheckout = async () => {
-      for (const apt of expired) {
-        try {
-          await updateStatusMutation.mutateAsync({ appointmentId: apt.id, status: 'completed' })
-          logger.info('dashboard', `Auto-checked out appointment ${apt.id}`)
-        } catch (e) {
-          logger.error('dashboard', `Failed to auto-checkout ${apt.id}`)
-        }
-      }
-    }
-
-    void runAutoCheckout()
+    void Promise.allSettled(
+      expired.map(apt =>
+        updateStatusMutation.mutateAsync({ appointmentId: apt.id, status: 'completed' })
+          .then(() => logger.info('dashboard', `Auto-checked out appointment ${apt.id}`))
+          .catch(() => logger.error('dashboard', `Failed to auto-checkout ${apt.id}`)),
+      ),
+    )
   }, [monthApts, loadingApts, businessId, updateStatusMutation])
 
   const handleUpdateStatus = useCallback(async (
@@ -259,6 +259,7 @@ export function useDashboardData({
           title: payload.title,
           body: payload.content,
           url: '/dashboard',
+          tag: `confirmed-${selectedApt.id}`,
         })
       } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
         const payload = notificationForAppointmentCancelled(
@@ -275,6 +276,7 @@ export function useDashboardData({
           title: payload.title,
           body: payload.content,
           url: '/dashboard',
+          tag: `cancelled-${selectedApt.id}`,
         })
       }
       onSuccess?.()
@@ -311,6 +313,7 @@ export function useDashboardData({
           title: payload.title,
           body: payload.content,
           url: '/dashboard',
+          tag: `deleted-${id}`,
         })
       }
 
@@ -327,19 +330,13 @@ export function useDashboardData({
     setUpdatingStatus(true)
     try {
       if (!businessId) throw new Error('No business ID')
-      const container = getBrowserContainer()
-      
-      // Fetch appointment details before confirming
-      const todayStr = new Date().toISOString().split('T')[0]
-      if (!todayStr) return
-      
-      const aptResult = await container.appointments.getMonthAppointments(
-        businessId,
-        todayStr,
-        todayStr,
+
+      // The appointment is already in the React Query cache (the calendar is
+      // displaying it). A second fetch to look it up by ID was wasted round-trip.
+      const cachedApts = queryClient.getQueryData<AppointmentWithRelations[]>(
+        ['appointments', businessId, rangeStart, rangeEnd],
       )
-      
-      const apt = aptResult.data?.find(a => a.id === aptId)
+      const apt = cachedApts?.find(a => a.id === aptId)
 
       await updateStatusMutation.mutateAsync({ appointmentId: aptId, status: 'confirmed' })
 
@@ -360,12 +357,13 @@ export function useDashboardData({
           title: payload.title,
           body: payload.content,
           url: '/dashboard',
+          tag: `confirmed-${aptId}`,
         })
       }
     } finally {
       setUpdatingStatus(false)
     }
-  }, [businessId, updateStatusMutation])
+  }, [businessId, queryClient, rangeStart, rangeEnd, updateStatusMutation])
 
   // ── Return ──────────────────────────────────────────────────────────────
 

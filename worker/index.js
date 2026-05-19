@@ -57,14 +57,22 @@ self.addEventListener('push', function (event) {
   var options = {
     body:      data.body    || 'Tienes una nueva notificación',
     icon:      data.icon    || '/icon-192x192.png',
-    badge:     '/icon-192x192.png',   // small mono icon shown in status bar (Android)
+    // Monochrome 72x72 PNG with transparent background; falls back to app icon if missing.
+    badge:     data.badge   || '/badge-72x72.png',
     image:     data.image   || undefined,
     data:      { url: data.url || '/dashboard' },
     vibrate:   [200, 100, 200],
-    tag:       'cronix-push',         // replaces previous notification of same tag
-    renotify:  false,
+    // Per-event tag prevents the next push from silently replacing an unread one.
+    // Caller passes `tag: 'reserva-<id>'`, `cancel-<id>`, etc.
+    tag:       data.tag     || undefined,
+    renotify:  data.renotify === true,
+    timestamp: data.timestamp || Date.now(),
     silent:    false,
     requireInteraction: false,
+    actions: [
+      { action: 'view',    title: 'Ver' },
+      { action: 'dismiss', title: 'Descartar' },
+    ],
   }
 
   event.waitUntil(
@@ -75,6 +83,8 @@ self.addEventListener('push', function (event) {
 // ── Notification click ───────────────────────────────────────────────────────
 self.addEventListener('notificationclick', function (event) {
   event.notification.close()
+
+  if (event.action === 'dismiss') return
 
   var targetUrl = '/dashboard'
   if (event.notification.data && event.notification.data.url) {

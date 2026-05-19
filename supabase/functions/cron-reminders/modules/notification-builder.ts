@@ -107,6 +107,7 @@ export async function sendPushNotification(
         title: `📋 ${appointments.length} cita${appointments.length > 1 ? 's' : ''} para mañana`,
         body: listed.join('\n') + overflow,
         url: '/dashboard',
+        tag: `daily-reminder-${business.id}-${new Date().toISOString().split('T')[0]}`,
       }),
     })
     return true

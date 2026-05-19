@@ -106,11 +106,17 @@ export function CalendarGrid({
                           key={apt.id}
                           className="w-full rounded-md px-1.5 py-1 text-[10px] font-bold truncate leading-tight"
                           style={{
-                            background:      `${color}28`,
+                            background:        `${color}28`,
                             color,
-                            border:          `1px solid ${color}50`,
-                            borderLeftWidth: "2px",
-                            borderLeftColor: color,
+                            borderTopWidth:    "1px",
+                            borderRightWidth:  "1px",
+                            borderBottomWidth: "1px",
+                            borderLeftWidth:   "2px",
+                            borderStyle:       "solid",
+                            borderTopColor:    `${color}50`,
+                            borderRightColor:  `${color}50`,
+                            borderBottomColor: `${color}50`,
+                            borderLeftColor:   color,
                           }}
                         >
                           {apt.client?.name?.split(" ")[0] ?? ""}

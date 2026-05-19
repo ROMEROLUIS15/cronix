@@ -90,7 +90,7 @@ export async function fireToolNotification(
           'Content-Type':      'application/json',
           'x-internal-secret': cronSecret,
         },
-        body: JSON.stringify({ business_id, title, body: content, url: '/dashboard' }),
+        body: JSON.stringify({ business_id, title, body: content, url: '/dashboard', tag: `ai-${Date.now()}` }),
       }).catch((err: unknown) => {
         logger.warn('TOOL-NOTIFY', 'push-notify fetch failed', {
           business_id,
@@ -104,6 +104,7 @@ export async function fireToolNotification(
         title,
         body: content,
         url: '/dashboard',
+        tag: `ai-${Date.now()}`,
       }).catch((err: Error) => {
         logger.warn('TOOL-NOTIFY', 'notifyOwner fallback failed', {
           business_id,

@@ -234,6 +234,32 @@ async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string):
   }
 }
 
+// ── Core: Web push to owner's PWA via push-notify edge function ───────────────
+
+async function sendOwnerWebPush(event: AppointmentEvent): Promise<void> {
+  try {
+    // @ts-ignore — Deno runtime globals
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    // @ts-ignore
+    const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
+    if (!supabaseUrl || !cronSecret) return
+
+    await fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
+      body: JSON.stringify({
+        business_id: event.businessId,
+        title: buildTitle(event.type),
+        body:  buildContent(event),
+        url:   '/dashboard/appointments',
+        tag:   `wa-${event.type}-${event.eventId}`,
+      }),
+    })
+  } catch (err) {
+    console.warn('[NOTIFICATION-WA] sendOwnerWebPush failed (non-critical):', err)
+  }
+}
+
 // ── Public API ── the only function exported from this module ─────────────────
 
 /**
@@ -266,6 +292,9 @@ export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
 
     // 4. WhatsApp owner (only if DB succeeded)
     await sendOwnerWhatsApp(event, event.businessName)
+
+    // 5. Web push to owner's installed PWA (fire-and-forget)
+    await sendOwnerWebPush(event)
 
   } catch (err) {
     captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })

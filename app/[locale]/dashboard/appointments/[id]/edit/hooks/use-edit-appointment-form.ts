@@ -414,8 +414,9 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
       const { notifyOwner } = await import('@/lib/services/push-notify.service')
       notifyOwner({
         title: notifPayload.title,
-        body: notifPayload.content,
-        url: '/dashboard',
+        body:  notifPayload.content,
+        url:   `/dashboard/appointments/${appointmentId}`,
+        tag:   `updated-${appointmentId}`,
       })
     }
 

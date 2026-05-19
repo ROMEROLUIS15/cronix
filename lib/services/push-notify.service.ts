@@ -14,9 +14,13 @@ import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
 export interface PushNotifyParams {
-  title: string
-  body:  string
-  url?:  string
+  title:     string
+  body:      string
+  url?:      string
+  tag?:      string
+  badge?:    string
+  image?:    string
+  renotify?: boolean
 }
 
 /**
