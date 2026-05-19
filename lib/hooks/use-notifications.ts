@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
@@ -134,6 +134,24 @@ export function useNotifications(businessId: string | null): UseNotificationsRet
       setState('subscribed')
     }
   }, [businessId, supabase])
+
+  // Auto re-subscribe when the browser rotates the push subscription.
+  // The SW posts PUSH_SUBSCRIPTION_EXPIRED on `pushsubscriptionchange`.
+  // Without this, push silently stops working ~30 days after install on Android.
+  const subscribeRef = useRef(subscribe)
+  useEffect(() => { subscribeRef.current = subscribe }, [subscribe])
+
+  useEffect(() => {
+    if (!isPushSupported() || !businessId) return
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_SUBSCRIPTION_EXPIRED') {
+        logger.info('useNotifications', 'Push subscription expired, re-subscribing')
+        void subscribeRef.current()
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [businessId])
 
   return {
     state,

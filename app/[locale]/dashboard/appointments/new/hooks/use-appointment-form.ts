@@ -378,6 +378,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
         title: '📅 Nueva cita agendada',
         body:  `${clientName} · ${serviceName} · ${timeStr}`,
         url:   `/dashboard/appointments/${newApt.id}`,
+        tag:   `created-${newApt.id}`,
       }).catch(err => {
         logger.error('Failed to send push notification to owner', err)
       })

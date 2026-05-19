@@ -50,6 +50,24 @@ export async function applyReferralBonus(
     content: 'Un negocio que invitaste ha activado su plan Pro. Hemos añadido 30 días adicionales a tu suscripción.',
     type: 'success',
   });
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+    const cronSecret  = process.env.CRON_SECRET;
+    if (supabaseUrl && cronSecret) {
+      void fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
+        body: JSON.stringify({
+          business_id: referrer.id,
+          title: '¡Mes gratis ganado! 🎁',
+          body:  'Un negocio que invitaste activó su plan. +30 días añadidos.',
+          url:   '/dashboard/settings',
+          tag:   `referral-bonus-${referrer.id}-${Date.now()}`,
+        }),
+      }).catch(() => null);
+    }
+  } catch { /* fire-and-forget */ }
 }
 
 /**
@@ -124,6 +142,24 @@ export async function finalizePayPalPayment(
         if (notifError) {
           console.error('[Fulfillment] Notification insert failed:', notifError);
         }
+        // Web push to owner — server-to-server with CRON_SECRET
+        try {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+          const cronSecret  = process.env.CRON_SECRET;
+          if (supabaseUrl && cronSecret) {
+            void fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
+              body: JSON.stringify({
+                business_id: row.business_id,
+                title: '¡Pago Confirmado! 🎉',
+                body:  `Tu plan ${row.plan_purchased.toUpperCase()} ha sido activado.`,
+                url:   '/dashboard/settings',
+                tag:   `payment-${row.invoice_id}`,
+              }),
+            }).catch(() => null);
+          }
+        } catch { /* fire-and-forget */ }
       }
       await applyReferralBonus(supabaseAdmin, row.business_id);
       return { status: 'completed', invoiceId: row.invoice_id, businessId: row.business_id };

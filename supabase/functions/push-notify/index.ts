@@ -64,6 +64,8 @@ Deno.serve(async (req: Request) => {
       businessId   = record.business_id as string
       body.title   = '¡Nueva Reserva!'
       body.body    = `Nueva cita recibida para el ${String(record.start_at).split('T')[0]}.`
+      body.tag     = `reserva-${record.id}`
+      body.url     = '/dashboard/appointments'
     } else if (!body.business_id) {
       await flushSentry()
       return json({ error: 'business_id required for internal calls' }, 400)
@@ -120,10 +122,15 @@ Deno.serve(async (req: Request) => {
   }
 
   const payload: PushPayload = {
-    title: body.title as string,
-    body: body.body as string,
-    url: body.url as string,
-    icon: body.icon as string,
+    title:     body.title     as string,
+    body:      body.body      as string,
+    url:       body.url       as string,
+    icon:      body.icon      as string,
+    badge:     body.badge     as string,
+    image:     body.image     as string,
+    tag:       body.tag       as string,
+    renotify:  body.renotify  as boolean,
+    timestamp: body.timestamp as number,
   }
 
   addBreadcrumb('Sending push notifications', 'push', 'info', { business_id: businessId, count: subs.length })

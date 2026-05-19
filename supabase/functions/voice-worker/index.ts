@@ -23,10 +23,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
 import { transcribe }            from './stt.ts'
 import { getClientFirstNamesForBoost } from './core/repos/clients.ts'
-import { synthesizeAudio }       from './tts.ts'
 import { runAgent }              from './agent.ts'
 import { dispatchBellNotification } from './notifications.ts'
-import { checkRateLimit }         from './redis.ts'
+import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
 import type { ToolContext }      from './core/tool-context.ts'
 import type {
@@ -86,10 +85,38 @@ interface UserContext {
   businessId: string
 }
 
+// JWT-keyed auth cache. Skips both `auth.getUser` (verifies JWT signature
+// + checks revocation, ~50–100 ms) and the `users` profile select
+// (~30–80 ms) when the same JWT was resolved within the last 60 s. The
+// 60-second TTL is the revocation grace window: a token that gets
+// invalidated mid-window will keep working until the cache entry
+// expires. Acceptable for a voice-assistant flow where the worst case
+// is one extra agent turn after logout.
+const AUTH_CACHE_TTL = 60
+
+async function sha256Hex(s: string): Promise<string> {
+  const bytes = new TextEncoder().encode(s)
+  const hash  = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 // deno-lint-ignore no-explicit-any
 async function resolveUserAndBusiness(supabase: any, authHeader: string): Promise<UserContext | null> {
   const jwt = authHeader.replace(/^Bearer\s+/i, '')
   if (!jwt) return null
+
+  // Cache lookup keyed by the JWT hash (don't store the JWT itself in Redis).
+  const jwtHash = await sha256Hex(jwt)
+  const cacheKey = `auth:jwt:${jwtHash.slice(0, 32)}`
+  const cached = await redisGet(cacheKey)
+  if (cached) {
+    try {
+      const ctx = JSON.parse(cached) as UserContext
+      if (ctx && ctx.userId && ctx.businessId) return ctx
+    } catch { /* fall through to fresh lookup */ }
+  }
 
   // Verify JWT and get user
   const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
@@ -104,12 +131,15 @@ async function resolveUserAndBusiness(supabase: any, authHeader: string): Promis
 
   if (!profile?.business_id) return null
 
-  return {
+  const ctx: UserContext = {
     userId:     profile.id as string,
     userName:   (profile.name as string | null) ?? 'Usuario',
     userRole:   ((profile.role as string | null) ?? 'employee') as UserRole,
     businessId: profile.business_id as string,
   }
+  // Fire-and-forget: caching is an optimisation, never a correctness gate.
+  void redisSet(cacheKey, JSON.stringify(ctx), AUTH_CACHE_TTL)
+  return ctx
 }
 
 // ── Business context loader ────────────────────────────────────────────────
@@ -372,15 +402,20 @@ async function handleRequest(req: Request): Promise<Response> {
     ...agentResult.pendingNotifications.map(n => dispatchBellNotification(supabase, n)),
   ])
 
-  // 7. TTS (synchronous — needed before response)
-  const audioUrl = await synthesizeAudio(agentResult.text)
-
+  // 7. TTS is no longer synthesised here.
+  //
+  // Synthesising the audio inside this Edge Function added 200–450 ms to
+  // every response. Instead we return `audioUrl: null` and rely on the
+  // client's existing fallback path (voice-assistant-fab.tsx) which
+  // streams from `/api/assistant/tts?t=<text>` — same Deepgram provider,
+  // but the roundtrip overlaps with the user's perceptual gap between
+  // "request done" and "speaker starts" rather than blocking the response.
   const totalMs = Date.now() - t0
-  console.log(`[VOICE-WORKER] Done in ${totalMs}ms — model=${agentResult.modelUsed} action=${agentResult.actionPerformed} hasAudio=${!!audioUrl}`)
+  console.log(`[VOICE-WORKER] Done in ${totalMs}ms — model=${agentResult.modelUsed} action=${agentResult.actionPerformed} (tts deferred to client)`)
 
   const body: VoiceWorkerResponse = {
     text:            agentResult.text,
-    audioUrl,
+    audioUrl:        null,
     actionPerformed: agentResult.actionPerformed,
     transcription,
     modelUsed:       agentResult.modelUsed,

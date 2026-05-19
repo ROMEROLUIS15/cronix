@@ -130,24 +130,37 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
-  // ── Constitutional guard: pre-recall memory ONCE per turn and attach a
-  //    write-guard closure to ctx. Both the fast path and the LLM path call
-  //    capabilities through `executeByName`, which sees this guard via ctx.
-  //    Memory recall is mandatory by design — never pass an empty array.
+  // ── Constitutional guard: attach a LAZY write-guard closure to ctx.
+  //    Memory recall (~150–300 ms: embedding + pgvector) used to run on
+  //    EVERY turn before the fast-path branch. Read-only intents
+  //    ("próxima cita", "qué citas tengo hoy") never invoke the guard, so
+  //    the recall was pure latency tax. We now defer the recall until the
+  //    FIRST write attempt, memoise it for the rest of the turn, and skip
+  //    it entirely on read-only turns.
+  //
+  //    Memory recall is mandatory by design (guard.ts asserts the array
+  //    shape) — never pass undefined; an empty array means "tried and
+  //    found nothing" while a deferred fetch means "we haven't asked yet".
   if (reviewer) {
-    const recalled = await memoryEngine.recall(
-      { businessId: ctx.businessId, actorKind: 'user', actorKey: ctx.userId },
-      input.text,
-      { topK: 5, threshold: 0.78 },
-    )
-    const recentMemory = recalled.map(r => ({
-      content:    r.content,
-      similarity: r.similarity,
-      createdAt:  r.createdAt,
-    }))
+    let memoryPromise: Promise<Array<{ content: string; similarity: number; createdAt: string }>> | null = null
+    const ensureMemory = () => {
+      if (!memoryPromise) {
+        memoryPromise = memoryEngine.recall(
+          { businessId: ctx.businessId, actorKind: 'user', actorKey: ctx.userId },
+          input.text,
+          { topK: 5, threshold: 0.78 },
+        ).then(recalled => recalled.map(r => ({
+          content:    r.content,
+          similarity: r.similarity,
+          createdAt:  r.createdAt,
+        })))
+      }
+      return memoryPromise
+    }
     ctx = {
       ...ctx,
       runWriteGuard: async (toolName, args): Promise<ToolResult | null> => {
+        const recentMemory = await ensureMemory()
         const outcome = await reviewWriteOrFailOpen({
           reviewer,
           toolName,

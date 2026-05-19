@@ -1,17 +1,29 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react"
-import { format, isSameDay, parseISO } from "date-fns"
+import dynamic from "next/dynamic"
+import { isSameDay, parseISO } from "date-fns"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { ServicesOnboardingBanner } from "@/components/dashboard/services-onboarding-banner"
 import { NoBusinessView } from "../_components/NoBusinessView"
 import { DashboardHeader } from "../_components/DashboardHeader"
 import { AgendaTab } from "../_components/AgendaTab"
-import { ResumenTab } from "../_components/ResumenTab"
-import { DayPanel } from "../_components/DayPanel"
-import { AptDetailPanel } from "../_components/AptDetailPanel"
 import type { AppointmentStatus, AppointmentWithRelations } from "@/types"
 import { useDashboardData } from "./hooks/use-dashboard-data"
+
+// Off-critical-path widgets — none of these render until the user changes tab
+// or opens a panel. Splitting them out of the initial JS bundle trims the
+// dashboard's first-load JS by their combined weight (panels alone are ~400
+// lines + their date-fns and lucide imports).
+const ResumenTab = dynamic(() =>
+  import("../_components/ResumenTab").then(m => ({ default: m.ResumenTab })),
+)
+const DayPanel = dynamic(() =>
+  import("../_components/DayPanel").then(m => ({ default: m.DayPanel })),
+)
+const AptDetailPanel = dynamic(() =>
+  import("../_components/AptDetailPanel").then(m => ({ default: m.AptDetailPanel })),
+)
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +39,12 @@ interface DashboardClientProps {
   initialStats: DashboardStats
   /** Whether the business has any services */
   initialHasServices: boolean
+  /** Server-pre-fetched appointments for the visible month range. */
+  initialMonthApts?: AppointmentWithRelations[]
+  /** Range start matching initialMonthApts (yyyy-MM-dd). */
+  initialRangeStart?: string
+  /** Range end matching initialMonthApts (yyyy-MM-dd). */
+  initialRangeEnd?: string
   /** Display name for greeting */
   userName: string
 }
@@ -42,6 +60,9 @@ interface DashboardClientProps {
 export function DashboardClient({
   initialStats,
   initialHasServices,
+  initialMonthApts,
+  initialRangeStart,
+  initialRangeEnd,
   userName,
 }: DashboardClientProps) {
   const { businessId } = useBusinessContext()
@@ -67,7 +88,14 @@ export function DashboardClient({
     setActionError,
     setConfirmDelete,
     confirmDelete,
-  } = useDashboardData({ businessId, initialStats, initialHasServices })
+  } = useDashboardData({
+    businessId,
+    initialStats,
+    initialHasServices,
+    initialMonthApts,
+    initialRangeStart,
+    initialRangeEnd,
+  })
 
   // ── UI state ──────────────────────────────────────────────────────────────
 

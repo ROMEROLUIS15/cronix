@@ -129,6 +129,22 @@ Deno.serve(async (req: Request) => {
       } catch (err) {
         captureException(err, { stage: 'create_whatsapp_failure_notification', business_id: biz.id })
       }
+      // Also push to owner's device — fallos silenciosos perdían visibilidad
+      try {
+        await fetch(`${Deno.env.get('SUPABASE_URL') ?? ''}/functions/v1/push-notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
+          body: JSON.stringify({
+            business_id: biz.id,
+            title: failureNotif.title,
+            body:  failureNotif.content,
+            url:   '/dashboard/settings',
+            tag:   `wa-fail-${biz.id}-${Date.now()}`,
+          }),
+        })
+      } catch (err) {
+        captureException(err, { stage: 'push_whatsapp_failure', business_id: biz.id })
+      }
     }
 
     // ── 2. Create in-app notification ─────────────────────────────────────

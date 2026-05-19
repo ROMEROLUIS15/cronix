@@ -9,6 +9,7 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 
 import { listAppointmentsCapability } from '../list-appointments/index.ts'
+import { nextAppointmentCapability }  from '../next-appointment/index.ts'
 import { searchClientsCapability }    from '../search-clients/index.ts'
 import { rescheduleCapability }       from '../reschedule/index.ts'
 import { cancelCapability }           from '../cancel/index.ts'
@@ -25,6 +26,11 @@ import { availableSlotsCapability }   from '../available-slots/index.ts'
 // "qué citas tengo mañana" doesn't trigger schedule's date+time presence.
 // deno-lint-ignore no-explicit-any
 const CAPABILITIES: ICapability<any>[] = [
+  // nextAppointment BEFORE listAppointments — "próxima cita" without a date
+  // keyword must not fall into the day-listing path (which would return
+  // today's 12:00 AM appointment as "next"). The detector here is strict:
+  // singular "próxima/siguiente cita" with NO date keyword.
+  nextAppointmentCapability,
   listAppointmentsCapability,
   rescheduleCapability,
   cancelCapability,
