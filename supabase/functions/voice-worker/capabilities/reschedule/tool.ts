@@ -95,6 +95,19 @@ export async function executeReschedule(
     return { success: false, result: `El horario ${finalTime} del ${finalDate} ya está ocupado. Elige otra hora.` }
   }
 
+  if (ctx.runWriteGuard) {
+    const denied = await ctx.runWriteGuard('reschedule_appointment', {
+      appointmentId: apt.id,
+      clientName,
+      serviceName,
+      previousDate: existingDate,
+      previousTime: existingTime,
+      newDate:      finalDate,
+      newTime:      finalTime,
+    })
+    if (denied) return denied
+  }
+
   const { error } = await ctx.supabase
     .from('appointments')
     .update({ start_at: newStartISO, end_at: newEndISO })

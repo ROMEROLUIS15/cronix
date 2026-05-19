@@ -37,6 +37,20 @@ import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
 import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
+import { createMemoryEngine }   from "../_shared/memory/index.ts"
+import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
+import { createTracer, shortHash } from "../_shared/observability/index.ts"
+import type { TraceOutcome, ToolStepStatus } from "../_shared/observability/contracts.ts"
+import { createSemanticRouter } from "../_shared/router/index.ts"
+import type { ClassifyResult }  from "../_shared/router/contracts.ts"
+import { createConstitutionalReviewer, reviewWriteOrFailOpen } from "../_shared/supervisor/index.ts"
+import type { WriteGuard } from "./tool-executor.ts"
+
+// Single instance per cold start. Stateless — safe to share across requests.
+const memoryEngine = createMemoryEngine()
+const tracer       = createTracer()
+const router       = createSemanticRouter()
+const reviewer     = createConstitutionalReviewer()
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -143,9 +157,57 @@ export async function runAgentLoop(
   // Cap history at 14 messages (~7 turns) for much better memory
   const cappedHistory = context.history.slice(-14)
 
+  // ── Memory recall + intent classification (parallel, both degrade gracefully)
+  const memoryScope: MemoryScope = {
+    businessId: business.id,
+    actorKind:  'client_phone',
+    actorKey:   sender,
+  }
+  const [recalled, intent] = await Promise.all([
+    memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 }),
+    router.classify(userText),
+  ])
+
+  // Build the constitutional guard for this turn. recentMemory comes from
+  // the same recall above — never empty by accident, never a second round-trip.
+  const writeGuard: WriteGuard | undefined = reviewer
+    ? async (toolName, args) => {
+        const outcome = await reviewWriteOrFailOpen({
+          reviewer,
+          toolName,
+          args,
+          scope:         { businessId: business.id, channel: 'whatsapp' },
+          userUtterance: userText,
+          recentMemory:  recalled.map(r => ({
+            content:    r.content,
+            similarity: r.similarity,
+            createdAt:  r.createdAt,
+          })),
+        })
+        return outcome.allowed ? null : { blocked: true, reason: outcome.reason }
+      }
+    : undefined
+
+  addBreadcrumb('Memory recall + intent classification completed', 'agent', 'info', {
+    memory_hits: recalled.length,
+    intent:      intent?.intent     ?? 'unknown',
+    confidence:  intent?.confidence ?? 0,
+  })
+
+  // ── Open the per-turn trace (closed in the finally block below) ───────────
+  const trace = tracer.start(
+    { businessId: business.id, channel: 'whatsapp', actorKind: 'client_phone', actorKey: sender },
+    await shortHash(userText),
+    {
+      memory_hits:      recalled.length,
+      intent:           intent?.intent     ?? null,
+      intent_confidence: intent?.confidence ?? null,
+    },
+  )
+
   // Build initial messages array
   const messages: AgentMessage[] = [
-    { role: 'system', content: buildMinimalSystemPrompt(context, customerName) },
+    { role: 'system', content: buildMinimalSystemPrompt(context, customerName, recalled, intent) },
     // Inject conversation history (convert 'model' role to 'assistant')
     ...cappedHistory.map(h => ({
       role:    (h.role === 'model' ? 'assistant' : h.role) as AgentMessage['role'],
@@ -181,6 +243,7 @@ export async function runAgentLoop(
       business: business.name,
     })
 
+    const llmStart = Date.now()
     const { response, tokens } = await callLlm(
       SMALL_MODEL,
       messages,
@@ -192,6 +255,12 @@ export async function runAgentLoop(
     totalTokens += tokens
 
     const assistantMsg = response.choices?.[0]?.message
+    trace.recordLlmStep({
+      model:        SMALL_MODEL,
+      latencyMs:    Date.now() - llmStart,
+      tokens,
+      hadToolCalls: Boolean(assistantMsg?.tool_calls?.length),
+    })
     if (!assistantMsg) break
 
     // ── Embedded function recovery ─────────────────────────────────────────
@@ -266,7 +335,7 @@ export async function runAgentLoop(
 
       let toolResult: string
       try {
-        toolResult = await executeToolCall(toolCall, context, sender, customerName)
+        toolResult = await executeToolCall(toolCall, context, sender, customerName, writeGuard)
       } catch (err) {
         captureException(err, { stage: 'execute_tool_call', tool: toolCall.function.name })
         toolResult = JSON.stringify({ success: false, error: 'TOOL_EXECUTION_ERROR: error interno al ejecutar la acción' })
@@ -274,13 +343,27 @@ export async function runAgentLoop(
 
       const parsedResult = (() => { try { return JSON.parse(toolResult) } catch { return toolResult } })()
 
+      const toolSuccess = parsedResult?.success !== false
       toolCallsTrace.push({
         step,
         tool:        toolCall.function.name,
         args:        (() => { try { return JSON.parse(toolCall.function.arguments) } catch { return toolCall.function.arguments } })(),
         result:      parsedResult,
         duration_ms: Date.now() - stepStart,
-        success:     parsedResult?.success !== false,
+        success:     toolSuccess,
+      })
+
+      const toolStatus: ToolStepStatus =
+        toolSuccess ? 'success'
+        : String(parsedResult?.error ?? '').includes('RATE_LIMIT') ? 'rate_limited'
+        : 'error'
+
+      trace.recordToolCall({
+        tool:            toolCall.function.name,
+        durationMs:      Date.now() - stepStart,
+        status:          toolStatus,
+        argsFingerprint: await shortHash(toolCall.function.arguments),
+        errorCode:       toolSuccess ? undefined : String(parsedResult?.error ?? 'UNKNOWN').slice(0, 64),
       })
 
       messages.push({
@@ -334,6 +417,17 @@ export async function runAgentLoop(
       business.timezone,
     )
     addBreadcrumb('Skipped final LLM pass (success template used)', 'agent', 'info', { tool: lastTrace?.tool, loop_exhausted: loopExhausted })
+
+    // Fire-and-forget: persist the episode. Never awaited inside the response path.
+    void memoryEngine.write(memoryScope, {
+      kind:    'episodic',
+      content: `Cliente ${customerName}: ${lastTrace?.tool ?? 'acción'} — ${userText}`,
+      metadata: {
+        tool:   lastTrace?.tool,
+        result: lastToolParsed,
+      },
+      ttlDays: 180,
+    })
   } else if (actionPerformed && lastToolParsed?.success === false) {
     // Tool failed with a known error — return deterministic message, NO second LLM call
     // A second LLM call here is the root cause of the 400→circuit breaker→503 loop
@@ -376,6 +470,25 @@ export async function runAgentLoop(
       : null
     finalText = deterministic ?? INTERNAL_SYNTAX_FALLBACK
   }
+
+  // ── Close the trace (awaited — Edge runtime may terminate after return) ───
+  const lastFailedError = lastToolParsed?.success === false
+    ? String(lastToolParsed?.error ?? '')
+    : ''
+  const outcome: TraceOutcome = (() => {
+    if (loopExhausted)                                          return 'error'
+    if (actionPerformed && lastToolParsed?.success === true)    return 'success'
+    if (lastFailedError.includes('RATE_LIMIT'))                 return 'rate_limited'
+    if (actionPerformed && lastToolParsed?.success === false)   return 'failure'
+    if (!actionPerformed && !loopText)                          return 'no_action'
+    return 'success'
+  })()
+
+  await trace.finish({
+    outcome,
+    errorCode:    lastFailedError ? lastFailedError.slice(0, 64) : undefined,
+    finalTextSha: await shortHash(finalText),
+  })
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }
 }

@@ -8,6 +8,8 @@
  */
 
 import type { BusinessRagContext } from "./types.ts"
+import type { MemoryRecord }       from "../_shared/memory/contracts.ts"
+import type { ClassifyResult }     from "../_shared/router/contracts.ts"
 
 // ── Shared Utility ────────────────────────────────────────────────────────────
 
@@ -26,7 +28,12 @@ export function formatLocalTime(time: string): string {
 
 // ── System Prompt Builder ─────────────────────────────────────────────────────
 
-export function buildMinimalSystemPrompt(context: BusinessRagContext, customerName: string): string {
+export function buildMinimalSystemPrompt(
+  context:      BusinessRagContext,
+  customerName: string,
+  recalled?:    ReadonlyArray<MemoryRecord>,
+  intent?:      ClassifyResult | null,
+): string {
   const { business, services, client, activeAppointments, bookedSlots } = context
   const { settings, timezone } = business
 
@@ -149,6 +156,23 @@ IDENTIFICADORES:
 - ✅ CORRECTO: "service_id": "339afed4-cbc2-423b-9d8c-17a6f52fb642"
 - ❌ INCORRECTO: "service_id": "REF#339afed4-cbc2-423b-9d8c-17a6f52fb642"
 `
+
+  if (recalled && recalled.length > 0) {
+    prompt += `\n--- MEMORIA RELEVANTE DEL CLIENTE ---\n`
+    prompt += `Usa estos hechos SOLO si son útiles. No los menciones literalmente.\n`
+    for (const m of recalled) {
+      prompt += `• ${m.content}\n`
+    }
+  }
+
+  // Intent hint — only injected when confidence is high enough to be useful.
+  // The 'matched' phrase is intentionally hidden to avoid the LLM parroting it.
+  if (intent && intent.confidence >= 0.85) {
+    const confidencePct = Math.round(intent.confidence * 100)
+    prompt += `\n--- INTENCIÓN DETECTADA (señal interna) ---\n`
+    prompt += `Probable intención del usuario: ${intent.intent} (confianza ${confidencePct}%).\n`
+    prompt += `Úsala como pista, NO como certeza. Si las palabras del cliente la contradicen, ignora esta señal.\n`
+  }
 
   return prompt
 }
