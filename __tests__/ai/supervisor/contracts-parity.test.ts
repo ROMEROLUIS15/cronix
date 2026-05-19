@@ -47,4 +47,11 @@ describe('supervisor parity (Node ↔ Deno)', () => {
         .replace(/from\s+['"]https:\/\/esm\.sh\/zod@[\d.]+['"]/g, "from 'zod'")
     expect(norm(deno)).toBe(norm(node))
   })
+
+  it('guard.ts is identical modulo the .ts suffix on relative imports', () => {
+    const node = read('lib/ai/supervisor/guard.ts')
+    const deno = read('supabase/functions/_shared/supervisor/guard.ts')
+    const norm = (s: string) => s.replace(/from\s+['"]\.\/(contracts)\.ts['"]/g, "from './$1'")
+    expect(norm(deno)).toBe(norm(node))
+  })
 })

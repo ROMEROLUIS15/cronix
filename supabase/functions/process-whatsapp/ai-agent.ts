@@ -43,11 +43,14 @@ import { createTracer, shortHash } from "../_shared/observability/index.ts"
 import type { TraceOutcome, ToolStepStatus } from "../_shared/observability/contracts.ts"
 import { createSemanticRouter } from "../_shared/router/index.ts"
 import type { ClassifyResult }  from "../_shared/router/contracts.ts"
+import { createConstitutionalReviewer, reviewWriteOrFailOpen } from "../_shared/supervisor/index.ts"
+import type { WriteGuard } from "./tool-executor.ts"
 
 // Single instance per cold start. Stateless — safe to share across requests.
 const memoryEngine = createMemoryEngine()
 const tracer       = createTracer()
 const router       = createSemanticRouter()
+const reviewer     = createConstitutionalReviewer()
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -164,6 +167,26 @@ export async function runAgentLoop(
     memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 }),
     router.classify(userText),
   ])
+
+  // Build the constitutional guard for this turn. recentMemory comes from
+  // the same recall above — never empty by accident, never a second round-trip.
+  const writeGuard: WriteGuard | undefined = reviewer
+    ? async (toolName, args) => {
+        const outcome = await reviewWriteOrFailOpen({
+          reviewer,
+          toolName,
+          args,
+          scope:         { businessId: business.id, channel: 'whatsapp' },
+          userUtterance: userText,
+          recentMemory:  recalled.map(r => ({
+            content:    r.content,
+            similarity: r.similarity,
+            createdAt:  r.createdAt,
+          })),
+        })
+        return outcome.allowed ? null : { blocked: true, reason: outcome.reason }
+      }
+    : undefined
 
   addBreadcrumb('Memory recall + intent classification completed', 'agent', 'info', {
     memory_hits: recalled.length,
@@ -312,7 +335,7 @@ export async function runAgentLoop(
 
       let toolResult: string
       try {
-        toolResult = await executeToolCall(toolCall, context, sender, customerName)
+        toolResult = await executeToolCall(toolCall, context, sender, customerName, writeGuard)
       } catch (err) {
         captureException(err, { stage: 'execute_tool_call', tool: toolCall.function.name })
         toolResult = JSON.stringify({ success: false, error: 'TOOL_EXECUTION_ERROR: error interno al ejecutar la acción' })

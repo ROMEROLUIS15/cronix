@@ -61,13 +61,45 @@ export type BookingEngineRepos = {
 type DayHours = { open: string; close: string } | null
 type WorkingHours = Record<string, DayHours>
 
+// ── BeforeDispatch hook (constitutional review) ───────────────────────────────
+// Abstracción propia del engine: no depende del módulo supervisor. El call site
+// inyecta una closure que ya capturó utterance + memoria.
+
+export type BookingWriteTool =
+  | 'confirm_booking'
+  | 'cancel_booking'
+  | 'reschedule_booking'
+
+export type DispatchGuardResult =
+  | { ok: true }
+  | { ok: false; reason: string }
+
+export type OnBeforeDispatchHook = (
+  toolName: BookingWriteTool,
+  toolArgs: Readonly<Record<string, unknown>>,
+  ctx:      TenantContext,
+) => Promise<DispatchGuardResult>
+
+const REVIEWED_WRITE_TOOLS: ReadonlySet<BookingWriteTool> = new Set([
+  'confirm_booking',
+  'cancel_booking',
+  'reschedule_booking',
+])
+
+function isReviewedWriteTool(name: string): name is BookingWriteTool {
+  return REVIEWED_WRITE_TOOLS.has(name as BookingWriteTool)
+}
+
 // ── BookingEngine ─────────────────────────────────────────────────────────────
 
 export class BookingEngine {
   private clientResolver:  ClientResolver
   private serviceResolver: ServiceResolver
 
-  constructor(private repos: BookingEngineRepos) {
+  constructor(
+    private repos:             BookingEngineRepos,
+    private onBeforeDispatch?: OnBeforeDispatchHook,
+  ) {
     this.clientResolver  = new ClientResolver(repos.clients)
     this.serviceResolver = new ServiceResolver(repos.services)
   }
@@ -415,6 +447,16 @@ export class BookingEngine {
     engineOpts?: { workingHours?: WorkingHours; autoCreateClient?: boolean },
   ): Promise<ToolResult<unknown>> {
     try {
+      if (this.onBeforeDispatch && isReviewedWriteTool(toolName)) {
+        const argsForReview = (rawArgs && typeof rawArgs === 'object')
+          ? rawArgs as Readonly<Record<string, unknown>>
+          : {}
+        const verdict = await this.onBeforeDispatch(toolName, argsForReview, ctx)
+        if (!verdict.ok) {
+          return toolFail('UNAUTHORIZED', `Acción bloqueada por el revisor: ${verdict.reason}`)
+        }
+      }
+
       switch (toolName) {
         case 'confirm_booking':          return await this.createAppointment(ctx, rawArgs, engineOpts)
         case 'cancel_booking':           return await this.cancelAppointment(ctx, rawArgs)

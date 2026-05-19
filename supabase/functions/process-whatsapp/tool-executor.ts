@@ -27,6 +27,16 @@ import {
   emitCancelledEvent,
   sendClientBookingConfirmation,
 } from "./notifications.ts"
+import type { ReviewedToolName } from "../_shared/supervisor/contracts.ts"
+
+export type WriteGuard = (
+  toolName: ReviewedToolName,
+  args:     Readonly<Record<string, unknown>>,
+) => Promise<{ blocked: true; reason: string } | null>
+
+function denialPayload(reason: string): string {
+  return JSON.stringify({ success: false, error: `UNAUTHORIZED: ${reason}` })
+}
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
 
@@ -159,6 +169,7 @@ export async function executeToolCall(
   context:      BusinessRagContext,
   sender:       string,
   customerName: string,
+  guard?:       WriteGuard,
 ): Promise<string> {
   const { business, services, client } = context
   const name = toolCall.function.name
@@ -194,6 +205,11 @@ export async function executeToolCall(
     const bookingAllowed = await checkBookingRateLimit(sender, business.id)
     if (!bookingAllowed) {
       return JSON.stringify({ success: false, error: 'BOOKING_RATE_LIMIT: límite de citas nuevas por hoy alcanzado' })
+    }
+
+    if (guard) {
+      const denial = await guard('book_appointment', { service_id, date, time, sender })
+      if (denial) return denialPayload(denial.reason)
     }
 
     const result = await createAppointment(business.id, {
@@ -242,6 +258,11 @@ export async function executeToolCall(
       return JSON.stringify({ success: false, error: 'UNAUTHORIZED: appointment does not belong to this client' })
     }
 
+    if (guard) {
+      const denial = await guard('reschedule_appointment', { appointment_id, new_date, new_time, sender })
+      if (denial) return denialPayload(denial.reason)
+    }
+
     const newStartAt = localTimeToUTC(new_date, new_time, business.timezone)
     const rescheduleResult = await rescheduleAppointment(appointment_id, newStartAt, business.id)
     if (!rescheduleResult.success) {
@@ -284,6 +305,11 @@ export async function executeToolCall(
         success: false,
         error: 'UNAUTHORIZED: Esta cita pertenece a otro cliente. Usa solo UUIDs del listado de CITAS ACTIVAS de este cliente.',
       })
+    }
+
+    if (guard) {
+      const denial = await guard('cancel_appointment', { appointment_id, sender })
+      if (denial) return denialPayload(denial.reason)
     }
 
     await cancelAppointmentById(appointment_id, business.id)

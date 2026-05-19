@@ -7,6 +7,8 @@ export * from './contracts.ts'
 export { ConstitutionalReviewer } from './ConstitutionalReviewer.ts'
 export { GroqReviewerLlm }        from './GroqReviewerLlm.ts'
 export { REVIEWER_RUBRIC_VERSION, REVIEWER_SYSTEM_PROMPT } from './rubric.ts'
+export { reviewWriteOrFailOpen } from './guard.ts'
+export type { GuardInput, GuardOutcome } from './guard.ts'
 
 /** DI composition root for the Deno (Edge Function) runtime. */
 export function createConstitutionalReviewer(): IReviewer | null {

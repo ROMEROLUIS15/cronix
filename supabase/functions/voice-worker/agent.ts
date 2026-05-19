@@ -23,7 +23,7 @@ import { buildSystemPrompt } from './prompt.ts'
 import type { ToolContext }  from './core/tool-context.ts'
 import { getProvider }       from './providers/registry.ts'
 import type { NeutralMessage, NeutralTool } from './providers/ILLMProvider.ts'
-import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType } from './types.ts'
+import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType, ToolResult } from './types.ts'
 import {
   detectFastPath as registryDetect,
   executeByName,
@@ -31,6 +31,11 @@ import {
   WRITE_CAPABILITIES,
   BYPASS_CAPABILITIES,
 } from './capabilities/_shared/registry.ts'
+import { createMemoryEngine }            from '../_shared/memory/index.ts'
+import { createConstitutionalReviewer, reviewWriteOrFailOpen } from '../_shared/supervisor/index.ts'
+
+const memoryEngine = createMemoryEngine()
+const reviewer     = createConstitutionalReviewer()
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
@@ -124,6 +129,41 @@ export async function runAgent(
   input: AgentInput,
 ): Promise<AgentOutput> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+
+  // ── Constitutional guard: pre-recall memory ONCE per turn and attach a
+  //    write-guard closure to ctx. Both the fast path and the LLM path call
+  //    capabilities through `executeByName`, which sees this guard via ctx.
+  //    Memory recall is mandatory by design — never pass an empty array.
+  if (reviewer) {
+    const recalled = await memoryEngine.recall(
+      { businessId: ctx.businessId, actorKind: 'user', actorKey: ctx.userId },
+      input.text,
+      { topK: 5, threshold: 0.78 },
+    )
+    const recentMemory = recalled.map(r => ({
+      content:    r.content,
+      similarity: r.similarity,
+      createdAt:  r.createdAt,
+    }))
+    ctx = {
+      ...ctx,
+      runWriteGuard: async (toolName, args): Promise<ToolResult | null> => {
+        const outcome = await reviewWriteOrFailOpen({
+          reviewer,
+          toolName,
+          args,
+          scope:         { businessId: ctx.businessId, channel: 'voice' },
+          userUtterance: input.text,
+          recentMemory,
+        })
+        if (outcome.allowed) return null
+        return {
+          success: false,
+          result:  `No puedo ejecutar esa acción: ${outcome.reason}`,
+        }
+      },
+    }
+  }
 
   // ── FAST PATHS — total LLM bypass for unambiguous queries
   //
