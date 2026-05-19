@@ -25,7 +25,7 @@ fi
 
 pass_count=0
 fail_count=0
-total_stages=3
+total_stages=4
 
 print_pass() {
   echo "${GREEN}✓${NC} $1"
@@ -62,7 +62,7 @@ print_summary() {
 
 # ── Stage 1: Lint ────────────────────────────────────────────────────────────
 run_lint() {
-  echo "${BOLD}[1/3] Running ESLint...${NC}"
+  echo "${BOLD}[1/4] Running ESLint...${NC}"
   local lint_output
   lint_output=$(npm run lint 2>&1)
   local lint_exit=$?
@@ -92,7 +92,7 @@ run_lint() {
 
 # ── Stage 2: Typecheck ──────────────────────────────────────────────────────
 run_typecheck() {
-  echo "${BOLD}[2/3] Running TypeScript check...${NC}"
+  echo "${BOLD}[2/4] Running TypeScript check...${NC}"
   local tsc_output
   tsc_output=$(npm run typecheck 2>&1)
   local tsc_exit=$?
@@ -116,7 +116,7 @@ run_typecheck() {
 
 # ── Stage 3: Tests ───────────────────────────────────────────────────────────
 run_tests() {
-  echo "${BOLD}[3/3] Running tests...${NC}"
+  echo "${BOLD}[3/4] Running tests...${NC}"
   local test_output
   test_output=$(npm test 2>&1)
   local test_exit=$?
@@ -166,6 +166,32 @@ run_tests() {
   return 1
 }
 
+# ── Stage 4: Security audit ──────────────────────────────────────────────────
+# Mirrors .github/workflows/security-audit.yml. Fails on HIGH/CRITICAL CVEs in
+# the dependency tree so dirty deps never reach origin / CI.
+run_audit() {
+  echo "${BOLD}[4/4] Running npm audit...${NC}"
+  local audit_output
+  audit_output=$(npm audit --audit-level=high 2>&1)
+  local audit_exit=$?
+
+  if [ $audit_exit -eq 0 ]; then
+    print_pass "No HIGH/CRITICAL vulnerabilities"
+    return 0
+  fi
+
+  print_fail "HIGH/CRITICAL vulnerabilities detected"
+
+  # Surface package names + severities; trim noise.
+  echo ""
+  echo "${RED}Audit details:${NC}"
+  echo "$audit_output" | grep -E "^(\S+\s+[0-9<>=~^.\- ]+|Severity:)" | head -30
+
+  print_suggestion "Resolve in a separate PR with: ${BOLD}npm audit fix${NC} (verify build + tests after)"
+  print_fix_command "npm audit --audit-level=high"
+  return 1
+}
+
 # ── Main Execution ───────────────────────────────────────────────────────────
 echo ""
 echo "╔═══════════════════════════════════════════════════════════╗"
@@ -181,6 +207,8 @@ echo ""
 run_typecheck || any_failed=1
 echo ""
 run_tests || any_failed=1
+echo ""
+run_audit || any_failed=1
 
 print_summary
 
