@@ -21,7 +21,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 import { initSentry, captureException, addBreadcrumb, flushSentry } from '../_shared/sentry.ts'
-import { buildExportSummary, toJsonl } from '../_shared/training/TrainingExporter.ts'
+import { buildExportSummary } from '../_shared/training/TrainingExporter.ts'
 import { TRAINING_SCHEMA_VERSION }     from '../_shared/training/contracts.ts'
 import type { SampleRow }              from '../_shared/training/contracts.ts'
 
@@ -154,6 +154,3 @@ Deno.serve(async (req: Request) => {
   await flushSentry()
   return json({ ok: true, range: { start: rangeStartIso, end: rangeEndIso }, ...results })
 })
-
-// Avoid unused-import elision in some toolchains.
-export const _jsonl_helper = toJsonl
