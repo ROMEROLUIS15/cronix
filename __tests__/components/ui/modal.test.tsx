@@ -133,7 +133,7 @@ describe('Modal Component', () => {
     )
 
     const dialog = screen.getByRole('dialog')
-    fireEvent.click(dialog)
+    if (dialog) fireEvent.click(dialog)
 
     expect(onCloseMock).toHaveBeenCalled()
   })
@@ -145,7 +145,8 @@ describe('Modal Component', () => {
       </Modal>
     )
 
-    fireEvent.click(screen.getByTestId('modal-content'))
+    const content = screen.getByTestId('modal-content')
+    if (content) fireEvent.click(content)
 
     expect(onCloseMock).not.toHaveBeenCalled()
   })

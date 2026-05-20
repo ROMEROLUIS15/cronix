@@ -32,8 +32,11 @@ describeIntegration('Voice Assistant Flow', () => {
     if (biz) TEST_BUSINESS_ID = biz.id
 
     const { data: user } = await supabase.auth.admin.listUsers()
-    if (user?.users && user.users.length > 0) {
-      TEST_USER_ID = user.users[0].id
+    if (user && user.users && user.users.length > 0) {
+      const firstUser = user.users[0]
+      if (firstUser?.id) {
+        TEST_USER_ID = firstUser.id
+      }
     }
   })
 

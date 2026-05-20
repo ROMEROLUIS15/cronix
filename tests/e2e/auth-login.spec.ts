@@ -140,7 +140,7 @@ test.describe('User Login (/login)', () => {
 
     for (let i = 0; i < inputCount; i++) {
       const input = inputs.nth(i)
-      const hasLabel = await input.evaluate((el) => {
+      const hasLabel = await input.evaluate((el: any) => {
         return !!el.labels?.length || el.hasAttribute('aria-label')
       })
 
@@ -191,8 +191,8 @@ test.describe('User Login (/login)', () => {
 
   test('should have correct page title', async ({ page }) => {
     const title = await page.title()
-    expect(title.toLowerCase()).toContain('login')
-      || expect(title.toLowerCase()).toContain('signin')
-      || expect(title.toLowerCase()).toContain('inicia')
+    const titleLower = title.toLowerCase()
+    const hasValidTitle = titleLower.includes('login') || titleLower.includes('signin') || titleLower.includes('inicia')
+    expect(hasValidTitle).toBe(true)
   })
 })

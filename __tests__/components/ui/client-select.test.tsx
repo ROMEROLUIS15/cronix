@@ -19,15 +19,20 @@ vi.mock('@/lib/hooks/use-clients-list', () => ({
 }))
 
 describe('ClientSelect Component', () => {
+  const mockClients = [
+    { id: '1', name: 'Client A', phone: '1234567890', email: 'a@example.com', business_id: 'b1' },
+    { id: '2', name: 'Client B', phone: '0987654321', email: 'b@example.com', business_id: 'b1' },
+  ] as any[]
+
   it('renders select dropdown', () => {
-    render(<ClientSelect value="" onChange={() => {}} />)
-    expect(screen.getByRole('combobox')).toBeInTheDocument()
+    render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: /select client/i })).toBeInTheDocument()
   })
 
-  it('displays client options', async () => {
-    render(<ClientSelect value="" onChange={() => {}} />)
-    const select = screen.getByRole('combobox')
-    fireEvent.click(select)
+  it('displays client options when opened', async () => {
+    render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
+    const button = screen.getByRole('button', { name: /select client/i })
+    fireEvent.click(button)
 
     await waitFor(() => {
       expect(screen.getByText('Client A')).toBeInTheDocument()
@@ -37,38 +42,46 @@ describe('ClientSelect Component', () => {
 
   it('calls onChange when client is selected', async () => {
     const onChange = vi.fn()
-    render(<ClientSelect value="" onChange={onChange} />)
+    render(<ClientSelect clients={mockClients} value="" onChange={onChange} />)
 
-    const select = screen.getByRole('combobox')
-    fireEvent.click(select)
+    const button = screen.getByRole('button', { name: /select client/i })
+    fireEvent.click(button)
 
     await waitFor(() => {
       const option = screen.getByText('Client A')
       fireEvent.click(option)
+      expect(onChange).toHaveBeenCalledWith('1')
     })
-
-    expect(onChange).toHaveBeenCalled()
   })
 
-  it('displays selected value', () => {
-    render(<ClientSelect value="1" onChange={() => {}} />)
-    expect(screen.getByDisplayValue('Client A')).toBeInTheDocument()
+  it('displays selected client name', () => {
+    render(<ClientSelect clients={mockClients} value="1" onChange={() => {}} />)
+    expect(screen.getByText('Client A')).toBeInTheDocument()
   })
 
-  it('handles loading state', () => {
-    vi.mocked(require('@/lib/hooks/use-clients-list').useClientsList).mockReturnValue({
-      clients: [],
-      loading: true,
-      error: null,
+  it('filters clients by search query', async () => {
+    render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
+    const button = screen.getByRole('button', { name: /select client/i })
+    fireEvent.click(button)
+
+    const searchInput = screen.getByPlaceholderText(/search/i)
+    fireEvent.change(searchInput, { target: { value: 'Client B' } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Client B')).toBeInTheDocument()
     })
-
-    render(<ClientSelect value="" onChange={() => {}} />)
-    expect(screen.getByText(/loading|cargando/i)).toBeInTheDocument()
   })
 
-  it('shows empty option by default', () => {
-    render(<ClientSelect value="" onChange={() => {}} />)
-    const select = screen.getByRole('combobox')
-    expect(select.querySelector('option:first-child')).toHaveValue('')
+  it('shows empty state when no clients match search', async () => {
+    render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
+    const button = screen.getByRole('button', { name: /select client/i })
+    fireEvent.click(button)
+
+    const searchInput = screen.getByPlaceholderText(/search/i)
+    fireEvent.change(searchInput, { target: { value: 'nonexistent' } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/no clients found/i)).toBeInTheDocument()
+    })
   })
 })

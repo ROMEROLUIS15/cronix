@@ -139,7 +139,7 @@ test.describe('Team Invite (/invite/[code])', () => {
 
     for (let i = 0; i < count; i++) {
       const input = inputs.nth(i)
-      const hasLabel = await input.evaluate((el) => {
+      const hasLabel = await input.evaluate((el: any) => {
         return !!el.labels?.length || el.hasAttribute('aria-label')
       }).catch(() => false)
 
@@ -154,7 +154,7 @@ test.describe('Team Invite (/invite/[code])', () => {
 
     for (let i = 0; i < Math.min(buttonCount, 3); i++) {
       const button = buttons.nth(i)
-      const hasText = await button.evaluate((el) => el.textContent?.trim().length > 0)
+      const hasText = await button.evaluate((el: any) => el.textContent?.trim().length > 0)
       expect(hasText).toBeTruthy()
     }
   })

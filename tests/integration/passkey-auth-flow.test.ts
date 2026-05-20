@@ -24,8 +24,11 @@ describeIntegration('Passkey Authentication Flow', () => {
     })
 
     const { data: users } = await supabase.auth.admin.listUsers()
-    if (users?.users && users.users.length > 0) {
-      TEST_USER_ID = users.users[0].id
+    if (users && users.users && users.users.length > 0) {
+      const firstUser = users.users[0]
+      if (firstUser?.id) {
+        TEST_USER_ID = firstUser.id
+      }
     }
   })
 
@@ -88,15 +91,16 @@ describeIntegration('Passkey Authentication Flow', () => {
       global: { fetch: (...args: Parameters<typeof fetch>) => fetch(...args) },
     })
 
-    const { data: passkeys } = await supabase
+    const { data: passkeyData } = await supabase
       .from('user_passkeys')
       .select('id, counter')
       .eq('user_id', TEST_USER_ID)
       .limit(1)
 
-    if (passkeys && passkeys.length > 0) {
-      TEST_PASSKEY_ID = passkeys[0].id
-      expect(passkeys[0].counter).toBeDefined()
+    const passkeys = passkeyData as Array<any> | null
+    if (passkeys && Array.isArray(passkeys) && passkeys.length > 0) {
+      TEST_PASSKEY_ID = passkeys[0]?.id
+      expect(passkeys[0]?.counter).toBeDefined()
     }
   })
 
@@ -143,13 +147,14 @@ describeIntegration('Passkey Authentication Flow', () => {
       global: { fetch: (...args: Parameters<typeof fetch>) => fetch(...args) },
     })
 
-    const { data: challenges } = await supabase
+    const { data: challengeData } = await supabase
       .from('passkey_challenges')
       .select('challenge')
       .limit(1)
 
-    if (challenges && challenges.length > 0) {
-      expect(challenges[0].challenge).toBeDefined()
+    const challenges = challengeData as Array<any> | null
+    if (challenges && Array.isArray(challenges) && challenges.length > 0) {
+      expect(challenges[0]?.challenge).toBeDefined()
     }
   })
 

@@ -158,11 +158,11 @@ test.describe('User Registration (/register)', () => {
     const passwordInput = page.locator('input[type="password"]')
 
     // Check if inputs have associated labels or aria-labels
-    const emailHasLabel = await emailInput.evaluate((el) => {
+    const emailHasLabel = await emailInput.evaluate((el: any) => {
       return !!el.labels?.length || el.hasAttribute('aria-label')
     })
 
-    const passwordHasLabel = await passwordInput.evaluate((el) => {
+    const passwordHasLabel = await passwordInput.evaluate((el: any) => {
       return !!el.labels?.length || el.hasAttribute('aria-label')
     })
 

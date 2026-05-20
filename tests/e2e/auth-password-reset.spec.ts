@@ -180,7 +180,7 @@ test.describe('Password Recovery (/forgot-password, /reset-password)', () => {
 
     for (let i = 0; i < count; i++) {
       const input = inputs.nth(i)
-      const hasLabel = await input.evaluate((el) => {
+      const hasLabel = await input.evaluate((el: any) => {
         return !!el.labels?.length || el.hasAttribute('aria-label')
       }).catch(() => false)
 
