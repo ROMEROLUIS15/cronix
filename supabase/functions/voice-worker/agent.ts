@@ -33,9 +33,12 @@ import {
 } from './capabilities/_shared/registry.ts'
 import { createMemoryEngine }            from '../_shared/memory/index.ts'
 import { createConstitutionalReviewer, reviewWriteOrFailOpen } from '../_shared/supervisor/index.ts'
+import { createTracer, shortHash }       from '../_shared/observability/index.ts'
+import type { TraceOutcome, ToolStepStatus } from '../_shared/observability/contracts.ts'
 
 const memoryEngine = createMemoryEngine()
 const reviewer     = createConstitutionalReviewer()
+const tracer       = createTracer()
 
 const MAX_STEPS = 3   // 1-2 tool calls + final synthesis fits comfortably
 
@@ -130,6 +133,14 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
+  // Per-turn observability trace. Closed at every exit path below so the
+  // dashboard (/dashboard/observability) sees voice turns alongside whatsapp.
+  const trace = tracer.start(
+    { businessId: ctx.businessId, channel: 'voice-worker', actorKind: 'user', actorKey: ctx.userId },
+    await shortHash(input.text),
+    { timezone: ctx.timezone },
+  )
+
   // ── Constitutional guard: attach a LAZY write-guard closure to ctx.
   //    Memory recall (~150–300 ms: embedding + pgvector) used to run on
   //    EVERY turn before the fast-path branch. Read-only intents
@@ -199,7 +210,15 @@ export async function runAgent(
   })
   if (registryHit) {
     console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}): args=${JSON.stringify(registryHit.args)}`)
+    const fastStart = Date.now()
     const result = await executeByName(registryHit.capability.name, registryHit.args, ctx)
+    trace.recordToolCall({
+      tool:            registryHit.capability.name,
+      durationMs:      Date.now() - fastStart,
+      status:          result.success ? 'success' : 'error',
+      argsFingerprint: await shortHash(JSON.stringify(registryHit.args)),
+      errorCode:       result.success ? undefined : 'FAST_PATH_FAILURE',
+    })
     // Tools may set fallthroughToLLM=true when they can't resolve a client by
     // the STT-mangled name and the LLM (with the activeClients roster in
     // context) has a better chance at mapping it. Skip the fast-path bypass
@@ -247,6 +266,13 @@ export async function runAgent(
             time:          result.data.time,
           }
     }
+    const fastOutcome: TraceOutcome = result.success
+      ? (registryHit.capability.isWrite ? 'success' : 'no_action')
+      : 'failure'
+    await trace.finish({
+      outcome:      fastOutcome,
+      finalTextSha: await shortHash(text),
+    })
     return {
       text,
       actionPerformed:      registryHit.capability.isWrite && result.success,
@@ -283,6 +309,7 @@ export async function runAgent(
   let lastRefCandidate: AgentOutput['lastRefCandidate'] = null
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    const llmStart = Date.now()
     const resp = await provider.chat({
       system,
       messages,
@@ -291,6 +318,12 @@ export async function runAgent(
       maxOutputTokens: 400,
     })
     modelUsed = resp.modelUsed
+    trace.recordLlmStep({
+      model:        resp.modelUsed,
+      latencyMs:    Date.now() - llmStart,
+      tokens:       resp.tokensUsed,
+      hadToolCalls: resp.toolCalls.length > 0,
+    })
 
     // No tool calls → final response
     if (resp.toolCalls.length === 0) {
@@ -363,7 +396,16 @@ export async function runAgent(
       }
       executedFingerprints.add(fp)
 
+      const toolStart = Date.now()
       const result = await executeByName(tc.name, parsedArgs, ctx)
+      const toolStatus: ToolStepStatus = result.success ? 'success' : 'error'
+      trace.recordToolCall({
+        tool:            tc.name,
+        durationMs:      Date.now() - toolStart,
+        status:          toolStatus,
+        argsFingerprint: await shortHash(JSON.stringify(sortedArgs)),
+        errorCode:       result.success ? undefined : 'TOOL_FAILURE',
+      })
       messages.push({
         role:         'tool',
         tool_call_id: tc.id,
@@ -444,6 +486,14 @@ export async function runAgent(
     { role: 'user',      content: input.text },
     { role: 'assistant', content: finalText  },
   ].slice(-30)
+
+  const llmOutcome: TraceOutcome = actionPerformed
+    ? 'success'
+    : (finalText.trim() ? 'success' : 'no_action')
+  await trace.finish({
+    outcome:      llmOutcome,
+    finalTextSha: await shortHash(finalText),
+  })
 
   return {
     text:                 finalText,

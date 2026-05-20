@@ -48,7 +48,11 @@ export class ObservabilityRepo {
       .eq('business_id', businessId)
       .gte('created_at', since)
 
-    if (error || !data) return EMPTY_SUMMARY
+    if (error) {
+      console.error('[ObservabilityRepo.getSummary24h]', error.message, error)
+      return EMPTY_SUMMARY
+    }
+    if (!data) return EMPTY_SUMMARY
 
     const rows = data as Array<{ outcome: string; total_tokens: number; latency_ms: number }>
     const total    = rows.length
@@ -73,7 +77,11 @@ export class ObservabilityRepo {
       .gte('created_at', since)
       .not('error_code', 'is', null)
 
-    if (error || !data) return []
+    if (error) {
+      console.error('[ObservabilityRepo.getTopErrors24h]', error.message, error)
+      return []
+    }
+    if (!data) return []
 
     const counts = new Map<string, number>()
     for (const row of data as Array<{ error_code: string | null }>) {
@@ -96,7 +104,11 @@ export class ObservabilityRepo {
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    if (error || !data) return []
+    if (error) {
+      console.error('[ObservabilityRepo.getRecentTraces]', error.message, error)
+      return []
+    }
+    if (!data) return []
 
     return (data as Array<{
       id: string; created_at: string; channel: string; outcome: string
