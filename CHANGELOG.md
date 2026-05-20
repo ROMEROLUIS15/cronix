@@ -6,6 +6,33 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/) y es
 
 ---
 
+## [Unreleased]
+
+### Corregido
+
+#### Voice agent: bucle de agendamiento multi-turno
+
+Se corrigió un bug en el asistente de voz del dashboard donde, tras pedir un dato faltante (p. ej. el servicio), el modelo volvía a pedir fecha y hora ya proporcionadas turnos antes, atrapando al usuario en un loop.
+
+**Causa raíz:**
+- El `frame-cutoff` del corpus (capa 4 anti-alucinación) cortaba en cualquier turno asistencial sin `?`. Frases de confirmación intermedia como "Perfecto, te confirmo: 21 de mayo a las 3pm" pasaban como boundary y truncaban el corpus, eliminando los slots dados en turnos previos.
+- El prompt no instruía explícitamente al LLM a leer el historial en busca de datos ya proporcionados.
+- `reschedule/tool.ts` no tenía el override desde corpus que sí tenía `schedule/tool.ts`, por lo que sufría la misma fragilidad.
+
+**Cambios:**
+- Nuevo módulo `voice-worker/core/conversation/frame.ts` con 8 marcadores terminales explícitos (`Listo.`, `Cancelado.`, `Reagendado.`, `Agendado.`, `No encontré`, `No pude`, `No hay`, `ya está ocupado`). Solo estos cierran el frame.
+- Nuevo módulo `voice-worker/core/conversation/slot-extractor.ts` con extracción de slots desde corpus reutilizada por schedule y reschedule (paridad).
+- `schedule/tool.ts` refactorizado en 3 pasos nombrados (override / missing / anti-hallucination).
+- `reschedule/tool.ts` ahora también recupera `new_date`/`new_time` desde corpus.
+- Prompt `voice-worker/prompt.ts`: añadidas secciones MEMORIA DE TURNOS (con ejemplo multi-turno) y CIERRE DE TURNO — USO OBLIGATORIO DEL SIGNO DE INTERROGACIÓN.
+- Cobertura anti-regresión: `voice-worker/core/__tests__/frame.test.ts` (15 tests nuevos).
+
+### Cambiado
+
+Documentación de la sección 7.4 (Frame-cutoff del corpus) actualizada en `TECHNICAL_DOCUMENTATION.md`, `TECHNICAL_DOCUMENTATION_ES.md` y `AI_SYSTEM.md` para reflejar el nuevo módulo y la regla de marcadores terminales.
+
+---
+
 ## [0.5.0] — 2026-05-02
 
 ### Cambiado

@@ -1,6 +1,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData }  from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
+import { extractSlotsFromCorpus } from '../../core/conversation/slot-extractor.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
 import {
@@ -26,6 +27,23 @@ export async function executeReschedule(
   if (!args.client_name) {
     return { success: false, result: 'Necesito saber a quién reagendar.' }
   }
+
+  // Recover new_date / new_time the LLM may have dropped across turns.
+  // Mirrors the schedule-tool override so multi-turn reschedule collection
+  // stays robust under the same Llama drift.
+  if (ctx.userTextCorpus) {
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+    const fromCorpus = extractSlotsFromCorpus(ctx.userTextCorpus, todayLocal)
+    if (!args.new_date && fromCorpus.date) {
+      console.log(`[VOICE-WORKER-RESCHEDULE] new_date from corpus → "${fromCorpus.date}"`)
+      args = { ...args, new_date: fromCorpus.date }
+    }
+    if (!args.new_time && fromCorpus.time) {
+      console.log(`[VOICE-WORKER-RESCHEDULE] new_time from corpus → "${fromCorpus.time}"`)
+      args = { ...args, new_time: fromCorpus.time }
+    }
+  }
+
   if (!args.new_date && !args.new_time) {
     return { success: false, result: '¿Para qué fecha y hora la reagendo?' }
   }
