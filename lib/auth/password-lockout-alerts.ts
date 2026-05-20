@@ -139,7 +139,7 @@ export async function getHighRiskUsers(threshold: number = 5): Promise<LockoutAl
   // Filter and map
   const alerts: LockoutAlert[] = []
   for (const [email, count] of Object.entries(emailCounts)) {
-    if (count >= threshold) {
+    if ((count as number) >= threshold) {
       const alert = await checkLockoutAlert(email)
       alerts.push(alert)
     }
