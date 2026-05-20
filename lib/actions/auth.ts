@@ -22,22 +22,43 @@ export async function login(formData: FormData): Promise<LoginResult> {
   const email    = (formData.get('email') as string | null) ?? ''
   const password = (formData.get('password') as string | null) ?? ''
 
-  // 1. Pre-check: is this account currently locked out?
+  const supabase = await createClient()
+
+  // 1. Check Redis rate limit (fast cache layer)
   const existing = await getLoginFailures(email)
   if (existing && existing.count >= MAX_ATTEMPTS_BEFORE_LOCK) {
     const lockDuration = existing.count >= 6 ? EXTENDED_LOCKOUT_MS : LOCKOUT_DURATION_MS
     const lockoutEndsAt = existing.lastFailAt + lockDuration
     if (Date.now() < lockoutEndsAt) {
+      // Also record in PostgreSQL for audit trail
+      await supabase.rpc('fn_record_failed_password_attempt', { p_email: email })
+
       return {
         error: 'locked',
         failedAttempts: existing.count,
         lockoutEndsAt,
       }
     }
-    // Lockout expired — allow the attempt (counter will reset on success or increment on fail)
   }
 
-  const supabase = await createClient()
+  // 2. Check PostgreSQL rate limit (persistent DB check)
+  const { data: dbCheckResult, error: dbCheckError } = await supabase.rpc(
+    'fn_check_password_attempts',
+    { p_email: email }
+  )
+
+  if (dbCheckError) {
+    console.error('DB password check failed:', dbCheckError)
+    // Continue anyway; don't block login on DB error
+  } else if (dbCheckResult && !dbCheckResult.allowed) {
+    return {
+      error: 'locked',
+      failedAttempts: dbCheckResult.attempt_count,
+      lockoutEndsAt: dbCheckResult.locked_until ? new Date(dbCheckResult.locked_until).getTime() : undefined,
+    }
+  }
+
+  // 3. Attempt password authentication
   const { error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
@@ -49,19 +70,38 @@ export async function login(formData: FormData): Promise<LoginResult> {
       }
     }
 
-    // 2. Credential failure — increment counter
-    const state = await incrementLoginFailures(email)
-    const isNowLocked = state.count >= MAX_ATTEMPTS_BEFORE_LOCK
-    const lockDuration = state.count >= 6 ? EXTENDED_LOCKOUT_MS : LOCKOUT_DURATION_MS
+    // 4. Credential failure — increment BOTH counters (Redis + PostgreSQL)
+    const redisState = await incrementLoginFailures(email)
+
+    // Record in PostgreSQL for persistent audit
+    const { data: dbRecordResult } = await supabase.rpc(
+      'fn_record_failed_password_attempt',
+      { p_email: email }
+    )
+
+    const isNowLocked = redisState.count >= MAX_ATTEMPTS_BEFORE_LOCK
+    const lockDuration = redisState.count >= 6 ? EXTENDED_LOCKOUT_MS : LOCKOUT_DURATION_MS
+
     return {
       error: isNowLocked ? 'locked' : 'invalid_credentials',
-      failedAttempts: state.count,
-      lockoutEndsAt: isNowLocked ? state.lastFailAt + lockDuration : undefined,
+      failedAttempts: redisState.count,
+      lockoutEndsAt: isNowLocked ? redisState.lastFailAt + lockDuration : undefined,
     }
   }
 
-  // 3. Success — clear failure counter
+  // 5. Success — clear BOTH counters (Redis + PostgreSQL)
   await resetLoginFailures(email)
+
+  const { error: resetError } = await supabase.rpc(
+    'fn_reset_password_attempts',
+    { p_email: email }
+  )
+
+  if (resetError) {
+    console.error('Failed to reset DB password attempts:', resetError)
+    // Don't block login on this error
+  }
+
   redirect('/dashboard')
 }
 

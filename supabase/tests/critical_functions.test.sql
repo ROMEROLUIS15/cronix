@@ -6,6 +6,7 @@
 -- 1. Pagos (fn_finalize_paypal_payment) — idempotencia, tolerancia
 -- 2. Agendamiento (fn_book_appointment_wa, fn_reschedule_appointment_wa)
 -- 3. Rate Limiting (fn_wa_check_rate_limit, fn_web_check_rate_limit)
+-- 4. Password Attempt Rate Limiting (fn_check_password_attempts, fn_record_failed_password_attempt)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 BEGIN;

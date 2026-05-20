@@ -64,7 +64,7 @@ Cronix ataca los 5 simultáneamente.
 | PWA | `@ducanh2912/next-pwa` (custom SW) | Instalable + offline |
 | Push | Web Push + VAPID | Notificaciones nativas |
 | Observabilidad | Sentry · Axiom · Vercel Logs · `ai_traces` propio | Errores + métricas + trazas LLM |
-| Testing | Vitest · Playwright · React Testing Library · MSW | 1507 tests (102 files) — 3 tipos |
+| Testing | Vitest · Playwright · React Testing Library · MSW · **pgTAP** | **1580 tests** (109 files) — **4 tipos**: Unit (1300+) · E2E (54) · Integration (200+) · **Database (73 pgTAP)** |
 | Quality gates | ESLint · Husky · lint-staged · pre-push (lint+tsc+test+audit) | No bypass |
 
 ---
@@ -282,13 +282,26 @@ npm run dev                # Next.js + Turbopack
 npm run build              # Build producción
 npm run lint               # ESLint
 npm run typecheck          # tsc --noEmit
-npm test                   # Vitest unit
-npm run test:integration   # Integration vs Supabase local
-npm run test:e2e           # Playwright
+npm test                   # Vitest unit (1300+ tests)
+npm run test:integration   # Integration vs Supabase local (200+ tests)
+npm run test:e2e           # Playwright (54 tests, 15 specs)
 npm run test:e2e:smoke     # Suite reducida
 npm run test:coverage      # Coverage v8
+npx supabase test db       # pgTAP: database tests (73 tests, RLS + functions)
 npm run seed:intents       # Regenerar embeddings de intents
 ```
+
+### Testing — 1580 tests pasando
+
+Vea [`docs/TESTING.md`](./docs/TESTING.md) para descripción completa.
+
+**pgTAP (PostgreSQL Testing):**
+- `docs/testing/PGTAP.md` — Qué es pgTAP, por qué y cuándo usarlo
+- `docs/testing/PGTAP_EXAMPLES.md` — 13 ejemplos concretos (RLS, pagos, rate-limiting)
+- `supabase/tests/rls_policies.test.sql` — 52 tests de Row-Level Security
+- `supabase/tests/critical_functions.test.sql` — 21 tests de funciones RPC críticas
+
+Ejecutar: `npx supabase test db` (~0.07s)
 
 ### Quality gates automatizados
 

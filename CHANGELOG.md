@@ -10,6 +10,18 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/) y es
 
 ### Corregido
 
+#### Observabilidad del Agente IA: voice-worker no escribía trazas
+
+La sección `/dashboard/observability` mostraba métricas vacías porque, de los tres canales declarados en el schema (`whatsapp | dashboard | voice-worker`), sólo `process-whatsapp/ai-agent.ts` instanciaba el tracer. Las llamadas de voz no producían filas en `ai_traces`, así que los owners veían 0 turnos / 0% éxito aunque hubiera tráfico real.
+
+Además, `ObservabilityRepo` se tragaba en silencio cualquier error de Supabase (tabla inexistente, RLS, conectividad) devolviendo arrays vacíos, lo que hacía imposible distinguir "sin datos" de "consulta fallida".
+
+**Cambios:**
+- `supabase/functions/voice-worker/agent.ts`: instanciación de `createTracer()`, apertura de `tracer.start(...)` por turno con canal `voice-worker`, registro de `recordLlmStep` (por cada `provider.chat`) y `recordToolCall` (en fast-path y dentro del loop LLM), cierre con `trace.finish(...)` en todas las rutas de salida (fast-path return y LLM-path return).
+- `app/[locale]/dashboard/observability/_data/observability-repo.ts`: los tres métodos (`getSummary24h`, `getTopErrors24h`, `getRecentTraces`) ahora emiten `console.error('[ObservabilityRepo.<método>]', error.message, error)` antes del fallback vacío, para que los fallos de RLS o tabla inexistente queden visibles en logs del server.
+
+**Verificación:** smoke test con `INSERT` manual en `ai_traces` validó el camino RLS → repo → componentes UI en `/dashboard/observability`. El canal `dashboard` sigue sin escritor — no hay agente de dashboard en producción todavía.
+
 #### Voice agent: bucle de agendamiento multi-turno
 
 Se corrigió un bug en el asistente de voz del dashboard donde, tras pedir un dato faltante (p. ej. el servicio), el modelo volvía a pedir fecha y hora ya proporcionadas turnos antes, atrapando al usuario en un loop.
