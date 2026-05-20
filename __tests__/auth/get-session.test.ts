@@ -244,6 +244,6 @@ describe('getSession()', () => {
     const session = await getSession()
 
     expect(session?.business_id).toBeNull()
-    expect(session?.dbUser.business_id).toBeNull()
+    expect(session?.dbUser?.business_id).toBeNull()
   })
 })

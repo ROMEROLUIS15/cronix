@@ -24,8 +24,8 @@ vi.mock('@/components/layout/notification-panel', () => ({
 
 describe('Topbar Component', () => {
   const mockNotifications = [
-    { id: '1', message: 'Test 1', is_read: false },
-    { id: '2', message: 'Test 2', is_read: true },
+    { id: '1', title: 'Test 1', content: 'Test notification 1', type: 'info' as const, is_read: false, created_at: new Date().toISOString() },
+    { id: '2', title: 'Test 2', content: 'Test notification 2', type: 'info' as const, is_read: true, created_at: new Date().toISOString() },
   ]
 
   beforeEach(() => {

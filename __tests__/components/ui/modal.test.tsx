@@ -107,8 +107,9 @@ describe('Modal Component', () => {
     )
 
     const closeButtons = screen.getAllByRole('button').filter(btn => btn.getAttribute('aria-label') === 'Cerrar')
-    if (closeButtons.length > 0) {
-      fireEvent.click(closeButtons[0])
+    const closeButton = closeButtons[0]
+    if (closeButton) {
+      fireEvent.click(closeButton)
       expect(onCloseMock).toHaveBeenCalled()
     }
   })

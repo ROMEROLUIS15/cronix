@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { NextRequest } from 'next/server'
 import { POST } from '@/app/api/webhooks/paypal/route'
 
 // ── Mock Supabase ────────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(401)
     const json = await response.json()
@@ -80,7 +81,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: 'not-valid-json{',
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(400)
     const json = await response.json()
@@ -91,6 +92,8 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
     vi.mocked(verifyWebhookSignature).mockResolvedValue(true)
     vi.mocked(finalizePayPalPayment).mockResolvedValue({
       status: 'completed',
+      invoiceId: 'inv-123',
+      businessId: 'biz-456',
     })
 
     const request = new Request('http://localhost/api/webhooks/paypal', {
@@ -99,7 +102,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -125,7 +128,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -147,7 +150,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(checkoutEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -176,7 +179,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(eventWithoutOrderId),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -197,7 +200,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -210,7 +213,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
     vi.mocked(finalizePayPalPayment).mockResolvedValue({
       status: 'amount_mismatch',
       expected: 29.99,
-      received: 19.99,
+      captured: 19.99,
     })
 
     const request = new Request('http://localhost/api/webhooks/paypal', {
@@ -219,7 +222,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(400)
     const json = await response.json()
@@ -239,7 +242,7 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
       body: JSON.stringify(validPaymentEvent),
     })
 
-    const response = await POST(request)
+    const response = await POST(request as NextRequest)
 
     expect(response.status).toBe(500)
     const json = await response.json()
@@ -250,6 +253,8 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
     vi.mocked(verifyWebhookSignature).mockResolvedValue(true)
     vi.mocked(finalizePayPalPayment).mockResolvedValue({
       status: 'completed',
+      invoiceId: 'inv-999',
+      businessId: 'biz-999',
     })
 
     const eventWithAmount = {
@@ -282,6 +287,8 @@ describe('PayPal Webhook (POST /api/webhooks/paypal)', () => {
     vi.mocked(verifyWebhookSignature).mockResolvedValue(true)
     vi.mocked(finalizePayPalPayment).mockResolvedValue({
       status: 'completed',
+      invoiceId: 'inv-123',
+      businessId: 'biz-123',
     })
 
     const eventWithoutAmount = {

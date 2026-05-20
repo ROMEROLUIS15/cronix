@@ -92,7 +92,9 @@ describe('LanguageSwitcher Component', () => {
 
     await waitFor(() => {
       const options = screen.getAllByRole('option')
-      fireEvent.click(options[0])
+      if (options[0]) {
+        fireEvent.click(options[0])
+      }
     })
 
     // Dropdown should close
@@ -110,7 +112,9 @@ describe('LanguageSwitcher Component', () => {
 
     await waitFor(() => {
       const options = screen.getAllByRole('option')
-      fireEvent.click(options[1]) // Select second locale
+      if (options[1]) {
+        fireEvent.click(options[1]) // Select second locale
+      }
     })
 
     // Router should be called with replace

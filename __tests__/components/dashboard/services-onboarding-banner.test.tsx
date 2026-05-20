@@ -66,7 +66,10 @@ describe('ServicesOnboardingBanner Component', () => {
 
     const closeButton = screen.getByRole('button', { name: '' })
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[buttons.length - 1])
+    const lastButton = buttons[buttons.length - 1]
+    if (lastButton) {
+      fireEvent.click(lastButton)
+    }
 
     rerender(<ServicesOnboardingBanner businessId={mockBusinessId} hasServices={false} />)
 
@@ -90,7 +93,10 @@ describe('ServicesOnboardingBanner Component', () => {
     render(<ServicesOnboardingBanner businessId={mockBusinessId} hasServices={false} />)
 
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[buttons.length - 1])
+    const lastButton = buttons[buttons.length - 1]
+    if (lastButton) {
+      fireEvent.click(lastButton)
+    }
 
     expect(localStorage.getItem(`services-banner-${mockBusinessId}`)).toBe('1')
   })
@@ -102,7 +108,10 @@ describe('ServicesOnboardingBanner Component', () => {
     const { rerender } = render(<ServicesOnboardingBanner businessId={biz1} hasServices={false} />)
 
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[buttons.length - 1])
+    const lastButton = buttons[buttons.length - 1]
+    if (lastButton) {
+      fireEvent.click(lastButton)
+    }
 
     rerender(<ServicesOnboardingBanner businessId={biz2} hasServices={false} />)
 

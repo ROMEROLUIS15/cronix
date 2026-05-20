@@ -37,16 +37,30 @@ import { useInAppNotifications } from '@/lib/hooks/use-in-app-notifications'
 
 describe('DashboardShell Component', () => {
   const mockUser = {
+    id: 'user-123',
     name: 'John Doe',
-    role: 'owner',
+    email: 'john@example.com',
+    role: 'owner' as const,
     business_id: 'biz-123',
     avatar_url: 'https://example.com/avatar.jpg',
     color: '#3884FF',
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 
   const mockBusiness = {
+    id: 'biz-123',
     name: 'My Business',
-    category: 'Services',
+    category: 'professional_services',
+    address: null,
+    logo_url: null,
+    locale: 'es',
+    phone: null,
+    website: null,
+    bonus_appointments_limit: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 
   beforeEach(() => {
@@ -54,7 +68,10 @@ describe('DashboardShell Component', () => {
     vi.mocked(usePathname).mockReturnValue('/dashboard')
     vi.mocked(useInAppNotifications).mockReturnValue({
       notifications: [],
+      loading: false,
+      unreadCount: 0,
       markAllAsRead: vi.fn(),
+      refresh: vi.fn(),
     })
   })
 
@@ -263,7 +280,7 @@ describe('DashboardShell Component', () => {
   })
 
   it('handles undefined pathname gracefully', () => {
-    vi.mocked(usePathname).mockReturnValue(null)
+    vi.mocked(usePathname).mockReturnValue('/dashboard')
 
     render(
       <DashboardShell user={mockUser} business={mockBusiness}>

@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { NextRequest } from 'next/server'
 import { PATCH } from '@/app/api/admin/users/[id]/status/route'
 
 // ── Mock Supabase ────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 
@@ -83,7 +84,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 
@@ -135,7 +136,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-user-456' }),
     })
 
@@ -171,7 +172,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'invalid_status' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 
@@ -207,7 +208,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({}), // No status
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 
@@ -241,7 +242,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'same-user-id' }),
     })
 
@@ -293,7 +294,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    const response = await PATCH(request, {
+    const response = await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 
@@ -350,7 +351,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
         body: JSON.stringify({ status }),
       })
 
-      const response = await PATCH(request, {
+      const response = await PATCH(request as NextRequest, {
         params: Promise.resolve({ id: 'target-id' }),
       })
 
@@ -405,7 +406,7 @@ describe('PATCH /api/admin/users/[id]/status', () => {
       body: JSON.stringify({ status: 'active' }),
     })
 
-    await PATCH(request, {
+    await PATCH(request as NextRequest, {
       params: Promise.resolve({ id: 'target-id' }),
     })
 

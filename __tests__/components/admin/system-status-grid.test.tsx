@@ -149,7 +149,7 @@ describe('SystemStatusGrid Component', () => {
 
     // Simulate Realtime event
     if (realtimeCallback) {
-      realtimeCallback()
+      (realtimeCallback as () => void)()
 
       await waitFor(() => {
         expect(mockSupabaseClient.from).toHaveBeenCalledTimes(2) // Initial + update

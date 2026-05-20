@@ -62,12 +62,28 @@ describe('Sidebar Component', () => {
   const mockUser = {
     id: 'user-123',
     email: 'user@example.com',
-    role: 'owner',
+    name: 'Test User',
+    avatar_url: null,
+    role: 'owner' as const,
+    business_id: 'biz-123',
+    color: '#0000FF',
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 
   const mockBusiness = {
     id: 'biz-123',
     name: 'Test Business',
+    category: 'professional_services',
+    address: null,
+    logo_url: null,
+    locale: 'es',
+    phone: null,
+    website: null,
+    bonus_appointments_limit: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 
   beforeEach(() => {
@@ -83,7 +99,7 @@ describe('Sidebar Component', () => {
   })
 
   it('hides owner-only items for non-owners', () => {
-    const nonOwnerUser = { ...mockUser, role: 'member' }
+    const nonOwnerUser = { ...mockUser, role: 'employee' as const }
     render(<Sidebar user={nonOwnerUser} business={mockBusiness} />)
 
     // Team should be hidden
@@ -108,7 +124,7 @@ describe('Sidebar Component', () => {
   })
 
   it('shows admin items for admins', () => {
-    const adminUser = { ...mockUser, role: 'platform_admin' }
+    const adminUser = { ...mockUser, role: 'platform_admin' as const }
     render(<Sidebar user={adminUser} business={mockBusiness} />)
 
     // Admin items should be visible (if role check is implemented)
