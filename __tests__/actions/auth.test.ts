@@ -27,6 +27,7 @@ vi.mock('@/lib/rate-limit/redis-rate-limiter', () => ({
 const mockSignIn = vi.fn()
 const mockSignOut = vi.fn()
 const mockOAuth = vi.fn()
+const mockRpc = vi.fn()
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
@@ -35,6 +36,7 @@ vi.mock('@/lib/supabase/server', () => ({
       signInWithOAuth: mockOAuth,
       signOut: mockSignOut,
     },
+    rpc: mockRpc,
   }),
 }))
 
@@ -67,6 +69,8 @@ describe('Auth Server Actions', () => {
     mockGetLoginFailures.mockResolvedValue(null)
     mockIncrementFailures.mockResolvedValue({ count: 1, firstFailAt: Date.now(), lastFailAt: Date.now() })
     mockResetFailures.mockResolvedValue(undefined)
+    // Default: PostgreSQL rate limit check allows login
+    mockRpc.mockResolvedValue({ data: { allowed: true, attempt_count: 0 }, error: null })
   })
 
   describe('login', () => {
