@@ -15,10 +15,17 @@ CREATE TABLE IF NOT EXISTS public.failed_password_attempts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for fast lookups by email
+-- Unique index for email (required for ON CONFLICT in fn_record_failed_password_attempt)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_failed_password_attempts_email
-  ON public.failed_password_attempts(email)
-  WHERE locked_until IS NULL OR locked_until > NOW();
+  ON public.failed_password_attempts(email);
+
+-- Enable RLS (service_role bypasses it, but required for security compliance)
+ALTER TABLE public.failed_password_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Deny all access (service_role functions handle access)
+CREATE POLICY "deny_all" ON public.failed_password_attempts
+  USING (false)
+  WITH CHECK (false);
 
 -- Create function to check and increment failed login attempts
 CREATE OR REPLACE FUNCTION public.fn_check_password_attempts(
@@ -131,7 +138,6 @@ BEGIN
   SET attempt_count = failed_password_attempts.attempt_count + 1,
       last_attempt_at = NOW(),
       updated_at = NOW()
-  WHERE email = p_email
   RETURNING attempt_count INTO v_current_attempt;
 
   -- Check if we should lock the account (3rd failed attempt)

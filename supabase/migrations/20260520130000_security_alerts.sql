@@ -58,7 +58,7 @@ CREATE POLICY "security_alerts_admin_view"
     EXISTS(
       SELECT 1 FROM public.users
       WHERE id = auth.uid()
-      AND role IN ('owner', 'admin')
+      AND role IN ('owner', 'platform_admin')
       AND is_active = true
     )
   );
@@ -69,7 +69,7 @@ CREATE POLICY "security_alerts_admin_update"
     EXISTS(
       SELECT 1 FROM public.users
       WHERE id = auth.uid()
-      AND role IN ('owner', 'admin')
+      AND role IN ('owner', 'platform_admin')
       AND is_active = true
     )
   )
@@ -77,7 +77,7 @@ CREATE POLICY "security_alerts_admin_update"
     EXISTS(
       SELECT 1 FROM public.users
       WHERE id = auth.uid()
-      AND role IN ('owner', 'admin')
+      AND role IN ('owner', 'platform_admin')
       AND is_active = true
     )
   );

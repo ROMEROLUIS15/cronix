@@ -310,7 +310,7 @@ SELECT ok(
 
 -- 5.1 Test: New user has no failed attempts and is allowed
 SELECT is(
-  (SELECT (fn_check_password_attempts('newuser@test.com')).allowed),
+  (SELECT (fn_check_password_attempts('newuser@test.com')->>'allowed')::boolean),
   true,
   'new user allowed to login (0 failed attempts)'
 );
@@ -322,7 +322,7 @@ BEGIN
 END $$;
 
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'attempt_count')::int),
   1,
   'first failed attempt recorded (count=1)'
 );
@@ -334,7 +334,7 @@ BEGIN
 END $$;
 
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'attempt_count')::int),
   2,
   'second failed attempt recorded (count=2)'
 );
@@ -346,21 +346,21 @@ BEGIN
 END $$;
 
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).is_locked),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'is_locked')::boolean),
   true,
   'user locked after 3rd failed attempt'
 );
 
 -- 5.5 Test: Locked user cannot login (allowed=false)
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).allowed),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'allowed')::boolean),
   false,
   'locked user is not allowed to login'
 );
 
 -- 5.6 Test: Locked user has locked_until timestamp set
 SELECT ok(
-  (SELECT (fn_check_password_attempts('user1@test.com')).locked_until) IS NOT NULL,
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'locked_until') IS NOT NULL),
   'locked user has locked_until timestamp'
 );
 
@@ -371,14 +371,14 @@ BEGIN
 END $$;
 
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'attempt_count')::int),
   0,
   'password attempts reset to 0 after reset'
 );
 
 -- 5.8 Test: Reset user is allowed to login again
 SELECT is(
-  (SELECT (fn_check_password_attempts('user1@test.com')).allowed),
+  (SELECT (fn_check_password_attempts('user1@test.com')->>'allowed')::boolean),
   true,
   'reset user is allowed to login again'
 );
