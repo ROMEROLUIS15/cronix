@@ -1,6 +1,6 @@
 # Testing — Cronix
 
-> Suite completa verificada: 1507 tests, 102 files, 3 tipos (Unit, E2E, Integration)
+> **Suite completa verificada: 1580 tests, 109 files, 4 tipos (Unit, E2E, Integration, pgTAP)**
 
 ## 1. Suite Overview
 
@@ -9,9 +9,10 @@
 | **Unit Tests** | Vitest + jsdom + RTL | `__tests__/`, `lib/**/__tests__/` | 1300+ | 101 | Lógica, componentes, utilidades, AI |
 | **E2E Tests** | Playwright | `tests/e2e/` | 54 | 15 specs | Flujos de usuario end-to-end |
 | **Integration Tests** | Vitest + Supabase local | `tests/integration/` | 200+ | 7 | Flujos con datos reales (RLS, multi-tenant) |
+| **pgTAP Tests** | SQL + TAP | `supabase/tests/` | 73 | 2 | Funciones RPC críticas, RLS policies |
 | **Voice-worker unit** | Vitest (Deno-style) | `supabase/functions/voice-worker/**/__tests__/` | 50+ | 5 | Capacidades de asistente de voz |
 
-**Total verificado**: 1507 tests, 102 archivos.
+**Total verificado**: 1580 tests (1507 Node.js + 73 PostgreSQL), 109 archivos.
 
 ## 1.1 Desglose por dominio
 
@@ -26,7 +27,8 @@
 | **Validaciones (Zod)** | 5 | — | — | 40+ | 5 |
 | **API Routes** | 13 | — | — | 97 | 13 |
 | **Otros (utils, middleware, etc.)** | 20+ | 8 | 3 | 30+ | 30 |
-| **TOTAL** | 1300+ | 54 | 200+ | **1507** | **102** |
+| **Database (pgTAP)** | — | — | — | 73 | 2 |
+| **TOTAL** | 1300+ | 54 | 200+ | **1580** | **109** |
 
 ## 2. Scripts
 
@@ -45,8 +47,12 @@ npm run test:e2e          # playwright test (15 specs)
 npm run test:e2e:smoke    # playwright project=smoke (suite rápida)
 npm run e2e:setup         # tsx scripts/setup-e2e-data.ts (seed datos E2E)
 
+# pgTAP Tests (PostgreSQL native, requiere Supabase local)
+npx supabase test db      # Ejecuta todos los pgTAP tests (73 tests, ~0.07s)
+npx supabase test db --debug  # Debug mode con salida detallada
+
 # Workflows completos
-npm test && npm run test:integration && npm run test:e2e  # Suite completa (~90s)
+npm test && npm run test:integration && npm run test:e2e && npx supabase test db  # Suite completa (~90s)
 ```
 
 ## 3. Tests críticos (los que defienden la arquitectura)
@@ -158,7 +164,75 @@ npm test && npm run test:integration && npm run test:e2e  # Suite completa (~90s
 - `tests/e2e/dashboard-core-pages.spec.ts` — 17 tests (page navigation, profile, settings)
 - `tests/e2e/business-flows-clients.spec.ts` — 14 tests (CRUD, filtering, bulk operations)
 
-## 4. Quality gates
+## 4. pgTAP Tests (Database-Level Testing)
+
+### Overview
+**pgTAP** es un framework de testing **nativo de PostgreSQL** que ejecuta tests SQL directamente en la base de datos. A diferencia de vitest (que testa lógica de aplicación), pgTAP testa comportamiento crítico que **NO puede mockarse**: RLS policies, RPC functions, triggers, constraints.
+
+**Archivos:**
+- `supabase/tests/rls_policies.test.sql` — 52 tests validando Row-Level Security
+- `supabase/tests/critical_functions.test.sql` — 21 tests validando funciones RPC críticas
+
+### 4.1 RLS Policies (52 tests)
+
+Valida que **multi-tenant isolation** funcione a nivel de base de datos:
+
+| Sección | Tests | Qué valida |
+|---|---|---|
+| **Authentication & Context** | 3 | `current_user_id()`, `current_business_id()` |
+| **Businesses** | 3 | Solo propietarios ven su business |
+| **Users** | 5 | Aislamiento strict por business_id |
+| **Appointments** | 6 | Staff ve citas de su business, clientes solo sus citas |
+| **Clients** | 6 | Aislamiento cross-tenant (UNIQUE business_phone) |
+| **Notification Subscriptions** | 8 | Hardening INSERT/UPDATE policies (2026-05-21) |
+| **Services** | 8 | No pueden ver/editar servicios de otro tenant |
+| **Audit Logs** | 8 | Staff ve logs de su business, no de otros |
+
+**Hallazgos críticos:**
+- Partial unique index `uq_reminder_imminent_owner` en `appointment_reminders` previene race conditions en cron jobs
+- INSERT/UPDATE policies en `notification_subscriptions` validan `business_id` directamente desde `users` table (no confía en contexto enviado)
+- Todas las políticas SELECT usan `business_id = (SELECT business_id FROM users WHERE id = auth.uid())`
+
+### 4.2 Critical Business Functions (21 tests)
+
+Valida lógica de negocio que **debe ser exacta y confiable**:
+
+#### Payments (5 tests)
+- `fn_finalize_paypal_payment` idempotencia: segunda llamada retorna `'already_processed'`
+- Amount tolerance: diffs < 0.01 aceptados (±1 centavo)
+- Amount mismatch > 0.01: rejected con status `'amount_mismatch'`
+- Invoice not found: returns `'invoice_not_found'`
+- Subscription extension + plan update
+
+#### Appointments (2 tests)
+- `fn_book_appointment_wa` creates appointments via WhatsApp
+- `fn_reschedule_appointment_wa` exists
+
+#### Rate Limiting (5 tests)
+- `fn_wa_check_rate_limit` — WhatsApp message rate limiting
+- `fn_web_check_rate_limit` — Web request rate limiting
+- `fn_wa_check_circuit_breaker` — Protección contra cascading failures
+- `fn_wa_check_token_quota` — Token usage tracking
+
+#### Helpers (3 tests)
+- `fn_clean_phone` — Phone number normalization (removes formatting)
+
+### 4.3 Ejecución
+
+```bash
+# Ejecutar todos los pgTAP tests
+npx supabase test db
+
+# Esperado:
+# /Users/.../rls_policies.test.sql ........ ok
+# /Users/.../critical_functions.test.sql .. ok
+# All tests successful.
+# Files=2, Tests=73, Result: PASS
+```
+
+---
+
+## 5. Quality gates
 
 | Hook | Acción | Status |
 |---|---|---|
@@ -168,7 +242,7 @@ npm test && npm run test:integration && npm run test:e2e  # Suite completa (~90s
 
 Si cualquiera falla, el push se cancela. No usar `--no-verify`.
 
-## 5. Patrones de Testing
+## 6. Patrones de Testing
 
 - **Builders sobre fixtures**: `makeAppointment(overrides)`, `makeBusiness(overrides)` en lugar de objetos gigantes
 - **Mocks tipados**: `vitest-mock-extended` para interfaces (`IClientRepository`, `IServiceRepository`)
@@ -182,7 +256,7 @@ Si cualquiera falla, el push se cancela. No usar `--no-verify`.
 - **Accessibility**: ARIA roles, keyboard navigation, labels validadas en componentes
 - **Edge cases**: Rapid state changes, concurrent operations, timezone boundaries
 
-## 6. Métricas & Cobertura
+## 7. Métricas & Cobertura
 
 ### Coverage actual (vitest v8)
 ```bash
@@ -202,14 +276,24 @@ npm run test:coverage
 | `lib/ai/supervisor/` (parity) | 100% | 100% | ✅ |
 
 ### Métricas de ejecución
-- **Total tests**: 1507
-- **Execution time**: ~30-32 segundos
-- **Test files**: 102
+- **Total tests**: 1580 (1507 Node.js + 73 PostgreSQL)
+- **Execution time**: ~30-32 segundos (Vitest) + ~0.07s (pgTAP)
+- **Test files**: 109 (102 Node.js + 2 pgTAP + 5 Voice-worker)
 - **Passing rate**: 100%
 - **Flakes**: 0
-- **Average per test**: ~31ms
+- **Average per test**: ~31ms (Node.js), ~1ms (pgTAP)
 
-## 7. Mantenimiento & Próximos pasos
+### Desglose por tipo
+| Tipo | Tests | Archivos | Tiempo |
+|---|---|---|---|
+| Unit (Vitest) | 1300+ | 101 | ~30s |
+| E2E (Playwright) | 54 | 15 specs | ~20-30s |
+| Integration (Vitest) | 200+ | 7 | ~8-10s |
+| pgTAP (SQL) | 73 | 2 | ~0.07s |
+| Voice-worker | 50+ | 5 | ~2-3s |
+| **TOTAL** | **1580** | **109** | **~60-70s** |
+
+## 8. Mantenimiento & Próximos pasos
 
 ### En desarrollo
 - Pre-commit hooks: `eslint --fix` automático
