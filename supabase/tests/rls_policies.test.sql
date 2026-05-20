@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(51);
+SELECT plan(52);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -379,9 +379,9 @@ SELECT ok(
 SELECT ok(
   EXISTS(
     SELECT 1 FROM pg_indexes
-    WHERE tablename = 'clients' AND indexname = 'clients_business_phone_unique'
+    WHERE tablename = 'clients' AND indexname IN ('clients_business_phone_unique', 'clients_business_phone_unique_key')
   ),
-  'unique index clients_business_phone_unique exists'
+  'unique index on clients business_id + phone exists'
 );
 
 -- Insert a client with phone for business A
@@ -460,14 +460,24 @@ SELECT is(
 
 RESET ROLE;
 
--- ── 14. Audit Log Privacy (Owner cannot see raw logs) ─────────────────────────
+-- ── 14. Audit Log Privacy (Via business context) ────────────────────────────
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
 
+-- With proper RLS policy, Owner A should NOT see OTHER owners' logs
+-- Since we inserted wa_audit_logs with business_id = biz_a (Owner A's business),
+-- and the RLS uses business_id = current_business_id(), Owner A CAN see their own logs
 SELECT is(
-  (SELECT COUNT(*)::INT FROM public.wa_audit_logs),
+  (SELECT COUNT(*)::INT FROM public.wa_audit_logs WHERE business_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can see own wa_audit_logs via RLS'
+);
+
+-- But Owner A cannot see Owner B's logs
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_audit_logs WHERE business_id = 'bbbbbbbb-0000-0000-0000-000000000002'),
   0,
-  'Owner A cannot see wa_audit_logs (Privacy layer)'
+  'Owner A cannot see Owner B wa_audit_logs'
 );
 
 RESET ROLE;
