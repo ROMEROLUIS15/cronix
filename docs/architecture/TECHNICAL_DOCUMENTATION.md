@@ -341,24 +341,30 @@ Order matters: `pasado mañana` is checked **before** `mañana` (the latter is a
 
 ### 7.4 Corpus frame-cutoff
 
-`voice-worker/index.ts:329-340`. The text corpus passed to guards (date-guard, fuzzy-guard) is built from the last non-question assistant turn. This prevents tokens from a failed previous attempt ("sábado 5pm") from contaminating an unrelated new attempt:
+`voice-worker/core/conversation/frame.ts` (extracted from `index.ts` for testability — see `core/__tests__/frame.test.ts`). The text corpus passed to guards (date-guard, fuzzy-guard) is built from the last **terminal** assistant turn. A terminal message is one that closes the current intent — success ("Listo. Agendé..."), terminal error ("No encontré..."), or known closing phrase. Question turns and intermediate confirmations leave the frame open so multi-turn slot collection works.
 
 ```ts
-let cutoff = -1
-for (let i = history.length - 1; i >= 0; i--) {
-  const msg = history[i]
-  if (msg && msg.role === 'assistant' && !/[?¿]/.test(msg.content)) {
-    cutoff = i
-    break
-  }
-}
-const relevantHistory = history.slice(cutoff + 1)
+// frame.ts
+const END = '(?:\\s|[.,!?]|$)'
+const TERMINAL_PATTERNS = [
+  new RegExp(`^\\s*Listo${END}`,        'i'),
+  new RegExp(`^\\s*Cancelado${END}`,    'i'),
+  new RegExp(`^\\s*Reagendado${END}`,   'i'),
+  new RegExp(`^\\s*Agendado${END}`,     'i'),
+  new RegExp(`^\\s*No encontr[ée]${END}`, 'i'),
+  new RegExp(`^\\s*No pude${END}`,      'i'),
+  new RegExp(`^\\s*No hay${END}`,       'i'),
+  /ya est[áa] ocupado/i,
+]
 ```
 
 Rules:
 - "Listo. Agendé a María..." → closes the frame.
 - "¿Para qué servicio?" → keeps the frame open (multi-turn collection).
+- "Perfecto, te confirmo: 21 de mayo a las 3pm" → keeps the frame open (intermediate confirmation, NOT a terminal marker).
 - "No encontré cita activa..." → closes the frame.
+
+The previous rule "any assistant turn without '?'" caused intermediate confirmation statements to truncate the corpus mid-flow, losing slots given two turns back. The terminal-marker rule threads the needle: still cuts on explicit failed intents (the original reason for cutting at all) but keeps the frame alive for multi-turn collection. Anti-regression coverage in `core/__tests__/frame.test.ts`.
 
 ### 7.5 Per-turn fingerprint dedup
 

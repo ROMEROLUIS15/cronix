@@ -16,9 +16,12 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData } from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
-import { normalize, tokens }       from '../../core/fuzzy.ts'
-import { parseDateExpression }     from '../../core/date-parser.ts'
-import { parseTimeExpression, userMentionedTime } from '../../core/time-parser.ts'
+import {
+  extractSlotsFromCorpus,
+  nameMentionedInCorpus,
+  timeMentionedInCorpus,
+  dateMentionedInCorpus,
+} from '../../core/conversation/slot-extractor.ts'
 import {
   type ClientRow, resolveClient, needsConfirmation, formatConfirmationPrompt,
 } from '../../core/repos/clients.ts'
@@ -55,47 +58,43 @@ export async function executeSchedule(
   args: ScheduleArgs,
 ): Promise<ToolResult> {
   let { service_name, client_name, date, time } = args
+  const corpus     = ctx.userTextCorpus ?? ''
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
 
-  if (ctx.userTextCorpus) {
-    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
-    const userDate = parseDateExpression(ctx.userTextCorpus, todayLocal)?.date
-    const userTime = parseTimeExpression(ctx.userTextCorpus)?.time
-    if (userDate && userDate !== date) {
-      console.log(`[VOICE-WORKER-SCHEDULE] date override: arg="${date}" → user="${userDate}"`)
-      date = userDate
+  // Step 1 — recover slots the LLM dropped across turns.
+  if (corpus) {
+    const fromCorpus = extractSlotsFromCorpus(corpus, todayLocal)
+    if (fromCorpus.date && fromCorpus.date !== date) {
+      console.log(`[VOICE-WORKER-SCHEDULE] date override: arg="${date}" → user="${fromCorpus.date}"`)
+      date = fromCorpus.date
     }
-    if (userTime && userTime !== time) {
-      console.log(`[VOICE-WORKER-SCHEDULE] time override: arg="${time}" → user="${userTime}"`)
-      time = userTime
+    if (fromCorpus.time && fromCorpus.time !== time) {
+      console.log(`[VOICE-WORKER-SCHEDULE] time override: arg="${time}" → user="${fromCorpus.time}"`)
+      time = fromCorpus.time
     }
   }
 
+  // Step 2 — refuse if any of the 4 slots is still missing or a placeholder.
   const missingLabel = firstMissing({ ...args, client_name, service_name, date, time })
   if (missingLabel) {
     return { success: false, result: `Para agendar necesito ${missingLabel}. ¿Me lo dices?` }
   }
 
-  if (ctx.userTextCorpus) {
-    const corpus = normalize(ctx.userTextCorpus)
-    const inCorpus = (name: string): boolean => {
-      const ts = tokens(name)
-      if (ts.length === 0) return false
-      return ts.some(t => t.length >= 3 && corpus.includes(t))
-    }
-    if (!inCorpus(service_name)) {
+  // Step 3 — anti-hallucination: every slot must trace back to the user.
+  if (corpus) {
+    if (!nameMentionedInCorpus(corpus, service_name)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated service="${service_name}"`)
       return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?' }
     }
-    if (!inCorpus(client_name)) {
+    if (!nameMentionedInCorpus(corpus, client_name)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated client="${client_name}"`)
       return { success: false, result: 'Para agendar necesito el nombre del cliente. ¿A quién agendo?' }
     }
-    if (!userMentionedTime(ctx.userTextCorpus)) {
+    if (!timeMentionedInCorpus(corpus)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated time="${time}"`)
       return { success: false, result: 'Para agendar necesito la hora. ¿A qué hora?' }
     }
-    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
-    if (!parseDateExpression(ctx.userTextCorpus, todayLocal)) {
+    if (!dateMentionedInCorpus(corpus, todayLocal)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated date="${date}"`)
       return { success: false, result: 'Para agendar necesito la fecha. ¿Para qué día?' }
     }

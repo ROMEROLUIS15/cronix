@@ -39,7 +39,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 1. **Phantom `TenantContext`** — solo `TenantEnforcer.verify()` lo emite. Cualquier intento de pasar un `string` en su lugar **no compila**.
 2. **Fast-paths totales sin LLM** — `voice-worker/capabilities/_shared/registry.ts`. 9 capabilities con detector + tool + (opcional) bypass de síntesis.
 3. **Date guard determinista** — si el usuario dijo "hoy / mañana / pasado mañana", la fecha de cualquier tool se sobrescribe en código (`voice-worker/agent.ts:104`).
-4. **Frame-cutoff corpus** — corta el historial en el último turno asistencial sin pregunta para que tokens de intentos viejos no contaminen los guards (`voice-worker/index.ts:329`).
+4. **Frame-cutoff corpus** — corta el historial en el último turno asistencial **terminal** (éxito `Listo.…`, error definitivo `No encontré…`, etc.) para que tokens de intentos viejos no contaminen los guards, sin truncar la recolección multi-turno (`voice-worker/core/conversation/frame.ts`).
 5. **Per-turn fingerprint dedup** — `Set<toolName::sortedArgsJSON>`. Si el modelo repite la misma llamada, se rechaza con un mensaje al modelo y se rompe el loop.
 6. **Response bypass (`bypassLLM`)** — la prosa de la tool se devuelve tal cual. Documentado como patrón `return_direct=True` de LangChain.
 7. **Confirmation gate 2-turn (WA)** — el array de tools llega vacío al LLM hasta que el cliente afirma una pregunta de confirmación.

@@ -27,6 +27,7 @@ import { runAgent }              from './agent.ts'
 import { dispatchBellNotification } from './notifications.ts'
 import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
+import { buildUserCorpus }       from './core/conversation/frame.ts'
 import type { ToolContext }      from './core/tool-context.ts'
 import type {
   AgentInput, BusinessContext, UserRole, VoiceWorkerResponse,
@@ -343,32 +344,9 @@ async function handleRequest(req: Request): Promise<Response> {
     } : null,
   }
   // Build the user-side text corpus for anti-hallucination guards.
-  //
-  // CRITICAL: cut the corpus at the previous "frame boundary" so tokens from
-  // unrelated past attempts can't leak into the current guard. A frame
-  // boundary is any assistant turn that ISN'T asking a question — a
-  // completion ("Listo. Agendé..."), an error ("No encontré cita activa..."),
-  // a listing answer, anything that closes the previous intent. Assistant
-  // questions ("¿Para qué servicio?", "Hay varios, ¿cuál?") keep the frame
-  // open so multi-turn param collection still works.
-  //
-  // The earlier "cut on Listo. only" rule failed when a reschedule attempt
-  // errored out and left "sábado a las 5pm" tokens in the corpus, which the
-  // next unrelated schedule attempt then picked up via the deterministic
-  // override.
-  let cutoff = -1
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i]
-    if (msg && msg.role === 'assistant' && !/[?¿]/.test(msg.content)) {
-      cutoff = i
-      break
-    }
-  }
-  const relevantHistory = history.slice(cutoff + 1)
-  const userCorpusParts = [inputText]
-  for (const m of relevantHistory) if (m.role === 'user') userCorpusParts.push(m.content)
-  const userTextCorpus = userCorpusParts.join(' ').slice(0, 4000)
-  console.log(`[VOICE-WORKER] corpus cutoff=${cutoff} relevantTurns=${relevantHistory.length} corpus="${userTextCorpus.slice(0, 120)}"`)
+  // Frame-boundary semantics live in core/conversation/frame.ts.
+  const { corpus: userTextCorpus, cutoff, relevantTurns } = buildUserCorpus(inputText, history)
+  console.log(`[VOICE-WORKER] corpus cutoff=${cutoff} relevantTurns=${relevantTurns} corpus="${userTextCorpus.slice(0, 120)}"`)
 
   const toolCtx: ToolContext = {
     supabase,
