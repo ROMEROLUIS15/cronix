@@ -11,7 +11,7 @@
 
 BEGIN;
 
-SELECT plan(21);
+SELECT plan(29);
 
 -- ── Setup: Test fixtures ──────────────────────────────────────────────────────
 
@@ -287,6 +287,100 @@ SELECT ok(
 SELECT ok(
   LENGTH(COALESCE(public.fn_clean_phone('+58 414 1234567'), '')) > 0,
   'fn_clean_phone returns non-empty result'
+);
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- SECTION 5: PASSWORD ATTEMPT RATE LIMITING
+-- ────────────────────────────────────────────────────────────────────────────
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'fn_check_password_attempts'),
+  'fn_check_password_attempts exists'
+);
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'fn_record_failed_password_attempt'),
+  'fn_record_failed_password_attempt exists'
+);
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'fn_reset_password_attempts'),
+  'fn_reset_password_attempts exists'
+);
+
+-- 5.1 Test: New user has no failed attempts and is allowed
+SELECT is(
+  (SELECT (fn_check_password_attempts('newuser@test.com')).allowed),
+  true,
+  'new user allowed to login (0 failed attempts)'
+);
+
+-- 5.2 Test: Record first failed attempt
+DO $$
+BEGIN
+  PERFORM fn_record_failed_password_attempt('user1@test.com');
+END $$;
+
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  1,
+  'first failed attempt recorded (count=1)'
+);
+
+-- 5.3 Test: Record second failed attempt
+DO $$
+BEGIN
+  PERFORM fn_record_failed_password_attempt('user1@test.com');
+END $$;
+
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  2,
+  'second failed attempt recorded (count=2)'
+);
+
+-- 5.4 Test: Third attempt triggers lockout
+DO $$
+BEGIN
+  PERFORM fn_record_failed_password_attempt('user1@test.com');
+END $$;
+
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).is_locked),
+  true,
+  'user locked after 3rd failed attempt'
+);
+
+-- 5.5 Test: Locked user cannot login (allowed=false)
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).allowed),
+  false,
+  'locked user is not allowed to login'
+);
+
+-- 5.6 Test: Locked user has locked_until timestamp set
+SELECT ok(
+  (SELECT (fn_check_password_attempts('user1@test.com')).locked_until) IS NOT NULL,
+  'locked user has locked_until timestamp'
+);
+
+-- 5.7 Test: Reset clears all attempts and lockout
+DO $$
+BEGIN
+  PERFORM fn_reset_password_attempts('user1@test.com');
+END $$;
+
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).attempt_count),
+  0,
+  'password attempts reset to 0 after reset'
+);
+
+-- 5.8 Test: Reset user is allowed to login again
+SELECT is(
+  (SELECT (fn_check_password_attempts('user1@test.com')).allowed),
+  true,
+  'reset user is allowed to login again'
 );
 
 -- ────────────────────────────────────────────────────────────────────────────
