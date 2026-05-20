@@ -33,11 +33,12 @@ export default function LockedUsersPage() {
   useEffect(() => {
     loadLockedUsers()
     loadAlerts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadLockedUsers() {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('failed_password_attempts')
       .select('*')
       .not('locked_until', 'is', null)
@@ -51,7 +52,7 @@ export default function LockedUsersPage() {
   }
 
   async function loadAlerts() {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('security_alerts')
       .select('*')
       .eq('status', 'pending_review')
@@ -66,7 +67,7 @@ export default function LockedUsersPage() {
   async function unlockUser(email: string) {
     setUnblockingEmail(email)
     try {
-      const { error } = await supabase.rpc('fn_reset_password_attempts', {
+      const { error } = await (supabase as any).rpc('fn_reset_password_attempts', {
         p_email: email,
       })
 
