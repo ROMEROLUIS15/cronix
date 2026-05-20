@@ -321,6 +321,12 @@ entrypoint = "./functions/process-whatsapp/index.ts"
 [functions.cron-reminders]
 verify_jwt = false
 
+[functions.push-notify]
+verify_jwt = false
+
+[functions.cron-imminent-push]
+verify_jwt = false
+
 [functions.embed-text]
 # Internal embedding endpoint (Supabase.ai gte-small).
 # Called from server-side code (Memory, Router) with the service_role key.

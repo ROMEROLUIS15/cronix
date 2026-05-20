@@ -1,6 +1,6 @@
-import { sendWebPush } from './vapid.ts'
-import type { PushSubscription, PushPayload } from './vapid.ts'
-import type { NotificationSubscription } from './modules/subscription-manager.ts'
+import { sendWebPush } from '../vapid.ts'
+import type { PushSubscription, PushPayload } from '../vapid.ts'
+import type { NotificationSubscription } from './subscription-manager.ts'
 
 export interface PushResult {
   sent: number

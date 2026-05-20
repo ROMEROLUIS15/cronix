@@ -5,8 +5,10 @@
  * 45–75 min window that haven't been "imminent-notified" yet and pushes a
  * single notification to the business owner's installed PWA.
  *
- * Idempotency: marks the appointment_reminders row (or inserts a sentinel with
- * minutes_before=-1, channel='push_owner') as 'sent' so re-runs skip it.
+ * Idempotency: inserts a sentinel row in appointment_reminders with
+ * channel='push_owner' and status='sent' so re-runs skip the appointment.
+ * A partial UNIQUE index on (appointment_id) WHERE channel='push_owner'
+ * protects against concurrent cron overlaps at the DB level.
  *
  * Auth: Authorization: Bearer <CRON_SECRET>
  */

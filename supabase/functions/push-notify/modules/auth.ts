@@ -1,4 +1,4 @@
-import { createUserClient } from './modules/subscription-manager.ts'
+import { createUserClient } from './subscription-manager.ts'
 
 export async function resolveBusinessIdFromJwt(
   supabaseUrl: string,
