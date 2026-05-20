@@ -31,7 +31,7 @@ export async function login(formData: FormData): Promise<LoginResult> {
     const lockoutEndsAt = existing.lastFailAt + lockDuration
     if (Date.now() < lockoutEndsAt) {
       // Also record in PostgreSQL for audit trail
-      await supabase.rpc('fn_record_failed_password_attempt', { p_email: email })
+      await (supabase as any).rpc('fn_record_failed_password_attempt', { p_email: email })
 
       return {
         error: 'locked',
@@ -42,7 +42,7 @@ export async function login(formData: FormData): Promise<LoginResult> {
   }
 
   // 2. Check PostgreSQL rate limit (persistent DB check)
-  const { data: dbCheckResult, error: dbCheckError } = await supabase.rpc(
+  const { data: dbCheckResult, error: dbCheckError } = await (supabase as any).rpc(
     'fn_check_password_attempts',
     { p_email: email }
   )
@@ -74,7 +74,7 @@ export async function login(formData: FormData): Promise<LoginResult> {
     const redisState = await incrementLoginFailures(email)
 
     // Record in PostgreSQL for persistent audit
-    const { data: dbRecordResult } = await supabase.rpc(
+    const { data: dbRecordResult } = await (supabase as any).rpc(
       'fn_record_failed_password_attempt',
       { p_email: email }
     )
@@ -92,7 +92,7 @@ export async function login(formData: FormData): Promise<LoginResult> {
   // 5. Success — clear BOTH counters (Redis + PostgreSQL)
   await resetLoginFailures(email)
 
-  const { error: resetError } = await supabase.rpc(
+  const { error: resetError } = await (supabase as any).rpc(
     'fn_reset_password_attempts',
     { p_email: email }
   )

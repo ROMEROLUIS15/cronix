@@ -26,7 +26,7 @@ export async function checkLockoutAlert(email: string): Promise<LockoutAlert> {
   const supabase = await createClient()
 
   // Get current lockout info
-  const { data: lockoutData } = await supabase
+  const { data: lockoutData } = await (supabase as any)
     .from('failed_password_attempts')
     .select('attempt_count, locked_until, created_at')
     .eq('email', email)
@@ -35,7 +35,7 @@ export async function checkLockoutAlert(email: string): Promise<LockoutAlert> {
   // Get lockout history from last 24 hours
   const oneDayAgo = new Date(Date.now() - ALERT_WINDOW_HOURS * 60 * 60 * 1000)
 
-  const { data: recentLockouts, count: lockout_count_24h } = await supabase
+  const { data: recentLockouts, count: lockout_count_24h } = await (supabase as any)
     .from('failed_password_attempts')
     .select('id', { count: 'exact' })
     .eq('email', email)
@@ -79,7 +79,7 @@ export async function sendLockoutAlert(alert: LockoutAlert): Promise<boolean> {
     const supabase = await createClient()
 
     // Create audit log entry
-    await supabase.from('security_alerts').insert({
+    await (supabase as any).from('security_alerts').insert({
       alert_type: 'password_lockout_threshold',
       severity: alert.alert_type,
       user_email: alert.email,
@@ -120,7 +120,7 @@ export async function getHighRiskUsers(threshold: number = 5): Promise<LockoutAl
 
   const oneDayAgo = new Date(Date.now() - ALERT_WINDOW_HOURS * 60 * 60 * 1000)
 
-  const { data: users } = await supabase
+  const { data: users } = await (supabase as any)
     .from('failed_password_attempts')
     .select('email, attempt_count, updated_at')
     .gte('updated_at', oneDayAgo.toISOString())
@@ -129,7 +129,7 @@ export async function getHighRiskUsers(threshold: number = 5): Promise<LockoutAl
 
   // Group by email and count
   const emailCounts = users.reduce(
-    (acc, record) => {
+    (acc: Record<string, number>, record: any) => {
       acc[record.email] = (acc[record.email] || 0) + 1
       return acc
     },

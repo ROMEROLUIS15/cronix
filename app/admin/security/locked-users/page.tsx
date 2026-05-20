@@ -147,7 +147,7 @@ export default function LockedUsersPage() {
                 </div>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => {
                     // Navigate to alert detail
                     window.location.href = `/admin/security/alerts/${alert.id}`
@@ -213,7 +213,7 @@ export default function LockedUsersPage() {
                       <td className="py-3 px-4">
                         <Button
                           size="sm"
-                          variant="destructive"
+                          variant="danger"
                           disabled={unblockingEmail === user.email}
                           onClick={() => unlockUser(user.email)}
                         >
