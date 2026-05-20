@@ -84,7 +84,7 @@ describeIntegration('Appointment Booking Flow', () => {
       .insert({
         business_id: TEST_BUSINESS_ID,
         client_id: TEST_CLIENT_ID,
-        service_ids: [TEST_SERVICE_ID],
+        service_id: TEST_SERVICE_ID,
         start_at: startAt.toISOString(),
         end_at: endAt.toISOString(),
         status: 'pending',
