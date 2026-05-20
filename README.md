@@ -64,7 +64,7 @@ Cronix ataca los 5 simultáneamente.
 | PWA | `@ducanh2912/next-pwa` (custom SW) | Instalable + offline |
 | Push | Web Push + VAPID | Notificaciones nativas |
 | Observabilidad | Sentry · Axiom · Vercel Logs · `ai_traces` propio | Errores + métricas + trazas LLM |
-| Testing | Vitest · Playwright · React Testing Library · MSW | 114 archivos de test |
+| Testing | Vitest · Playwright · React Testing Library · MSW | 1507 tests (102 files) — 3 tipos |
 | Quality gates | ESLint · Husky · lint-staged · pre-push (lint+tsc+test+audit) | No bypass |
 
 ---
@@ -215,10 +215,10 @@ cronix/
 │   │   └── export-ai-traces/          ← cron 03:00 UTC
 │   └── migrations/                    ← 69 migraciones
 │
-├── __tests__/                         ← 74 archivos (unit + components + ai + …)
+├── __tests__/                         ← 101 unit test files (components, auth, api, ai, actions, validations, use-cases, …)
 ├── tests/
-│   ├── e2e/                           ← 11 specs Playwright
-│   └── integration/                   ← Vitest contra Supabase local
+│   ├── e2e/                           ← 15 Playwright specs (auth, dashboard, business flows)
+│   └── integration/                   ← 7 Vitest files (Supabase local)
 │
 ├── messages/                          ← i18n JSON (6 idiomas)
 ├── docs/

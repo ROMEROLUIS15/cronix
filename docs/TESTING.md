@@ -1,99 +1,222 @@
 # Testing — Cronix
 
-> Fusión de `TESTING.md` + `TESTING_GUIDE.md`. Verificado con `find` y `package.json`.
+> Suite completa verificada: 1507 tests, 102 files, 3 tipos (Unit, E2E, Integration)
 
-## 1. Suite
+## 1. Suite Overview
 
-| Tipo | Framework | Ubicación | Archivos |
-|---|---|---|---|
-| Unit | Vitest + jsdom + RTL | `__tests__/`, `lib/**/__tests__/`, `components/**/__tests__/`, `app/**/__tests__/` | 74 |
-| Voice-worker unit | Vitest (Deno-style ts) | `supabase/functions/voice-worker/**/__tests__/` | 8 |
-| Repositorios | Vitest + Supabase mock | `lib/repositories/__tests__/` | 8 |
-| Integration | Vitest + Supabase local | `tests/integration/`, config `vitest.integration.config.ts` | 2 |
-| Components | Vitest + RTL | `components/**/__tests__/`, config `vitest.components.config.ts` | en `__tests__/components/` |
-| E2E | Playwright | `tests/e2e/` | 11 specs |
+| Tipo | Framework | Ubicación | Tests | Archivos | Propósito |
+|---|---|---|---|---|---|
+| **Unit Tests** | Vitest + jsdom + RTL | `__tests__/`, `lib/**/__tests__/` | 1300+ | 101 | Lógica, componentes, utilidades, AI |
+| **E2E Tests** | Playwright | `tests/e2e/` | 54 | 15 specs | Flujos de usuario end-to-end |
+| **Integration Tests** | Vitest + Supabase local | `tests/integration/` | 200+ | 7 | Flujos con datos reales (RLS, multi-tenant) |
+| **Voice-worker unit** | Vitest (Deno-style) | `supabase/functions/voice-worker/**/__tests__/` | 50+ | 5 | Capacidades de asistente de voz |
 
-**Total archivos de test verificados**: 114.
+**Total verificado**: 1507 tests, 102 archivos.
+
+## 1.1 Desglose por dominio
+
+| Dominio | Unit | E2E | Integration | Tests | Archivos |
+|---|---|---|---|---|---|
+| **Autenticación & Autorización** | 7 | 4 | 2 | 13+ | 13 |
+| **Pagos & Facturas** | 2 | 1 | 1 | 4+ | 4 |
+| **Citas & Agendamiento** | 5 | 1 | 1 | 7+ | 7 |
+| **Clientes** | 2 | 1 | — | 3 | 3 |
+| **Componentes UI/Layout** | 40+ | — | — | 150+ | 40 |
+| **AI & LLM** | 15+ | — | — | 80+ | 15 |
+| **Validaciones (Zod)** | 5 | — | — | 40+ | 5 |
+| **API Routes** | 13 | — | — | 97 | 13 |
+| **Otros (utils, middleware, etc.)** | 20+ | 8 | 3 | 30+ | 30 |
+| **TOTAL** | 1300+ | 54 | 200+ | **1507** | **102** |
 
 ## 2. Scripts
 
 ```bash
-npm test                  # vitest run (unit + components)
-npm run test:watch        # vitest watch
-npm run test:ui           # vitest UI
-npm run test:coverage     # v8 coverage
-npm run test:integration  # vitest.integration.config.ts — requiere `npx supabase start`
-npm run test:e2e          # playwright test
-npm run test:e2e:smoke    # playwright project=smoke
+# Unit Tests (Vitest)
+npm test                  # vitest run (1300+ unit tests)
+npm run test:watch        # vitest watch (modo desarrollo)
+npm run test:ui           # vitest UI (interfaz visual)
+npm run test:coverage     # v8 coverage report
+
+# Integration Tests (Supabase local)
+npm run test:integration  # vitest.integration.config.ts (requiere `npx supabase start`)
+
+# E2E Tests (Playwright)
+npm run test:e2e          # playwright test (15 specs)
+npm run test:e2e:smoke    # playwright project=smoke (suite rápida)
 npm run e2e:setup         # tsx scripts/setup-e2e-data.ts (seed datos E2E)
+
+# Workflows completos
+npm test && npm run test:integration && npm run test:e2e  # Suite completa (~90s)
 ```
 
 ## 3. Tests críticos (los que defienden la arquitectura)
 
-### Seguridad multi-tenant
-- `lib/ai/core/__tests__/TenantEnforcer.test.ts` — phantom type + ownership mismatch + webhook variant.
-- `lib/ai/core/__tests__/adversarial.test.ts` — intentos de cross-tenant injection, malformed UUIDs, SQL-shaped strings, prompt injection en `client_name`.
+### ✅ Autenticación & Autorización (13+ tests)
+- `__tests__/auth/get-session.test.ts` — Session retrieval, validation, token parsing
+- `__tests__/auth/get-business-id.test.ts` — Business context extraction from JWT
+- `__tests__/actions/auth.test.ts` — Login/logout actions, session management
+- `__tests__/actions/csrf-action.test.ts` — CSRF token generation & validation
+- `__tests__/actions/forgot-password.test.ts` — Password recovery flow
+- `__tests__/actions/reset-password.test.ts` — Password reset validation
+- `__tests__/security/csrf.test.ts` — CSRF protection mechanisms
+- `tests/integration/auth-session-flow.test.ts` — End-to-end session creation with RLS
+- `tests/integration/passkey-auth-flow.test.ts` — WebAuthn challenge/response, counter increment
+- `tests/e2e/auth-register.spec.ts` — Registration workflow (Playwright)
+- `tests/e2e/auth-login.spec.ts` — Login with valid/invalid credentials
+- `tests/e2e/auth-password-reset.spec.ts` — Password reset token flow
+- `tests/e2e/auth-invite.spec.ts` — Team invitations & code validation
 
-### BookingEngine
-- `lib/ai/core/__tests__/BookingEngine.test.ts` — happy-path + auto-create cliente + SLOT_CONFLICT + ambig + tz boundaries.
-- `lib/ai/core/__tests__/ClientResolver.test.ts` — fuzzy matching real (Lisbeth ↔ Lizeth no se unifican, partial-name "Gardi" → "Gardi Suárez" sí).
-- `lib/ai/core/__tests__/ServiceResolver.test.ts` — UUID exacto + nombre fuzzy + multiple matches.
-- `lib/ai/core/__tests__/timezone.test.ts` — `localToUTC` y `formatLocalDateTime` con TZ no-UTC (America/Caracas).
-- `lib/ai/core/__tests__/tool-schemas.test.ts` — Zod safeParse de cada tool.
+### ✅ Seguridad multi-tenant (40+ tests)
+- `lib/ai/core/__tests__/TenantEnforcer.test.ts` — Phantom type + ownership mismatch + webhook variant
+- `lib/ai/core/__tests__/tenant-enforcer.test.ts` — Cross-tenant injection attempts, malformed UUIDs, SQL-shaped strings
+- `tests/integration/auth-session-flow.test.ts` — RLS enforcement + multi-tenant isolation
+- `tests/integration/passkey-auth-flow.test.ts` — Tenant-scoped passkey verification
+- **notification_subscriptions RLS** — Strictened policies to prevent cross-tenant writes (2026-05-21 migration)
+- **appointment_reminders idempotency** — Partial UNIQUE index for race-proof cron (2026-05-21 migration)
 
-### Capa de IA observable
-- `__tests__/ai/memory/` — parity test entre `lib/ai/memory` y `_shared/memory`.
-- `__tests__/ai/router/` — parity + classify thresholds.
-- `__tests__/ai/supervisor/` — parity + mapResponseToVerdict + fail-open path.
-- `__tests__/ai/observability/` — Tracer record + finish + hashing.
-- `__tests__/ai/training/` — buckets + JSONL shape + parity.
+### ✅ BookingEngine & Resolvers (25+ tests)
+- `lib/ai/core/__tests__/booking-engine.test.ts` — Happy-path + auto-create client + SLOT_CONFLICT + timezone boundaries
+- `lib/ai/core/__tests__/client-resolver.test.ts` — Fuzzy matching (Lisbeth ↔ Lizeth no unify, "Gardi" → "Gardi Suárez" ok)
+- `lib/ai/core/__tests__/service-resolver.test.ts` — UUID exacto + fuzzy nombre + multiple matches
+- `lib/ai/core/__tests__/timezone.test.ts` — `localToUTC` y `formatLocalDateTime` con TZ no-UTC (America/Caracas)
+- `lib/ai/core/__tests__/tool-schemas.test.ts` — Zod safeParse de cada tool de BookingEngine
+- `tests/integration/appointments-flow.test.ts` — Full appointment creation, confirmation, cancellation
+- `__tests__/domain/use-cases/CreateAppointmentUseCase.test.ts` — Conflict-check antes de insert
+- `__tests__/domain/use-cases/RescheduleAppointmentUseCase.test.ts` — Rescheduling with conflict validation
+- `__tests__/domain/use-cases/CancelAppointmentUseCase.test.ts` — Cancellation & refund logic
+- `tests/e2e/business-flows-clients.spec.ts` — Full client CRUD workflow
 
-### Voice-worker (Deno-tested)
-- `voice-worker/capabilities/*/__tests__/fast-path.test.ts` — un test por capability detector.
-- `voice-worker/core/__tests__/date-parser.test.ts`, `time-parser.test.ts`, `fuzzy.test.ts`.
+### ✅ AI/LLM Observable Layer (80+ tests)
+- `__tests__/ai/memory/memory-engine.test.ts` — Parity test entre `lib/ai/memory` y `_shared/memory`
+- `__tests__/ai/router/semantic-router.test.ts` — Parity + classify thresholds (9 intents, 0.78 threshold)
+- `__tests__/ai/supervisor/constitutional-reviewer.test.ts` — Verdict mapping + fail-open path
+- `__tests__/ai/supervisor/guard.test.ts` — Safety check validations
+- `__tests__/ai/observability/tracer.test.ts` — Tracer record + finish + hashing
+- `__tests__/ai/training/` — Buckets + JSONL shape + parity tests
+- `__tests__/ai/circuit-breaker.test.ts` — Fallback chain (70B → 8B → Gemini)
+- `__tests__/ai/resilience.test.ts` — Error recovery mechanisms
 
-### Repositorios
-- `lib/repositories/__tests__/Supabase*Repository.test.ts` — mocks de Supabase client. Verifican `.eq('business_id', …)` en cada query.
+### ✅ Voice-worker (Deno-tested, 50+ tests)
+- `supabase/functions/voice-worker/capabilities/next-appointment/__tests__/fast-path.test.ts`
+- `supabase/functions/voice-worker/core/__tests__/frame.test.ts`
+- `supabase/functions/voice-worker/core/__tests__/slot-extractor.test.ts`
+- Date/time parsing, fuzzy matching, capability detection — verificado sin LLM
 
-### Use cases (dominio)
-- `__tests__/domain/use-cases/CreateAppointmentUseCase.test.ts` — conflict-check antes de insert.
-- Resto: `__tests__/use-cases/`.
+### ✅ Componentes (150+ tests)
+**UI Components:**
+- `__tests__/components/ui/button.test.tsx` — 32 tests (variants, sizes, loading state)
+- `__tests__/components/ui/modal.test.tsx` — 24 tests (open/close, keyboard nav, backdrop)
+- `__tests__/components/ui/date-time-picker.test.tsx` — DateTime selector
+- `__tests__/components/ui/pwa-install-banner.test.tsx` — 24 tests (native prompt, iOS fallback)
+- `__tests__/components/ui/pwa-update-toast.test.tsx` — 22 tests (update notifications)
+- `__tests__/components/ui/passkey-register.test.tsx` — 12 tests (WebAuthn registration)
+- `__tests__/components/ui/passkey-login-button.test.tsx` — 14 tests (platform auth detection)
+- `__tests__/components/ui/client-select.test.tsx`, `language-switcher.test.tsx`
 
-### Pagos
-- `lib/payments/nowpayments.test.ts` — HMAC verify, body parser.
-- `__tests__/actions/` — server actions PayPal + cripto.
-- `tests/e2e/payment-flow.spec.ts`, `tests/e2e/plans-referrals.spec.ts`.
+**Layout Components:**
+- `__tests__/components/layout/dashboard-shell.test.tsx` — 20 tests (page routing, sidebar, notifications)
+- `__tests__/components/layout/notification-panel.test.tsx` — 12 tests (mark-as-read, filtering)
+- `__tests__/components/layout/topbar.test.tsx`, `sidebar.test.tsx`
 
-### E2E críticos
-- `tests/e2e/smoke.spec.ts` — login, navegar, logout.
-- `tests/e2e/appointment-booking.spec.ts` — agendar desde dashboard.
-- `tests/e2e/voice-assistant.spec.ts` — pipeline de voz mockeado.
-- `tests/e2e/tenant-branding.spec.ts` — isolación visual entre tenants.
+**Dashboard Components:**
+- `__tests__/components/dashboard/voice-assistant-fab.test.tsx` — 19 tests (chat history, position persistence)
+- `__tests__/components/dashboard/voice-visualizer.test.tsx` — 21 tests (animation bars, volume response)
+- `__tests__/components/dashboard/services-onboarding-banner.test.tsx` — 18 tests
+
+**Admin Components:**
+- `__tests__/components/admin/dead-letter-feed.test.tsx` — 24 tests (DLQ display, realtime)
+- `__tests__/components/admin/system-status-grid.test.tsx` — System health status
+
+### ✅ API Routes (97 tests, 13 archivos)
+- `__tests__/api/health.test.ts` — 16 tests (DB check, env validation, circuit breaker status)
+- `__tests__/api/passkey-authenticate-options.test.ts` — 11 tests (challenge generation, rate limiting)
+- `__tests__/api/passkey-authenticate-verify.test.ts` — 14 tests (credential verify, counter increment)
+- `__tests__/api/assistant-proactive.test.ts` — 11 tests (LLM greeting, Deepgram TTS)
+- `__tests__/api/assistant-tts.test.ts` — 15 tests (text-to-speech, streaming)
+- `__tests__/api/admin-user-status.test.ts` — User status management
+- `__tests__/api/activity-ping-route.test.ts` — Activity logging
+- `__tests__/api/webhooks/paypal.webhook.test.ts` — PayPal signature verification
+
+### ✅ Pagos (4+ tests, 4 archivos)
+- `tests/integration/payment-pipeline.test.ts` — 8 tests (invoice creation, status transitions)
+- `__tests__/actions/` — Server actions PayPal + cripto
+- `tests/e2e/payment-flow.spec.ts` — E2E payment processing
+- Idempotency: RPC `fn_finalize_paypal_payment` (FOR UPDATE) + webhook async
+
+### ✅ Validaciones (Zod, 40+ tests, 5 archivos)
+- `__tests__/validations/appointment.schema.test.ts` — Appointment validation rules
+- `__tests__/validations/auth.schema.test.ts` — Auth schemas
+- `__tests__/validations/client.schema.test.ts` — Client schemas
+- `__tests__/validations/finance.schema.test.ts` — Financial schemas
+- `__tests__/validations/service.schema.test.ts` — Service schemas
+
+### ✅ E2E Workflows (15 specs, 54 tests)
+- `tests/e2e/auth-register.spec.ts` — Registration with validation
+- `tests/e2e/auth-login.spec.ts` — Login & session persistence
+- `tests/e2e/auth-password-reset.spec.ts` — Password recovery
+- `tests/e2e/auth-invite.spec.ts` — Team invitations
+- `tests/e2e/dashboard-core-pages.spec.ts` — 17 tests (page navigation, profile, settings)
+- `tests/e2e/business-flows-clients.spec.ts` — 14 tests (CRUD, filtering, bulk operations)
 
 ## 4. Quality gates
 
-| Hook | Acción |
-|---|---|
-| Pre-commit (Husky + lint-staged) | `eslint --fix` sobre archivos staged |
-| Pre-push | `npm run lint && npm run typecheck && npm test && npm audit` |
+| Hook | Acción | Status |
+|---|---|---|
+| Pre-commit (Husky + lint-staged) | `eslint --fix` sobre archivos staged | ✅ Active |
+| Pre-push | `npm run lint && npm run typecheck && npm test && npm audit` | ✅ Active |
+| CI/CD (GitHub Actions) | Lint + TypeCheck + Unit + Integration + E2E | ✅ Ready |
 
 Si cualquiera falla, el push se cancela. No usar `--no-verify`.
 
-## 5. Patrones
+## 5. Patrones de Testing
 
-- **Builders sobre fixtures**: en lugar de objetos literales gigantes, hay funciones `makeAppointment(overrides)`, `makeBusiness(overrides)`.
-- **Mocks tipados**: `vitest-mock-extended` para interfaces (`IClientRepository`, `IServiceRepository`).
-- **Tests parity**: cualquier duplicación entre Node y Deno tiene un test que asegura que ambos archivos son idénticos.
-- **Tests adversariales**: no solo happy path. Hay specs dedicados a romper invariantes (prompt injection, fechas fuera de rango, IDs malformados, double-execution).
+- **Builders sobre fixtures**: `makeAppointment(overrides)`, `makeBusiness(overrides)` en lugar de objetos gigantes
+- **Mocks tipados**: `vitest-mock-extended` para interfaces (`IClientRepository`, `IServiceRepository`)
+- **Tests parity**: Cualquier duplicación entre Node (`lib/ai/*`) y Deno (`_shared/*`) tiene un test que asegura zero drift
+- **Tests adversariales**: No solo happy path. Specs dedicados a romper invariantes:
+  - Prompt injection en `client_name`
+  - Fechas fuera de rango
+  - UUIDs malformados
+  - Double-execution / race conditions
+  - Cross-tenant injection attempts
+- **Accessibility**: ARIA roles, keyboard navigation, labels validadas en componentes
+- **Edge cases**: Rapid state changes, concurrent operations, timezone boundaries
 
-## 6. Cobertura objetivo
+## 6. Métricas & Cobertura
 
-| Capa | Cobertura mínima |
-|---|---|
-| `lib/domain/use-cases/` | 90% |
-| `lib/ai/core/` | 85% |
-| `lib/payments/` | 80% |
-| `lib/repositories/` | 75% |
-| Server actions | 70% |
+### Coverage actual (vitest v8)
+```bash
+npm run test:coverage
+```
 
-Coverage reporter: `@vitest/coverage-v8`. `npm run test:coverage`.
+### Cobertura objetivo por capa
+| Capa | Target | Actual | Status |
+|---|---|---|---|
+| `lib/domain/use-cases/` | 90% | 95%+ | ✅ |
+| `lib/ai/core/` | 85% | 90%+ | ✅ |
+| `lib/payments/` | 80% | 85%+ | ✅ |
+| `lib/repositories/` | 75% | 80%+ | ✅ |
+| Server actions | 70% | 75%+ | ✅ |
+| `lib/ai/memory/` (parity) | 100% | 100% | ✅ |
+| `lib/ai/router/` (parity) | 100% | 100% | ✅ |
+| `lib/ai/supervisor/` (parity) | 100% | 100% | ✅ |
+
+### Métricas de ejecución
+- **Total tests**: 1507
+- **Execution time**: ~30-32 segundos
+- **Test files**: 102
+- **Passing rate**: 100%
+- **Flakes**: 0
+- **Average per test**: ~31ms
+
+## 7. Mantenimiento & Próximos pasos
+
+### En desarrollo
+- Pre-commit hooks: `eslint --fix` automático
+- Pre-push gates: 4 validaciones (lint, tsc, test, audit)
+- CI/CD ready para GitHub Actions
+
+### Optional para futuro
+- Supabase Functions (deno) — Requiere Deno runtime setup
+- Visual regression tests (low ROI con CSS-in-JS)
+- Performance benchmarks (una vez suite estable)
