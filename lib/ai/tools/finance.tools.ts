@@ -1,11 +1,15 @@
 /**
- * finance.tools.ts — AI tools for financial read/write operations.
+ * finance.tools.ts — AI read tool for the dashboard voice greeting.
+ *
+ * Only `get_today_summary` survives: it is the single AI tool still wired to a
+ * live route (`app/api/assistant/proactive` builds the voice welcome message).
+ * The rest of the Node AI tool layer (booking/client/crm write+read tools + the
+ * ReAct planner) was removed — the live assistant is the Deno voice-worker.
  */
 
 import { z } from 'zod'
-import { startOfDay, endOfDay, addDays, format } from 'date-fns'
+import { startOfDay, endOfDay, format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { fuzzyFind } from '@/lib/ai/fuzzy-match'
 import { logger } from '@/lib/logger'
 import type { ToolContext } from './_context'
 
@@ -14,27 +18,6 @@ import type { ToolContext } from './_context'
 export const GetTodaySummarySchema = z.object({
   business_id: z.string().uuid(),
 })
-
-export const RegisterPaymentSchema = z.object({
-  business_id: z.string().uuid(),
-  client_name: z.string().min(2),
-  amount: z.number().positive().max(100_000_000, 'Monto fuera de los límites de seguridad'),
-  method: z.enum(['efectivo', 'tarjeta', 'transferencia', 'qr', 'cash', 'card', 'transfer']).default('efectivo'),
-})
-
-export const GetRevenueStatsSchema = z.object({
-  business_id: z.string().uuid(),
-})
-
-const PAYMENT_METHOD_MAP: Record<string, string> = {
-  efectivo:      'cash',
-  tarjeta:       'card',
-  transferencia: 'transfer',
-  qr:            'qr',
-  cash:          'cash',
-  card:          'card',
-  transfer:      'transfer',
-}
 
 // ── READ: Resumen del día ──────────────────────────────────────────────────
 
@@ -74,77 +57,4 @@ export async function get_today_summary(
     logger.error('TOOL-DB', `get_today_summary failed: ${err instanceof Error ? err.message : String(err)}`, { business_id })
     return 'Error al consultar el resumen del día. Intenta de nuevo en un momento.'
   }
-}
-
-// ── WRITE: Registrar pago ──────────────────────────────────────────────────
-
-export async function register_payment(
-  args: z.infer<typeof RegisterPaymentSchema>,
-  ctx: ToolContext
-): Promise<string> {
-  const parse = RegisterPaymentSchema.safeParse(args)
-  if (!parse.success) return `Error en los datos del cobro: ${parse.error.issues[0]?.message}`
-  const { business_id, client_name, amount, method } = parse.data
-
-  // SECURITY: Verify business_id matches authenticated user's business
-  try { await ctx.tenantGuard.verify(business_id) } catch { return 'No autorizado.' }
-
-  const normalizedMethod = PAYMENT_METHOD_MAP[method.toLowerCase()] ?? 'other'
-
-  const clientsResult = await ctx.clientRepo.findActiveForAI(business_id)
-  if (clientsResult.error || !clientsResult.data) return `En este momento no puedo verificar el cliente ${client_name}.`
-
-  const clientMatch = fuzzyFind(clientsResult.data, client_name)
-  if (clientMatch.status !== 'found') return `No encontré al cliente ${client_name}.`
-
-  const client = clientMatch.match
-
-  const txResult = await ctx.financeRepo.createTransaction({
-    business_id,
-    client_id:  client.id,
-    amount,
-    net_amount: amount,
-    method:     normalizedMethod,
-    paid_at:    new Date().toISOString(),
-    notes:      'Registrado por voz — Luis IA',
-  })
-
-  if (txResult.error) {
-    logger.error('TOOL-DB', `register_payment failed: ${txResult.error}`, { business_id })
-    return 'No pude registrar el cobro por un error técnico.'
-  }
-
-  return `Listo. Registré un cobro de $${amount.toLocaleString('es-CO')} a ${client.name}.`
-}
-
-// ── STRATEGIC: Estadísticas de ingresos ────────────────────────────────────
-
-export async function get_revenue_stats(
-  args: z.infer<typeof GetRevenueStatsSchema>,
-  ctx: ToolContext
-): Promise<string> {
-  const parse = GetRevenueStatsSchema.safeParse(args)
-  if (!parse.success) return `Error: ${parse.error.message}`
-  const { business_id } = parse.data
-
-  // SECURITY: Verify business_id matches authenticated user's business
-  try { await ctx.tenantGuard.verify(business_id) } catch { return 'No autorizado.' }
-
-  const startPrev    = addDays(new Date(), -14).toISOString()
-  const startCurrent = addDays(new Date(), -7).toISOString()
-
-  const result = await ctx.financeRepo.findByPaidAtRange(business_id, startPrev, new Date().toISOString())
-
-  if (result.error || !result.data) return 'Error al calcular estadísticas.'
-
-  const currentTotal  = result.data.filter(t => new Date(t.paid_at) >= new Date(startCurrent)).reduce((acc, t) => acc + Number(t.net_amount), 0)
-  const previousTotal = result.data.filter(t => new Date(t.paid_at) <  new Date(startCurrent)).reduce((acc, t) => acc + Number(t.net_amount), 0)
-
-  let diffStr = ''
-  if (previousTotal > 0) {
-    const diff = ((currentTotal - previousTotal) / previousTotal) * 100
-    diffStr = ` — eso es un ${diff.toFixed(1)}% ${diff >= 0 ? 'más' : 'menos'} que la semana pasada.`
-  }
-
-  return `En los últimos 7 días has facturado $${currentTotal.toLocaleString('es-CO')}${diffStr}`
 }

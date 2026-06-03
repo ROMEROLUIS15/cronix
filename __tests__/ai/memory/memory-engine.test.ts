@@ -58,10 +58,10 @@ function makeStore(
 // ── recall ────────────────────────────────────────────────────────────────────
 
 describe('MemoryEngine.recall', () => {
-  let onError: ReturnType<typeof vi.fn>
+  let onError: ReturnType<typeof vi.fn<(stage: string, error: string) => void>>
 
   beforeEach(() => {
-    onError = vi.fn()
+    onError = vi.fn<(stage: string, error: string) => void>()
   })
 
   it('returns records on happy path', async () => {
@@ -114,10 +114,10 @@ describe('MemoryEngine.recall', () => {
 // ── write ─────────────────────────────────────────────────────────────────────
 
 describe('MemoryEngine.write', () => {
-  let onError: ReturnType<typeof vi.fn>
+  let onError: ReturnType<typeof vi.fn<(stage: string, error: string) => void>>
 
   beforeEach(() => {
-    onError = vi.fn()
+    onError = vi.fn<(stage: string, error: string) => void>()
   })
 
   it('embeds the content and inserts on happy path', async () => {

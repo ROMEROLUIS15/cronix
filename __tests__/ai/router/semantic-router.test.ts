@@ -38,10 +38,10 @@ const PROTOS: ReadonlyArray<IntentPrototype> = [
 ]
 
 describe('SemanticRouter.classify', () => {
-  let onError: ReturnType<typeof vi.fn>
+  let onError: ReturnType<typeof vi.fn<(stage: string, error: string) => void>>
 
   beforeEach(() => {
-    onError = vi.fn()
+    onError = vi.fn<(stage: string, error: string) => void>()
   })
 
   it('returns the highest-similarity intent above threshold', async () => {

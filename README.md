@@ -17,8 +17,8 @@
 ## TL;DR técnico
 
 - **Doble runtime físico**: Node.js (Next.js 15 App Router en Vercel) + Deno (Edge Functions en Supabase). Cero cross-imports — la lógica compartida se duplica byte-by-byte bajo `supabase/functions/_shared/` con tests de parity que fallan al menor drift.
-- **Aislamiento multi-tenant en 5 capas**: phantom-typed `TenantContext` (compile-time) → `TenantEnforcer.verify()` (DB check) → repositorios filtrados (`.eq('business_id', …)` + ownership asserts) → Row Level Security en Postgres → `ConstitutionalReviewer` semántico sobre args de escritura.
-- **10 mecanismos anti-alucinación verificables** en el código: phantom types, fast-paths sin LLM, date-guard determinista, frame-cutoff del corpus, per-turn fingerprint dedup, response bypass, confirmation gate 2-turn, embedded `<function>` recovery, router semántico, constitutional reviewer.
+- **Aislamiento multi-tenant**: repositorios filtrados (`.eq('business_id', …)` + ownership asserts) → Row Level Security en Postgres (`current_business_id()` del JWT) → `ConstitutionalReviewer` semántico sobre los writes de IA (WhatsApp/voz). El UI del dashboard se aísla por RLS; los canales de IA añaden el reviewer.
+- **10 mecanismos anti-alucinación verificables** en el código: corpus mention guards, fast-paths sin LLM, date-guard determinista, frame-cutoff del corpus, per-turn fingerprint dedup, response bypass, confirmation gate 2-turn, embedded `<function>` recovery, router semántico, constitutional reviewer.
 - **Pipeline de IA cero-costo**: Groq (Llama 3.3-70B + 3.1-8B con key rotation), Gemini 2.0-flash opcional vía endpoint OpenAI-compat, embeddings `gte-small` (384 dim) ejecutándose dentro del Edge runtime de Supabase, Deepgram Nova-2 (STT) y Aura-2 (TTS) en free tier. Stack productivo a $0/mes.
 - **Memoria episódica vectorial** (`ai_memories_v2`, pgvector) con recall obligatorio antes de cada escritura supervisada.
 - **Observabilidad estructurada** (`ai_traces`) + **pipeline diario de training-data** (`ai_training_exports`, cron 03:00 UTC, cero PII, JSONL versionado por `schema_version`).
@@ -88,18 +88,17 @@ Cronix ataca los 5 simultáneamente.
                                    ▼
                 ┌─────────────────────────────────────────────┐
                 │ SEGURIDAD                                   │
-                │   TenantEnforcer.verify() ── phantom type   │
-                │   ConstitutionalReviewer (Groq 8B)          │
+                │   Supabase Auth + RLS (current_business_id) │
+                │   repos filtrados (.eq business_id)         │
                 └──────────────────┬──────────────────────────┘
                                    │
                                    ▼
                 ┌─────────────────────────────────────────────┐
                 │ DOMINIO                                     │
-                │   BookingEngine.dispatch                    │
-                │   ├─ Zod safeParse                          │
-                │   ├─ Resolvers (Client + Service)           │
-                │   ├─ UseCases (Create/Cancel/Reschedule/…)  │
-                │   └─ cache.invalidate                       │
+                │   Server Actions → domain use-cases         │
+                │   ├─ Zod validation                         │
+                │   ├─ conflict check                         │
+                │   └─ repos + cache.invalidate               │
                 └──────────────────┬──────────────────────────┘
                                    │
                                    ▼
@@ -131,10 +130,10 @@ Cronix ataca los 5 simultáneamente.
 
 | Módulo | Código | Tests |
 |---|---|---|
-| Agente WhatsApp | `supabase/functions/process-whatsapp/` | `supabase/functions/voice-worker/**/__tests__/` + `__tests__/edge-functions/` |
-| Asistente voz dashboard | `supabase/functions/voice-worker/` | `supabase/functions/voice-worker/capabilities/*/__tests__/` |
-| BookingEngine | `lib/ai/core/booking/BookingEngine.ts` | `lib/ai/core/__tests__/` |
-| TenantEnforcer | `lib/ai/core/security/TenantEnforcer.ts` | `lib/ai/core/__tests__/TenantEnforcer.test.ts` |
+| Agente WhatsApp (pipeline) | `supabase/functions/process-whatsapp/` → `message-pipeline.ts` | `__tests__/edge-functions/` |
+| Asistente voz dashboard (pipeline) | `supabase/functions/voice-worker/` → `voice-pipeline.ts` | `supabase/functions/voice-worker/capabilities/*/__tests__/` |
+| Pipeline Engine | `supabase/functions/_shared/pipeline/Pipeline.ts` | `_shared/pipeline/__tests__/` (21 tests: unit + property + load) |
+| Saludo proactivo (voz) | `app/api/assistant/proactive/` + `lib/ai/tools/finance.tools.ts` (`get_today_summary`) | — |
 | Constitutional Reviewer | `lib/ai/supervisor/` + `_shared/supervisor/` | `__tests__/ai/supervisor/` |
 | Semantic Router | `lib/ai/router/` + `_shared/router/` | `__tests__/ai/router/` |
 | Memory Engine | `lib/ai/memory/` + `_shared/memory/` | `__tests__/ai/memory/` |
@@ -178,14 +177,13 @@ cronix/
 │
 ├── lib/
 │   ├── ai/
-│   │   ├── core/                      ← BookingEngine + TenantEnforcer + contracts
+│   │   ├── tools/                     ← get_today_summary (saludo voz) + tenantGuard
 │   │   ├── memory/                    ← pgvector + gte-small
 │   │   ├── observability/             ← Tracer + PgTraceSink
 │   │   ├── router/                    ← SemanticRouter + intents
 │   │   ├── supervisor/                ← ConstitutionalReviewer
 │   │   ├── training/                  ← TrainingExporter
 │   │   ├── providers/                 ← Groq, Deepgram
-│   │   ├── tools/                     ← tool definitions
 │   │   ├── circuit-breaker.ts
 │   │   ├── resilience.ts
 │   │   └── with-tenant-guard.ts
@@ -204,9 +202,15 @@ cronix/
 │
 ├── supabase/
 │   ├── functions/
-│   │   ├── _shared/                   ← duplicado byte-by-byte de lib/ai/* (parity-tested)
-│   │   ├── voice-worker/              ← Deno, capability registry
-│   │   ├── process-whatsapp/          ← Deno, ReAct loop
+│   │   ├── _shared/
+│   │   │   ├── pipeline/              ← Pipeline Engine (step orchestrator)
+│   │   │   ├── booking-adapter.ts     ← WhatsApp booking adapter
+│   │   │   ├── memory/                ← pgvector recall
+│   │   │   ├── observability/         ← tracing
+│   │   │   ├── supervisor/            ← constitutional guard
+│   │   │   └── ...                    ← duplicado byte-by-byte de lib/ai/* (parity-tested)
+│   │   ├── voice-worker/              ← Deno, capability registry → voice-pipeline.ts
+│   │   ├── process-whatsapp/          ← Deno, message-pipeline.ts
 │   │   ├── whatsapp-webhook/          ← HMAC verify + QStash publish
 │   │   ├── whatsapp-service/          ← outbound API
 │   │   ├── cron-reminders/            ← recordatorios
@@ -379,28 +383,51 @@ APP_URL=http://localhost:3000
 
 ---
 
-## Seguridad multi-tenant — 5 capas independientes
+## Seguridad multi-tenant — 3 capas independientes
 
 Falla en una capa NO compromete las otras.
 
 | Capa | Mecanismo | Falla por |
 |---|---|---|
-| 1 | **Phantom `TenantContext`** (compile-time) | El código no compila si se intenta construir el contexto directamente |
-| 2 | **`TenantEnforcer.verify()`** (runtime DB) | Lanza `UNAUTHORIZED` si `users.business_id ≠ requestedBusinessId` |
-| 3 | **Repositorios filtrados** + ownership asserts | `.eq('business_id', ctx.businessId)` en TODA query + assert antes de `update`/`delete` |
-| 4 | **Row Level Security en Postgres** | Aún con admin key comprometido, RLS bloquea cross-tenant reads/writes |
-| 5 | **`ConstitutionalReviewer`** (Groq 8B semántico) | Bloquea con códigos `TENANT_MISMATCH`, `AMBIGUOUS_TARGET`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `UNSAFE_ARGS` |
+| 1 | **Repositorios filtrados** + ownership asserts | `.eq('business_id', ctx.businessId)` en TODA query + assert antes de `update`/`delete` |
+| 2 | **Row Level Security en Postgres** (`current_business_id()` del JWT) | Aún con admin key comprometido, RLS bloquea cross-tenant reads/writes |
+| 3 | **`ConstitutionalReviewer`** (Groq 8B semántico, writes de IA WhatsApp/voz) | Bloquea con códigos `TENANT_MISMATCH`, `AMBIGUOUS_TARGET`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `UNSAFE_ARGS` |
+
+> El único tool de IA Node aún vivo (`get_today_summary`, lectura para el saludo) además llama `tenantGuard.verify()` contra `users.business_id`.
 
 Detalle: [`docs/architecture/AI_SYSTEM.md`](./docs/architecture/AI_SYSTEM.md) §10 y [`docs/architecture/DATABASE_SECURITY_TESTING.md`](./docs/architecture/DATABASE_SECURITY_TESTING.md).
 
 ---
 
+## Pipeline Engine
+
+El `Pipeline<T>` en `supabase/functions/_shared/pipeline/Pipeline.ts` reemplazó los loops monolíticos de ambos agentes:
+
+```
+Pipeline<T>
+  .step(name, fn)                       ← define paso
+  .step(name, fn, { if: predicate })    ← paso condicional
+  .step(name, fn, { timeoutMs: 500 })   ← paso con timeout
+  .on({ onStepStart, onStepComplete })  ← hooks de observabilidad
+  .run(initial) → { context, results }  ← ejecuta
+```
+
+**WhatsApp** (message-handler.ts: 337→281 líneas):
+  fetch-context → run-agent → send-response → log-interaction
+
+**Voice** (agent.ts: 506→226 líneas):
+  llm-loop → build-output
+
+Propiedades: tipado genérico, merge monotónico de contexto, parada en error, 21 tests (unit + property-based con fast-check + load).
+
+---
+
 ## Patrones anti-alucinación — 10 mecanismos verificables
 
-1. Phantom-typed `TenantContext`.
+1. Corpus mention guards (servicio/cliente/fecha/hora deben rastrearse a algo que el usuario dijo).
 2. Fast-paths sin LLM (9 capabilities en `voice-worker/capabilities/`).
-3. Date guard determinista (`detectTemporalIntent` en `voice-worker/agent.ts`).
-4. Frame-cutoff del corpus (`voice-worker/index.ts:329`).
+3. Date guard determinista (`detectTemporalIntent` en `voice-pipeline.ts`).
+4. Frame-cutoff del corpus (`voice-worker/capabilities/schedule/tool.ts`).
 5. Per-turn fingerprint dedup `(tool + sorted args)`.
 6. Response bypass (flag `bypassLLM` en `ICapability`).
 7. Confirmation gate 2-turn (`confirmation-gate.ts`).
@@ -428,8 +455,12 @@ Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
 
 ## Decisiones arquitectónicas clave
 
-- **Por qué duplicación lib/ai/ ↔ _shared/ con parity tests** — Edge Functions Deno no pueden importar módulos Node; duplicar + test garantiza zero drift. [ADR-0004 placeholder]
-- **Por qué phantom types para tenant context** — un `string` businessId podría olvidarse de verificar; un `TenantContext` no puede existir sin verificación.
+- **Por qué Pipeline Engine custom en vez de LangChain/LangGraph** — Deno 1.x no soporta dependencias Node.js de LangChain; un Pipeline<T> de ~75 líneas reemplaza 10MB de deps. [ADR-0005](./docs/architecture/adr/0005-custom-pipeline-engine-over-langchain.md)
+- **Por qué booking-adapter.ts para WhatsApp pero no para Voice** — WhatsApp identifica clientes por teléfono (adapter directo); Voice los identifica por nombre con resolución de ambigüedad + validación anti-alucinación. [ADR-0006](./docs/architecture/adr/0006-booking-engine-dual-implementation.md)
+- **Por qué 4 agentes (Orchestrator, Booking, Client, Supervisor)** — cobertura completa sin fragmentación excesiva; cada agente es un step del Pipeline. [ADR-0007](./docs/architecture/adr/0007-four-agent-architecture-decomposition.md)
+- **Por qué import maps en vez de Turborepo** — Edge Functions no pueden instalar npm packages; import maps resuelven el sharing sin build step. [ADR-0008](./docs/architecture/adr/0008-import-maps-over-shared-packages.md)
+- **Por qué duplicación lib/ai/ ↔ _shared/ con parity tests** — Edge Functions Deno no pueden importar módulos Node; duplicar + test garantiza zero drift.
+- **Por qué RLS como red estructural** — el `businessId` puede llegar de un cliente/LLM; RLS (derivado del JWT vía `current_business_id()`) bloquea cross-tenant a nivel DB independientemente del código de aplicación. Los repos además filtran por `business_id` en toda query.
 - **Por qué `PAYPAL_ENV=live` es opt-in** — Vercel inyecta `NODE_ENV=production` en previews; usar `NODE_ENV` cobraría dinero real en cada PR.
 - **Por qué fail-open en el reviewer** — un reviewer flaky no debe bloquear bookings legítimos; los códigos `block` solo disparan ante incoherencia semántica clara.
 - **Por qué template determinista en WhatsApp success path** — cortar el segundo LLM call elimina el loop `400 → circuit-breaker → 503` observado cuando el 8B fallaba la síntesis.
@@ -440,7 +471,7 @@ Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
 
 ## Documentación detallada
 
-- [`docs/architecture/AI_SYSTEM.md`](./docs/architecture/AI_SYSTEM.md) — Sistema de IA: modelos, capas anti-alucinación, BookingEngine, memoria, router, observabilidad, training exporter, parity, fallback chain, resilience.
+- [`docs/architecture/AI_SYSTEM.md`](./docs/architecture/AI_SYSTEM.md) — Sistema de IA: modelos, capas anti-alucinación, booking por canal, memoria, router, observabilidad, training exporter, parity, fallback chain, resilience.
 - [`docs/architecture/WHATSAPP_AGENT.md`](./docs/architecture/WHATSAPP_AGENT.md) — Agente WA end-to-end: pipeline, 6 defensas anti-abuso, confirmation gate, recuperación de tool-calls, final-pass determinista.
 - [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md) — PayPal + NOWPayments + manual: webhooks, idempotencia, referidos, migraciones, seguridad.
 - [`docs/architecture/RELIABILITY.md`](./docs/architecture/RELIABILITY.md) — Circuit breaker + QStash retries.
@@ -449,7 +480,15 @@ Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
 - [`docs/architecture/PASSKEY_WEBAUTHN_IMPLEMENTATION.md`](./docs/architecture/PASSKEY_WEBAUTHN_IMPLEMENTATION.md) — WebAuthn server + browser.
 - [`docs/architecture/WEB_PUSH_STANDARDS_DEEP_DIVE.md`](./docs/architecture/WEB_PUSH_STANDARDS_DEEP_DIVE.md) — VAPID + push subscriptions.
 - [`docs/architecture/UX_ENGINEERING.md`](./docs/architecture/UX_ENGINEERING.md) — patterns de UX en el dashboard.
-- [`docs/architecture/adr/`](./docs/architecture/adr/) — ADR-0001..0004.
+- [`docs/architecture/adr/`](./docs/architecture/adr/) — ADR-0001..0008:
+  - 0001: Action Tags vs JSON Function Calling
+  - 0002: Next.js Upgrade Deferral
+  - 0003: WhatsApp Concurrency Queues
+  - 0004: WhatsApp Business Verification
+  - **0005: Pipeline Engine custom sobre LangChain/LangGraph**
+  - **0006: Implementaciones de booking por canal (sin engine compartido)**
+  - **0007: 4-agent architecture decomposition**
+  - **0008: Import maps sobre Turborepo**
 - [`docs/operations/CI_CD_GATEKEEPER.md`](./docs/operations/CI_CD_GATEKEEPER.md) — gates pre-commit/pre-push.
 - [`docs/security/SECURITY_AND_RATE_LIMITS.md`](./docs/security/SECURITY_AND_RATE_LIMITS.md) + [`dependency-policy.md`](./docs/security/dependency-policy.md).
 - [`docs/TESTING.md`](./docs/TESTING.md) — suite, scripts, tests críticos.

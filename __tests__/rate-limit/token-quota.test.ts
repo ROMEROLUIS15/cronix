@@ -13,12 +13,15 @@ const mockExpire = vi.fn()
 const mockDel = vi.fn()
 
 vi.mock('@upstash/redis', () => ({
-  Redis: vi.fn().mockImplementation(() => ({
-    get: mockGet,
-    incrby: mockIncrby,
-    expire: mockExpire,
-    del: mockDel,
-  })),
+  // vitest 4 requires a `function` (not an arrow) for a mock used with `new`.
+  Redis: vi.fn(function () {
+    return {
+      get: mockGet,
+      incrby: mockIncrby,
+      expire: mockExpire,
+      del: mockDel,
+    }
+  }),
 }))
 
 vi.mock('@/lib/logger', () => ({

@@ -13,5 +13,4 @@ Documentación profunda de las piezas que sostienen la arquitectura. Cada archiv
 | Parity Node ↔ Deno (`_shared/`) | [SHARED_PARITY.md](./SHARED_PARITY.md) |
 | LLM Provider Fallback Chain | [PROVIDER_FALLBACK.md](./PROVIDER_FALLBACK.md) |
 | RPC `fn_finalize_paypal_payment` | [PAYPAL_RPC_DESIGN.md](./PAYPAL_RPC_DESIGN.md) |
-| BookingEngine `onBeforeDispatch` hook | [BOOKING_ENGINE_HOOK.md](./BOOKING_ENGINE_HOOK.md) |
 | Edge Function `embed-text` | [EMBED_TEXT_FUNCTION.md](./EMBED_TEXT_FUNCTION.md) |

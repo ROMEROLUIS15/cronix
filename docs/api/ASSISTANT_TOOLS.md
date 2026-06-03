@@ -1,6 +1,12 @@
 # Luis IA — Assistant Tools Reference
 
-> Current tool catalog as of 2026-04-29. All tool definitions live in `lib/ai/orchestrator/decision-engine.ts` (`buildToolDefsForRole`). Execution logic lives in `lib/ai/orchestrator/tool-adapter/RealToolExecutor.ts`.
+> Tool catalog snapshot (2026-04-29). The **live** tool definitions are the
+> voice-worker capabilities (`supabase/functions/voice-worker/capabilities/*/index.ts`,
+> registered in `capabilities/_shared/registry.ts`) and the WhatsApp `BOOKING_TOOLS`
+> (`supabase/functions/process-whatsapp/tool-executor.ts`). The Node
+> `lib/ai/orchestrator/*` and `lib/ai/tools/*` AI-agent layers referenced by older
+> revisions were never wired to a live route and were removed (June 2026 audit; see
+> ADR-0006) — the parameter contracts below still describe the voice tools.
 
 ---
 

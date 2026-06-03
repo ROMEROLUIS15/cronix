@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "scripts/**/*.{ts,js}",
+    "instrumentation.ts",
+    "instrumentation-client.ts",
+    "middleware.ts",
+    "worker/index.js",
+    "i18n/**/*.ts"
+  ],
+  "ignore": [
+    "supabase/functions/**",
+    "lib/database.types.ts",
+    "types/database.types.ts",
+    "lib/mock/**",
+    "**/*.d.ts"
+  ],
+  "ignoreBinaries": ["deno", "supabase"],
+  "ignoreDependencies": [],
+  "treatConfigHintsAsErrors": false
+}

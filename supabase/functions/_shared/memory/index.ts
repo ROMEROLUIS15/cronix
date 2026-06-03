@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4'
+import { createClient } from '@supabase/supabase-js'
 import type { IMemoryEngine } from './contracts.ts'
 import { SupabaseEdgeEmbedder }  from './Embedder.ts'
 import { PgVectorEpisodicStore } from './EpisodicStore.ts'

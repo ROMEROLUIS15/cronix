@@ -73,19 +73,16 @@ npm test && npm run test:integration && npm run test:e2e && npx supabase test db
 - `tests/e2e/auth-invite.spec.ts` — Team invitations & code validation
 
 ### ✅ Seguridad multi-tenant (40+ tests)
-- `lib/ai/core/__tests__/TenantEnforcer.test.ts` — Phantom type + ownership mismatch + webhook variant
-- `lib/ai/core/__tests__/tenant-enforcer.test.ts` — Cross-tenant injection attempts, malformed UUIDs, SQL-shaped strings
+- `lib/ai/with-tenant-guard.ts` — per-tool `tenantGuard.verify()` against `users.business_id`, called by every dashboard AI tool
+- RLS audit + cross-tenant adversarial scenarios — see `docs/architecture/DATABASE_SECURITY_TESTING.md`
 - `tests/integration/auth-session-flow.test.ts` — RLS enforcement + multi-tenant isolation
 - `tests/integration/passkey-auth-flow.test.ts` — Tenant-scoped passkey verification
 - **notification_subscriptions RLS** — Strictened policies to prevent cross-tenant writes (2026-05-21 migration)
 - **appointment_reminders idempotency** — Partial UNIQUE index for race-proof cron (2026-05-21 migration)
 
-### ✅ BookingEngine & Resolvers (25+ tests)
-- `lib/ai/core/__tests__/booking-engine.test.ts` — Happy-path + auto-create client + SLOT_CONFLICT + timezone boundaries
-- `lib/ai/core/__tests__/client-resolver.test.ts` — Fuzzy matching (Lisbeth ↔ Lizeth no unify, "Gardi" → "Gardi Suárez" ok)
-- `lib/ai/core/__tests__/service-resolver.test.ts` — UUID exacto + fuzzy nombre + multiple matches
-- `lib/ai/core/__tests__/timezone.test.ts` — `localToUTC` y `formatLocalDateTime` con TZ no-UTC (America/Caracas)
-- `lib/ai/core/__tests__/tool-schemas.test.ts` — Zod safeParse de cada tool de BookingEngine
+### ✅ Booking & appointment use-cases
+- `supabase/functions/voice-worker/core/__tests__/fuzzy.test.ts` — Client/service fuzzy matching (voice; Lisbeth ↔ Lizeth no unify)
+- `__tests__/notifications/appointment-event-id.test.ts` — Deterministic notification `eventId` (Node↔Deno contract)
 - `tests/integration/appointments-flow.test.ts` — Full appointment creation, confirmation, cancellation
 - `__tests__/domain/use-cases/CreateAppointmentUseCase.test.ts` — Conflict-check antes de insert
 - `__tests__/domain/use-cases/RescheduleAppointmentUseCase.test.ts` — Rescheduling with conflict validation

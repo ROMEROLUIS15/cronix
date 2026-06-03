@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4'
+import { createClient } from '@supabase/supabase-js'
 import type { ITracer } from './contracts.ts'
 import { Tracer }      from './Tracer.ts'
 import { PgTraceSink } from './PgTraceSink.ts'

@@ -39,10 +39,10 @@ function makeLlm(result: Result<ReviewerLlmResponse> | Promise<Result<ReviewerLl
 }
 
 describe('ConstitutionalReviewer.review', () => {
-  let onError: ReturnType<typeof vi.fn>
+  let onError: ReturnType<typeof vi.fn<(stage: string, error: string) => void>>
 
   beforeEach(() => {
-    onError = vi.fn()
+    onError = vi.fn<(stage: string, error: string) => void>()
   })
 
   it('translates allow into { ok: true }', async () => {

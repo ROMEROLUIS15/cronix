@@ -25,6 +25,29 @@ export function buildEndISO(startISO: string, durationMin: number): string {
   return new Date(new Date(startISO).getTime() + durationMin * 60_000).toISOString()
 }
 
+/**
+ * Converts a stored UTC ISO timestamp to local { date: YYYY-MM-DD, time: HH:mm }
+ * in the business timezone. Notifications and lastRef must read in local time —
+ * slicing the raw UTC string (start_at.slice(0,10)) shows the wrong day/hour in
+ * any non-UTC zone. Returns empty strings on an invalid input rather than throw.
+ */
+export function utcToLocalParts(utcIso: string, timezone: string): { date: string; time: string } {
+  const d = new Date(utcIso)
+  if (isNaN(d.getTime())) return { date: '', time: '' }
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const map  = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  const hour = map.hour === '24' ? '00' : map.hour
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    time: `${hour}:${map.minute}`,
+  }
+}
+
 export function humanizeDate(isoDate: string, timezone: string): string {
   try {
     return new Intl.DateTimeFormat('es', {

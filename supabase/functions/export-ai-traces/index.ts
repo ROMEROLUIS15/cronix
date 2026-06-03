@@ -19,7 +19,7 @@
  *   npx supabase functions deploy export-ai-traces
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import { createClient } from '@supabase/supabase-js'
 import { initSentry, captureException, addBreadcrumb, flushSentry } from '../_shared/sentry.ts'
 import { buildExportSummary } from '../_shared/training/TrainingExporter.ts'
 import { TRAINING_SCHEMA_VERSION }     from '../_shared/training/contracts.ts'

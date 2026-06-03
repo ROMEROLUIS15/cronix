@@ -1,6 +1,6 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData }  from '../../types.ts'
-import { localToUTC, buildEndISO } from '../../core/time-format.ts'
+import { localToUTC, buildEndISO, utcToLocalParts } from '../../core/time-format.ts'
 import { extractSlotsFromCorpus } from '../../core/conversation/slot-extractor.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
@@ -100,9 +100,9 @@ export async function executeReschedule(
 
   // When only one of (new_date, new_time) was given, keep the other from the
   // existing appointment so the user can say "reagéndala a las 4" without
-  // having to repeat the date.
-  const existingDate = apt.start_at.slice(0, 10)
-  const existingTime = apt.start_at.slice(11, 16)
+  // having to repeat the date. start_at is UTC — convert to the business-local
+  // day/hour, otherwise localToUTC below would re-offset it (wrong day/hour).
+  const { date: existingDate, time: existingTime } = utcToLocalParts(apt.start_at, ctx.timezone)
   const finalDate = args.new_date ?? existingDate
   const finalTime = args.new_time ?? existingTime
 

@@ -76,13 +76,8 @@
 
 ### AI & Machine Learning (15+ archivos)
 - ✅ `__tests__/ai/circuit-breaker.test.ts` — Resilience patterns
-- ✅ `__tests__/ai/core/booking-engine.test.ts` — Appointment logic
-- ✅ `__tests__/ai/core/client-resolver.test.ts` — Client matching
-- ✅ `__tests__/ai/core/service-resolver.test.ts` — Service matching
-- ✅ `__tests__/ai/core/tenant-enforcer.test.ts` — Multi-tenancy
-- ✅ `__tests__/ai/core/timezone.test.ts` — Timezone handling
-- ✅ `__tests__/ai/core/tool-schemas.test.ts` — Tool definitions
-- ✅ `__tests__/ai/fuzzy-match.test.ts` — Fuzzy matching
+- ✅ `__tests__/notifications/appointment-event-id.test.ts` — Deterministic notification eventId (Node↔Deno)
+- ✅ `supabase/functions/voice-worker/core/__tests__/fuzzy.test.ts` — Fuzzy client/service matching (voice)
 - ✅ `__tests__/ai/memory/memory-engine.test.ts` — Memory management
 - ✅ `__tests__/ai/observability/tracer.test.ts` — Tracing
 - ✅ `__tests__/ai/resilience.test.ts` — Error recovery
@@ -114,7 +109,6 @@
 - ✅ `__tests__/validations/service.schema.test.ts`
 
 ### Otras Características
-- ✅ `__tests__/application/ai/planner.test.ts` — AI planning
 - ✅ `__tests__/contracts/appointment-repository.contract.test.ts` — Contract testing
 - ✅ `__tests__/dashboard/observability-repo.test.ts` — Observability
 - ✅ `__tests__/domain/DomainError.test.ts` — Error handling

@@ -2,7 +2,7 @@
  * Security — QStash signature verification and message sanitization.
  */
 
-import { Receiver }          from "https://esm.sh/@upstash/qstash@2.7.20"
+import { Receiver }          from "@upstash/qstash"
 import { captureException, addBreadcrumb } from "../_shared/sentry.ts"
 
 // ── QStash signature verification ────────────────────────────────────────────

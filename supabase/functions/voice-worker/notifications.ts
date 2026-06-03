@@ -11,7 +11,7 @@
  * Fire-and-forget: notifications are derivative; never block the response.
  */
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppointmentNotification, NotificationType } from './types.ts'
 
 function buildTitle(type: NotificationType): string {

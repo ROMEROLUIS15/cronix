@@ -39,10 +39,11 @@ Si una persona modifica solo un lado, el test falla. El pre-push gate bloquea el
 | `lib/ai/observability/` | `_shared/observability/` | `__tests__/ai/observability/parity.test.ts` |
 
 `_shared/` también contiene utilities exclusivas para Deno que no necesitan parity:
-- `_shared/booking-adapter.ts` — adapta `BookingEngine` al runtime Edge.
+- `_shared/booking-adapter.ts` — booking de WhatsApp en runtime Edge (vía RPCs de Supabase).
 - `_shared/sentry.ts` — wrapper de Sentry para Deno.
 - `_shared/supabase.ts` — admin client + DLQ logger.
-- `_shared/tenant-guard.ts` — variante de `TenantEnforcer` para webhooks.
+- `_shared/tenant-guard.ts` — verificación de tenant para webhooks (el negocio viene del webhook HMAC, no de un usuario autenticado).
+- `_shared/notifications/event-id.ts` — `eventId` determinista de notificación (espejo Deno del de Node).
 - `_shared/database.ts` — tipos compartidos.
 
 ## Alternativas descartadas

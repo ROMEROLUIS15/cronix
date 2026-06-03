@@ -16,6 +16,13 @@ export type CreateNotificationPayload = {
   content: string
   type: 'info' | 'success' | 'warning' | 'error'
   metadata?: Record<string, unknown>
+  /**
+   * Idempotency key. When provided, the insert is deduped against the
+   * `notifications.event_id` UNIQUE constraint — a repeated event_id is a no-op
+   * (returns null data, no error). Built via buildAppointmentEventId so the same
+   * logical appointment event maps to the same id across retries and channels.
+   */
+  event_id?: string | null
 }
 
 export interface INotificationRepository {

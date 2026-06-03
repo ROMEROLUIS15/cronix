@@ -12,9 +12,7 @@ Owner (voz)  ──► voice-worker   (Deno Edge)
 Cliente (WA) ──► process-whatsapp (Deno Edge)
                           │
                           ▼
-                  BookingEngine (lib/ai/core)
-                  + TenantEnforcer (phantom type)
-                  + ConstitutionalReviewer (Groq 8B)
+                  ConstitutionalReviewer (Groq 8B)
                   + MemoryEngine (pgvector + gte-small)
                   + SemanticRouter (gte-small + cosine)
                   + Tracer (ai_traces)
@@ -36,7 +34,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 
 ## 3. Las 10 capas anti-alucinación
 
-1. **Phantom `TenantContext`** — solo `TenantEnforcer.verify()` lo emite. Cualquier intento de pasar un `string` en su lugar **no compila**.
+1. **Corpus mention guards** — antes de cualquier escritura, cada slot (servicio/cliente/fecha/hora) debe rastrearse a algo que el usuario dijo este turno (`nameMentionedInCorpus`/`timeMentionedInCorpus`/`dateMentionedInCorpus`). Si el modelo inventó un nombre o servicio, la capability se niega (`voice-worker/capabilities/schedule/tool.ts`).
 2. **Fast-paths totales sin LLM** — `voice-worker/capabilities/_shared/registry.ts`. 9 capabilities con detector + tool + (opcional) bypass de síntesis.
 3. **Date guard determinista** — si el usuario dijo "hoy / mañana / pasado mañana", la fecha de cualquier tool se sobrescribe en código (`voice-worker/agent.ts:104`).
 4. **Frame-cutoff corpus** — corta el historial en el último turno asistencial **terminal** (éxito `Listo.…`, error definitivo `No encontré…`, etc.) para que tokens de intentos viejos no contaminen los guards, sin truncar la recolección multi-turno (`voice-worker/core/conversation/frame.ts`).
@@ -47,26 +45,24 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 9. **Router semántico** — 9 intents con embeddings precalculados, threshold 0.78. Sirve para enriquecer prompts y para la afirmación del gate.
 10. **Constitutional reviewer (semántico)** — Groq 8B emite veredicto `allow|block|warn` con códigos `TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`. Fail-open con timeout 1500ms.
 
-## 4. BookingEngine — single source of truth
+## 4. Booking — 2 canales IA + dashboard manual
 
-Una sola clase, dos canales. Cualquier escritura pasa por:
+No hay engine de booking compartido (ver ADR-0006). El booking por IA ocurre en **dos canales Deno**; el dashboard agenda **manualmente** (sin IA). Lo único compartido es la BD (RPCs + constraints):
 
 ```
-TenantContext (sellado por TenantEnforcer)
-        │
-        ▼
-BookingEngine.dispatch(ctx, toolName, rawArgs)
-        ├─ onBeforeDispatch (constitutional review)  ← bloquea o sigue
-        ├─ Zod safeParse(rawArgs)                    ← INVALID_ARGS si falla
-        ├─ ClientResolver  (fuzzy + ambig + auto-create)
-        ├─ ServiceResolver (UUID o nombre)
-        ├─ localToUTC(date, time, tz)
-        ├─ UseCase.execute (conflict-check + insert atómico)
-        ├─ cache.invalidate(businessId, 'appointments' | 'stats')
-        └─ ToolResult<T>   ← nunca lanza
+WhatsApp (_shared/booking-adapter.ts)
+    normaliza args → RPC fn_book_appointment_wa / fn_reschedule_appointment_wa
+        (conflict-check + cliente por teléfono dentro del RPC)
+
+Voz (voice-worker/capabilities/{schedule,cancel,reschedule}/)
+    corpus guards → resolución de cliente (ambigüedad) → conflict-check
+        → write guard → INSERT
+
+Dashboard UI (sin IA)
+    forms → server actions → lib/domain/use-cases/* → repos
 ```
 
-Use cases en `lib/domain/use-cases/`: `CreateAppointmentUseCase`, `CancelAppointmentUseCase`, `RescheduleAppointmentUseCase`, `GetAppointmentsByDateUseCase`, `GetAvailableSlotsUseCase`, `CreateClientUseCase`, `DeleteClientUseCase`, `GetClientsUseCase`, `RegisterPaymentUseCase`.
+El write guard constitucional (`runWriteGuard`) corre **antes** del INSERT/UPDATE en WhatsApp y voz. El dashboard manual no pasa por IA, así que no aplica.
 
 ## 5. Memoria episódica
 

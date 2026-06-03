@@ -1,5 +1,6 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData } from '../../types.ts'
+import { utcToLocalParts } from '../../core/time-format.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
 import {
@@ -62,13 +63,17 @@ export async function executeCancel(
     if (svc) serviceName = svc.name
   }
 
+  // start_at is stored in UTC — render it in the business timezone so the
+  // notification and write-guard see the local day/hour the user actually means.
+  const { date: localDate, time: localTime } = utcToLocalParts(apt.start_at, ctx.timezone)
+
   if (ctx.runWriteGuard) {
     const denied = await ctx.runWriteGuard('cancel_appointment', {
       appointmentId: apt.id,
       clientName,
       serviceName,
-      date: apt.start_at.slice(0, 10),
-      time: apt.start_at.slice(11, 16),
+      date: localDate,
+      time: localTime,
     })
     if (denied) return denied
   }
@@ -85,8 +90,8 @@ export async function executeCancel(
     appointmentId: apt.id,
     clientName,
     serviceName,
-    date: apt.start_at.slice(0, 10),
-    time: apt.start_at.slice(11, 16),
+    date: localDate,
+    time: localTime,
     action: 'cancelled',
   }
   return {

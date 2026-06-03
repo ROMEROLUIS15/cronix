@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Revisor semántico de toda escritura de la IA. **No ejecuta acciones**: emite un veredicto `allow | block | warn`. Su trabajo no es validar SQL, RLS ni formatos (eso lo hace `TenantEnforcer` + `BookingEngine`). Su trabajo es detectar **incoherencia entre el utterance del usuario, los args propuestos y la memoria reciente**.
+Revisor semántico de toda escritura de la IA. **No ejecuta acciones**: emite un veredicto `allow | block | warn`. Su trabajo no es validar SQL, RLS ni formatos (eso lo hace la capa de datos —RPCs/constraints— + el tenant guard). Su trabajo es detectar **incoherencia entre el utterance del usuario, los args propuestos y la memoria reciente**.
 
 ## Componentes
 
@@ -62,24 +62,23 @@ ConstitutionalReviewer.review(request, { timeoutMs=1500 })
 ## Reglas duras (override)
 
 1. Utterance explícito + consistente con args → `allow` aunque memoria esté vacía. Memoria vacía ≠ sospecha.
-2. **No valida RLS, IDs ni formatos** — `TenantEnforcer` lo hace.
-3. **No valida slot conflicts ni horarios laborales** — `BookingEngine` lo hace.
+2. **No valida RLS, IDs ni formatos** — el tenant guard lo hace.
+3. **No valida slot conflicts ni horarios laborales** — la capa de datos (RPC + constraints) lo hace.
 4. `delete_client` es **warn como mínimo** si memoria muestra actividad del cliente en los últimos 30 días. Nunca `block` solo por eso.
 5. Si `recentMemory.length === 0`, solo puede emitir `UNSAFE_ARGS` o `POLICY_VIOLATION` (los demás requieren evidencia).
 
 ## Punto de inyección
 
-`BookingEngine` recibe un hook opcional `onBeforeDispatch`:
+El write guard se inyecta por turno: en voz como `ctx.runWriteGuard` (dentro del `ToolContext`), en WhatsApp se pasa a `executeToolCall`. Cada write tool/capability lo llama **antes** de su INSERT/UPDATE:
 
 ```ts
-type OnBeforeDispatchHook = (
-  toolName: BookingWriteTool,
-  toolArgs: Readonly<Record<string, unknown>>,
-  ctx:      TenantContext,
-) => Promise<{ ok: true } | { ok: false; reason: string }>
+type WriteGuard = (
+  toolName: ReviewedToolName,
+  args:     Readonly<Record<string, unknown>>,
+) => Promise<{ blocked: true; reason: string } | null>   // null = permitido
 ```
 
-Activado solo para `confirm_booking | cancel_booking | reschedule_booking`. Si verdict `block`, retorna `toolFail('UNAUTHORIZED', `Acción bloqueada por el revisor: ${reason}`)`.
+Internamente invoca `reviewWriteOrFailOpen({ reviewer, toolName, args, scope, userUtterance, recentMemory })`. Activado solo para `confirm_booking | cancel_booking | reschedule_booking`. Si el verdict es `block`, el tool retorna un resultado de error `UNAUTHORIZED` con la razón del revisor.
 
 ## Por qué fail-open
 

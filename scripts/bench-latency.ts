@@ -3,9 +3,7 @@
  *
  * Mide componentes deterministas (sin red, sin BD, sin LLM):
  *   1. SemanticRouter.classify       — cosine similarity sobre 9 prototipos
- *   2. ConfirmBookingSchema.safeParse — validación Zod del payload de booking
- *   3. fuzzyFind                      — resolución de cliente por nombre
- *   4. mapResponseToVerdict           — traducción del veredicto del reviewer
+ *   2. mapResponseToVerdict           — traducción del veredicto del reviewer
  *
  * NO mide:
  *   - Groq / Deepgram (red)
@@ -18,9 +16,6 @@
 import { SemanticRouter } from '../lib/ai/router/SemanticRouter'
 import type { IEmbedder, IntentPrototype } from '../lib/ai/router/contracts'
 import embeddingsFile from '../lib/ai/router/intent-embeddings.generated.json'
-import { ConfirmBookingSchema } from '../lib/ai/core/contracts/tool-schemas'
-import { fuzzyFind } from '../lib/ai/fuzzy-match'
-import type { ClientForAI } from '../lib/domain/repositories/IClientRepository'
 
 const ITERATIONS = 10_000
 
@@ -60,22 +55,7 @@ async function benchAsync(label: string, fn: () => Promise<unknown>, iters: numb
   return { label, iters, totalMs, perOpUs }
 }
 
-// ── 2. Zod schema validation ─────────────────────────────────────────────────
-const TYPICAL_BOOKING_ARGS = {
-  service_id:  '11111111-1111-4111-8111-111111111111',
-  date:        '2026-06-01',
-  time:        '15:00',
-  client_name: 'Juan Pérez',
-}
-
-// ── 3. fuzzyFind over a realistic catalog ────────────────────────────────────
-const CLIENTS: ClientForAI[] = Array.from({ length: 50 }, (_, i) => ({
-  id:    `cli-${i}`,
-  name:  `Cliente ${i} Pérez`,
-  phone: `+5841471${String(i).padStart(5, '0')}`,
-}))
-
-// ── 4. mapResponseToVerdict (constitutional reviewer mapping) ────────────────
+// ── 2. mapResponseToVerdict (constitutional reviewer mapping) ────────────────
 // Inline since the helper is not exported — same logic as in ConstitutionalReviewer.ts
 type ReviewVerdict =
   | { ok: true }
@@ -107,16 +87,6 @@ async function main() {
   results.push(r1)
 
   results.push(bench(
-    'ConfirmBookingSchema.safeParse (Zod)',
-    () => { ConfirmBookingSchema.safeParse(TYPICAL_BOOKING_ARGS) },
-  ))
-
-  results.push(bench(
-    'fuzzyFind sobre 50 clientes',
-    () => { fuzzyFind(CLIENTS, 'Juan Perez') },
-  ))
-
-  results.push(bench(
     'mapResponseToVerdict (reviewer mapping)',
     () => { mapResponseToVerdict(TYPICAL_VERDICT_RESPONSE) },
   ))
@@ -142,7 +112,7 @@ async function main() {
   const totalPerTurnUs = results.reduce((sum, r) => sum + r.perOpUs, 0)
   console.log('')
   console.log('───────────────────────────────────────────────────────────────────')
-  console.log(`  Suma por turno (las 4 piezas)                →   ${totalPerTurnUs < 1000 ? totalPerTurnUs.toFixed(2) + ' µs' : (totalPerTurnUs / 1000).toFixed(2) + ' ms'}`)
+  console.log(`  Suma por turno (las 2 piezas)                →   ${totalPerTurnUs < 1000 ? totalPerTurnUs.toFixed(2) + ' µs' : (totalPerTurnUs / 1000).toFixed(2) + ' ms'}`)
   console.log('───────────────────────────────────────────────────────────────────')
   console.log('')
   console.log('  Nota: la latencia end-to-end del agente está dominada por la red:')

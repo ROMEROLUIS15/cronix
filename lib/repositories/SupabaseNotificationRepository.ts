@@ -17,20 +17,35 @@ export class SupabaseNotificationRepository implements INotificationRepository {
   constructor(private supabase: Client) {}
 
   async create(payload: CreateNotificationPayload): Promise<Result<InAppNotification | null>> {
+    const row = {
+      business_id: payload.business_id,
+      user_id: payload.user_id,
+      title: payload.title,
+      content: payload.content,
+      type: payload.type,
+      // Cast metadata to satisfy Supabase's Json type (Record<string,unknown> is a valid Json object)
+      metadata: (payload.metadata ?? {}) as unknown as import('@/types/database.types').Json,
+      is_read: false,
+      ...(payload.event_id ? { event_id: payload.event_id } : {}),
+    }
+
+    // Idempotent path: when an event_id is supplied, dedup against the
+    // notifications_event_id_key UNIQUE constraint. A repeated event_id resolves
+    // to DO NOTHING (no row returned) instead of a duplicate-key error.
+    if (payload.event_id) {
+      const { data, error } = await this.supabase
+        .from('notifications')
+        .upsert(row, { onConflict: 'event_id', ignoreDuplicates: true })
+        .select()
+        .maybeSingle()
+
+      if (error) return fail(`Failed to create notification: ${error.message}`)
+      return ok((data as unknown as InAppNotification) || null)
+    }
+
     const { data, error } = await this.supabase
       .from('notifications')
-      .insert([
-        {
-          business_id: payload.business_id,
-          user_id: payload.user_id,
-          title: payload.title,
-          content: payload.content,
-          type: payload.type,
-          // Cast metadata to satisfy Supabase's Json type (Record<string,unknown> is a valid Json object)
-          metadata: (payload.metadata ?? {}) as unknown as import('@/types/database.types').Json,
-          is_read: false,
-        },
-      ])
+      .insert([row])
       .select()
       .single()
 

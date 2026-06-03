@@ -64,6 +64,10 @@ export function localTimeToUTC(dateStr: string, timeStr: string, timezone: strin
  */
 export function utcToLocalParts(utcIso: string, timezone: string): { date: string; time: string } {
   const d = new Date(utcIso)
+  // Defensive: an empty/invalid ISO (e.g. an appointment whose start_at couldn't
+  // be recovered) must not throw inside the fire-and-forget notification path —
+  // the DB write already succeeded. Callers render an empty date gracefully.
+  if (isNaN(d.getTime())) return { date: '', time: '' }
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit',

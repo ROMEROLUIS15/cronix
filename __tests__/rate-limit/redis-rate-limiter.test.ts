@@ -21,17 +21,20 @@ const mockIncrby = vi.fn()
 const mockDel = vi.fn()
 
 vi.mock('@upstash/redis', () => ({
-  Redis: vi.fn(() => ({
-    zremrangebyscore: mockZremrangebyscore,
-    zcard: mockZcard,
-    zadd: mockZadd,
-    expire: mockExpire,
-    zrange: mockZrange,
-    get: mockGet,
-    incrby: mockIncrby,
-    del: mockDel,
-    multi: mockMulti,
-  })),
+  // vitest 4 requires a `function` (not an arrow) for a mock used with `new`.
+  Redis: vi.fn(function () {
+    return {
+      zremrangebyscore: mockZremrangebyscore,
+      zcard: mockZcard,
+      zadd: mockZadd,
+      expire: mockExpire,
+      zrange: mockZrange,
+      get: mockGet,
+      incrby: mockIncrby,
+      del: mockDel,
+      multi: mockMulti,
+    }
+  }),
 }))
 
 describe('redis-rate-limiter', () => {

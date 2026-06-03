@@ -8,7 +8,25 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/) y es
 
 ## [Unreleased]
 
+### Eliminado
+
+#### Auditoría de arquitectura: dos subsistemas de IA muertos (~2.700 LOC)
+
+Una auditoría (junio 2026) encontró dos subsistemas Node que la documentación declaraba como vivos pero que **ningún route de producción invocaba**:
+
+- **`BookingEngine`** (`lib/ai/core/booking/` + `ClientResolver`/`ServiceResolver`/`TenantEnforcer`/contracts, ~1.274 LOC): declarado "única fuente de verdad" cross-canal, pero Deno nunca pudo importarlo y el dashboard nunca lo adoptó. Solo lo usaban sus propios tests. El `contracts-parity.test.ts` que los ADR citaban no existía.
+- **Capa de tools de IA Node** (`lib/ai/tools/appointment.tools.ts`, `client.tools.ts`, `crm.tools.ts`, `_helpers.ts`, `lib/ai/fuzzy-match.ts`, `lib/application/ai/planner.ts`, ~1.450 LOC): un agente de texto ReAct nunca terminado (planner sin executor sin route). El único tool vivo es `get_today_summary` (saludo de voz); el resto sin consumidores.
+
+El asistente de IA vivo es el **voice-worker (Deno)**. Ambos subsistemas se eliminaron junto con sus ~13 tests sobre código muerto.
+
+### Añadido
+
+- **Contrato unificado de notificación**: `buildAppointmentEventId(action, businessId, appointmentId, date, time)` determinista en los 3 canales (WhatsApp/voz/dashboard), idempotente vía `UNIQUE(notifications.event_id)`. Espejo Deno↔Node pinneado por `__tests__/notifications/appointment-event-id.test.ts`.
+
 ### Corregido
+
+- **3 bugs de notificación**: WhatsApp cancel sin fecha y con `serviceName` genérico; voz cancel/reschedule mostrando hora en UTC en vez de la local del negocio (nuevo `utcToLocalParts` en `voice-worker/core/time-format.ts`).
+- **Documentación**: ADR 0006/0008, README, AI_SYSTEM, WHATSAPP_AGENT, SUPERVISOR, SHARED_PARITY, TESTING, TECHNICAL_DOCUMENTATION (EN+ES) reescritos a la realidad — booking por IA en **2 canales Deno** (no 3), aislamiento multi-tenant en **3 capas reales** (repos filtrados → RLS → reviewer; el phantom-type/`TenantEnforcer` nunca estuvo en producción).
 
 #### Observabilidad del Agente IA: voice-worker no escribía trazas
 

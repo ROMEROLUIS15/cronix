@@ -24,6 +24,7 @@ import { captureException } from "../_shared/sentry.ts"
 import { utcToLocalParts } from "./time-utils.ts"
 import { formatLocalTime } from "./prompt-builder.ts"
 import { sendWhatsAppMessage } from "./whatsapp.ts"
+import { buildAppointmentEventId } from "../_shared/notifications/event-id.ts"
 import type { BusinessRagContext } from "./types.ts"
 
 // ── AppointmentEvent contract (mirrors lib/ai/orchestrator/events.ts) ─────────
@@ -377,12 +378,10 @@ export async function sendClientBookingConfirmation(
 // Replace the old fireOwnerNotifications / fireCancelNotifications / fireRescheduleNotifications.
 // Each constructs a typed AppointmentEvent and calls emitBookingEvent (fire-and-forget).
 
-// Deterministic event IDs: same tool + same appointment + same date/time = same eventId.
-// Prevents duplicate owner notifications when the ReAct loop or QStash retries
-// re-invoke the same tool call. Idempotency check in emitBookingEvent relies on this.
-function buildEventId(type: string, businessId: string, appointmentId: string, date: string, time: string): string {
-  return `${type}:${businessId}:${appointmentId}:${date}:${time}`
-}
+// Deterministic event IDs come from the shared contract (buildAppointmentEventId):
+// same action + same appointment + same date/time = same eventId. Prevents
+// duplicate owner notifications when the ReAct loop or QStash retries re-invoke
+// the same tool call. Idempotency check in emitBookingEvent relies on this.
 
 export function emitCreatedEvent(
   business:      BusinessRagContext['business'],
@@ -393,7 +392,7 @@ export function emitCreatedEvent(
   appointmentId: string,
 ): void {
   void emitBookingEvent({
-    eventId:      buildEventId('created', business.id, appointmentId, date, time),
+    eventId:      buildAppointmentEventId('created', business.id, appointmentId, date, time),
     type:         'appointment.created',
     businessId:   business.id,
     businessName: business.name,
@@ -415,7 +414,7 @@ export function emitRescheduledEvent(
   newTime:       string,
 ): void {
   void emitBookingEvent({
-    eventId:      buildEventId('rescheduled', business.id, appointmentId, newDate, newTime),
+    eventId:      buildAppointmentEventId('rescheduled', business.id, appointmentId, newDate, newTime),
     type:         'appointment.rescheduled',
     businessId:   business.id,
     businessName: business.name,
@@ -439,7 +438,7 @@ export function emitCancelledEvent(
   const { date, time } = utcToLocalParts(oldStartAt, business.timezone)
 
   void emitBookingEvent({
-    eventId:      buildEventId('cancelled', business.id, appointmentId, date, time),
+    eventId:      buildAppointmentEventId('cancelled', business.id, appointmentId, date, time),
     type:         'appointment.cancelled',
     businessId:   business.id,
     businessName: business.name,

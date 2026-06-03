@@ -1,23 +1,23 @@
 /**
- * booking-adapter.ts — Adapter WhatsApp → BookingEngine (Deno-compatible).
+ * booking-adapter.ts — WhatsApp booking implementation (Deno-compatible).
  *
- * DIFERENCIAS con el adapter del dashboard:
+ * One of three per-channel booking implementations (see ADR-0006). The shared
+ * contract across channels is the database (RPCs + appointments constraints),
+ * not a shared engine.
+ *
+ * DIFERENCIAS con el canal dashboard:
  *   - El cliente se identifica por TELÉFONO, no por nombre
  *   - El businessId viene del webhook (verificado por HMAC de Meta), no del LLM
  *   - No hay auto-creación por nombre: el RPC fn_book_appointment_wa crea el cliente
  *     por teléfono si no existe (comportamiento existente preservado)
- *   - TenantContext se crea via verifyWebhook(), no via verify() de sesión
  *
- * Esta es la ÚNICA diferencia de lógica entre canales.
- * El resto (conflict check, timezone, cache) es idéntico via BookingEngine.
- *
- * NOTA: Este archivo es Deno-compatible (sin imports de Node.js).
- * Usa la misma lógica pero llama al RPC de Supabase directamente
- * para la creación (fn_book_appointment_wa) que maneja al cliente por teléfono.
- * El resto de operaciones (cancel, reschedule, read) usa el patrón unificado.
+ * NOTA: Deno-compatible (sin imports de Node.js). La creación va por RPC
+ * (fn_book_appointment_wa / fn_reschedule_appointment_wa), que encapsula
+ * conflict-check y manejo de cliente por teléfono. Cancel/read usan el cliente
+ * de Supabase directamente con filtro de tenant.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from '@supabase/supabase-js'
 
 // ── Tipos locales (Deno no puede importar de lib/) ────────────────────────────
 
@@ -32,7 +32,7 @@ type ToolResult =
 type ServiceRow = { id: string; name: string; duration_min: number; price: number }
 type ActiveAppointmentRow = { id: string; service_name: string; start_at: string }
 
-// ── Timezone (puro Intl — mismo algoritmo que lib/ai/core/utils/timezone.ts) ──
+// ── Timezone (puro Intl — mismo algoritmo Intl usado en los demás canales) ──
 
 function localToUTC(date: string, time: string, timezone: string): string {
   const naiveAsUTC = new Date(`${date}T${time}:00Z`)

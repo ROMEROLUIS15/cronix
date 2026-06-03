@@ -1,7 +1,7 @@
 # WhatsApp Agent — Arquitectura end-to-end
 
 > Fusión de `WHATSAPP_AI_ARCHITECTURE.md` + `WhatsApp-AI-Architecture-Details.md`.
-> Verificado contra `supabase/functions/process-whatsapp/`, `supabase/functions/whatsapp-webhook/`, `supabase/functions/whatsapp-service/` y `lib/ai/core/booking/BookingEngine.ts`.
+> Verificado contra `supabase/functions/process-whatsapp/`, `supabase/functions/whatsapp-webhook/`, `supabase/functions/whatsapp-service/` y `supabase/functions/_shared/booking-adapter.ts`.
 
 ## 1. Visión
 
@@ -35,8 +35,8 @@ process-whatsapp (Deno Edge)
    │     ├─ confirmation-gate.toolsAllowedThisTurn (2-turn gate)
    │     ├─ deduplication guard por fingerprint(tool+args)
    │     ├─ embedded <function> recovery → promote a tool_call
-   │     ├─ executeToolCall vía BookingEngine.dispatch (Zod + UseCases)
-   │     │     └─ onBeforeDispatch hook = constitutional reviewer
+   │     ├─ executeToolCall → rate-limit + writeGuard → WhatsAppBookingAdapter.execute (RPC)
+   │     │     └─ writeGuard = constitutional reviewer (antes del write)
    │     ├─ output sanitizer (strip UUIDs, internal syntax, "_booking" leaks)
    │     └─ trace.recordToolCall(status, errorCode, hashedArgs)
    ├─ Success → renderBookingSuccessTemplate (SKIP large model)
@@ -83,17 +83,15 @@ Cuando la última tool del loop tuvo éxito, se salta el LARGE_MODEL y se render
 
 Cuando la tool falló con error conocido (`SLOT_CONFLICT`, `BOOKING_RATE_LIMIT`, `INVALID_ARGS`, `UNAUTHORIZED`, `NOT_FOUND`), se devuelve un mensaje determinista — nunca un segundo LLM call.
 
-## 8. Tabla de tools (BookingEngine `dispatch`)
+## 8. Tabla de tools (WhatsAppBookingAdapter)
 
-| Tool name | Schema Zod | Reviewed | Bypass-allowed |
-|---|---|---|---|
-| `confirm_booking` | `ConfirmBookingSchema` | ✔ | ✗ (requiere gate abierto) |
-| `cancel_booking` | `CancelBookingSchema` | ✔ | ✗ |
-| `reschedule_booking` | `RescheduleBookingSchema` | ✔ | ✗ |
-| `get_appointments_by_date` | `GetByDateSchema` | – | – |
-| `get_available_slots` | `GetAvailableSlotsSchema` | – | – |
-| `create_client` | `CreateClientSchema` | – | – |
-| `search_clients` | `SearchClientsSchema` | – | – |
+El agente WhatsApp expone solo **3 tools de escritura** (`BOOKING_TOOLS` en `tool-executor.ts`, definición JSON inline — no Zod), todas detrás del confirmation-gate de 2 turnos y del write-guard:
+
+| Tool name | Reviewed (writeGuard) | Gate 2-turnos |
+|---|---|---|
+| `confirm_booking` | ✔ | ✔ |
+| `cancel_booking` | ✔ | ✔ |
+| `reschedule_booking` | ✔ | ✔ |
 
 ## 9. Costos y latencias observables
 

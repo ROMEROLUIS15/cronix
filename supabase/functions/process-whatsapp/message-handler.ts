@@ -10,17 +10,15 @@
  *  6. Booking rate limiting — 2 bookings / 24h (inside runAgentLoop)
  */
 
-import { runAgentLoop, transcribeAudio, LlmRateLimitError, CircuitBreakerError } from "./ai-agent.ts"
-import { sendWhatsAppMessage, downloadMediaBuffer }                               from "./whatsapp.ts"
-import type { MetaWebhookPayload, BusinessRagContext, WaBusinessSettings }        from "./types.ts"
+import { transcribeAudio, LlmRateLimitError, CircuitBreakerError } from "./ai-agent.ts"
+import { sendWhatsAppMessage, downloadMediaBuffer }                 from "./whatsapp.ts"
+import type { MetaWebhookPayload, WaBusinessSettings }              from "./types.ts"
 import { checkMessageRateLimit, checkBusinessUsageLimit, checkTokenQuota, trackTokenUsage } from "./guards.ts"
 import { getBusinessBySlug, verifyBusinessPhone, getSessionBusiness, upsertSession }        from "./business-router.ts"
-import { getBusinessServices, getClientByPhone, getActiveAppointments,
-         getConversationHistory, getBookedSlots }                                           from "./context-fetcher.ts"
-import { logInteraction }    from "./audit.ts"
 import { verifyQStash, sanitizeMessage } from "./security.ts"
 import { captureException, addBreadcrumb, setSentryTag, flushSentry } from "../_shared/sentry.ts"
 import { logToDLQ }          from "../_shared/supabase.ts"
+import { buildWhatsAppPipeline, AgentRetryError, AgentCircuitBreakerError, AgentTransientError } from "./message-pipeline.ts"
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -247,80 +245,26 @@ export async function handleMessage(req: Request): Promise<Response> {
       return json({ success: true, message: 'Token quota exceeded — user notified' })
     }
 
-    const timezone = business.timezone ?? 'UTC'
-
-    const [services, client] = await Promise.all([
-      getBusinessServices(business.id),
-      getClientByPhone(business.id, sender),
-    ])
-
-    const [activeAppointments, history, bookedSlots] = await Promise.all([
-      client ? getActiveAppointments(business.id, client.id) : Promise.resolve([]),
-      getConversationHistory(business.id, sender, 6),
-      getBookedSlots(business.id, timezone),
-    ])
-
-    addBreadcrumb('Context fetched', 'database', 'info', {
-      has_client:          !!client,
-      active_appointments: activeAppointments.length,
-      history_items:       history.length,
-    })
-
-    const context: BusinessRagContext = {
-      business: {
-        id:       business.id,
-        name:     business.name,
-        timezone,
-        phone:    business.phone ?? null,
-        slug:     business.slug ?? null,
-        settings: (business.settings ?? {}) as WaBusinessSettings,
-      },
-      services,
-      client,
-      activeAppointments,
-      history,
-      bookedSlots,
-    }
-
-    addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'llama-3.1-8b-instant + llama-3.3-70b-versatile' })
-
-    let agentResult: { text: string; tokens: number; toolCallsTrace: unknown[] }
+    const pipeline = buildWhatsAppPipeline()
     try {
-      agentResult = await runAgentLoop(text, context, customerName, sender)
-      if (agentResult.tokens > 0) await trackTokenUsage(business.id, agentResult.tokens)
+      await pipeline.run({ sender, customerName, text, business })
     } catch (err) {
-      if (err instanceof LlmRateLimitError) {
-        addBreadcrumb('LLM rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
+      if (err instanceof AgentRetryError) {
+        addBreadcrumb('LLM rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfter })
         await flushSentry()
-        return retryLater(err.retryAfterSecs)
+        return retryLater(err.retryAfter)
       }
-      if (err instanceof CircuitBreakerError) {
+      if (err instanceof AgentCircuitBreakerError) {
         addBreadcrumb('LLM Circuit open hit — delegating retry to QStash', 'llm', 'warning')
         await flushSentry()
         return retryLater(30)
       }
-      captureException(err, { stage: 'ai_processing_failure', sender, prompt_length: text?.length })
-      await flushSentry()
-      // Transient platform crashes go to a short QStash retry instead of alarming the client.
-      // El cliente recibirá la respuesta final automáticamente una vez que el encolador destrabe el cuello de botella.
-      return retryLater(15)
+      if (err instanceof AgentTransientError) {
+        await flushSentry()
+        return retryLater(15)
+      }
+      throw err // non-agent errors propagate to the outer catch (→ DLQ)
     }
-
-    addBreadcrumb('Agent loop finished', 'llm', 'info', { response_length: agentResult.text.length, tokens: agentResult.tokens })
-
-    await sendWhatsAppMessage(sender, agentResult.text)
-    // Client receives a dedicated business-branded confirmation WA via
-    // sendClientBookingConfirmation() in tool-executor.ts (fired during tool execution).
-
-    await logInteraction({
-      business_id:  business.id,
-      sender_phone: sender,
-      message_text: text,
-      ai_response:  agentResult.text,
-      tool_calls:   agentResult.toolCallsTrace.length > 0
-        ? { steps: agentResult.toolCallsTrace }
-        : undefined,
-    })
 
     await flushSentry()
     return json({ success: true })

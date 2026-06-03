@@ -38,10 +38,10 @@ function makeClock(values: number[]) {
 }
 
 describe('Tracer.start + TraceHandle.finish', () => {
-  let onError: ReturnType<typeof vi.fn>
+  let onError: ReturnType<typeof vi.fn<(stage: string, error: string) => void>>
 
   beforeEach(() => {
-    onError = vi.fn()
+    onError = vi.fn<(stage: string, error: string) => void>()
   })
 
   it('writes a fully populated record on the happy path', async () => {

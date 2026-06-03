@@ -16,7 +16,7 @@
 5. [Multi-tenant isolation — 5 layers](#5-multi-tenant-isolation--5-layers)
 6. [AI system — models, costs, decisions](#6-ai-system--models-costs-decisions)
 7. [The 10 anti-hallucination layers](#7-the-10-anti-hallucination-layers)
-8. [BookingEngine — single source of truth](#8-bookingengine--single-source-of-truth)
+8. [Booking — per-channel implementations](#8-booking--per-channel-implementations)
 9. [Voice Worker (Deno) — detailed pipeline](#9-voice-worker-deno--detailed-pipeline)
 10. [Process WhatsApp (Deno) — detailed pipeline](#10-process-whatsapp-deno--detailed-pipeline)
 11. [Vector episodic memory](#11-vector-episodic-memory)
@@ -56,8 +56,8 @@ Service businesses in LATAM (hair salons, barber shops, clinics, spas, nail stud
 
 - **WhatsApp 24/7**: a single Cronix Cloud number serves every business. The customer just clicks the business' link and types.
 - **Voice in the dashboard**: the owner talks to the app ("book María tomorrow 3pm") and Cronix executes. Deepgram STT + TTS, end-to-end latency <2s.
-- **10 verifiable anti-hallucination layers**: phantom types, fast-paths, date-guards, fingerprint dedup, constitutional reviewer, etc. (section 7).
-- **5 isolation layers**: phantom-typed `TenantContext` → `TenantEnforcer.verify()` → filtered repos → Postgres RLS → semantic `ConstitutionalReviewer`.
+- **10 verifiable anti-hallucination layers**: corpus mention guards, fast-paths, date-guards, fingerprint dedup, constitutional reviewer, etc. (section 7).
+- **3 isolation layers**: filtered repos (`.eq business_id` + ownership) → Postgres RLS → semantic `ConstitutionalReviewer` (AI writes).
 - **3 gateways converging into one `saas_invoices` table**: PayPal (card + balance), NOWPayments (USDT BSC), Pago Móvil VE + Binance Pay (manual).
 
 ## 2. Business model and monetization
@@ -183,35 +183,17 @@ Verifiable in `lib/payments/subscription-fulfillment.ts:7-53`.
 
 **How logic is shared**: `supabase/functions/_shared/` duplicates byte-by-byte the modules under `lib/ai/{memory,router,supervisor,training,observability}/`. Parity tests in `__tests__/ai/*/parity.test.ts` fail on the smallest drift. See `docs/architecture/internals/SHARED_PARITY.md` for detail.
 
-## 5. Multi-tenant isolation — 5 layers
+## 5. Multi-tenant isolation — 3 layers
 
-### Layer 1 — Phantom-typed `TenantContext` (compile-time)
+> Note: two earlier designs were removed in the June 2026 audit (see ADR-0006): a
+> phantom-typed `TenantContext` + `TenantEnforcer`, and the Node AI tool layer that
+> called `tenantGuard.verify()` per tool. The only surviving AI tool — the read-only
+> `get_today_summary` — still calls `tenantGuard.verify()` (`lib/ai/with-tenant-guard.ts`:
+> resolves the authed user's `business_id` and throws on mismatch). Otherwise the
+> dashboard UI is isolated by the layers below (RLS + filtered repos), and the AI
+> channels (WhatsApp/voice) add the constitutional reviewer.
 
-`lib/ai/core/security/TenantEnforcer.ts:25-32`:
-
-```ts
-declare const __tenantBrand: unique symbol
-
-export type TenantContext = {
-  readonly businessId: string
-  readonly userId:     string
-  readonly timezone:   string
-  readonly [__tenantBrand]: true
-}
-```
-
-`__tenantBrand` doesn't exist at runtime — it's erased by the transpiler. But at compile-time, TypeScript blocks any attempt to do `const ctx: TenantContext = {...}` directly. The only place that does `as TenantContext` is `TenantEnforcer.verify()`. Any other attempt **does not compile**.
-
-### Layer 2 — `TenantEnforcer.verify()` (runtime DB check)
-
-```ts
-const ctx = await TenantEnforcer.verify(requestedBusinessId, authUserId, timezone)
-// Reads users.business_id; if !== requestedBusinessId → throws UNAUTHORIZED
-```
-
-For external channels (WA webhooks) there is `TenantEnforcer.verifyWebhook(businessId, timezone)` that only checks the business exists. Intentionally different because WA has no authenticated user.
-
-### Layer 3 — Filtered repositories + ownership asserts
+### Layer 1 — Filtered repositories + ownership asserts
 
 Every repository (`lib/repositories/Supabase*Repository.ts`) includes `.eq('business_id', businessId)` in **every** query. For mutations, an explicit assert is also done:
 
@@ -222,7 +204,7 @@ if (apt.business_id !== businessId) throw new Error('Ownership mismatch')
 
 Verifies that the read row actually belongs to the tenant before updating — protects against the paranoid case where RLS gets accidentally disabled.
 
-### Layer 4 — Row Level Security in Postgres
+### Layer 2 — Row Level Security in Postgres
 
 Every table with `business_id` has policy `USING (business_id = current_business_id())`. The function `current_business_id()` reads from the JWT (`auth.uid()` → `users.business_id`). Relevant migrations:
 - `20260414000000_rls_current_business_id.sql`
@@ -231,15 +213,14 @@ Every table with `business_id` has policy `USING (business_id = current_business
 
 Even if `service_role` got compromised, RLS blocks client traffic. `service_role` bypasses RLS but is **only** used from authenticated server-side code. Never exposed to the browser.
 
-### Layer 5 — Constitutional Reviewer (semantic)
+### Layer 3 — Constitutional Reviewer (semantic)
 
-On every supervised write (`confirm_booking`, `cancel_booking`, `reschedule_booking`), a reviewer LLM emits `allow | block | warn`. Detects semantic incoherence that technical layers don't catch: ambiguous client, double-intent, contradiction with memory. Detail in `docs/architecture/internals/SUPERVISOR.md`.
+On every supervised write (`confirm_booking`, `cancel_booking`, `reschedule_booking`) in the WhatsApp and voice channels, a reviewer LLM emits `allow | block | warn`. Detects semantic incoherence that technical layers don't catch: ambiguous client, double-intent, contradiction with memory. Detail in `docs/architecture/internals/SUPERVISOR.md`.
 
 ### How an attacker would fail
 
-- Compile-time bypass → impossible (phantom type).
 - Forging JWT → impossible if Supabase Auth is intact.
-- Modifying `business_id` in the payload → `TenantEnforcer.verify` rejects.
+- Modifying `business_id` in the payload → `tenantGuard.verify` rejects.
 - Skipping the repo and using `.from(...)` directly → RLS blocks.
 - Compromising service-role key → RLS still applies, but the attacker would read everything if calling with `service_role`. **That's why the key is only server-side**, never in `NEXT_PUBLIC_*`.
 
@@ -313,9 +294,9 @@ As traffic grows, the first costs will be Deepgram (STT volume) and Supabase (st
 
 Each layer has its file, verifiable lines and associated test:
 
-### 7.1 Phantom-typed `TenantContext` (compile-time)
+### 7.1 Corpus mention guards
 
-`lib/ai/core/security/TenantEnforcer.ts:25-32`. Already covered in §5.1.
+`supabase/functions/voice-worker/capabilities/schedule/tool.ts` + `core/conversation/slot-extractor.ts`. Before any booking write, every slot (service, client, date, time) must trace back to something the user actually said this turn (`nameMentionedInCorpus`, `timeMentionedInCorpus`, `dateMentionedInCorpus`). If the model fabricated a name or service, the capability refuses to act on it.
 
 ### 7.2 Total fast-paths without LLM
 
@@ -410,61 +391,44 @@ When the gate is closed, **the tools array is passed empty to the LLM** → the 
 
 `lib/ai/supervisor/`. Reviewer LLM emits `allow | block | warn` with codes. Fail-open. Detail in `docs/architecture/internals/SUPERVISOR.md`.
 
-## 8. BookingEngine — single source of truth
+## 8. Booking — per-channel implementations
 
-`lib/ai/core/booking/BookingEngine.ts`.
+There is **no shared booking engine**. Each channel owns its booking code; the
+only thing shared across them is the **database** (RPCs + `appointments` schema +
+conflict-detection constraints). See ADR-0006 for the rationale.
 
-### Invariants (verbatim from the file comment)
+> History: a Node `BookingEngine` (`lib/ai/core/booking/`) was once designated the
+> cross-channel "single source of truth". It could never be imported by Deno
+> (ADR-0008) and was unused. A parallel Node AI tool layer
+> (`lib/ai/tools/appointment.tools.ts` + a ReAct planner) was assumed to be the
+> dashboard's booking path but was **never wired to a live route** — the dashboard's
+> only live AI surface is the voice assistant. Both dead subsystems were removed in
+> the June 2026 audit (~1,274 + ~1,450 LOC).
 
-1. Only accepts `TenantContext` — tenant verification is structural.
-2. Validates with Zod BEFORE any DB operation.
-3. Converts timezone once, at the correct layer (before writing).
-4. Never throws — every error is a `ToolResult`.
-5. Invalidates cache after every successful write.
+AI booking runs in **two** Deno channels; the dashboard UI books manually.
 
-### Public API
+| Surface | Implementation | Client identity | Notable |
+|---|---|---|---|
+| WhatsApp (AI, Deno) | `supabase/functions/_shared/booking-adapter.ts` → RPCs | phone | `fn_book_appointment_wa` / `fn_reschedule_appointment_wa` encapsulate conflict-check + client-by-phone |
+| Voice (AI, Deno) | `voice-worker/capabilities/{schedule,cancel,reschedule}/` | name (fuzzy) | corpus anti-hallucination guards, ambiguity confirmation, write guard |
+| Dashboard UI (Node) | server actions → `lib/domain/use-cases/*` → repositories | — | manual booking, no AI/LLM |
 
-```ts
-class BookingEngine {
-  constructor(repos: BookingEngineRepos, onBeforeDispatch?: OnBeforeDispatchHook)
+### Keeping surfaces consistent
 
-  async createAppointment(ctx, rawArgs, opts?):    Promise<ToolResult<BookingData>>
-  async cancelAppointment(ctx, rawArgs):           Promise<ToolResult<BookingData>>
-  async rescheduleAppointment(ctx, rawArgs):       Promise<ToolResult<BookingData>>
-  async getAppointmentsByDate(ctx, rawArgs):       Promise<ToolResult<void>>
-  async getAvailableSlots(ctx, rawArgs, wh?):      Promise<ToolResult<void>>
-  async createClient(ctx, rawArgs):                Promise<ToolResult<{id, name}>>
-  async searchClients(ctx, rawArgs):               Promise<ToolResult<void>>
+Shared business rules (conflict detection, timezone math, status transitions) are
+pushed into the **Postgres RPCs and table constraints** where they can be enforced
+once for everyone, rather than re-implemented in a shared application module. The
+notification `event_id` is the one small cross-runtime string contract, mirrored
+in Node and Deno and pinned by a parity test.
 
-  async dispatch(ctx, toolName, rawArgs, opts?):   Promise<ToolResult<unknown>>
-}
-```
+### Write guard (`runWriteGuard`)
 
-### `createAppointment` flow (detailed)
-
-1. **Zod safeParse** of the payload → `INVALID_ARGS` on failure.
-2. **`ClientResolver.resolve`**:
-   - If `client_id` provided → UUID lookup.
-   - If `client_name` provided → fuzzy match against the active roster (`findActiveForAI`).
-   - Multiple matches → returns `ambiguous` with candidates.
-   - None → if `autoCreateClient` (default true), creates via `CreateClientUseCase`.
-3. **`ServiceResolver.resolve`**:
-   - Exact UUID → direct.
-   - Name → fuzzy + ambig handling.
-4. **`localToUTC(date, time, ctx.timezone)`** → UTC ISO.
-5. **`CreateAppointmentUseCase.execute`** atomic:
-   - Conflict check vs `findConflicts(businessId, startISO, endISO, excludeId?)`.
-   - INSERT into `appointments` + `appointment_services` (M2M).
-6. **`cache.invalidate(businessId, 'appointments' | 'dashboard')`** — forces dashboard re-fetch.
-7. **`toolOk(data, prose)`** with user-facing message.
-
-### Why resolve client/service inside the engine
-
-Previously each channel (dashboard, WhatsApp) had its own matching logic. Result: the dashboard accepted "María" but WhatsApp required "María Pérez full name". Centralizing matching eliminates that bias and allows a single set of adversarial tests (`ClientResolver.test.ts`, `ServiceResolver.test.ts`).
-
-### `onBeforeDispatch` hook
-
-Detail in `docs/architecture/internals/BOOKING_ENGINE_HOOK.md`. Fires only for `{confirm_booking, cancel_booking, reschedule_booking}`. The call-site (voice or WA) builds a closure that already captured the turn's `userUtterance` and `recentMemory`.
+The constitutional reviewer is injected per turn as `ctx.runWriteGuard` (voice) or
+passed to `executeToolCall` (WhatsApp), and each write capability calls it
+**before** its INSERT/UPDATE — only for `{confirm_booking, cancel_booking,
+reschedule_booking}`. The call-site builds a closure that already captured the
+turn's `userUtterance` and `recentMemory`. The dashboard UI does not book via AI,
+so the reviewer does not apply there.
 
 ## 9. Voice Worker (Deno) — detailed pipeline
 
@@ -534,7 +498,7 @@ Free-tier diversification and resilience. `FallbackChain` (`providers/registry.t
      - `BOOKING_TOOLS` or `[]` passed to the LLM.
      - Embedded `<function>` recovery if the model emits syntax leaks.
      - Fingerprint dedup.
-     - `executeToolCall` → `BookingEngine.dispatch` (with `onBeforeDispatch = writeGuard`).
+     - `executeToolCall` → rate-limit + `writeGuard`, then `WhatsAppBookingAdapter.execute` (RPC `fn_book_appointment_wa`).
    - **End decision tree**:
      - Last tool success → `renderBookingSuccessTemplate` (skip LARGE_MODEL).
      - Last tool failed with known errorCode → deterministic message per code.
@@ -638,7 +602,7 @@ Detail in `docs/architecture/internals/SUPERVISOR.md`.
 - Rubric v1 (versioned in code): 6 codes (`TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`).
 - Hard rules: explicit utterance overrides any "suspicion by empty memory"; reviewer does NOT validate RLS/SQL/slot conflicts.
 
-### Injection into BookingEngine
+### Injection of the write guard
 
 ```ts
 const ctx = {
@@ -655,7 +619,7 @@ const ctx = {
 }
 ```
 
-BookingEngine invokes the hook **only** for tools in `REVIEWED_WRITE_TOOLS`. Reads go through directly.
+Each write tool/capability calls the guard **before** its INSERT/UPDATE — only for the reviewed write tools (`book/cancel/reschedule`). Reads never invoke it.
 
 ## 15. Payment system — three gateways
 
@@ -1001,8 +965,9 @@ Detail in `docs/TESTING.md`. Summary:
 - **114 test files**.
 - Vitest unit + integration + Playwright E2E.
 - Critical tests:
-  - `TenantEnforcer.test.ts` + `adversarial.test.ts` (multi-tenant).
-  - `BookingEngine.test.ts` + resolvers (domain).
+  - RLS audit + cross-tenant adversarial tests (`docs/architecture/DATABASE_SECURITY_TESTING.md`).
+  - voice `core/__tests__/fuzzy.test.ts` (client/service name matching).
+  - `appointment-event-id.test.ts` (deterministic notification contract, Node↔Deno).
   - `parity.test.ts` for each `_shared/` module (Node↔Deno).
   - `fast-path.test.ts` for each voice-worker capability.
   - `nowpayments.test.ts` (HMAC).
@@ -1041,9 +1006,16 @@ Supabase Edge Functions run on Deno. Deno has its own module resolver (`.ts` exp
 
 The option I took (two runtimes with duplicated `_shared/` + parity tests) is the balance between simplicity and reuse.
 
-### Why phantom types for `TenantContext`?
+### Why RLS as the structural base?
 
-A `businessId: string` is indistinguishable from "any string" to TypeScript. A junior could write `bookingEngine.create('uuid-of-another-business', ...)` and it would compile. Phantom-typed `TenantContext` makes **only `TenantEnforcer.verify()`** capable of emitting one. It's safety by types, not by convention.
+A `businessId: string` is indistinguishable from "any string" to TypeScript, so the
+real gate is the database: RLS (`current_business_id()` derived from the JWT) blocks
+cross-tenant reads/writes regardless of application code, and every repository also
+filters by `business_id`. Two type-level / per-tool guards were prototyped to make
+the check harder to forget (a phantom-typed `TenantContext`, and a per-tool
+`tenantGuard.verify()` in the Node AI tools) but the AI tool layer was never wired
+to production and was removed (see ADR-0006). `tenantGuard.verify()` survives only on
+the one live AI read tool, `get_today_summary`.
 
 ### Why fail-open in the reviewer?
 
@@ -1112,7 +1084,7 @@ Groq's free tier is measured per key. Having several keys ($0 each) lets us satu
 
 ### Junior
 
-"Cronix is a multi-tenant SaaS for booking appointments via WhatsApp and a dashboard with a voice assistant. It's built with Next.js 15, React 19, TypeScript, Tailwind, Supabase (Postgres + Edge Functions + RLS) and Upstash (Redis + QStash). I wrote the dashboard frontend, payment server actions, repositories against Supabase, and unit tests. The most interesting thing I learned: how to isolate tenants with Postgres RLS and TypeScript phantom types, and how to avoid duplicate bookings with a per-turn fingerprint."
+"Cronix is a multi-tenant SaaS for booking appointments via WhatsApp and a dashboard with a voice assistant. It's built with Next.js 15, React 19, TypeScript, Tailwind, Supabase (Postgres + Edge Functions + RLS) and Upstash (Redis + QStash). I wrote the dashboard frontend, payment server actions, repositories against Supabase, and unit tests. The most interesting thing I learned: how to isolate tenants with Postgres RLS plus a per-tool tenant guard, and how to avoid duplicate bookings with a per-turn fingerprint."
 
 ### Middle
 
@@ -1120,7 +1092,7 @@ Groq's free tier is measured per key. Having several keys ($0 each) lets us satu
 
 AI uses Groq (Llama 3.3-70B + 3.1-8B with key rotation) and optional Gemini as fallback chain. Embeddings with `gte-small` running inside Supabase Edge runtime. STT/TTS with Deepgram Nova-2/Aura-2. All on free tiers — the production stack costs $0/month.
 
-Multi-tenant isolation is 5-layer: compile-time `TenantContext` phantom type, runtime `TenantEnforcer.verify()` with check against `users.business_id`, `.eq('business_id', X)` filters in every repository, RLS in Postgres, and a semantic `ConstitutionalReviewer` reviewing the coherence of every write.
+Multi-tenant isolation is 3-layer: `.eq('business_id', X)` filters + ownership asserts in every repository, RLS in Postgres (`current_business_id()` from the JWT), and a semantic `ConstitutionalReviewer` reviewing the coherence of every AI write.
 
 Payments with three gateways converging to `saas_invoices`: PayPal with async webhook + atomic `fn_finalize_paypal_payment` RPC with `FOR UPDATE` (atomic Postgres idempotency), NOWPayments crypto via QStash with back-pressure, and manual with admin approval. The referral system adds 30 days to the referrer when their referee closes the first `finished` payment.
 
@@ -1130,15 +1102,15 @@ Tests: 114 files between unit (Vitest), integration (against local Supabase), co
 
 "The project tackles two scale problems: LLM hallucinations in operations with side effects (booking), and data isolation in multi-tenant SaaS.
 
-For hallucinations I implemented **10 verifiable mechanisms** combined: phantom typing of the tenant context, total fast-paths without LLM, deterministic date-guard, corpus frame-cutoff, per-turn fingerprint dedup, response bypass (`return_direct`), 2-turn confirmation gate that passes `tools=[]` to the model, embedded `<function>` recovery, semantic router with precomputed embeddings, and a fail-open constitutional reviewer with rubric versioned in code.
+For hallucinations I implemented **10 verifiable mechanisms** combined: corpus mention guards (service/client/date/time must trace to the user), total fast-paths without LLM, deterministic date-guard, corpus frame-cutoff, per-turn fingerprint dedup, response bypass (`return_direct`), 2-turn confirmation gate that passes `tools=[]` to the model, embedded `<function>` recovery, semantic router with precomputed embeddings, and a fail-open constitutional reviewer with rubric versioned in code.
 
-For isolation I also combined 5 layers: phantom-typed `TenantContext`, `TenantEnforcer` with DB check, filtered repositories + ownership asserts, RLS with `current_business_id()` derived from JWT, and the constitutional reviewer detecting semantic `TENANT_MISMATCH`.
+For isolation I combined 3 layers: filtered repositories + ownership asserts, RLS with `current_business_id()` derived from JWT, and the constitutional reviewer on AI writes detecting semantic `TENANT_MISMATCH`.
 
 Noteworthy decisions I justify:
 - Byte-by-byte duplication of `lib/ai/{memory,router,supervisor,training,observability}` under `supabase/functions/_shared/` with parity tests because Deno and Node can't cross-import and bundling was more expensive.
 - Zero synthesis LLM calls in WhatsApp when the tool succeeded: using a deterministic template closes the `400→circuit-breaker→503` loop we suffered.
 - `PAYPAL_ENV=live` explicit opt-in because Vercel sets `NODE_ENV=production` in previews — without opt-in every PR would charge real money.
-- Fail-open in the reviewer because the first 4 layers are sufficient and blocking legitimate bookings due to reviewer flakiness is worse than letting one anomalous edge case through.
+- Fail-open in the reviewer because the structural layers (filtered repos + RLS) are sufficient and blocking legitimate bookings due to reviewer flakiness is worse than letting one anomalous edge case through.
 - Episodic memory with TTL instead of eternal retention because the reviewer only needs recent context (10 min) to detect `DUPLICATE_INTENT`.
 
 Observability: every turn generates an `ai_traces` row with latency, tokens, tool sequence (no args), outcome and query_hash (truncated SHA-256). A daily cron samples up to 500 traces per business, buckets them and exports them to `ai_training_exports` with `schema_version`. Zero PII guaranteed by types.
@@ -1153,8 +1125,7 @@ The suite covers 114 files: adversarial tests against prompt-injection, Node-Den
 
 | Term | Definition |
 |---|---|
-| BookingEngine | Central class that executes all appointment operations. `lib/ai/core/booking/BookingEngine.ts`. |
-| TenantContext | Phantom-typed object proving the caller verified the tenant. Only `TenantEnforcer.verify()` emits it. |
+| tenantGuard | Per-request guard (`lib/ai/with-tenant-guard.ts`); `verify(businessId)` rejects if it ≠ the authenticated user's business. Called by the one surviving AI read tool (`get_today_summary`). |
 | Fast-path | Agent path that runs a tool without going through the LLM, based on deterministic text patterns. |
 | LLM Bypass | Returning the tool's response directly to the user, without re-synthesis. `return_direct=True` pattern. |
 | Constitutional Reviewer | Reviewer LLM (Groq 8B) emitting verdict on semantic coherence of every write. Fail-open. |
@@ -1167,9 +1138,7 @@ The suite covers 114 files: adversarial tests against prompt-injection, Node-Den
 | Anaphora | Reference to a conversational antecedent ("cancel it" → last appointment mentioned). |
 | QStash | Upstash queue with dedupe + retry. |
 | ReAct loop | LLM Reason+Act pattern: model decides which tool to call, sees the result, decides the next. |
-| ToolResult | Type returned by every BookingEngine operation. Never throws. |
+| ToolResult | Type returned by AI tool/capability operations (`{ success, result/message, data? }`). Never throws. |
 | pgvector | Postgres extension for vectors and similarity search. |
 | gte-small | Lightweight embeddings model (384 dim, L2-normalized) running inside Supabase Edge AI. |
 | VAPID | Web Push standard for authenticating the server. |
-| Phantom type | TypeScript type with a `unique symbol` brand that doesn't exist at runtime but prevents direct construction. |
-| Single source of truth | Pattern where a single entity governs multiple consumers. |

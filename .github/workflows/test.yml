@@ -39,6 +39,14 @@ jobs:
       - name: Run Lint
         run: npm run lint
 
+      # Dead-code / unused-dependency detection. INFORMATIONAL for now
+      # (continue-on-error) because a backlog of unused files/exports predates this
+      # check — it caught two ghost subsystems in the June 2026 audit. Make this
+      # blocking once the baseline (npm run knip) reaches zero.
+      - name: Dead-code scan (knip)
+        run: npm run knip
+        continue-on-error: true
+
   # ── Job 1.5: Production Build Verification ────────────────────────────────
   build:
     name: Production Build

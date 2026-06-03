@@ -1,26 +1,16 @@
 /**
  * Tool Executor — WhatsApp AI Agent
  *
- * Contains the booking tool definitions (JSON Schema for the LLM) and the
- * runtime executor that maps LLM tool calls to DB mutations.
- *
- * Exposes:
- *  - BOOKING_TOOLS     → tool definitions array passed to the LLM
- *  - executeToolCall   → dispatches a ToolCall to the correct DB operation
+ * Tool definitions (JSON Schema for the LLM) and a thin executor that
+ * delegates DB operations to WhatsAppBookingAdapter (shared) while keeping
+ * WhatsApp-specific: rate limiting, constitutional guard, notifications.
  */
 
 import type { BusinessRagContext } from "./types.ts"
 import { addBreadcrumb, captureException } from "../_shared/sentry.ts"
-import { checkBookingRateLimit }                               from "./guards.ts"
-import { localTimeToUTC, utcToLocalParts }                      from "./time-utils.ts"
-import {
-  createAppointment,
-  rescheduleAppointment,
-  cancelAppointmentById,
-  getAppointmentDetails,
-} from "./appointment-repo.ts"
+import { checkBookingRateLimit } from "./guards.ts"
+import { WhatsAppBookingAdapter } from "../_shared/booking-adapter.ts"
 import type { ToolCall } from "./groq-client.ts"
-import { formatLocalTime } from "./prompt-builder.ts"
 import {
   emitCreatedEvent,
   emitRescheduledEvent,
@@ -34,8 +24,19 @@ export type WriteGuard = (
   args:     Readonly<Record<string, unknown>>,
 ) => Promise<{ blocked: true; reason: string } | null>
 
-function denialPayload(reason: string): string {
-  return JSON.stringify({ success: false, error: `UNAUTHORIZED: ${reason}` })
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// ── Adapter singleton (lazy) ─────────────────────────────────────────────────
+
+let _adapter: WhatsAppBookingAdapter | null = null
+function getAdapter(): WhatsAppBookingAdapter {
+  if (!_adapter) {
+    _adapter = new WhatsAppBookingAdapter(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+  }
+  return _adapter
 }
 
 // ── Tool Definitions ──────────────────────────────────────────────────────────
@@ -92,76 +93,6 @@ export const BOOKING_TOOLS = [
   },
 ]
 
-// ── Argument Validators ───────────────────────────────────────────────────────
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const DATE_REGEX = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/
-const TIME_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/
-
-function sanitizeUUID(id: string | undefined): string {
-  if (!id) return ''
-  return id.replace(/^(?:REF#?|ID#?)\s*/i, '').trim()
-}
-
-function sanitizeTime(time: string | undefined): string {
-  if (!time) return ''
-  let t = time.trim()
-  
-  // Si dice "5 PM" sin minutos, lo convertimos a "5:00 PM"
-  if (/^(\d{1,2})\s*(AM|PM)$/i.test(t)) {
-    t = t.replace(/^(\d{1,2})\s*(AM|PM)$/i, '$1:00 $2')
-  }
-
-  const m = t.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i)
-  if (!m) return t
-  let h = parseInt(m[1]!, 10)
-  const isPM = m[3]?.toUpperCase() === 'PM'
-  const isAM = m[3]?.toUpperCase() === 'AM'
-  if (isPM && h < 12) h += 12
-  if (isAM && h === 12) h = 0
-  return `${h.toString().padStart(2, '0')}:${m[2]}`
-}
-
-function sanitizeDate(date: string | undefined): string {
-  if (!date) return ''
-  let t = date.trim()
-  
-  // occasionally LLM might pass DD-MM-YYYY or DD/MM/YYYY
-  const dm = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if (dm) return `${dm[3]}-${dm[2]?.padStart(2, '0')}-${dm[1]?.padStart(2, '0')}`
-
-  // Si dice "28-04" sin año, le ponemos el año actual
-  const noYear = t.match(/^(\d{1,2})[\/\-](\d{1,2})$/)
-  if (noYear) return `${new Date().getFullYear()}-${noYear[2]?.padStart(2, '0')}-${noYear[1]?.padStart(2, '0')}`
-
-  return t
-}
-
-function isValidUUID(id: string): boolean   { return UUID_REGEX.test(id) }
-function isValidDate(date: string): boolean  { return DATE_REGEX.test(date) }
-function isValidTime(time: string): boolean  { return TIME_REGEX.test(time) }
-
-/**
- * Checks whether a stored `clients.phone` (which may be formatted: "+58 414 7531158",
- * "04147531158", etc.) matches the raw WhatsApp sender (bare digits from Meta).
- * Strips all non-digits from both sides, and handles the Venezuelan leading-zero
- * variant (58 0424xxx vs 58 424xxx) — mirror of fn_find_client_by_phone logic.
- */
-function phoneMatches(storedPhone: string, sender: string): boolean {
-  const a = storedPhone.replace(/\D/g, '')
-  const b = sender.replace(/\D/g, '')
-  if (!a || !b) return false
-  if (a === b) return true
-  // Leading-zero variant after country code (e.g. 58 0424 vs 58 424)
-  if (a.length >= 3 && b.length >= 3) {
-    const aStripped = `${a.slice(0, 2)}${a.slice(3)}`
-    const bStripped = `${b.slice(0, 2)}${b.slice(3)}`
-    if (a.charAt(2) === '0' && aStripped === b) return true
-    if (b.charAt(2) === '0' && bStripped === a) return true
-  }
-  return false
-}
-
 // ── Tool Executor ─────────────────────────────────────────────────────────────
 
 export async function executeToolCall(
@@ -183,148 +114,65 @@ export async function executeToolCall(
 
   addBreadcrumb(`Tool call: ${name}`, 'agent', 'info', { args })
 
-  // ── confirm_booking ──────────────────────────────────────────────────────────
+  // Rate limit + guard — WhatsApp-specific, checked BEFORE delegating to adapter
   if (name === 'confirm_booking') {
-    let { service_id, date, time } = args
-    service_id = sanitizeUUID(service_id)
-    date = sanitizeDate(date)
-    time = sanitizeTime(time)
-
-    // Fallback: Si el modelo 8B escribe el nombre del servicio en vez del UUID ("Tarjeta" en vez de "1234-...")
-    if (!isValidUUID(service_id)) {
-      const match = services.find(s => s.name.toLowerCase().includes(service_id.toLowerCase()))
-      if (match) service_id = match.id
-    }
-
-    if (!isValidUUID(service_id)) return JSON.stringify({ success: false, error: 'INVALID_ARGS: service_id must be a valid UUID' })
-    if (!isValidDate(date))       return JSON.stringify({ success: false, error: 'INVALID_ARGS: date must be YYYY-MM-DD' })
-    if (!isValidTime(time))       return JSON.stringify({ success: false, error: 'INVALID_ARGS: time must be HH:mm' })
-
-    // Booking rate limit: check BEFORE attempting DB insert (read-only since fn now counts active appointments)
-    // Limit = 5 active bookings per 24h per client. After cancelling, they can rebook.
     const bookingAllowed = await checkBookingRateLimit(sender, business.id)
     if (!bookingAllowed) {
       return JSON.stringify({ success: false, error: 'BOOKING_RATE_LIMIT: límite de citas nuevas por hoy alcanzado' })
     }
-
-    if (guard) {
-      const denial = await guard('book_appointment', { service_id, date, time, sender })
-      if (denial) return denialPayload(denial.reason)
-    }
-
-    const result = await createAppointment(business.id, {
-      client_phone: sender,
-      client_name:  client?.name ?? customerName,
-      service_id,
-      date,
-      time,
-      timezone:     business.timezone,
-    })
-
-    if (!result.success) {
-      return JSON.stringify({ success: false, error: result.error ?? 'SLOT_CONFLICT' })
-    }
-
-    const svcName = services.find(s => s.id === service_id)?.name ?? 'Servicio'
-
-    // Fire-and-forget: owner notification (dashboard + owner WA)
-    emitCreatedEvent(business, client?.name ?? customerName, svcName, date, time, result.appointment_id ?? '')
-    // Fire-and-forget: formal confirmation message to the client
-    sendClientBookingConfirmation(sender, 'created', business.name, svcName, date, time)
-
-    addBreadcrumb('Appointment created', 'agent', 'info', { appointment_id: result.appointment_id })
-    return JSON.stringify({ success: true, appointment_id: result.appointment_id, date, time, service_name: svcName })
   }
 
-  // ── reschedule_booking ───────────────────────────────────────────────────────
-  if (name === 'reschedule_booking') {
-    let { appointment_id, new_date, new_time } = args
-    appointment_id = sanitizeUUID(appointment_id)
-    new_date = sanitizeDate(new_date)
-    new_time = sanitizeTime(new_time)
+  const guardToolName = (
+    name === 'confirm_booking'   ? 'book_appointment'
+    : name === 'reschedule_booking' ? 'reschedule_appointment'
+    : name === 'cancel_booking'     ? 'cancel_appointment'
+    : null
+  ) as ReviewedToolName | null
 
-    if (!isValidUUID(appointment_id)) return JSON.stringify({ success: false, error: 'INVALID_ARGS: appointment_id must be a valid UUID' })
-    if (!isValidDate(new_date))       return JSON.stringify({ success: false, error: 'INVALID_ARGS: new_date must be YYYY-MM-DD' })
-    if (!isValidTime(new_time))       return JSON.stringify({ success: false, error: 'INVALID_ARGS: new_time must be HH:mm' })
-
-    const aptDetails = await getAppointmentDetails(appointment_id)
-
-    // Ownership validation: ensure appointment belongs to this business and client
-    if (!aptDetails || aptDetails.business_id !== business.id) {
-      return JSON.stringify({ success: false, error: 'UNAUTHORIZED: appointment does not belong to this business' })
-    }
-    const aptClientPhone = (aptDetails.clients as { phone?: string })?.phone ?? null
-    if (aptClientPhone && !phoneMatches(aptClientPhone, sender)) {
-      return JSON.stringify({ success: false, error: 'UNAUTHORIZED: appointment does not belong to this client' })
-    }
-
-    if (guard) {
-      const denial = await guard('reschedule_appointment', { appointment_id, new_date, new_time, sender })
-      if (denial) return denialPayload(denial.reason)
-    }
-
-    const newStartAt = localTimeToUTC(new_date, new_time, business.timezone)
-    const rescheduleResult = await rescheduleAppointment(appointment_id, newStartAt, business.id)
-    if (!rescheduleResult.success) {
-      return JSON.stringify({ success: false, error: rescheduleResult.error ?? 'RESCHEDULE_FAILED' })
-    }
-
-    const svcName    = aptDetails.services?.name ?? 'Servicio'
-    const clientName = aptDetails.clients?.name ?? customerName
-
-    emitRescheduledEvent(business, clientName, svcName, appointment_id, new_date, new_time)
-    // Fire-and-forget: formal confirmation message to the client
-    sendClientBookingConfirmation(sender, 'rescheduled', business.name, svcName, new_date, new_time)
-
-    addBreadcrumb('Appointment rescheduled', 'agent', 'info', { appointment_id })
-    return JSON.stringify({ success: true, new_date, new_time, service_name: svcName })
+  if (guard && guardToolName) {
+    const denial = await guard(guardToolName, { ...args, sender })
+    if (denial) return JSON.stringify({ success: false, error: `UNAUTHORIZED: ${denial.reason}` })
   }
 
-  // ── cancel_booking ───────────────────────────────────────────────────────────
-  if (name === 'cancel_booking') {
-    let { appointment_id } = args
-    appointment_id = sanitizeUUID(appointment_id)
+  // Delegate DB operation to shared booking adapter
+  const adapterResult = await getAdapter().execute({
+    toolName: name,
+    rawArgs: args,
+    businessId: business.id,
+    timezone: business.timezone,
+    senderPhone: sender,
+    services: context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min, price: s.price })),
+    activeAppts: context.activeAppointments.map(a => ({ id: a.id, service_name: a.service_name, start_at: a.start_at })),
+  })
 
-    if (!isValidUUID(appointment_id)) return JSON.stringify({
-      success: false,
-      error: 'INVALID_ARGS: appointment_id debe ser el UUID exacto del REF# en CITAS ACTIVAS. Usa solo el UUID sin el prefijo REF#.',
-    })
-
-    const aptDetails = await getAppointmentDetails(appointment_id)
-
-    // Ownership validation: ensure appointment belongs to this business and client
-    if (!aptDetails || aptDetails.business_id !== business.id) {
-      return JSON.stringify({
-        success: false,
-        error: 'NOT_FOUND: Cita no encontrada en este negocio. Verifica que el UUID sea correcto del listado de CITAS ACTIVAS. Si no aparece en ese listado, la cita pudo haberse cancelado ya o no existir.',
-      })
-    }
-    const aptClientPhone = (aptDetails.clients as { phone?: string })?.phone ?? null
-    if (aptClientPhone && !phoneMatches(aptClientPhone, sender)) {
-      return JSON.stringify({
-        success: false,
-        error: 'UNAUTHORIZED: Esta cita pertenece a otro cliente. Usa solo UUIDs del listado de CITAS ACTIVAS de este cliente.',
-      })
-    }
-
-    if (guard) {
-      const denial = await guard('cancel_appointment', { appointment_id, sender })
-      if (denial) return denialPayload(denial.reason)
-    }
-
-    await cancelAppointmentById(appointment_id, business.id)
-
-    const svcName    = aptDetails.services?.name ?? 'Servicio'
-    const clientName = aptDetails.clients?.name ?? customerName
-    const { date: oldDate, time: oldTime } = utcToLocalParts(aptDetails.start_at, business.timezone)
-
-    emitCancelledEvent(business, clientName, svcName, appointment_id, aptDetails.start_at)
-    // Fire-and-forget: formal confirmation message to the client
-    sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, oldDate, oldTime)
-
-    addBreadcrumb('Appointment cancelled', 'agent', 'info', { appointment_id })
-    return JSON.stringify({ success: true, service_name: svcName, date: oldDate, time: oldTime })
+  if (!adapterResult.success) {
+    return JSON.stringify({ success: false, error: adapterResult.error })
   }
 
-  return JSON.stringify({ success: false, error: `UNKNOWN_TOOL: ${name}` })
+  // WhatsApp-specific notifications.
+  // reschedule_booking / cancel_booking carry no service_id, so recover the
+  // service name — and the original start_at the cancelled-event needs to render
+  // a local date — from the client's active appointments (snapshot taken before
+  // the write, so it still holds the pre-cancellation values).
+  const apptIdArg  = (args['appointment_id'] ?? '').replace(/^(?:REF#?|ID#?)\s*/i, '').trim()
+  const activeAppt = apptIdArg ? context.activeAppointments.find(a => a.id === apptIdArg) : undefined
+
+  const svcName = services.find(s => s.id === args['service_id'])?.name
+    ?? activeAppt?.service_name
+    ?? (adapterResult as any).service_name
+    ?? 'Servicio'
+
+  if (name === 'confirm_booking') {
+    emitCreatedEvent(business, client?.name ?? customerName, svcName, args['date'] ?? '', args['time'] ?? '', adapterResult.appointmentId ?? '')
+    sendClientBookingConfirmation(sender, 'created', business.name, svcName, args['date'] ?? '', args['time'] ?? '')
+  } else if (name === 'reschedule_booking') {
+    emitRescheduledEvent(business, client?.name ?? customerName, svcName, args['appointment_id'] ?? '', args['new_date'] ?? '', args['new_time'] ?? '')
+    sendClientBookingConfirmation(sender, 'rescheduled', business.name, svcName, args['new_date'] ?? '', args['new_time'] ?? '')
+  } else if (name === 'cancel_booking') {
+    emitCancelledEvent(business, client?.name ?? customerName, svcName, args['appointment_id'] ?? '', activeAppt?.start_at ?? '')
+    sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, '', '')
+  }
+
+  addBreadcrumb(`Tool ${name} succeeded`, 'agent', 'info', { appointmentId: adapterResult.appointmentId })
+  return JSON.stringify({ success: true, ...adapterResult })
 }
