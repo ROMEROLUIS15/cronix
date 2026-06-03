@@ -39,13 +39,14 @@ jobs:
       - name: Run Lint
         run: npm run lint
 
-      # Dead-code / unused-dependency detection. INFORMATIONAL for now
-      # (continue-on-error) because a backlog of unused files/exports predates this
-      # check — it caught two ghost subsystems in the June 2026 audit. Make this
-      # blocking once the baseline (npm run knip) reaches zero.
+      # Dead-code / unused-dependency detection. BLOCKING on the high-signal rules
+      # (unused/unlisted/unresolved dependencies + binaries) — this is what caught
+      # two ghost subsystems and the dead Vercel AI SDK in the June 2026 audit.
+      # Unused files/exports/types are reported as warnings (knip.json `rules`):
+      # a triage backlog of intentional public-API surface predates strict enforcement
+      # there — see docs/architecture/AUDIT_BACKLOG.md.
       - name: Dead-code scan (knip)
         run: npm run knip
-        continue-on-error: true
 
   # ── Job 1.5: Production Build Verification ────────────────────────────────
   build:

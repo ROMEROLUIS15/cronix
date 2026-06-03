@@ -6,16 +6,40 @@
     "instrumentation-client.ts",
     "middleware.ts",
     "worker/index.js",
-    "i18n/**/*.ts"
+    "i18n/**/*.ts",
+    "vitest.components.config.ts",
+    "__tests__/setup/test-setup.ts",
+    "tests/e2e/**/*.ts"
   ],
   "ignore": [
     "supabase/functions/**",
     "lib/database.types.ts",
     "types/database.types.ts",
     "lib/mock/**",
+    "tests/load/**",
     "**/*.d.ts"
   ],
   "ignoreBinaries": ["deno", "supabase"],
-  "ignoreDependencies": [],
-  "treatConfigHintsAsErrors": false
+  "ignoreDependencies": [
+    "@rushstack/eslint-patch",
+    "@typescript-eslint/eslint-plugin",
+    "@vitejs/plugin-react",
+    "supabase",
+    "jimp"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "files": "warn",
+    "exports": "warn",
+    "types": "warn",
+    "nsExports": "warn",
+    "nsTypes": "warn",
+    "enumMembers": "warn",
+    "duplicates": "warn",
+    "classMembers": "warn",
+    "dependencies": "error",
+    "unlisted": "error",
+    "binaries": "error",
+    "unresolved": "error"
+  }
 }
