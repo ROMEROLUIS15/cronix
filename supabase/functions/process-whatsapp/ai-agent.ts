@@ -37,6 +37,7 @@ import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
 import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
+import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
 import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
 import { createTracer, shortHash } from "../_shared/observability/index.ts"
@@ -268,28 +269,14 @@ export async function runAgentLoop(
     // allows it. Otherwise we'd be executing exactly the hallucinations the gate
     // is supposed to block.
     if (toolsAllowed && assistantMsg.content && (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0)) {
-      const match1 = assistantMsg.content.match(/<function=([a-z_]+)>([\s\S]*?)<\/function>/i)
-      const match2 = assistantMsg.content.match(/<function>\s*([a-z_]+)\s*<\/function>\s*(\{[\s\S]*\})/i)
-      let fnName = ''
-      let argsRaw = ''
-      
-      if (match1) { fnName = match1[1] ?? ''; argsRaw = match1[2] ?? '' }
-      else if (match2) { fnName = match2[1] ?? ''; argsRaw = match2[2] ?? '' }
-
-      if (fnName) {
-        addBreadcrumb(`LLM emitted embedded <function> syntax — recovering ${fnName}`, 'agent', 'warning')
-        const VALID_TOOL_NAMES = new Set(['confirm_booking', 'reschedule_booking', 'cancel_booking'])
-        let argsValid = false
-        try { JSON.parse(argsRaw); argsValid = true } catch { /* malformed JSON — skip recovery */ }
-
-        if (argsValid && VALID_TOOL_NAMES.has(fnName)) {
+      const recovery = recoverEmbeddedToolCall(assistantMsg.content)
+      if (recovery) {
+        addBreadcrumb(`LLM emitted embedded <function> syntax — recovering ${recovery.name}`, 'agent', 'warning')
+        if (recovery.status === 'recovered') {
           assistantMsg.tool_calls = [{
             id:       `call_${Date.now()}`,
             type:     'function',
-            function: {
-              name:      fnName as 'confirm_booking' | 'reschedule_booking' | 'cancel_booking',
-              arguments: argsRaw,
-            },
+            function: { name: recovery.name, arguments: recovery.argsRaw },
           }]
           // Hide leaked content from LLM
           assistantMsg.content = null

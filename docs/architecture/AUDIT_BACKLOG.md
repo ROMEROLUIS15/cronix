@@ -42,20 +42,27 @@ Remaining `warn`-level backlog (optional, not blocking):
 - [ ] **Payments** — `NOWPaymentsAPI` is flagged unused by knip. Confirm the NOWPayments crypto gateway is actually reachable (webhook route → handler) or remove it.
 - [ ] **Memory / Router / Training / Observability** — confirm which are exercised by a live route/cron vs only by parity tests.
 
-### C. Refactor `runAgentLoop` (#4) — dedicated PR
+### C. Refactor `runAgentLoop` (#4) — dedicated PR (partially started)
 
 `process-whatsapp/ai-agent.ts:runAgentLoop` is a ~340-line god-function with ≥10
 responsibilities (memory recall, intent, write-guard build, trace, ReAct loop,
 embedded-`<function>` recovery, dedup, final-pass template selection, sanitize,
-deterministic fallback, trace finish). It is **live** WhatsApp code — refactor it
-in its own PR with focused tests, not bundled with other work.
+deterministic fallback, trace finish). It is **live** WhatsApp code — the rest of
+the extraction belongs in its own PR with focused tests, not bundled with other work.
 
-- [ ] Extract: `recoverEmbeddedFunctionCall`, `selectFinalResponse` (template vs deterministic vs fallback), `buildWriteGuard`, the dedup/fingerprint loop.
-- [ ] Keep behavior identical; cover the decision tree (success template, known-error deterministic message, empty-loop fallback) with unit tests before refactoring.
+- [x] Extracted `recoverEmbeddedToolCall` → pure `tool-recovery.ts` (behavior-identical) **with real unit tests**.
+- [x] Replaced the hollow `whatsapp-agent.test.ts` (it tested inline fakes, not the real code) with real tests of the 2-turn confirmation gate + the recovery helper. **This surfaced a real bug** (see below).
+- [ ] Still to extract (dedicated PR): `selectFinalResponse` (template vs deterministic vs fallback) — reads tangled loop state (`actionPerformed`, `lastToolParsed`, `loopText`, `loopExhausted`); needs characterization tests first.
+- [ ] Still to extract: `buildWriteGuard`, the dedup/fingerprint loop.
+
+> **Bug found & fixed while writing real tests:** `confirmation-gate.isAffirmative('sí')`
+> returned `false` (and `'ajá'`, `'así es'`) because the trailing `\b` doesn't treat
+> accented chars as word boundaries — so the gate ignored the most common Spanish
+> affirmative. Fixed with an accent-safe boundary (mirrors `core/conversation/frame.ts`).
 
 ### D. Minor / nice-to-have
 
-- [ ] Move the "Junior pitch / Senior pitch" narrative out of `TECHNICAL_DOCUMENTATION.md` into a separate `INTERVIEW.md` so it stops masquerading as architecture docs.
-- [ ] `Pipeline.ts`: the `if` predicate swallows exceptions silently (skips the step). Consider recording the predicate error in `StepResult.error`.
+- [x] `Pipeline.ts`: the `if` predicate no longer swallows exceptions silently — it skips the step (fail-closed) but records the error in `StepResult.error`. Covered by a test.
+- [ ] Move the "Junior pitch / Senior pitch" narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into a separate `INTERVIEW.md`. Pure doc reorg — cosmetic, not debt.
 - [ ] `voice-pipeline.ts` is a single-step pipeline — harmless over-abstraction; leave or inline.
 - [ ] Optional: cross-tenant injection unit test for `lib/ai/with-tenant-guard.ts` (low value — the guard now only fronts `get_today_summary`; real isolation is RLS + repos, tested via pgTAP).

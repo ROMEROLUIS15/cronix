@@ -16,8 +16,15 @@
 const CONFIRMATION_QUESTION_RE =
   /¿\s*(Confirmo|Reagendo|Procedo|Te\s+(?:confirmo|agendo|reagendo)|Confirma[rs]?\s+(?:que\s+(?:(?:la|lo|se|las|los)\s+)?(?:cancele|reagende|agende)|la\s+cancelaci[óo]n|el\s+reagendamiento|la\s+reserva|la\s+cita))/i
 
-const AFFIRMATIVE_RE =
-  /^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\s+supuesto|as[íi]\s+es|est[áa]\s+bien|todo\s+bien|me\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\s+acuerdo|de\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)\b/i
+// Boundary: whitespace, sentence punctuation, or end-of-string. We do NOT use \b
+// because Spanish accents (í, á, ó) are not "word" chars in JS regex without /u,
+// so \b after "sí" / "ajá" / "así es" fails — which made the gate ignore the most
+// common Spanish affirmative ("sí"). Mirrors core/conversation/frame.ts.
+const AFF_END = '(?:\\s|[.,!?]|$)'
+const AFFIRMATIVE_RE = new RegExp(
+  `^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\\s+supuesto|as[íi]\\s+es|est[áa]\\s+bien|todo\\s+bien|me\\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\\s+acuerdo|de\\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)${AFF_END}`,
+  'i',
+)
 
 const NEGATIVE_RE =
   /^(no+|nop[ea]?|nada|para\s+nada|todav[íi]a\s+no|a[úu]n\s+no|mejor\s+no|cancela\s+eso)\b/i

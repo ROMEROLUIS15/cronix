@@ -56,16 +56,25 @@ export class Pipeline<T extends Record<string, unknown>> {
 
       // Condition check
       let shouldRun = true
+      let predicateError: string | undefined
       if (step.options.if) {
         try {
           shouldRun = await step.options.if(ctx)
-        } catch {
+        } catch (err) {
+          // A throwing predicate skips the step (fail-closed), but the error is
+          // surfaced in the StepResult instead of being silently swallowed.
           shouldRun = false
+          predicateError = err instanceof Error ? err.message : String(err)
         }
       }
 
       if (!shouldRun) {
-        results.push({ name: step.name, status: 'skipped', durationMs: Date.now() - start })
+        results.push({
+          name: step.name,
+          status: 'skipped',
+          durationMs: Date.now() - start,
+          ...(predicateError ? { error: predicateError } : {}),
+        })
         continue
       }
 

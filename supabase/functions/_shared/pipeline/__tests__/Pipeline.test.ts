@@ -117,4 +117,19 @@ describe('Pipeline', () => {
 
     expect(sideEffects).toEqual(['ran'])
   })
+
+  it('skips the step and records the error when the if-predicate throws', async () => {
+    const sideEffects: string[] = []
+
+    const { results } = await new Pipeline('test')
+      .step('guarded', () => {
+        sideEffects.push('ran')
+        return {}
+      }, { if: () => { throw new Error('predicate boom') } })
+      .run({})
+
+    expect(sideEffects).toEqual([])              // step did not run (fail-closed)
+    expect(results[0]!.status).toBe('skipped')
+    expect(results[0]!.error).toBe('predicate boom')  // error surfaced, not swallowed
+  })
 })
