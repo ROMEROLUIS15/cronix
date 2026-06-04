@@ -11,7 +11,7 @@
 
 BEGIN;
 
-SELECT plan(29);
+SELECT plan(32);
 
 -- ── Setup: Test fixtures ──────────────────────────────────────────────────────
 

@@ -41,10 +41,17 @@ describe('Pipeline (property-based)', () => {
   })
 
   it('context merge is monotonic — keys are never removed', async () => {
+    // Exclude prototype-polluting keys: { __proto__: x } sets the prototype,
+    // not an own property, so Object.keys() and toHaveProperty() disagree on it.
+    const safeKey = (max: number) =>
+      fc.string({ minLength: 1, maxLength: max }).filter(
+        k => k !== '__proto__' && k !== 'constructor' && k !== 'prototype',
+      )
+
     await fc.assert(
       fc.asyncProperty(
-        fc.dictionary(fc.string({ minLength: 1, maxLength: 5 }), fc.anything()),
-        fc.array(fc.string({ minLength: 1, maxLength: 10 }), { minLength: 0, maxLength: 5 }),
+        fc.dictionary(safeKey(5), fc.anything()),
+        fc.array(safeKey(10), { minLength: 0, maxLength: 5 }),
         fc.anything(),
         async (initialKeys, extraKeys, extraValue) => {
           const initial = initialKeys as Record<string, unknown>
