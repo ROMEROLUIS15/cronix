@@ -52,8 +52,8 @@ the extraction belongs in its own PR with focused tests, not bundled with other 
 
 - [x] Extracted `recoverEmbeddedToolCall` → pure `tool-recovery.ts` (behavior-identical) **with real unit tests**.
 - [x] Replaced the hollow `whatsapp-agent.test.ts` (it tested inline fakes, not the real code) with real tests of the 2-turn confirmation gate + the recovery helper. **This surfaced a real bug** (see below).
-- [ ] Still to extract (dedicated PR): `selectFinalResponse` (template vs deterministic vs fallback) — reads tangled loop state (`actionPerformed`, `lastToolParsed`, `loopText`, `loopExhausted`); needs characterization tests first.
-- [ ] Still to extract: `buildWriteGuard`, the dedup/fingerprint loop.
+- [x] Extracted `selectFinalResponse` → pure `final-response.ts` with 20 characterization tests (4 branches × edge cases).
+- [x] Extracted `buildWriteGuard` and `trackDedupCall` as private helpers in `ai-agent.ts` (removed inline closures from `runAgentLoop`).
 
 > **Bug found & fixed while writing real tests:** `confirmation-gate.isAffirmative('sí')`
 > returned `false` (and `'ajá'`, `'así es'`) because the trailing `\b` doesn't treat
@@ -63,6 +63,6 @@ the extraction belongs in its own PR with focused tests, not bundled with other 
 ### D. Minor / nice-to-have
 
 - [x] `Pipeline.ts`: the `if` predicate no longer swallows exceptions silently — it skips the step (fail-closed) but records the error in `StepResult.error`. Covered by a test.
-- [ ] Move the "Junior pitch / Senior pitch" narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into a separate `INTERVIEW.md`. Pure doc reorg — cosmetic, not debt.
+- [x] Moved §28–29 narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into `docs/INTERVIEW.md` + `docs/INTERVIEW_ES.md`. One-line pointer left in each TECHNICAL_DOCUMENTATION.
 - [ ] `voice-pipeline.ts` is a single-step pipeline — harmless over-abstraction; leave or inline.
 - [ ] Optional: cross-tenant injection unit test for `lib/ai/with-tenant-guard.ts` (low value — the guard now only fronts `get_today_summary`; real isolation is RLS + repos, tested via pgTAP).

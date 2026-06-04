@@ -34,10 +34,11 @@ import {
   MAX_STEPS,
 } from "./groq-client.ts"
 import type { AgentMessage } from "./groq-client.ts"
-import { buildMinimalSystemPrompt, renderBookingSuccessTemplate } from "./prompt-builder.ts"
+import { buildMinimalSystemPrompt } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
 import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
 import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
+import { selectFinalResponse } from "./final-response.ts"
 import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
 import { createTracer, shortHash } from "../_shared/observability/index.ts"
@@ -83,7 +84,34 @@ function containsInternalSyntax(text: string): boolean {
 
 const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
 
-// Tool-gating helpers are in confirmation-gate.ts (imported above).
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+function buildWriteGuard(
+  rev:          typeof reviewer,
+  businessId:   string,
+  userText:     string,
+  recentMemory: Array<{ content: string; similarity: number; createdAt: string }>,
+): WriteGuard | undefined {
+  if (!rev) return undefined
+  return async (toolName, args) => {
+    const outcome = await reviewWriteOrFailOpen({
+      reviewer:      rev,
+      toolName,
+      args,
+      scope:         { businessId, channel: 'whatsapp' },
+      userUtterance: userText,
+      recentMemory,
+    })
+    return outcome.allowed ? null : { blocked: true, reason: outcome.reason }
+  }
+}
+
+function trackDedupCall(fingerprints: Set<string>, toolName: string, argsRaw: string): boolean {
+  const fp = `${toolName}::${argsRaw}`
+  if (fingerprints.has(fp)) return true
+  fingerprints.add(fp)
+  return false
+}
 
 // ── Deterministic intent fallback ─────────────────────────────────────────────
 // Used ONLY when the 8B produces empty/unusable output while the gate is blocked.
@@ -171,23 +199,12 @@ export async function runAgentLoop(
 
   // Build the constitutional guard for this turn. recentMemory comes from
   // the same recall above — never empty by accident, never a second round-trip.
-  const writeGuard: WriteGuard | undefined = reviewer
-    ? async (toolName, args) => {
-        const outcome = await reviewWriteOrFailOpen({
-          reviewer,
-          toolName,
-          args,
-          scope:         { businessId: business.id, channel: 'whatsapp' },
-          userUtterance: userText,
-          recentMemory:  recalled.map(r => ({
-            content:    r.content,
-            similarity: r.similarity,
-            createdAt:  r.createdAt,
-          })),
-        })
-        return outcome.allowed ? null : { blocked: true, reason: outcome.reason }
-      }
-    : undefined
+  const writeGuard = buildWriteGuard(
+    reviewer,
+    business.id,
+    userText,
+    recalled.map(r => ({ content: r.content, similarity: r.similarity, createdAt: r.createdAt })),
+  )
 
   addBreadcrumb('Memory recall + intent classification completed', 'agent', 'info', {
     memory_hits: recalled.length,
@@ -307,8 +324,7 @@ export async function runAgentLoop(
       const stepStart = Date.now()
 
       // Deduplication guard — same tool + same args in the same session = duplicate booking risk
-      const fingerprint = `${toolCall.function.name}::${toolCall.function.arguments}`
-      if (executedToolFingerprints.has(fingerprint)) {
+      if (trackDedupCall(executedToolFingerprints, toolCall.function.name, toolCall.function.arguments)) {
         addBreadcrumb(`Duplicate tool call blocked: ${toolCall.function.name}`, 'agent', 'warning')
         messages.push({
           role:         'tool',
@@ -318,7 +334,6 @@ export async function runAgentLoop(
         })
         continue
       }
-      executedToolFingerprints.add(fingerprint)
 
       let toolResult: string
       try {
@@ -384,61 +399,26 @@ export async function runAgentLoop(
     loop_exhausted:      loopExhausted,
   })
 
-  // ── Final Pass (LARGE_MODEL): empathetic response ─────────────────────────
-  // Only invoked when tools were executed (booking actions need on-brand confirmation)
-  // or when the loop exited without generating any text (edge case: MAX_STEPS hit).
-  // Pure conversational messages answered by the 8B skip this to save tokens.
-  let finalText: string
-
-  // Check if last tool call succeeded — if so, skip LARGE_MODEL entirely using template
+  // ── Final Pass: pick response text ───────────────────────────────────────────
   const lastToolMsg    = [...messages].reverse().find(m => m.role === 'tool')
   const lastToolParsed = lastToolMsg ? (() => { try { return JSON.parse(lastToolMsg.content ?? '') } catch { return null } })() : null
   const lastTrace      = toolCallsTrace[toolCallsTrace.length - 1] as { tool: string } | undefined
 
-  if (actionPerformed && lastToolParsed?.success === true) {
-    // Tool succeeded → use predefined template, skip LLM entirely.
-    // Runs even if loop exhausted: a successful last action is still a valid outcome.
-    finalText = renderBookingSuccessTemplate(
-      lastTrace?.tool ?? '',
-      lastToolParsed,
-      business.timezone,
-    )
-    addBreadcrumb('Skipped final LLM pass (success template used)', 'agent', 'info', { tool: lastTrace?.tool, loop_exhausted: loopExhausted })
+  let finalText = selectFinalResponse(actionPerformed, lastToolParsed, loopText, lastTrace, business.timezone)
 
-    // Fire-and-forget: persist the episode. Never awaited inside the response path.
+  if (actionPerformed && lastToolParsed?.success === true) {
+    addBreadcrumb('Skipped final LLM pass (success template used)', 'agent', 'info', { tool: lastTrace?.tool, loop_exhausted: loopExhausted })
     void memoryEngine.write(memoryScope, {
       kind:    'episodic',
       content: `Cliente ${customerName}: ${lastTrace?.tool ?? 'acción'} — ${userText}`,
-      metadata: {
-        tool:   lastTrace?.tool,
-        result: lastToolParsed,
-      },
+      metadata: { tool: lastTrace?.tool, result: lastToolParsed },
       ttlDays: 180,
     })
   } else if (actionPerformed && lastToolParsed?.success === false) {
-    // Tool failed with a known error — return deterministic message, NO second LLM call
-    // A second LLM call here is the root cause of the 400→circuit breaker→503 loop
-    const errorCode = String(lastToolParsed?.error ?? '')
-    if (errorCode.includes('SLOT_CONFLICT') || errorCode.includes('Slot no disponible')) {
-      finalText = '⚠️ Ese horario ya está ocupado. ¿Te gustaría intentar con otra fecha u hora disponible?'
-    } else if (errorCode.includes('BOOKING_RATE_LIMIT')) {
-      finalText = '⚠️ Has alcanzado el límite de citas nuevas por hoy. Por favor contáctanos directamente si necesitas agendar con urgencia.'
-    } else if (errorCode.includes('INVALID_ARGS')) {
-      finalText = '⚠️ Hubo un problema con los datos de la cita. Por favor indícame nuevamente el servicio, fecha y hora.'
-    } else if (errorCode.includes('UNAUTHORIZED') || errorCode.includes('NOT_FOUND')) {
-      finalText = '⚠️ No encontré esa cita en tu historial. ¿Puedes confirmarme los detalles?'
-    } else {
-      finalText = '⚠️ No pude procesar tu solicitud en este momento. Por favor intenta de nuevo en unos minutos.'
-    }
-    addBreadcrumb('Tool failed — using deterministic error response', 'agent', 'warning', { errorCode })
+    addBreadcrumb('Tool failed — using deterministic error response', 'agent', 'warning', { errorCode: String(lastToolParsed?.error ?? '') })
   } else if (!loopText) {
-    // No tool call, empty text: LLM produced nothing useful.
-    // Graceful fallback that invites the customer to clarify — better UX than a cold error.
     addBreadcrumb('Empty loop response without action — asking customer to clarify', 'agent', 'warning', { loop_exhausted: loopExhausted })
-    finalText = '¿Podrías indicarme con más detalle qué te gustaría hacer? Estoy aquí para ayudarte.'
   } else {
-    // 8B already produced a complete conversational response — use it directly
-    finalText = loopText
     addBreadcrumb('Using direct 8B conversational response', 'agent', 'info')
   }
 
