@@ -90,12 +90,15 @@ export default defineConfig({
   ],
 
   webServer: {
-    // In CI the build is a separate explicit step — just start the pre-built server.
+    // In CI the build + static-copy steps run beforehand; serve the standalone bundle
+    // directly. `next start` warns / breaks when output:'standalone' is set.
     // Locally, build + start in one go for convenience.
-    command: process.env.CI ? 'npm run start' : 'npm run build && npm run start',
+    command: process.env.CI
+      ? 'node .next/standalone/server.js'
+      : 'npm run build && npm run start',
     url: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: process.env.CI ? 60_000 : 180_000, // CI: only next start (~5s); local: full build
+    timeout: process.env.CI ? 60_000 : 180_000,
     stdout: 'pipe',
     stderr: 'pipe',
   },

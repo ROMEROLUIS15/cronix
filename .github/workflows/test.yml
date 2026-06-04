@@ -136,6 +136,11 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
+      - name: Copy standalone static assets
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+
       - name: Run smoke tests
         run: npx playwright test --project=smoke --reporter=list
         env:
@@ -152,9 +157,8 @@ jobs:
 
   # ── Job 4: Full authenticated E2E (manual only — workflow_dispatch) ──────────
   # Run from the Actions tab when the Supabase test-env state is provisioned.
-  # NOTE: webServer uses `next start` but next.config has `output: standalone`;
-  # for reliable full runs switch the playwright webServer to
-  # `node .next/standalone/server.js` (+ copy .next/static and public).
+  # webServer uses `node .next/standalone/server.js` (see playwright.config.ts).
+  # Static assets are copied into the standalone bundle in the step below.
   e2e-full:
     name: E2E Full Suite (Playwright, manual)
     runs-on: ubuntu-latest
@@ -182,6 +186,11 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Copy standalone static assets
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
 
       - name: Setup E2E test data
         run: npx tsx scripts/setup-e2e-data.ts
