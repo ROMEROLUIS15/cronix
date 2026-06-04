@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { selectFinalResponse } from '../../final-response'
+import { selectFinalResponse } from '../final-response.ts'
 
 const TZ = 'America/Bogota'
 
