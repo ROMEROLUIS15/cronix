@@ -52,8 +52,8 @@ the extraction belongs in its own PR with focused tests, not bundled with other 
 
 - [x] Extracted `recoverEmbeddedToolCall` → pure `tool-recovery.ts` (behavior-identical) **with real unit tests**.
 - [x] Replaced the hollow `whatsapp-agent.test.ts` (it tested inline fakes, not the real code) with real tests of the 2-turn confirmation gate + the recovery helper. **This surfaced a real bug** (see below).
-- [ ] Still to extract (dedicated PR): `selectFinalResponse` (template vs deterministic vs fallback) — reads tangled loop state (`actionPerformed`, `lastToolParsed`, `loopText`, `loopExhausted`); needs characterization tests first.
-- [ ] Still to extract: `buildWriteGuard`, the dedup/fingerprint loop.
+- [x] Extracted `selectFinalResponse` → pure `final-response.ts` with 20 characterization tests (4 branches × edge cases). PR: `feature/whatsapp-refactor-final-response`.
+- [x] Extracted `buildWriteGuard` and `trackDedupCall` as private helpers in `ai-agent.ts`. Same PR.
 
 > **Bug found & fixed while writing real tests:** `confirmation-gate.isAffirmative('sí')`
 > returned `false` (and `'ajá'`, `'así es'`) because the trailing `\b` doesn't treat
@@ -63,6 +63,17 @@ the extraction belongs in its own PR with focused tests, not bundled with other 
 ### D. Minor / nice-to-have
 
 - [x] `Pipeline.ts`: the `if` predicate no longer swallows exceptions silently — it skips the step (fail-closed) but records the error in `StepResult.error`. Covered by a test.
-- [ ] Move the "Junior pitch / Senior pitch" narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into a separate `INTERVIEW.md`. Pure doc reorg — cosmetic, not debt.
+- [x] Moved §28–29 narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into `docs/INTERVIEW.md` + `docs/INTERVIEW_ES.md`. PR: `feature/split-interview-docs`.
 - [ ] `voice-pipeline.ts` is a single-step pipeline — harmless over-abstraction; leave or inline.
 - [ ] Optional: cross-tenant injection unit test for `lib/ai/with-tenant-guard.ts` (low value — the guard now only fronts `get_today_summary`; real isolation is RLS + repos, tested via pgTAP).
+
+### E. RLS & DB audit (June 2026) — DONE ✅
+
+- [x] pgTAP `critical_functions.test.sql`: plan count fixed 29→32 (3 password-lockout tests were added without bumping the count).
+- [x] pgTAP `rls_policies.test.sql`: expanded 52→86 tests. Added cross-tenant isolation coverage for 11 tables added post-audit with no pgTAP coverage: `ai_memories_v2`, `ai_traces`, `ai_training_exports`, `entity_relationships`, `notifications`, `notification_subscriptions`, `saas_invoices`, `wa_sessions`, `appointment_services`, `failed_password_attempts`, `security_alerts`.
+- [x] `seed.sql`: added `platform_admin` user (uid=...000003) to `auth.users` + `public.users` — required for `security_alerts` RLS policy tests.
+- [x] `20260604000000_fix_dead_function_overload.sql`: dropped broken `fn_wa_report_service_failure(text,text,int)` overload that referenced nonexistent columns (`last_failure_at`, `circuit_state`, `error_message`); cleaned dead `v_window_start` variable from 3 rate-limiting functions. DB lint: 0 errors in own functions.
+- [x] `Pipeline.property.test.ts`: filtered `__proto__`/`constructor`/`prototype` from fast-check dictionary keys — these prototype-polluting keys caused non-deterministic failures.
+- [x] `.husky/pre-push`: audit switched to `--omit=dev` — `supabase` CLI devDep carries GHSA-x96m-c5fj-q75c with no fix, irrelevant to production bundle.
+
+All 118 pgTAP tests pass. PR: `fix/pgtap-rls-audit`.
