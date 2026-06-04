@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(52);
+SELECT plan(86);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -565,6 +565,331 @@ SELECT ok(
 );
 
 RESET ROLE;
+
+-- ── New Fixtures: AI subsystems, notifications, invoices, sessions ────────────
+-- All inserted as superuser (no RLS applies in DO blocks run by the test runner).
+
+DO $$
+DECLARE
+  biz_a    UUID := 'aaaaaaaa-0000-0000-0000-000000000001';
+  biz_b    UUID := 'bbbbbbbb-0000-0000-0000-000000000002';
+  uid_a    UUID := '00000000-0000-0000-0000-000000000001';
+  client_a UUID := 'cccccccc-0000-0000-0000-000000000001';
+  svc_a    UUID := 'eeeeeeee-0000-0000-0000-000000000001';
+  zero_vec vector(384) := ('[' || repeat('0,', 383) || '0]')::vector(384);
+BEGIN
+  INSERT INTO public.ai_traces (id, business_id, channel, actor_kind, actor_key, query_sha, outcome)
+  VALUES ('aa000001-0000-0000-0000-000000000001', biz_a, 'whatsapp', 'client_phone', '+584140000001', 'testsha256', 'success')
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.ai_memories_v2 (id, business_id, actor_kind, actor_key, kind, content, embedding)
+  VALUES ('bb000001-0000-0000-0000-000000000001', biz_a, 'client_phone', '+584140000001', 'episodic', 'test memory content', zero_vec)
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.ai_training_exports (id, business_id, range_start, range_end, sample_count)
+  VALUES ('cc000001-0000-0000-0000-000000000001', biz_a, NOW() - INTERVAL '1 hour', NOW(), 5)
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.notifications (id, business_id, title, content)
+  VALUES ('dd000001-0000-0000-0000-000000000001', biz_a, 'Prueba RLS', 'Contenido de prueba')
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.saas_invoices (id, business_id, amount_usd, status, plan_purchased, payment_method)
+  VALUES ('ee000001-0000-0000-0000-000000000001', biz_a, 29.99, 'waiting', 'pro', 'paypal')
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.wa_sessions (sender_phone, business_id)
+  VALUES ('+584140000099', biz_a)
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.entity_relationships (id, business_id, from_kind, from_id, to_kind, to_id, edge_type)
+  VALUES ('ff000001-0000-0000-0000-000000000001', biz_a, 'client', client_a, 'service', svc_a, 'prefers_time_window')
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.security_alerts (id, alert_type, severity, user_email)
+  VALUES ('99000001-0000-0000-0000-000000000001', 'password_lockout_threshold', 'warning', 'victim@test.com')
+  ON CONFLICT DO NOTHING;
+END $$;
+
+-- ── 18. RLS enabled on tables added after the June 2026 audit ─────────────────
+
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'ai_memories_v2'        AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on ai_memories_v2'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'ai_traces'             AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on ai_traces'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'ai_training_exports'   AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on ai_training_exports'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'entity_relationships'  AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on entity_relationships'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'notifications'         AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on notifications'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'notification_subscriptions' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on notification_subscriptions'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'saas_invoices'         AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on saas_invoices'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'wa_sessions'           AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on wa_sessions'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'appointment_services'  AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on appointment_services'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'failed_password_attempts' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on failed_password_attempts'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'security_alerts'       AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on security_alerts'
+);
+
+-- ── 19. AI subsystem cross-tenant isolation ───────────────────────────────────
+
+-- ai_memories_v2
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_memories_v2 WHERE id = 'bb000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own ai_memory'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_memories_v2 WHERE id = 'bb000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A ai_memory'
+);
+
+RESET ROLE;
+
+-- ai_traces
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_traces WHERE id = 'aa000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own ai_trace'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_traces WHERE id = 'aa000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A ai_trace'
+);
+
+RESET ROLE;
+
+-- ai_training_exports
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_training_exports WHERE id = 'cc000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own ai_training_export'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.ai_training_exports WHERE id = 'cc000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A ai_training_export'
+);
+
+RESET ROLE;
+
+-- ── 20. notifications isolation ───────────────────────────────────────────────
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.notifications WHERE id = 'dd000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own notification'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.notifications WHERE id = 'dd000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A notification'
+);
+
+RESET ROLE;
+
+-- ── 21. saas_invoices isolation ───────────────────────────────────────────────
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.saas_invoices WHERE id = 'ee000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own saas_invoice'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.saas_invoices WHERE id = 'ee000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A saas_invoice'
+);
+
+RESET ROLE;
+
+-- ── 22. wa_sessions isolation ─────────────────────────────────────────────────
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_sessions WHERE sender_phone = '+584140000099' AND business_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own wa_session'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_sessions WHERE sender_phone = '+584140000099' AND business_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A wa_session'
+);
+
+RESET ROLE;
+
+-- ── 23. entity_relationships isolation ───────────────────────────────────────
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.entity_relationships WHERE id = 'ff000001-0000-0000-0000-000000000001'),
+  1,
+  'Owner A can select own entity_relationship'
+);
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.entity_relationships WHERE id = 'ff000001-0000-0000-0000-000000000001'),
+  0,
+  'Owner B cannot select Owner A entity_relationship'
+);
+
+RESET ROLE;
+
+-- ── 24. deny_all policies — no authenticated access to internal tables ─────────
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.failed_password_attempts),
+  0,
+  'authenticated cannot read failed_password_attempts (deny_all policy)'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.wa_rate_limits),
+  0,
+  'authenticated cannot read wa_rate_limits (deny_all policy)'
+);
+
+RESET ROLE;
+
+-- ── 25. security_alerts — role-based access ───────────────────────────────────
+
+-- Owner (role='owner') CAN see security_alerts per policy
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT ok(
+  (SELECT COUNT(*)::INT FROM public.security_alerts WHERE id = '99000001-0000-0000-0000-000000000001') >= 1,
+  'owner role can view security_alerts'
+);
+
+RESET ROLE;
+
+-- anon CANNOT see security_alerts
+SET ROLE anon;
+
+SELECT is(
+  (SELECT COUNT(*)::INT FROM public.security_alerts WHERE id = '99000001-0000-0000-0000-000000000001'),
+  0,
+  'anon cannot view security_alerts'
+);
+
+RESET ROLE;
+
+-- ── 26. Policy existence for new tables ───────────────────────────────────────
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ai_traces'          AND policyname='ai_traces_tenant_select'),
+  'policy ai_traces_tenant_select exists'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ai_memories_v2'     AND policyname='ai_memories_v2_tenant_select'),
+  'policy ai_memories_v2_tenant_select exists'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='notifications'      AND policyname LIKE 'Users can view%'),
+  'policy notifications view exists'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='saas_invoices'      AND policyname LIKE 'Users can view%'),
+  'policy saas_invoices view exists'
+);
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='wa_sessions'        AND policyname LIKE 'Users can view%'),
+  'policy wa_sessions view exists'
+);
 
 SELECT * FROM finish();
 
