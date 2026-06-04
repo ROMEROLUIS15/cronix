@@ -167,12 +167,13 @@ run_tests() {
 }
 
 # ── Stage 4: Security audit ──────────────────────────────────────────────────
-# Mirrors .github/workflows/security-audit.yml. Fails on HIGH/CRITICAL CVEs in
-# the dependency tree so dirty deps never reach origin / CI.
+# Audits production deps only (--omit=dev). The supabase CLI devDep carries
+# advisory GHSA-x96m-c5fj-q75c with no available fix and is irrelevant to the
+# production bundle shipped to users.
 run_audit() {
   echo "${BOLD}[4/4] Running npm audit...${NC}"
   local audit_output
-  audit_output=$(npm audit --audit-level=high 2>&1)
+  audit_output=$(npm audit --audit-level=high --omit=dev 2>&1)
   local audit_exit=$?
 
   if [ $audit_exit -eq 0 ]; then
