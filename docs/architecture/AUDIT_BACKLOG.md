@@ -63,6 +63,6 @@ the extraction belongs in its own PR with focused tests, not bundled with other 
 ### D. Minor / nice-to-have
 
 - [x] `Pipeline.ts`: the `if` predicate no longer swallows exceptions silently — it skips the step (fail-closed) but records the error in `StepResult.error`. Covered by a test.
-- [ ] Move the "Junior pitch / Senior pitch" narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into a separate `INTERVIEW.md`. Pure doc reorg — cosmetic, not debt.
+- [x] Moved §28–29 narrative out of `TECHNICAL_DOCUMENTATION.md` (EN+ES) into `docs/INTERVIEW.md` + `docs/INTERVIEW_ES.md`. One-line pointer left in each TECHNICAL_DOCUMENTATION.
 - [ ] `voice-pipeline.ts` is a single-step pipeline — harmless over-abstraction; leave or inline.
 - [ ] Optional: cross-tenant injection unit test for `lib/ai/with-tenant-guard.ts` (low value — the guard now only fronts `get_today_summary`; real isolation is RLS + repos, tested via pgTAP).
