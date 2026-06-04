@@ -5,6 +5,7 @@ on:
     branches: ['**']
   pull_request:
     branches: ['**']
+  workflow_dispatch: # manual trigger — runs the full authenticated E2E suite (e2e-full)
 
 env:
   NEXT_PUBLIC_SUPABASE_URL:       ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -100,16 +101,66 @@ jobs:
       - name: Run Integration Tests (Vitest Node)
         run: npx vitest run --config vitest.integration.config.ts
 
-  # ── Job 3: E2E Tests (only on push to main/develop) ──────────────────────────
-  # continue-on-error: true → E2E failures are INFORMATIONAL, not blocking.
-  # The real CI gates are `unit` (logic) and `build` (compilation).
-  # An E2E failure notifies but never prevents a Vercel deploy.
+  # ── Job 3: Smoke E2E (push to main/develop) — fast, unauthenticated ──────────
+  # Only the smoke project runs on push: it needs no auth/test-data and finishes
+  # in a couple of minutes. The full authenticated suite is manual (e2e-full)
+  # because it depends on real Supabase test-env state that CI doesn't provision —
+  # running it on every push burned ~50 min and was always red.
+  # continue-on-error keeps it non-blocking; timeout-minutes caps any hang.
   e2e:
-    name: E2E Visual Tests (Playwright)
+    name: E2E Smoke Tests (Playwright)
     runs-on: ubuntu-latest
     continue-on-error: true
+    timeout-minutes: 15
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
     needs: [unit, build]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Run smoke tests
+        run: npx playwright test --project=smoke --reporter=list
+        env:
+          CI: 'true'
+          PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report-smoke
+          path: playwright-report/
+          retention-days: 7
+
+  # ── Job 4: Full authenticated E2E (manual only — workflow_dispatch) ──────────
+  # Run from the Actions tab when the Supabase test-env state is provisioned.
+  # NOTE: webServer uses `next start` but next.config has `output: standalone`;
+  # for reliable full runs switch the playwright webServer to
+  # `node .next/standalone/server.js` (+ copy .next/static and public).
+  e2e-full:
+    name: E2E Full Suite (Playwright, manual)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v5
@@ -138,7 +189,7 @@ jobs:
       - name: Create auth directory
         run: mkdir -p playwright/.auth
 
-      - name: Run E2E Tests
+      - name: Run full E2E suite
         run: npx playwright test --project=setup --project=chromium --project=smoke --reporter=list,html
         env:
           CI: 'true'
@@ -148,7 +199,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-full
           path: playwright-report/
           retention-days: 7
 
