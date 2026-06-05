@@ -26,7 +26,7 @@ type ToolErrorCode =
   | 'UNAUTHORIZED' | 'BOOKING_RATE_LIMIT' | 'INVALID_ARGS' | 'DB_ERROR'
 
 type ToolResult =
-  | { success: true;  message: string; appointmentId?: string }
+  | { success: true;  message: string; appointmentId?: string; serviceName?: string; date?: string; time?: string }
   | { success: false; error: ToolErrorCode; message: string }
 
 type ServiceRow = { id: string; name: string; duration_min: number; price: number }
@@ -42,6 +42,19 @@ function localToUTC(date: string, time: string, timezone: string): string {
   }).format(naiveAsUTC)
   const tzAsUTC = new Date(tzStr.replace(' ', 'T') + 'Z')
   return new Date(naiveAsUTC.getTime() + (naiveAsUTC.getTime() - tzAsUTC.getTime())).toISOString()
+}
+
+function utcToLocalParts(utcIso: string, timezone: string): { date: string; time: string } {
+  const d = new Date(utcIso)
+  if (isNaN(d.getTime())) return { date: '', time: '' }
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  const hour = map.hour === '24' ? '00' : map.hour
+  return { date: `${map.year}-${map.month}-${map.day}`, time: `${hour}:${map.minute}` }
 }
 
 function normalizeTime(raw: string): string | null {
@@ -100,7 +113,7 @@ export class WhatsAppBookingAdapter {
       case 'confirm_booking':
         return this.confirmBooking({ rawArgs, businessId, timezone, senderPhone, services })
       case 'cancel_booking':
-        return this.cancelBooking({ rawArgs, businessId, senderPhone, activeAppts })
+        return this.cancelBooking({ rawArgs, businessId, timezone, senderPhone, activeAppts })
       case 'reschedule_booking':
         return this.rescheduleBooking({ rawArgs, businessId, timezone, senderPhone, activeAppts })
       default:
@@ -169,6 +182,9 @@ export class WhatsAppBookingAdapter {
       success:       true,
       message:       `Listo. Tu cita de ${svcName} quedó para el ${date} a las ${normalizedTime}.`,
       appointmentId: result.appointment_id,
+      serviceName:   svcName,
+      date,
+      time:          normalizedTime,
     }
   }
 
@@ -177,6 +193,7 @@ export class WhatsAppBookingAdapter {
   private async cancelBooking(p: {
     rawArgs:     Record<string, string>
     businessId:  string
+    timezone:    string
     senderPhone: string
     activeAppts: ActiveAppointmentRow[]
   }): Promise<ToolResult> {
@@ -203,10 +220,14 @@ export class WhatsAppBookingAdapter {
 
     if (error) return { success: false, error: 'DB_ERROR', message: 'Error al cancelar la cita.' }
 
+    const { date, time } = utcToLocalParts(target.start_at, p.timezone)
     return {
-      success: true,
-      message: `Listo. Cancelé tu cita de ${target.service_name}.`,
+      success:     true,
+      message:     `Listo. Cancelé tu cita de ${target.service_name}.`,
       appointmentId,
+      serviceName: target.service_name,
+      date,
+      time,
     }
   }
 
@@ -260,6 +281,9 @@ export class WhatsAppBookingAdapter {
       success:       true,
       message:       `Listo. Tu cita de ${target.service_name} queda para el ${new_date} a las ${new_time}.`,
       appointmentId,
+      serviceName:   target.service_name,
+      date:          new_date,
+      time:          new_time,
     }
   }
 }

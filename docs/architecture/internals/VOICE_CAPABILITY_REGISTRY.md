@@ -36,14 +36,22 @@ supabase/functions/voice-worker/capabilities/
 ## Contrato `ICapability`
 
 ```ts
-export interface ICapability {
-  readonly name:        string         // tool name expuesto al LLM
-  readonly isWrite:     boolean        // afecta DB → notifications + lastRef
-  readonly bypassLLM:   boolean        // si true, la prosa de la tool se devuelve directo
-  readonly tool:        ToolDefinition // schema OpenAI-style + execute()
-  readonly fastPath?:   FastPathDetector
+export interface ICapability<Args extends Record<string, unknown> = Record<string, unknown>> {
+  readonly name:       string         // tool name expuesto al LLM
+  readonly isWrite:    boolean        // afecta DB → notifications + lastRef
+  readonly bypassLLM:  boolean        // si true, la prosa de la tool se devuelve directo sin re-síntesis LLM
+  readonly definition: ToolDefinition // schema OpenAI-style (expuesto al LLM vía getToolDefinitions())
+
+  /** Retorna args para execute(), o null si no aplica el fast path. */
+  detectFastPath(input: FastPathInput): Args | null
+
+  /** Ejecuta el intent con args ya validados. */
+  execute(ctx: ToolContext, args: Args): Promise<ToolResult>
 }
 ```
+
+`FastPathInput` incluye: `{ text, today, timezone, history, lastRef, services }`.
+`services` es necesario para que el fast-path de `schedule` pueda tokenizar el catálogo determinísticamente.
 
 ## API del registry
 
@@ -78,8 +86,8 @@ Cuando la tool ejecutada es la única del turno y tiene `bypassLLM=true`, `agent
 
 ## Lastref + notifications post-write
 
-Cuando una capability `isWrite` retorna `success` + `data`:
-- Se construye `AppointmentNotification` con `eventId = crypto.randomUUID()` y se envía por la campanita del dashboard.
+Cuando una capability `isWrite` retorna `success` + `data` (`voice-pipeline.ts:buildNotificationFromWrite`):
+- Se construye `AppointmentNotification` con `eventId = buildAppointmentEventId(action, businessId, appointmentId, date, time)` — **determinístico**, no `crypto.randomUUID()`. Un reintento de QStash/LLM con los mismos datos produce el mismo `eventId`, y la constraint `UNIQUE` sobre `notifications.event_id` descarta el duplicado silenciosamente.
 - Si el action fue `created` o `rescheduled`, se actualiza `lastRefCandidate` con el ID/cliente/servicio/fecha — esto permite que el siguiente turno entienda "cancélala" / "reagéndala" sin re-nombrar al cliente.
 - Si fue `cancelled`, `lastRefCandidate = null` — la cita ya no existe.
 

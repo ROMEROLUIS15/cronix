@@ -5,7 +5,7 @@
  *
  * Architecture:
  *  - Small model (llama-3.1-8b-instant) handles the decision/tool-calling loop (MAX_STEPS=3)
- *  - Large model (llama-3.3-70b-versatile) generates the final empathetic response
+ *  - Final pass is fully deterministic: success template | errorCode map | 8B loopText verbatim
  *  - If DB rejects a booking (SLOT_CONFLICT), the LLM sees the error and self-corrects
  *
  * Exposes:
@@ -168,7 +168,8 @@ function buildDeterministicIntentResponse(
  * Inner loop (SMALL_MODEL): decides whether to call a booking tool, executes it,
  * feeds the DB result back to the LLM, and retries if needed (up to MAX_STEPS).
  *
- * Final pass (LARGE_MODEL): generates an empathetic, on-brand response for the customer.
+ * Final pass: deterministic — success template, errorCode map, or 8B loopText verbatim.
+ * No second LLM call is made at any point.
  *
  * @param userText     - Sanitized message text from the customer
  * @param context      - Full BusinessRagContext (services, history, booked slots, etc.)

@@ -18,6 +18,7 @@ import {
   sendClientBookingConfirmation,
 } from "./notifications.ts"
 import type { ReviewedToolName } from "../_shared/supervisor/contracts.ts"
+import { buildSuccessTemplateData } from "./success-data.ts"
 
 export type WriteGuard = (
   toolName: ReviewedToolName,
@@ -173,6 +174,13 @@ export async function executeToolCall(
     sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, '', '')
   }
 
+  // Enrich the tool result with the fields renderBookingSuccessTemplate reads.
+  // The adapter returns camelCase (serviceName/date/time); the final-pass template
+  // (final-response.ts → prompt-builder.ts) reads snake_case, and reschedule reads
+  // new_date/new_time. Without this mapping the success message renders blank
+  // (e.g. "Tu cita para ** quedó agendada") because the fields are absent.
+  const successData = buildSuccessTemplateData(name, adapterResult)
+
   addBreadcrumb(`Tool ${name} succeeded`, 'agent', 'info', { appointmentId: adapterResult.appointmentId })
-  return JSON.stringify({ success: true, ...adapterResult })
+  return JSON.stringify({ success: true, ...adapterResult, ...successData })
 }

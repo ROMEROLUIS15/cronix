@@ -90,7 +90,7 @@ async function stepFetchContext(ctx: WhatsAppPipelineInput) {
 // ── Step 2: Run AI Agent ──────────────────────────────────────────────────────
 
 async function stepRunAgent(ctx: WhatsAppPipelineInput & { context: BusinessRagContext }) {
-  addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'llama-3.1-8b-instant + llama-3.3-70b-versatile' })
+  addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'llama-3.1-8b-instant' })
 
   let agentResult: { text: string; tokens: number; toolCallsTrace: unknown[] }
   try {

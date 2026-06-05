@@ -2,6 +2,9 @@
 
 > Fusión de `AI_FLOWS.md` + `AI_MASTER_GUIDE.md` + `ANTI_HALLUCINATION_PATTERNS.md`.
 > Verificado contra `lib/ai/`, `supabase/functions/voice-worker/`, `supabase/functions/process-whatsapp/` y `supabase/functions/_shared/`.
+> Última revisión: 2026-06-04.
+>
+> Docs relacionados: [`WHATSAPP_AGENT.md`](WHATSAPP_AGENT.md) · [`VOICE_AGENT.md`](VOICE_AGENT.md) · [`internals/SUPERVISOR.md`](internals/SUPERVISOR.md) · [`internals/VOICE_CAPABILITY_REGISTRY.md`](internals/VOICE_CAPABILITY_REGISTRY.md)
 
 ## 1. Topología
 
@@ -26,7 +29,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 | Fallback voz | Groq `llama-3.1-8b-instant` | Misma cuota, otro modelo del mismo proveedor |
 | Cadena alterna | Gemini `gemini-2.0-flash` (vía endpoint OpenAI-compat) | Activable por `LLM_PROVIDER` env var (`gemini`, `gemini,groq`) |
 | ReAct decisor WA | Groq `llama-3.1-8b-instant` | Latencia y costo bajos para loops de 3 pasos |
-| Síntesis WA | Groq `llama-3.3-70b-versatile` (saltado en success) | Solo si la tool falló |
+| Síntesis WA | — (eliminado) | El final-pass es 100% determinista: template en success, errorCode map en failure, `loopText` del 8B en conversacional. `LARGE_MODEL` está definido en `groq-client.ts` pero **no se llama** desde `ai-agent.ts`. |
 | Supervisor | Groq `llama-3.1-8b-instant` @ T=0 + `response_format json_object` | JSON determinista, fail-open |
 | Embeddings | `gte-small` (384 dim) vía `Supabase.ai.Session` (Edge Function `embed-text`) | Local al edge, sin costo de API externa |
 | STT | Deepgram Nova-2 (`language=es`, keywords-boost con nombres reales) | Free tier amplio + sesgo a nombres propios del negocio |
@@ -36,7 +39,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 
 1. **Corpus mention guards** — antes de cualquier escritura, cada slot (servicio/cliente/fecha/hora) debe rastrearse a algo que el usuario dijo este turno (`nameMentionedInCorpus`/`timeMentionedInCorpus`/`dateMentionedInCorpus`). Si el modelo inventó un nombre o servicio, la capability se niega (`voice-worker/capabilities/schedule/tool.ts`).
 2. **Fast-paths totales sin LLM** — `voice-worker/capabilities/_shared/registry.ts`. 9 capabilities con detector + tool + (opcional) bypass de síntesis.
-3. **Date guard determinista** — si el usuario dijo "hoy / mañana / pasado mañana", la fecha de cualquier tool se sobrescribe en código (`voice-worker/agent.ts:104`).
+3. **Date guard determinista** — si el usuario dijo "hoy / mañana / pasado mañana", la fecha se sobrescribe antes de ejecutar el tool. `detectTemporalIntent()` se llama en `voice-worker/agent.ts` y el override se aplica en `voice-pipeline.ts:applyDateOverride()` por cada `DATE_TOOLS` call.
 4. **Frame-cutoff corpus** — corta el historial en el último turno asistencial **terminal** (éxito `Listo.…`, error definitivo `No encontré…`, etc.) para que tokens de intentos viejos no contaminen los guards, sin truncar la recolección multi-turno (`voice-worker/core/conversation/frame.ts`).
 5. **Per-turn fingerprint dedup** — `Set<toolName::sortedArgsJSON>`. Si el modelo repite la misma llamada, se rechaza con un mensaje al modelo y se rompe el loop.
 6. **Response bypass (`bypassLLM`)** — la prosa de la tool se devuelve tal cual. Documentado como patrón `return_direct=True` de LangChain.
@@ -68,7 +71,9 @@ El write guard constitucional (`runWriteGuard`) corre **antes** del INSERT/UPDAT
 
 - Tabla `ai_memories_v2`: `business_id, actor_kind ∈ {user, client_phone}, actor_key, kind, content, embedding vector(384), metadata jsonb, expires_at`.
 - RPC `match_ai_memories_v2(business_id, actor_kind, actor_key, query_embedding, match_threshold, match_count)` aplica filtro tenant **antes** del vector scan.
-- `MemoryEngine.recall` es obligatorio antes de cada turno reviewable — el reviewer requiere `recentMemory: []` como input (memoria vacía ≠ sospecha, solo limita los códigos de bloqueo posibles).
+- **WhatsApp**: recall es **eager** — `memoryEngine.recall()` se ejecuta en paralelo con `router.classify()` al inicio de `runAgentLoop()`, siempre, antes de saber si habrá una tool de escritura.
+- **Voice**: recall es **lazy** — envuelto en `ensureMemory()` closure dentro de `ctx.runWriteGuard`. Solo se llama cuando una capability invoca el write-guard; si el turno es solo lectura, el recall no ocurre.
+- En ambos canales la memoria vacía (`recentMemory: []`) no es sospecha — solo limita los códigos de bloqueo del supervisor (`TENANT_MISMATCH`, `DUPLICATE_INTENT`, etc. requieren evidencia en memoria).
 - Escritura: fire-and-forget tras success (`MemoryEngine.write`, TTL 180 días por defecto).
 
 ## 6. Observabilidad — `ai_traces`

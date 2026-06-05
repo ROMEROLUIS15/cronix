@@ -32,12 +32,22 @@ ConstitutionalReviewer.review(request, { timeoutMs=1500 })
         │
         ├── timeout / error / parse fail → onError() + return { ok: true }   ← fail-open
         │
-        └── ok → mapResponseToVerdict({verdict, code, reason})
+        └── ok → mapResponseToVerdict({verdict, code, reason})   ← ReviewVerdict
                        │
                        ├─ allow → { ok: true }
                        ├─ warn  → { ok: false, severity: 'warn',  code, reason }
                        └─ block → { ok: false, severity: 'block', code, reason }
+
+        ↓ ReviewVerdict devuelto a reviewWriteOrFailOpen()
+
+        ├── verdict.ok === true          → GuardOutcome { allowed: true }
+        ├── verdict.severity !== 'block' → GuardOutcome { allowed: true }   ← warn NO bloquea
+        └── verdict.severity === 'block' → GuardOutcome { allowed: false, severity, code, reason }
 ```
+
+> **Importante**: `warn` no bloquea la acción. Solo `block` produce `{ allowed: false }`.
+> El veredicto `warn` queda registrado en el trace para análisis pero la escritura procede.
+> Esto es intencional: un reviewer flaky o demasiado cauteloso no debe bloquear bookings legítimos.
 
 ## Modelo y configuración
 
