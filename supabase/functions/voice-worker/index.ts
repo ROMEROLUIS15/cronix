@@ -6,7 +6,7 @@
  *   2. Validate JWT (auto-handled by verify_jwt=true in supabase/config.toml)
  *   3. Resolve user → business
  *   4. Rate limit check (per user, 30/min)
- *   5. STT via Groq Whisper (skip if input is text)
+ *   5. STT via Deepgram Nova-2 (skip if input is text)
  *   6. Load business context (services, today's appointments, working hours, ai rules)
  *   7. Load session history from Redis
  *   8. Run agent loop

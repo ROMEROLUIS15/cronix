@@ -78,5 +78,8 @@ docs/architecture/TECHNICAL_DOCUMENTATION_ES.md
 *.tsbuildinfo
 next-env.d.ts
 
-# Auditor�as internas
+# Auditoras internas
 CRONIX_AUDIT_REPORT.md
+
+# CV (ExclusiÃ³n de repositorio)
+cv/

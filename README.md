@@ -64,7 +64,7 @@ Cronix ataca los 5 simultáneamente.
 | PWA | `@ducanh2912/next-pwa` (custom SW) | Instalable + offline |
 | Push | Web Push + VAPID | Notificaciones nativas |
 | Observabilidad | Sentry · Axiom · Vercel Logs · `ai_traces` propio | Errores + métricas + trazas LLM |
-| Testing | Vitest · Playwright · React Testing Library · MSW · **pgTAP** | **1580 tests** (109 files) — **4 tipos**: Unit (1300+) · E2E (54) · Integration (200+) · **Database (73 pgTAP)** |
+| Testing | Vitest · Playwright · React Testing Library · MSW · **pgTAP** | **1,127 tests unitarios** (94 files) · **16 specs E2E** (Playwright) · **127 asserts pgTAP** (9+32+86) · integración Supabase local · + tests Deno de Edge Functions |
 | Quality gates | ESLint · Husky · lint-staged · pre-push (lint+tsc+test+audit) | No bypass |
 
 ---
@@ -217,11 +217,11 @@ cronix/
 │   │   ├── push-notify/               ← Web Push VAPID
 │   │   ├── embed-text/                ← Supabase.ai.Session('gte-small')
 │   │   └── export-ai-traces/          ← cron 03:00 UTC
-│   └── migrations/                    ← 69 migraciones
+│   └── migrations/                    ← 77 migraciones
 │
-├── __tests__/                         ← 101 unit test files (components, auth, api, ai, actions, validations, use-cases, …)
+├── __tests__/                         ← 94 unit test files (components, auth, api, ai, actions, validations, use-cases, …)
 ├── tests/
-│   ├── e2e/                           ← 15 Playwright specs (auth, dashboard, business flows)
+│   ├── e2e/                           ← 16 Playwright specs (auth, dashboard, business flows)
 │   └── integration/                   ← 7 Vitest files (Supabase local)
 │
 ├── messages/                          ← i18n JSON (6 idiomas)
@@ -286,26 +286,27 @@ npm run dev                # Next.js + Turbopack
 npm run build              # Build producción
 npm run lint               # ESLint
 npm run typecheck          # tsc --noEmit
-npm test                   # Vitest unit (1300+ tests)
-npm run test:integration   # Integration vs Supabase local (200+ tests)
-npm run test:e2e           # Playwright (54 tests, 15 specs)
+npm test                   # Vitest unit (1,127 tests, 94 files)
+npm run test:integration   # Integration vs Supabase local (7 archivos)
+npm run test:e2e           # Playwright (16 specs)
 npm run test:e2e:smoke     # Suite reducida
 npm run test:coverage      # Coverage v8
-npx supabase test db       # pgTAP: database tests (73 tests, RLS + functions)
+npx supabase test db       # pgTAP: database tests (127 asserts: RLS + funciones + alertas)
 npm run seed:intents       # Regenerar embeddings de intents
 ```
 
-### Testing — 1580 tests pasando
+### Testing — 1,127 unit (Vitest) + 16 E2E (Playwright) + 127 pgTAP
 
 Vea [`docs/TESTING.md`](./docs/TESTING.md) para descripción completa.
 
-**pgTAP (PostgreSQL Testing):**
+**pgTAP (PostgreSQL Testing) — 127 asserts:**
 - `docs/testing/PGTAP.md` — Qué es pgTAP, por qué y cuándo usarlo
-- `docs/testing/PGTAP_EXAMPLES.md` — 13 ejemplos concretos (RLS, pagos, rate-limiting)
-- `supabase/tests/rls_policies.test.sql` — 52 tests de Row-Level Security
-- `supabase/tests/critical_functions.test.sql` — 21 tests de funciones RPC críticas
+- `docs/testing/PGTAP_EXAMPLES.md` — ejemplos concretos (RLS, pagos, rate-limiting)
+- `supabase/tests/rls_policies.test.sql` — 86 asserts de Row-Level Security
+- `supabase/tests/critical_functions.test.sql` — 32 asserts de funciones RPC críticas
+- `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente
 
-Ejecutar: `npx supabase test db` (~0.07s)
+Ejecutar: `npx supabase test db`
 
 ### Quality gates automatizados
 
@@ -455,7 +456,7 @@ Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
 
 ## Decisiones arquitectónicas clave
 
-- **Por qué Pipeline Engine custom en vez de LangChain/LangGraph** — Deno 1.x no soporta dependencias Node.js de LangChain; un Pipeline<T> de ~75 líneas reemplaza 10MB de deps. [ADR-0005](./docs/architecture/adr/0005-custom-pipeline-engine-over-langchain.md)
+- **Por qué Pipeline Engine custom en vez de LangChain/LangGraph** — Deno 1.x no soporta dependencias Node.js de LangChain; un Pipeline<T> de ~106 líneas reemplaza 10MB de deps. [ADR-0005](./docs/architecture/adr/0005-custom-pipeline-engine-over-langchain.md)
 - **Por qué booking-adapter.ts para WhatsApp pero no para Voice** — WhatsApp identifica clientes por teléfono (adapter directo); Voice los identifica por nombre con resolución de ambigüedad + validación anti-alucinación. [ADR-0006](./docs/architecture/adr/0006-booking-engine-dual-implementation.md)
 - **Por qué 4 agentes (Orchestrator, Booking, Client, Supervisor)** — cobertura completa sin fragmentación excesiva; cada agente es un step del Pipeline. [ADR-0007](./docs/architecture/adr/0007-four-agent-architecture-decomposition.md)
 - **Por qué import maps en vez de Turborepo** — Edge Functions no pueden instalar npm packages; import maps resuelven el sharing sin build step. [ADR-0008](./docs/architecture/adr/0008-import-maps-over-shared-packages.md)
