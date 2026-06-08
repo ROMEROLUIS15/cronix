@@ -122,7 +122,7 @@ describe('Resilience — Safe AI Operations', () => {
         )
 
       const messages = [{ role: 'user', content: 'Hola' }]
-      const tools = []
+      const tools: Record<string, unknown>[] = []
       const result = await safeLLM(messages, tools, 'test-key')
 
       expect(result.data).toEqual(fallbackResponse)
@@ -135,7 +135,7 @@ describe('Resilience — Safe AI Operations', () => {
       )
 
       const messages = [{ role: 'user', content: 'Hola' }]
-      const tools = []
+      const tools: Record<string, unknown>[] = []
       const result = await safeLLM(messages, tools, 'bad-key')
 
       expect(result.data).toBeNull()

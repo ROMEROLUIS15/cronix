@@ -204,10 +204,10 @@ describe('resolveExpiredAppointments', () => {
     const result = resolveExpiredAppointments(input)
 
     expect(result).toHaveLength(2)
-    expect(result[0].status).toBe('completed')
-    expect(result[1].status).toBe('pending')
+    expect(result[0]!.status).toBe('completed')
+    expect(result[1]!.status).toBe('pending')
     // Original not mutated
-    expect(input[0].status).toBe('pending')
+    expect(input[0]!.status).toBe('pending')
   })
 })
 
