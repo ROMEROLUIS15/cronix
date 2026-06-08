@@ -293,6 +293,29 @@ Si alguna respuesta es “sí” → refactorizar antes de responder.
 
 ---
 
+## IX. PROTOCOLO DE PRUEBAS AUTOMATIZADAS (Testing Rules)
+
+### 1️⃣ Estructura AAA Obligatoria
+Todo test debe estar dividido visualmente y seguir el patrón:
+- **Arrange**: Configuración de mocks y datos locales controlados.
+- **Act**: Ejecución del método bajo prueba.
+- **Assert**: Verificación de resultados.
+
+### 2️⃣ Enfoque en Comportamiento (No en Implementación)
+- Prohibido hacer mocking interno excesivo que acople el test a detalles de código (bucles, variables locales).
+- Probar entradas (`inputs`) y salidas (`outputs`) esperadas del comportamiento del negocio.
+
+### 3️⃣ Aislamiento y Determinismo
+- Los tests no deben interactuar con bases de datos ni APIs reales en producción (usar mocks o DB de pruebas).
+- Cada test debe limpiar su estado para ser 100% independiente.
+- Prohibido depender de fechas del sistema dinámicas o datos aleatorios no controlados.
+
+### 4️⃣ Nombres Semánticos
+- Los nombres deben describir el escenario, la acción y el resultado esperado.
+- Formato sugerido: `[funcion_a_probar] debería [resultado_esperado] cuando [escenario_de_entrada]`.
+
+---
+
 # 🎯 Filosofía Final
 
 Velocidad sin estructura es caos.

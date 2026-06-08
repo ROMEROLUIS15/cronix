@@ -10,7 +10,7 @@
  * Also verifies 429 rate-limit responses don't count as failures.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { aiCircuit } from '@/lib/ai/circuit-breaker'
 
 // ── Mock logger ──────────────────────────────────────────────────────────────
@@ -18,12 +18,27 @@ vi.mock('@/lib/logger', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
+// ── Mock Sentry ──────────────────────────────────────────────────────────────
+vi.mock('@sentry/nextjs', () => ({
+  withScope: vi.fn(),
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}))
+
+const BASE_TIME = new Date('2026-04-11T12:00:00Z')
+
 describe('AICircuitBreaker', () => {
   beforeEach(() => {
-    // Reset internal state before each test
+    vi.useFakeTimers()
+    vi.setSystemTime(BASE_TIME)
+
     aiCircuit.reportSuccess('STT')
     aiCircuit.reportSuccess('LLM')
     aiCircuit.reportSuccess('TTS')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   // ── Initial State ────────────────────────────────────────────────────────
@@ -74,16 +89,14 @@ describe('AICircuitBreaker', () => {
     it('blocks requests during cooldown', () => {
       for (let i = 0; i < 5; i++) aiCircuit.reportFailure('STT')
 
-      // Within cooldown (5 min) — should be blocked
-      vi.setSystemTime(Date.now() + 2 * 60 * 1000) // 2 minutes later
+      vi.advanceTimersByTime(2 * 60 * 1000) // 2 minutes — still within cooldown
       expect(aiCircuit.isAvailable('STT')).toBe(false)
     })
 
     it('allows request after cooldown expires (HALF-OPEN)', () => {
       for (let i = 0; i < 5; i++) aiCircuit.reportFailure('LLM')
 
-      // Past cooldown
-      vi.setSystemTime(Date.now() + 6 * 60 * 1000) // 6 minutes later
+      vi.advanceTimersByTime(6 * 60 * 1000) // 6 minutes — past cooldown
       expect(aiCircuit.isAvailable('LLM')).toBe(true)
     })
   })
@@ -91,13 +104,10 @@ describe('AICircuitBreaker', () => {
   // ── HALF-OPEN → CLOSED (recovery) ────────────────────────────────────────
   describe('HALF-OPEN → CLOSED recovery', () => {
     it('closes circuit on success after HALF-OPEN', () => {
-      // Trip the circuit
       for (let i = 0; i < 5; i++) aiCircuit.reportFailure('TTS')
 
-      // Wait for cooldown
-      vi.setSystemTime(Date.now() + 6 * 60 * 1000)
+      vi.advanceTimersByTime(6 * 60 * 1000)
 
-      // Service is HALF-OPEN — simulate success
       expect(aiCircuit.isAvailable('TTS')).toBe(true)
       aiCircuit.reportSuccess('TTS')
 
@@ -111,7 +121,7 @@ describe('AICircuitBreaker', () => {
     it('re-opens circuit if HALF-OPEN request fails', () => {
       for (let i = 0; i < 5; i++) aiCircuit.reportFailure('STT')
 
-      vi.setSystemTime(Date.now() + 6 * 60 * 1000)
+      vi.advanceTimersByTime(6 * 60 * 1000)
       aiCircuit.isAvailable('STT') // transitions to HALF-OPEN
       aiCircuit.reportFailure('STT') // probe fails
 
@@ -126,7 +136,6 @@ describe('AICircuitBreaker', () => {
         aiCircuit.reportFailure('LLM', { message: 'rate_limit_exceeded' })
       }
 
-      // Circuit should still be CLOSED despite 10 "failures"
       expect(aiCircuit.isAvailable('LLM')).toBe(true)
       expect(aiCircuit.getDiagnostic().LLM).toBe('CLOSED')
     })
@@ -143,13 +152,10 @@ describe('AICircuitBreaker', () => {
   // ── Success Resets Failure Count ─────────────────────────────────────────
   describe('success resets failure counter', () => {
     it('resets failure count on success', () => {
-      // 4 failures
       for (let i = 0; i < 4; i++) aiCircuit.reportFailure('STT')
 
-      // 1 success — resets counter
       aiCircuit.reportSuccess('STT')
 
-      // 4 more failures — should NOT trip because counter was reset
       for (let i = 0; i < 4; i++) aiCircuit.reportFailure('STT')
 
       expect(aiCircuit.isAvailable('STT')).toBe(true)

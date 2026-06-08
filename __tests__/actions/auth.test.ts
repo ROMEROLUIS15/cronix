@@ -4,7 +4,7 @@
  * Tests for lib/actions/auth.ts
  * Covers: login error mapping, Google OAuth URL generation, signout.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── Hoisted mocks (vi.mock factories are hoisted to top — must use vi.hoisted) ─
 const {
@@ -64,6 +64,8 @@ import { redirect } from 'next/navigation'
 
 describe('Auth Server Actions', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T12:00:00Z'))
     vi.clearAllMocks()
     // Default: no prior failures, no lockout
     mockGetLoginFailures.mockResolvedValue(null)
@@ -71,6 +73,10 @@ describe('Auth Server Actions', () => {
     mockResetFailures.mockResolvedValue(undefined)
     // Default: PostgreSQL rate limit check allows login
     mockRpc.mockResolvedValue({ data: { allowed: true, attempt_count: 0 }, error: null })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('login', () => {
@@ -139,7 +145,7 @@ describe('Auth Server Actions', () => {
       mockGetLoginFailures.mockResolvedValue({
         count: 3,
         firstFailAt: now - 60_000,
-        lastFailAt: now - 30_000, // 30s ago → still inside 5-min window
+        lastFailAt: now - 30_000,
       })
 
       const formData = new FormData()
@@ -148,7 +154,6 @@ describe('Auth Server Actions', () => {
 
       const result = await login(formData)
 
-      // Supabase should NOT be called when already locked
       expect(mockSignIn).not.toHaveBeenCalled()
       expect(result).toMatchObject({
         error: 'locked',

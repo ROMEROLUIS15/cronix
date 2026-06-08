@@ -1,18 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { routing } from '@/i18n/routing'
-
-// ── Replicate the stripLocalePrefix logic from lib/supabase/middleware.ts ──────
-// This test validates the core path-stripping behaviour that makes the Supabase
-// middleware work correctly for non-default locales.
-function stripLocalePrefix(pathname: string): string {
-  for (const locale of routing.locales) {
-    if (locale === routing.defaultLocale) continue
-    if (pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)) {
-      return pathname.slice(locale.length + 1) || '/'
-    }
-  }
-  return pathname
-}
+import { stripLocalePrefix } from '@/lib/middleware/utils'
 
 describe('stripLocalePrefix', () => {
   it('leaves default locale paths unchanged', () => {
