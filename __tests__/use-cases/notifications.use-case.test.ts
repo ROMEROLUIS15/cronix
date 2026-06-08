@@ -21,29 +21,19 @@ describe('Notifications Use-Case', () => {
   const TIME = '3:00 PM'
 
   describe('notificationForAppointmentCreated', () => {
-    it('creates notification with correct business_id', () => {
+    it('returns a complete, well-formed notification object', () => {
+      // ── Arrange ─────────────────────────────────────────────────────────
+      // (constants defined at describe scope: BIZ, CLIENT, SERVICE, TIME)
+
+      // ── Act ──────────────────────────────────────────────────────────────
       const result = notificationForAppointmentCreated(BIZ, CLIENT, SERVICE, TIME)
 
+      // ── Assert ───────────────────────────────────────────────────────────
       expect(result.business_id).toBe(BIZ)
-    })
-
-    it('includes client and service name in content', () => {
-      const result = notificationForAppointmentCreated(BIZ, CLIENT, SERVICE, TIME)
-
+      expect(result.type).toBe('success')
       expect(result.content).toContain(CLIENT)
       expect(result.content).toContain(SERVICE)
       expect(result.content).toContain(TIME)
-    })
-
-    it('uses success type', () => {
-      const result = notificationForAppointmentCreated(BIZ, CLIENT, SERVICE, TIME)
-
-      expect(result.type).toBe('success')
-    })
-
-    it('includes metadata with event type', () => {
-      const result = notificationForAppointmentCreated(BIZ, CLIENT, SERVICE, TIME)
-
       expect(result.metadata).toEqual({
         event: 'appointment.created',
         clientName: CLIENT,

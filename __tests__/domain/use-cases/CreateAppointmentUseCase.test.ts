@@ -78,7 +78,7 @@ describe('CreateAppointmentUseCase', () => {
       startAt: START, endAt: END,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBe('Ese horario ya está ocupado. Sugiere otro horario al cliente.')
     expect(result.data).toBeNull()
   })
 
@@ -92,7 +92,7 @@ describe('CreateAppointmentUseCase', () => {
       startAt: START, endAt: END,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBe('No se pudo verificar la disponibilidad del horario.')
     expect(result.data).toBeNull()
   })
 
@@ -106,7 +106,7 @@ describe('CreateAppointmentUseCase', () => {
       startAt: START, endAt: END,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBe('Error al crear la cita: FK violation')
     expect(result.data).toBeNull()
   })
 
@@ -120,7 +120,7 @@ describe('CreateAppointmentUseCase', () => {
       startAt: START, endAt: END,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBe('Error al crear la cita: respuesta vacía')
   })
 
   it('does not call create when conflict is detected', async () => {

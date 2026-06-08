@@ -303,12 +303,10 @@ describe('PATCH /api/admin/users/[id]/status', () => {
     expect(json.error).toBeDefined()
   })
 
-  it('accepts all valid status values', async () => {
-    const validStatuses = ['active', 'pending', 'rejected']
-
-    for (const status of validStatuses) {
-      vi.clearAllMocks()
-
+  it.each(['active', 'pending', 'rejected'] as const)(
+    'returns 200 when platform_admin sets status to "%s"',
+    async (status) => {
+      // ── Arrange ───────────────────────────────────────────────────────────
       const mockSupabase = {
         auth: {
           getUser: vi.fn().mockResolvedValue({
@@ -351,15 +349,17 @@ describe('PATCH /api/admin/users/[id]/status', () => {
         body: JSON.stringify({ status }),
       })
 
+      // ── Act ───────────────────────────────────────────────────────────────
       const response = await PATCH(request as NextRequest, {
         params: Promise.resolve({ id: 'target-id' }),
       })
 
+      // ── Assert ────────────────────────────────────────────────────────────
       expect(response.status).toBe(200)
       const json = await response.json()
       expect(json.user.status).toBe(status)
     }
-  })
+  )
 
   it('sets updated_at timestamp when updating', async () => {
     const mockSupabase = {

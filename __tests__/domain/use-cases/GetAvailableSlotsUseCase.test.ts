@@ -47,8 +47,8 @@ describe('GetAvailableSlotsUseCase', () => {
     expect(result.error).toBeNull()
     // 09:00, 09:30, 10:00, 10:30 → 4 slots (each 30min fits before 11:00)
     expect(result.data).toHaveLength(4)
-    expect(result.data![0]!.time).toBe('09:00')
-    expect(result.data![3]!.time).toBe('10:30')
+    expect(result.data[0].time).toBe('09:00')
+    expect(result.data[3].time).toBe('10:30')
   })
 
   it('slot label uses 12h format with am/pm', async () => {
@@ -61,7 +61,8 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data![0]!.label).toBe('9:00 am')
+    expect(result.data).toHaveLength(2)
+    expect(result.data[0].label).toBe('9:00 am')
   })
 
   it('correctly labels pm slots', async () => {
@@ -74,7 +75,8 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data![0]!.label).toBe('2:00 pm')
+    expect(result.data).toHaveLength(2)
+    expect(result.data[0].label).toBe('2:00 pm')
   })
 
   // ── Booked interval subtraction ─────────────────────────────────────────────
@@ -95,7 +97,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    const times = result.data!.map((s) => s.time)
+    const times = result.data.map((s) => s.time)
     expect(times).not.toContain('09:00')   // conflicts with booked 09:00-09:30
     expect(times).toContain('09:30')
     expect(times).toContain('10:00')
@@ -122,12 +124,12 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    const times = result.data!.map((s) => s.time)
+    const times = result.data.map((s) => s.time)
     expect(times).not.toContain('09:00') // conflicts with booking
     expect(times).not.toContain('09:30') // conflicts with booking
     expect(times).not.toContain('10:00') // still overlaps booking end (10:30)
     expect(times).not.toContain('10:30') // 10:30+60=11:30 exceeds close (11:00)
-    expect(result.data!.length).toBe(0)
+    expect(result.data).toHaveLength(0)
   })
 
   // ── Fully booked ────────────────────────────────────────────────────────────
@@ -165,8 +167,8 @@ describe('GetAvailableSlotsUseCase', () => {
 
     expect(result.error).toBeNull()
     // Default 09:00-18:00 with 30min interval = 18 slots
-    expect(result.data!.length).toBe(18)
-    expect(result.data![0]!.time).toBe('09:00')
+    expect(result.data).toHaveLength(18)
+    expect(result.data[0].time).toBe('09:00')
   })
 
   // ── Repo error ──────────────────────────────────────────────────────────────
@@ -185,7 +187,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBeDefined()
     expect(result.data).toBeNull()
   })
 
@@ -202,8 +204,8 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data!.length).toBe(1)
-    expect(result.data![0]!.time).toBe('09:00')
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0].time).toBe('09:00')
   })
 
   it('returns no slots when duration exceeds window', async () => {
@@ -217,6 +219,6 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data!.length).toBe(0)
+    expect(result.data).toHaveLength(0)
   })
 })

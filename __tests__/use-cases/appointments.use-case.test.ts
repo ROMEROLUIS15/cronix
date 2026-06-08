@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   evaluateDoubleBooking,
   checkSlotOverlap,
@@ -11,14 +11,14 @@ import {
 // ── evaluateDoubleBooking ─────────────────────────────────────────────────
 
 describe('evaluateDoubleBooking', () => {
-  it('debe retornar allowed cuando no hay citas previas', () => {
+  it('should return allowed when there are no previous appointments', () => {
     const result = evaluateDoubleBooking({ existingCount: 0, existingSlots: [] })
     expect(result.level).toBe('allowed')
     expect(result.existingCount).toBe(0)
     expect(result.message).toBe('')
   })
 
-  it('debe retornar warn cuando el cliente tiene 1 cita ese día', () => {
+  it('should return warn when the client has 1 appointment that day', () => {
     const result = evaluateDoubleBooking({
       existingCount: 1,
       existingSlots: [{ time: '10:00', service: 'Corte' }],
@@ -30,7 +30,7 @@ describe('evaluateDoubleBooking', () => {
     expect(result.message).toContain('Corte')
   })
 
-  it('debe retornar blocked cuando el cliente tiene 2 o más citas ese día', () => {
+  it('should return blocked when the client has 2 or more appointments that day', () => {
     const result = evaluateDoubleBooking({
       existingCount: 3,
       existingSlots: [
@@ -44,7 +44,7 @@ describe('evaluateDoubleBooking', () => {
     expect(result.message).toContain('3 citas')
   })
 
-  it('debe retornar warn con mensaje genérico si slot está vacío', () => {
+  it('should return warn with generic message if slot is empty', () => {
     const result = evaluateDoubleBooking({
       existingCount: 1,
       existingSlots: [],
@@ -62,7 +62,7 @@ describe('checkSlotOverlap', () => {
     { start_at: '2026-03-20T14:00:00Z', end_at: '2026-03-20T15:00:00Z', id: 'a2' },
   ]
 
-  it('debe retornar no overlap cuando el slot está libre', () => {
+  it('should return no overlap when the slot is free', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T12:00:00Z'),
       proposedEnd:   new Date('2026-03-20T13:00:00Z'),
@@ -71,7 +71,7 @@ describe('checkSlotOverlap', () => {
     expect(result.overlaps).toBe(false)
   })
 
-  it('debe detectar solapamiento cuando el slot propuesto empieza dentro de uno existente', () => {
+  it('should detect overlap when the proposed slot starts inside an existing one', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T10:30:00Z'),
       proposedEnd:   new Date('2026-03-20T11:30:00Z'),
@@ -81,7 +81,7 @@ describe('checkSlotOverlap', () => {
     expect(result.conflictTime).toBeDefined()
   })
 
-  it('debe detectar solapamiento cuando el slot propuesto termina dentro de uno existente', () => {
+  it('should detect overlap when the proposed slot ends inside an existing one', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T09:30:00Z'),
       proposedEnd:   new Date('2026-03-20T10:30:00Z'),
@@ -90,7 +90,7 @@ describe('checkSlotOverlap', () => {
     expect(result.overlaps).toBe(true)
   })
 
-  it('debe detectar solapamiento cuando el slot propuesto contiene uno existente', () => {
+  it('should detect overlap when the proposed slot contains an existing one', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T09:00:00Z'),
       proposedEnd:   new Date('2026-03-20T12:00:00Z'),
@@ -99,7 +99,7 @@ describe('checkSlotOverlap', () => {
     expect(result.overlaps).toBe(true)
   })
 
-  it('debe excluir un appointment por ID', () => {
+  it('should exclude an appointment by ID', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T10:30:00Z'),
       proposedEnd:   new Date('2026-03-20T11:30:00Z'),
@@ -109,7 +109,7 @@ describe('checkSlotOverlap', () => {
     expect(result.overlaps).toBe(false)
   })
 
-  it('no debe detectar overlap con slots adyacentes (back-to-back)', () => {
+  it('should not detect overlap with adjacent slots (back-to-back)', () => {
     const result = checkSlotOverlap({
       proposedStart: new Date('2026-03-20T11:00:00Z'),
       proposedEnd:   new Date('2026-03-20T12:00:00Z'),
@@ -122,7 +122,10 @@ describe('checkSlotOverlap', () => {
 // ── getLocalDayBoundaries ─────────────────────────────────────────────────
 
 describe('getLocalDayBoundaries', () => {
-  it('debe retornar start y end como ISO strings con start < end y span ~24h', () => {
+  beforeAll(() => { process.env.TZ = 'UTC' })
+  afterAll(() => { delete process.env.TZ })
+
+  it('should return start and end as ISO strings with start < end and span ~24h', () => {
     const { start, end } = getLocalDayBoundaries('2026-03-20T14:30')
     const startDate = new Date(start)
     const endDate = new Date(end)
@@ -137,7 +140,7 @@ describe('getLocalDayBoundaries', () => {
     expect(end).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
-  it('debe generar boundaries consistentes para cualquier hora del mismo día', () => {
+  it('should generate consistent boundaries for any time on the same day', () => {
     const a = getLocalDayBoundaries('2026-01-01T00:00')
     const b = getLocalDayBoundaries('2026-01-01T23:59')
     // Same day input → same boundaries
@@ -149,7 +152,7 @@ describe('getLocalDayBoundaries', () => {
 // ── isExpiredAppointment ──────────────────────────────────────────────────
 
 describe('isExpiredAppointment', () => {
-  it('debe retornar true para cita pending con end_at en el pasado', () => {
+  it('should return true for pending appointment with end_at in the past', () => {
     const result = isExpiredAppointment({
       end_at: '2020-01-01T00:00:00Z',
       status: 'pending',
@@ -157,7 +160,7 @@ describe('isExpiredAppointment', () => {
     expect(result).toBe(true)
   })
 
-  it('debe retornar true para cita confirmed con end_at en el pasado', () => {
+  it('should return true for confirmed appointment with end_at in the past', () => {
     const result = isExpiredAppointment({
       end_at: '2020-01-01T00:00:00Z',
       status: 'confirmed',
@@ -165,7 +168,7 @@ describe('isExpiredAppointment', () => {
     expect(result).toBe(true)
   })
 
-  it('debe retornar false para cita pending con end_at en el futuro', () => {
+  it('should return false for pending appointment with end_at in the future', () => {
     const result = isExpiredAppointment({
       end_at: '2099-01-01T00:00:00Z',
       status: 'pending',
@@ -173,7 +176,7 @@ describe('isExpiredAppointment', () => {
     expect(result).toBe(false)
   })
 
-  it('debe retornar false para cita ya resuelta (completed)', () => {
+  it('should return false for already resolved appointment (completed)', () => {
     const result = isExpiredAppointment({
       end_at: '2020-01-01T00:00:00Z',
       status: 'completed',
@@ -181,7 +184,7 @@ describe('isExpiredAppointment', () => {
     expect(result).toBe(false)
   })
 
-  it('debe retornar false para cita cancelada', () => {
+  it('should return false for cancelled appointment', () => {
     const result = isExpiredAppointment({
       end_at: '2020-01-01T00:00:00Z',
       status: 'cancelled',
@@ -193,24 +196,25 @@ describe('isExpiredAppointment', () => {
 // ── resolveExpiredAppointments ────────────────────────────────────────────
 
 describe('resolveExpiredAppointments', () => {
-  it('debe resolver citas expiradas sin mutar el array original', () => {
+  it('should resolve expired appointments without mutating the original array', () => {
     const input = [
       { end_at: '2020-01-01T00:00:00Z', status: 'pending', id: '1' },
       { end_at: '2099-01-01T00:00:00Z', status: 'pending', id: '2' },
     ]
     const result = resolveExpiredAppointments(input)
 
-    expect(result[0]!.status).toBe('completed')
-    expect(result[1]!.status).toBe('pending')
+    expect(result).toHaveLength(2)
+    expect(result[0].status).toBe('completed')
+    expect(result[1].status).toBe('pending')
     // Original not mutated
-    expect(input[0]!.status).toBe('pending')
+    expect(input[0].status).toBe('pending')
   })
 })
 
 // ── buildAppointmentPayload ──────────────────────────────────────────────
 
 describe('buildAppointmentPayload', () => {
-  it('debe calcular end_at correctamente a partir de duration', () => {
+  it('should calculate end_at correctly from duration', () => {
     const payload = buildAppointmentPayload({
       startAt: '2026-03-20T10:00:00Z',
       totalDurationMin: 30,
@@ -229,7 +233,7 @@ describe('buildAppointmentPayload', () => {
     expect(payload.is_dual_booking).toBe(false)
   })
 
-  it('debe manejar notes null correctamente', () => {
+  it('should handle null notes correctly', () => {
     const payload = buildAppointmentPayload({
       startAt: '2026-03-20T10:00:00Z',
       totalDurationMin: 60,
