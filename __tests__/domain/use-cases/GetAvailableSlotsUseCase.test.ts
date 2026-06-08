@@ -61,6 +61,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
+    expect(result.data).toHaveLength(2)
     expect(result.data![0]!.label).toBe('9:00 am')
   })
 
@@ -74,6 +75,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
+    expect(result.data).toHaveLength(2)
     expect(result.data![0]!.label).toBe('2:00 pm')
   })
 
@@ -127,7 +129,7 @@ describe('GetAvailableSlotsUseCase', () => {
     expect(times).not.toContain('09:30') // conflicts with booking
     expect(times).not.toContain('10:00') // still overlaps booking end (10:30)
     expect(times).not.toContain('10:30') // 10:30+60=11:30 exceeds close (11:00)
-    expect(result.data!.length).toBe(0)
+    expect(result.data).toHaveLength(0)
   })
 
   // ── Fully booked ────────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ describe('GetAvailableSlotsUseCase', () => {
 
     expect(result.error).toBeNull()
     // Default 09:00-18:00 with 30min interval = 18 slots
-    expect(result.data!.length).toBe(18)
+    expect(result.data).toHaveLength(18)
     expect(result.data![0]!.time).toBe('09:00')
   })
 
@@ -185,7 +187,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.error).toBeTruthy()
+    expect(result.error).toBeDefined()
     expect(result.data).toBeNull()
   })
 
@@ -202,7 +204,7 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data!.length).toBe(1)
+    expect(result.data).toHaveLength(1)
     expect(result.data![0]!.time).toBe('09:00')
   })
 
@@ -217,6 +219,6 @@ describe('GetAvailableSlotsUseCase', () => {
       slotIntervalMin: 30,
     })
 
-    expect(result.data!.length).toBe(0)
+    expect(result.data).toHaveLength(0)
   })
 })
