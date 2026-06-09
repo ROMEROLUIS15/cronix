@@ -105,14 +105,15 @@ export class SupabaseServiceRepository implements IServiceRepository {
     return ok(undefined)
   }
 
-  async toggleActive(serviceId: string, currentlyActive: boolean): Promise<Result<void>> {
+  async toggleActive(serviceId: string, businessId: string, currentlyActive: boolean): Promise<Result<void>> {
     const { error } = await this.supabase
       .from('services')
       .update({ is_active: !currentlyActive })
       .eq('id', serviceId)
+      .eq('business_id', businessId)
 
     if (error) return fail(`Error toggling service: ${error.message}`)
-    // Invalidate all service caches (we don't have businessId — best effort)
+    await cache.invalidate(businessId, 'services')
     return ok(undefined)
   }
 }

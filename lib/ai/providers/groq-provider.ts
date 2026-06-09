@@ -33,13 +33,15 @@ const MODEL_BY_TIER: Record<LlmTier, { primary: string; fallback: string; baseUr
 
 export class GroqProvider implements ISttProvider, ILlmProvider {
   private apiKey: string
+  private businessId?: string
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, businessId?: string) {
     this.apiKey = apiKey
+    this.businessId = businessId
   }
 
   async transcribe(audio: Blob, options?: SttOptions): Promise<SttResult> {
-    const res = await safeSTT(audio, this.apiKey, options?.language)
+    const res = await safeSTT(audio, this.apiKey, options?.language, this.businessId)
     return {
       text: res.data?.text || '',
       error: res.error,
@@ -52,7 +54,7 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
 
     // quality tier: try Cerebras 70B first (fast + free), fall back to Groq 8B
     if (altKey && baseUrl) {
-      const cerebrasRes = await safeLLM(messages, tools ?? [], altKey, primary, primary, baseUrl)
+      const cerebrasRes = await safeLLM(messages, tools ?? [], altKey, primary, primary, baseUrl, this.businessId)
       if (!cerebrasRes.error && cerebrasRes.data) {
         const data   = cerebrasRes.data as { choices: { message: LlmMessage }[]; usage?: { total_tokens?: number } }
         const choice = data.choices?.[0]
@@ -68,7 +70,7 @@ export class GroqProvider implements ISttProvider, ILlmProvider {
       logger.warn('AI-LLM', 'Cerebras failed — falling back to Groq', { tier })
     }
 
-    const res = await safeLLM(messages, tools ?? [], this.apiKey, fallback, fallback)
+    const res = await safeLLM(messages, tools ?? [], this.apiKey, fallback, fallback, undefined, this.businessId)
 
     if (res.error || !res.data) {
       return {

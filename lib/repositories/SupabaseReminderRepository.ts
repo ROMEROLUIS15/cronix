@@ -18,25 +18,16 @@ export class SupabaseReminderRepository implements IReminderRepository {
     remindAt:      string,
     minutesBefore: number
   ): Promise<Result<void>> {
-    // Delete existing pending reminder first
-    await this.supabase
-      .from('appointment_reminders')
-      .delete()
-      .eq('appointment_id', appointmentId)
-      .eq('status', 'pending')
+    // Atomic RPC: DELETE + INSERT in a single PostgreSQL transaction,
+    // eliminating the crash-vulnerable window between two HTTP round-trips.
+    const { error } = await (this.supabase.rpc as any)('fn_upsert_reminder', {
+      p_appointment_id: appointmentId,
+      p_business_id:    businessId,
+      p_remind_at:      remindAt,
+      p_minutes_before: minutesBefore,
+    })
 
-    const { error } = await this.supabase
-      .from('appointment_reminders')
-      .insert({
-        appointment_id: appointmentId,
-        business_id:    businessId,
-        remind_at:      remindAt,
-        minutes_before: minutesBefore,
-        status:         'pending',
-        channel:        'whatsapp',
-      })
-
-    if (error) return fail(`Error creating reminder: ${error.message}`)
+    if (error) return fail(`Error upserting reminder: ${error.message}`)
     return ok(undefined)
   }
 

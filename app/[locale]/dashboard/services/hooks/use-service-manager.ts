@@ -179,7 +179,7 @@ export function useServiceManager(): UseServiceManagerReturn {
     if (!businessId) return;
     try {
       const container = getBrowserContainer();
-      const result = await container.services.toggleActive(s.id, s.is_active ?? true);
+      const result = await container.services.toggleActive(s.id, businessId, s.is_active ?? true);
 
       if (result.error) throw new Error(result.error);
 

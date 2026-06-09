@@ -66,5 +66,5 @@ export interface IServiceRepository {
   /**
    * Toggles the is_active flag on a service.
    */
-  toggleActive(serviceId: string, currentlyActive: boolean): Promise<Result<void>>
+  toggleActive(serviceId: string, businessId: string, currentlyActive: boolean): Promise<Result<void>>
 }

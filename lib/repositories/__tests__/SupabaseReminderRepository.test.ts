@@ -12,19 +12,18 @@ describe('SupabaseReminderRepository', () => {
   })
 
   describe('upsert', () => {
-    it('should delete existing pending and insert new reminder', async () => {
-      mockSupabase.from.mockReturnValue(mockSupabaseResponse(null, null))
+    it('should call atomic RPC instead of delete + insert', async () => {
+      mockSupabase.rpc.mockResolvedValue({ data: null, error: null })
 
       const result = await repository.upsert('apt_1', 'biz_1', '2026-01-01T10:00:00Z', 60)
 
       expect(result.error).toBeNull()
-      const from = mockSupabase.from('appointment_reminders')
-      expect(from.delete).toHaveBeenCalled()
-      expect(from.insert).toHaveBeenCalledWith(expect.objectContaining({
-        appointment_id: 'apt_1',
-        remind_at: '2026-01-01T10:00:00Z',
-        status: 'pending'
-      }))
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('fn_upsert_reminder', {
+        p_appointment_id: 'apt_1',
+        p_business_id:    'biz_1',
+        p_remind_at:      '2026-01-01T10:00:00Z',
+        p_minutes_before: 60,
+      })
     })
   })
 

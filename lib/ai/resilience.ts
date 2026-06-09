@@ -23,10 +23,11 @@ interface AIResponse<T> {
 export async function safeSTT(
   audioBlob: Blob,
   apiKey: string,
-  language: string = 'es'
+  language: string = 'es',
+  businessId?: string
 ): Promise<AIResponse<{ text: string }>> {
   const start = Date.now()
-  if (!aiCircuit.isAvailable('STT')) {
+  if (!aiCircuit.isAvailable('STT', businessId)) {
     return { data: null, error: 'STT Circuit Open (Fail Fast)', latency: 0, retries: 0, circuitTripped: true }
   }
 
@@ -53,13 +54,13 @@ export async function safeSTT(
       })
 
       if (res.ok) {
-        aiCircuit.reportSuccess('STT')
+        aiCircuit.reportSuccess('STT', businessId)
         const data = await res.json() as { text?: string }
         return { data: { text: data.text ?? '' }, latency: Date.now() - start, retries: retryCount, modelUsed: 'whisper-large-v3-turbo' }
       }
 
       const errText = await res.text()
-      aiCircuit.reportFailure('STT', errText)
+      aiCircuit.reportFailure('STT', errText, businessId)
       logger.error('AI-STT', `HTTP ${res.status}`, errText.slice(0, 300))
 
       if (res.status === 429 && keys.length > 1) {
@@ -77,7 +78,7 @@ export async function safeSTT(
 
     } catch (err: any) {
       if (retryCount === MAX_RETRIES) {
-        aiCircuit.reportFailure('STT', err.message)
+        aiCircuit.reportFailure('STT', err.message, businessId)
         logger.error('AI-STT', 'Max retries reached', err.message)
         return { data: null, error: err.message, latency: Date.now() - start, retries: retryCount }
       }
@@ -98,10 +99,11 @@ export async function safeLLM(
   apiKey: string,
   primaryModel: string = 'llama-3.1-8b-instant',
   fallbackModel: string = 'llama-3.3-70b-versatile',
-  baseUrl: string = 'https://api.groq.com/openai/v1/chat/completions'
+  baseUrl: string = 'https://api.groq.com/openai/v1/chat/completions',
+  businessId?: string
 ): Promise<AIResponse<any>> {
   const start = Date.now()
-  if (!aiCircuit.isAvailable('LLM')) {
+  if (!aiCircuit.isAvailable('LLM', businessId)) {
     return { data: null, error: 'LLM Circuit Open', latency: 0, retries: 0, circuitTripped: true }
   }
 
@@ -134,11 +136,11 @@ export async function safeLLM(
 
     try {
       const data = await execute(primaryModel, currentKey)
-      aiCircuit.reportSuccess('LLM')
+      aiCircuit.reportSuccess('LLM', businessId)
       return { data, latency: Date.now() - start, retries: attempt, modelUsed: primaryModel }
     } catch (err: any) {
       attemptError = err
-      aiCircuit.reportFailure('LLM', err.text)
+      aiCircuit.reportFailure('LLM', err.text, businessId)
       logger.warn('AI-LLM', `Primary model failed on key ${attempt + 1}/${keys.length}`, err.text)
 
       if (err.status === 429 && attempt < keys.length - 1) {
@@ -170,7 +172,7 @@ export async function safeLLM(
     await sleep(2000)
     try {
       const data = await execute(primaryModel, keys[0]!)
-      aiCircuit.reportSuccess('LLM')
+      aiCircuit.reportSuccess('LLM', businessId)
       return { data, latency: Date.now() - start, retries: keys.length, modelUsed: primaryModel }
     } catch (finalErr: any) {
       return { data: null, error: finalErr.text || '429 after retry', latency: Date.now() - start, retries: keys.length + 1 }
@@ -186,10 +188,11 @@ export async function safeLLM(
 export async function safeTTS(
   text: string, 
   apiKey: string, 
-  voiceId: string
+  voiceId: string,
+  businessId?: string
 ): Promise<AIResponse<{ audioUrl: string | null; useNativeFallback: boolean }>> {
   const start = Date.now()
-  if (!apiKey || !aiCircuit.isAvailable('TTS')) {
+  if (!apiKey || !aiCircuit.isAvailable('TTS', businessId)) {
     return { data: { audioUrl: null, useNativeFallback: true }, latency: 0, retries: 0, circuitTripped: !apiKey ? false : true }
   }
 
@@ -210,11 +213,11 @@ export async function safeTTS(
 
     if (!res.ok) {
        const err = await res.text()
-       aiCircuit.reportFailure('TTS', err)
+       aiCircuit.reportFailure('TTS', err, businessId)
        return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
     }
 
-    aiCircuit.reportSuccess('TTS')
+    aiCircuit.reportSuccess('TTS', businessId)
     const buffer = await res.arrayBuffer()
     const audioUrl = `data:audio/mpeg;base64,${Buffer.from(buffer).toString('base64')}`
     
@@ -226,7 +229,7 @@ export async function safeTTS(
     }
 
   } catch (err: any) {
-    aiCircuit.reportFailure('TTS', err.message)
+    aiCircuit.reportFailure('TTS', err.message, businessId)
     logger.error('AI-TTS', `Unexpected TTS failure: ${err.message}`, { stack: err.stack })
     return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
   }
@@ -237,12 +240,13 @@ export async function safeTTS(
 export async function safeDeepgramTTS(
   text: string, 
   apiKey: string, 
-  model: string = 'aura-2-nestor-es' // REVERTED TO NESTOR (STABLE SPANISH MALE)
+  model: string = 'aura-2-nestor-es',
+  businessId?: string
 ): Promise<AIResponse<{ audioUrl: string | null; useNativeFallback: boolean }>> {
   const start = Date.now()
   logger.info('AI-TTS-DEEPGRAM', `Attempting synthesis with model: ${model}`)
   
-  if (!apiKey || !aiCircuit.isAvailable('TTS')) {
+  if (!apiKey || !aiCircuit.isAvailable('TTS', businessId)) {
     logger.warn('AI-TTS-DEEPGRAM', 'API Key missing or Circuit Tripped')
     return { data: { audioUrl: null, useNativeFallback: true }, latency: 0, retries: 0, circuitTripped: !apiKey ? false : true }
   }
@@ -259,12 +263,12 @@ export async function safeDeepgramTTS(
 
     if (!res.ok) {
        const err = await res.text()
-       aiCircuit.reportFailure('TTS', err)
+       aiCircuit.reportFailure('TTS', err, businessId)
        logger.error('AI-TTS-DEEPGRAM', `API Failure: ${res.status} | Model: ${model} | Error: ${err}`)
        return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
     }
 
-    aiCircuit.reportSuccess('TTS')
+    aiCircuit.reportSuccess('TTS', businessId)
     const buffer = await res.arrayBuffer()
     const audioUrl = `data:audio/mpeg;base64,${Buffer.from(buffer).toString('base64')}`
     
@@ -278,7 +282,7 @@ export async function safeDeepgramTTS(
     }
 
   } catch (err: any) {
-    aiCircuit.reportFailure('TTS', err.message)
+    aiCircuit.reportFailure('TTS', err.message, businessId)
     logger.error('AI-TTS-DEEPGRAM', `Critical Exception: ${err.message}`)
     return { data: { audioUrl: null, useNativeFallback: true }, latency: Date.now() - start, retries: 0 }
   }

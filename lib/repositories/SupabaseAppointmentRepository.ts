@@ -197,100 +197,11 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
     status: string,
     businessId: string
   ): Promise<Result<void>> {
-    // ---- Auto-Facturación / Checkout ----
-    if (status === 'completed') {
-      try {
-        // Fetch appointment data for billing — ALWAYS filter by both id AND business_id.
-        // The business_id filter here is an explicit ownership assertion, not just a
-        // convenience: if apt is null, billing is skipped entirely, preventing cross-tenant
-        // data reads and idempotency key poisoning even when using an admin client.
-        const { data: apt } = await this.supabase
-          .from('appointments')
-          .select(`
-            business_id,
-            appointment_services (
-              service:services(price, name)
-            ),
-            transactions (
-              net_amount
-            )
-          `)
-          .eq('id', appointmentId)
-          .eq('business_id', businessId)
-          .single()
-
-        // Hard ownership check: if the appointment doesn't belong to this business,
-        // apt will be null (row not found). Skip billing entirely — do NOT fall through
-        // to a default totalAmount of 0, which would silently hide the mismatch.
-        if (!apt) {
-          logger.error('AUTO-BILLING', 'Billing skipped — appointment not found for business', {
-            appointmentId,
-            businessId,
-            reason: 'APPOINTMENT_NOT_FOUND_OR_CROSS_TENANT',
-          })
-          // Fall through to the UPDATE — it will also find 0 rows and return an error.
-        } else {
-          // Invariant: the fetched row must belong to this business.
-          // This catches future regressions where the query filter is accidentally removed.
-          if (apt.business_id !== businessId) {
-            throw new Error(
-              `[updateStatus] Ownership mismatch: appointment ${appointmentId} belongs to ` +
-              `${apt.business_id}, not ${businessId}. Billing aborted.`
-            )
-          }
-
-          let totalAmount = 0
-          let notes = 'Cobro automático (completada)'
-
-          if (apt.appointment_services && Array.isArray(apt.appointment_services)) {
-            totalAmount = apt.appointment_services.reduce(
-              (sum: number, relation: any) => sum + Number(relation.service?.price ?? 0), 0
-            )
-            const serviceNames = apt.appointment_services
-              .map((r: any) => r.service?.name)
-              .filter(Boolean)
-              .join(', ')
-            if (serviceNames) notes = `Cobro: ${serviceNames}`
-          }
-
-          // Subtract what was already paid (if they made partial payments before completion)
-          const alreadyPaid = apt.transactions && Array.isArray(apt.transactions)
-            ? apt.transactions.reduce((sum: number, t: any) => sum + Number(t.net_amount ?? 0), 0)
-            : 0
-
-          const debt = totalAmount - alreadyPaid
-
-          if (debt > 0) {
-            await this.supabase
-              .from('transactions')
-              .upsert({
-                business_id:     businessId,
-                appointment_id:  appointmentId,
-                amount:          debt,
-                net_amount:      debt,
-                discount:        0,
-                tip:             0,
-                method:          'cash',
-                notes:           alreadyPaid > 0 ? `Liquidación de saldo. ${notes}` : notes,
-                paid_at:         new Date().toISOString(),
-                idempotency_key: `checkout_${appointmentId}`,
-              }, { onConflict: 'idempotency_key', ignoreDuplicates: true })
-          }
-        }
-      } catch (err) {
-        logger.error('AUTO-BILLING', 'Exception in auto-billing hook', {
-          appointmentId,
-          businessId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
-
     const { error } = await this.supabase
       .from('appointments')
       .update({
         status: status as Database['public']['Enums']['appointment_status'],
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('id', appointmentId)
       .eq('business_id', businessId)

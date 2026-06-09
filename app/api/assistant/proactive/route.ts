@@ -25,13 +25,13 @@ export const GET = withErrorHandler(async (req, _context, supabase, user) => {
   }
 
   // 1. Initialize Engines
-  const stt = new GroqProvider(process.env.GROQ_API_KEY!)
-  const llm = new GroqProvider(process.env.GROQ_API_KEY!)
+  const stt = new GroqProvider(process.env.GROQ_API_KEY!, businessId)
+  const llm = new GroqProvider(process.env.GROQ_API_KEY!, businessId)
   
   // PRIMARY TTS: Deepgram Aura 2 — nestor-es (ultra-low latency Spanish male voice)
   const DEEPGRAM_API_KEY = process.env.DEEPGRAM_AURA_API_KEY
   if (!DEEPGRAM_API_KEY) return NextResponse.json({ error: 'TTS provider not configured' }, { status: 500 })
-  const tts = new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es')
+  const tts = new DeepgramProvider(DEEPGRAM_API_KEY, 'aura-2-nestor-es', businessId)
 
   // 1. Get Today Context (Raw)
   const { get_today_summary } = await import('@/lib/ai/tools/finance.tools')

@@ -37,6 +37,17 @@ async function handler(req: Request) {
 
     const invoiceStatus = toInvoiceStatus(paymentStatus);
 
+    // ---- Idempotency guard: skip if already processed ----
+    const { data: existing } = await supabaseAdmin
+      .from('saas_invoices')
+      .select('status')
+      .eq('np_invoice_id', invoiceId)
+      .single();
+
+    if (existing?.status === 'finished') {
+      return NextResponse.json({ success: true, idempotent: true });
+    }
+
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('saas_invoices')
       .update({

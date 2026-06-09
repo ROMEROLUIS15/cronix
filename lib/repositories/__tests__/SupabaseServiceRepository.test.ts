@@ -50,12 +50,13 @@ describe('SupabaseServiceRepository', () => {
     it('should toggle is_active status', async () => {
       mockSupabase.from.mockReturnValue(mockSupabaseResponse(null, null))
 
-      const result = await repository.toggleActive('service_123', true) // current is true, should set to false
+      const result = await repository.toggleActive('service_123', 'biz_123', true) // current is true, should set to false
 
       expect(result.error).toBeNull()
       const from = mockSupabase.from('services')
       expect(from.update).toHaveBeenCalledWith({ is_active: false })
       expect(from.eq).toHaveBeenCalledWith('id', 'service_123')
+      expect(from.eq).toHaveBeenCalledWith('business_id', 'biz_123')
     })
   })
 })
