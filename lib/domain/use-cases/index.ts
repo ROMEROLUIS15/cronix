@@ -2,14 +2,15 @@
  * index.ts — Barrel exports for domain use cases.
  */
 
-export { CreateAppointmentUseCase } from './CreateAppointmentUseCase'
-export { CancelAppointmentUseCase } from './CancelAppointmentUseCase'
+export { CreateAppointmentUseCase }    from './CreateAppointmentUseCase'
+export { CancelAppointmentUseCase }    from './CancelAppointmentUseCase'
 export { RescheduleAppointmentUseCase } from './RescheduleAppointmentUseCase'
 export { GetAppointmentsByDateUseCase } from './GetAppointmentsByDateUseCase'
-export { GetClientsUseCase } from './GetClientsUseCase'
-export { CreateClientUseCase } from './CreateClientUseCase'
-export { GetAvailableSlotsUseCase } from './GetAvailableSlotsUseCase'
-export { RegisterPaymentUseCase } from './RegisterPaymentUseCase'
+export { GetClientsUseCase }           from './GetClientsUseCase'
+export { CreateClientUseCase }         from './CreateClientUseCase'
+export { GetAvailableSlotsUseCase }    from './GetAvailableSlotsUseCase'
+export { RegisterPaymentUseCase }      from './RegisterPaymentUseCase'
+export { CompleteAppointmentUseCase }  from './CompleteAppointmentUseCase'
 
 export type {
   CreateAppointmentInput,
@@ -22,3 +23,8 @@ export type {
   ClientSummary,
   RegisterPaymentInput,
 } from './types'
+
+export type {
+  CompleteAppointmentInput,
+  CompleteAppointmentOutput,
+} from './CompleteAppointmentUseCase'

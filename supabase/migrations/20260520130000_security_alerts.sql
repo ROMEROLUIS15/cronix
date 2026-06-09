@@ -21,6 +21,7 @@ CREATE TYPE alert_severity AS ENUM (
 
 CREATE TABLE IF NOT EXISTS public.security_alerts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id UUID NOT NULL REFERENCES public.businesses(id),
   alert_type security_alert_type NOT NULL,
   severity alert_severity NOT NULL,
   user_email TEXT NOT NULL,
@@ -49,6 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_security_alerts_severity
 CREATE INDEX IF NOT EXISTS idx_security_alerts_created_at
   ON public.security_alerts(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_security_alerts_business_id
+  ON public.security_alerts(business_id);
+
 -- RLS: Only authenticated admins can view security alerts
 ALTER TABLE public.security_alerts ENABLE ROW LEVEL SECURITY;
 
@@ -60,6 +64,13 @@ CREATE POLICY "security_alerts_admin_view"
       WHERE id = auth.uid()
       AND role IN ('owner', 'platform_admin')
       AND is_active = true
+      AND (
+        -- platform_admin sees all rows
+        role = 'platform_admin'
+        OR
+        -- owner only sees their own business alerts
+        public.security_alerts.business_id = public.current_business_id()
+      )
     )
   );
 
@@ -71,6 +82,11 @@ CREATE POLICY "security_alerts_admin_update"
       WHERE id = auth.uid()
       AND role IN ('owner', 'platform_admin')
       AND is_active = true
+      AND (
+        role = 'platform_admin'
+        OR
+        public.security_alerts.business_id = public.current_business_id()
+      )
     )
   )
   WITH CHECK (
@@ -79,6 +95,11 @@ CREATE POLICY "security_alerts_admin_update"
       WHERE id = auth.uid()
       AND role IN ('owner', 'platform_admin')
       AND is_active = true
+      AND (
+        role = 'platform_admin'
+        OR
+        public.security_alerts.business_id = public.current_business_id()
+      )
     )
   );
 

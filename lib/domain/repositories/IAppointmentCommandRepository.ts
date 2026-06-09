@@ -22,8 +22,14 @@ export interface IAppointmentCommandRepository {
 
   /**
    * Updates appointment status.
-   * Requires businessId as a security guard — the update is scoped to both
-   * appointmentId AND businessId so cross-tenant mutations are impossible.
+   *
+   * PURE: Only updates the status column. No billing, no cross-aggregate writes.
+   * Tenant-safe: scoped to BOTH appointmentId AND businessId — cross-tenant
+   * mutations are structurally impossible (0 rows updated if businessId doesn't match).
+   *
+   * ⚠️ If you are marking a status as 'completed' and need auto-billing,
+   * use CompleteAppointmentUseCase or the completeAppointment() Server Action instead.
+   * Calling updateStatus('completed') directly will NOT trigger a charge.
    */
   updateStatus(
     appointmentId: string,

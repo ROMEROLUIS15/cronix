@@ -16,6 +16,7 @@ import {
   notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
 import { notifyOwner } from '@/lib/services/push-notify.service'
+import { completeAppointment } from '@/lib/actions/complete-appointment'
 import { logger } from '@/lib/logger'
 import type { AppointmentStatus, AppointmentWithRelations } from '@/types'
 import type { DashboardStats } from '@/app/[locale]/dashboard/_hooks/useDashboard'
@@ -175,9 +176,18 @@ export function useDashboardData({
   const updateStatusMutation = useMutation({
     mutationFn: async ({ appointmentId, status }: { appointmentId: string; status: string }) => {
       if (!businessId) throw new Error('No business ID')
-      const container = getBrowserContainer()
-      const result = await container.appointments.updateStatus(appointmentId, status, businessId)
-      if (result.error) throw new Error(result.error)
+
+      // 'completed' goes through CompleteAppointmentUseCase (billing + status update).
+      // All other statuses use the plain updateStatus path (no billing side-effect).
+      if (status === 'completed') {
+        const result = await completeAppointment(appointmentId, businessId)
+        if (result.error) throw new Error(result.error)
+      } else {
+        const container = getBrowserContainer()
+        const result = await container.appointments.updateStatus(appointmentId, status, businessId)
+        if (result.error) throw new Error(result.error)
+      }
+
       return { appointmentId, status }
     },
     onMutate: async ({ appointmentId, status }) => {

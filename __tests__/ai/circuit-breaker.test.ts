@@ -45,9 +45,9 @@ describe('AICircuitBreaker', () => {
   describe('initial state', () => {
     it('starts all services CLOSED', () => {
       const diag = aiCircuit.getDiagnostic()
-      expect(diag.STT).toBe('CLOSED')
-      expect(diag.LLM).toBe('CLOSED')
-      expect(diag.TTS).toBe('CLOSED')
+      expect(diag['global:STT']).toBe('CLOSED')
+      expect(diag['global:LLM']).toBe('CLOSED')
+      expect(diag['global:TTS']).toBe('CLOSED')
     })
 
     it('allows requests when CLOSED', () => {
@@ -71,7 +71,7 @@ describe('AICircuitBreaker', () => {
         aiCircuit.reportFailure('LLM')
       }
       const diag = aiCircuit.getDiagnostic()
-      expect(diag.LLM).toBe('OPEN')
+      expect(diag['global:LLM']).toBe('OPEN')
       expect(aiCircuit.isAvailable('LLM')).toBe(false)
     })
 
@@ -111,7 +111,7 @@ describe('AICircuitBreaker', () => {
       expect(aiCircuit.isAvailable('TTS')).toBe(true)
       aiCircuit.reportSuccess('TTS')
 
-      expect(aiCircuit.getDiagnostic().TTS).toBe('CLOSED')
+      expect(aiCircuit.getDiagnostic()['global:TTS']).toBe('CLOSED')
       expect(aiCircuit.isAvailable('TTS')).toBe(true)
     })
   })
@@ -125,7 +125,7 @@ describe('AICircuitBreaker', () => {
       aiCircuit.isAvailable('STT') // transitions to HALF-OPEN
       aiCircuit.reportFailure('STT') // probe fails
 
-      expect(aiCircuit.getDiagnostic().STT).toBe('OPEN')
+      expect(aiCircuit.getDiagnostic()['global:STT']).toBe('OPEN')
     })
   })
 
@@ -137,7 +137,7 @@ describe('AICircuitBreaker', () => {
       }
 
       expect(aiCircuit.isAvailable('LLM')).toBe(true)
-      expect(aiCircuit.getDiagnostic().LLM).toBe('CLOSED')
+      expect(aiCircuit.getDiagnostic()['global:LLM']).toBe('CLOSED')
     })
 
     it('does not count 429 JSON errors as failures', () => {
@@ -166,7 +166,7 @@ describe('AICircuitBreaker', () => {
   describe('getDiagnostic', () => {
     it('returns state for all three services', () => {
       const diag = aiCircuit.getDiagnostic()
-      expect(Object.keys(diag)).toEqual(['STT', 'LLM', 'TTS'])
+      expect(Object.keys(diag)).toEqual(['global:STT', 'global:LLM', 'global:TTS'])
     })
   })
 })

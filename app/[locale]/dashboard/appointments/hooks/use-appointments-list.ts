@@ -12,6 +12,7 @@ import { getBrowserContainer } from '@/lib/browser-container';
 import { createClient } from '@/lib/supabase/client';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case';
+import { completeAppointment } from '@/lib/actions/complete-appointment';
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types';
 import { format } from 'date-fns';
 
@@ -102,13 +103,19 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     if (!businessId) return;
     setResolvingId(aptId);
     try {
-      const container = getBrowserContainer();
-      const result = await container.appointments.updateStatus(aptId, resolution, businessId);
-      if (!result.error) {
-        setAppointments(prev =>
-          prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
-        );
+      // 'completed' triggers auto-billing via CompleteAppointmentUseCase.
+      // 'no_show' is a plain status update — no billing involved.
+      if (resolution === 'completed') {
+        const result = await completeAppointment(aptId, businessId);
+        if (result.error) throw new Error(result.error)
+      } else {
+        const container = getBrowserContainer();
+        const result = await container.appointments.updateStatus(aptId, resolution, businessId);
+        if (result.error) throw new Error(result.error)
       }
+      setAppointments(prev =>
+        prev.map(a => a.id === aptId ? { ...a, status: resolution } : a)
+      );
     } catch {
       // Silently fail — state remains unchanged
     } finally {
