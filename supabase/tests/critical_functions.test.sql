@@ -11,7 +11,7 @@
 
 BEGIN;
 
-SELECT plan(32);
+SELECT plan(43);
 
 -- ── Setup: Test fixtures ──────────────────────────────────────────────────────
 
@@ -183,6 +183,127 @@ SELECT is(
   (SELECT (fn_finalize_paypal_payment('pp_nonexistent', 100.00)).result_status),
   'invoice_not_found',
   'payment rejected for nonexistent invoice'
+);
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- SECTION 1b: PAGOS CRIPTO (fn_finalize_crypto_payment) + BONO (fn_apply_referral_bonus)
+-- ────────────────────────────────────────────────────────────────────────────
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'fn_apply_referral_bonus'),
+  'fn_apply_referral_bonus exists'
+);
+
+SELECT ok(
+  EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'fn_finalize_crypto_payment'),
+  'fn_finalize_crypto_payment exists'
+);
+
+-- 1b.1 Setup: crypto business + waiting invoice (payment_method = 'nowpayments')
+DO $$
+DECLARE
+  cb_biz   UUID := 'ffffffff-a0a0-a0a0-a0a0-a0a0a0a0a0a0';
+  cb_owner UUID := 'ffffffff-a0a0-a0a0-a0a0-a0a0a0a0a0b0';
+  cb_inv   UUID := 'ffffffff-a0a0-a0a0-a0a0-a0a0a0a0a0c0';
+BEGIN
+  INSERT INTO public.businesses (id, name, owner_id, category, subscription_ends_at)
+  VALUES (cb_biz, 'Crypto Biz', cb_owner, 'salon', NOW() + INTERVAL '30 days')
+  ON CONFLICT DO NOTHING;
+  INSERT INTO public.users (id, name, email, business_id, role, is_active, status)
+  VALUES (cb_owner, 'Crypto Owner', 'crypto@test.com', cb_biz, 'owner', true, 'active')
+  ON CONFLICT DO NOTHING;
+  INSERT INTO public.saas_invoices (id, business_id, amount_usd, status, payment_method, np_invoice_id, plan_purchased)
+  VALUES (cb_inv, cb_biz, 50.00, 'waiting', 'nowpayments', 'np_crypto_001', 'pro')
+  ON CONFLICT DO NOTHING;
+END $$;
+
+-- 1b.2 Test: intermediate status (confirming) → 'updated', no activa plan
+SELECT is(
+  (SELECT (fn_finalize_crypto_payment('np_crypto_001', 'pay_c1', 'confirming', 0.5, 'btc')).result_status),
+  'updated',
+  'crypto intermediate status returns updated'
+);
+
+-- 1b.3 Test: invoice status persisted as confirming
+SELECT is(
+  (SELECT status::text FROM public.saas_invoices WHERE np_invoice_id = 'np_crypto_001'),
+  'confirming',
+  'crypto invoice status updated to confirming'
+);
+
+-- 1b.4 Test: finished status → 'completed'
+SELECT is(
+  (SELECT (fn_finalize_crypto_payment('np_crypto_001', 'pay_c1', 'finished', 0.5, 'btc')).result_status),
+  'completed',
+  'crypto payment finalized successfully'
+);
+
+-- 1b.5 Test: invoice status now finished
+SELECT is(
+  (SELECT status::text FROM public.saas_invoices WHERE np_invoice_id = 'np_crypto_001'),
+  'finished',
+  'crypto invoice status changed to finished'
+);
+
+-- 1b.6 Test: business plan activated
+SELECT is(
+  (SELECT plan::text FROM public.businesses WHERE id = 'ffffffff-a0a0-a0a0-a0a0-a0a0a0a0a0a0'),
+  'pro',
+  'crypto business plan activated to pro'
+);
+
+-- 1b.7 Test: idempotency — second finished call returns already_processed
+SELECT is(
+  (SELECT (fn_finalize_crypto_payment('np_crypto_001', 'pay_c1', 'finished', 0.5, 'btc')).result_status),
+  'already_processed',
+  'second crypto finalize is idempotent'
+);
+
+-- 1b.8 Test: invoice not found
+SELECT is(
+  (SELECT (fn_finalize_crypto_payment('np_nonexistent', 'x', 'finished', 0.5, 'btc')).result_status),
+  'invoice_not_found',
+  'crypto finalize rejects nonexistent invoice'
+);
+
+-- 1b.9 Setup: referrer (pro) + referred business + its crypto invoice
+DO $$
+DECLARE
+  ref_biz      UUID := 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0a0';  -- referrer
+  ref_owner    UUID := 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0a1';
+  invited_biz  UUID := 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0b0';  -- referred
+  invited_own  UUID := 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0b1';
+  invited_inv  UUID := 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0c0';
+BEGIN
+  INSERT INTO public.businesses (id, name, owner_id, category, plan, subscription_ends_at)
+  VALUES (ref_biz, 'Referrer Biz', ref_owner, 'salon', 'pro', NOW() + INTERVAL '30 days')
+  ON CONFLICT DO NOTHING;
+  INSERT INTO public.users (id, name, email, business_id, role, is_active, status)
+  VALUES (ref_owner, 'Referrer Owner', 'referrer@test.com', ref_biz, 'owner', true, 'active')
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.businesses (id, name, owner_id, category, referred_by_id, subscription_ends_at)
+  VALUES (invited_biz, 'Invited Biz', invited_own, 'salon', ref_biz, NOW() + INTERVAL '30 days')
+  ON CONFLICT DO NOTHING;
+  INSERT INTO public.users (id, name, email, business_id, role, is_active, status)
+  VALUES (invited_own, 'Invited Owner', 'invited@test.com', invited_biz, 'owner', true, 'active')
+  ON CONFLICT DO NOTHING;
+  INSERT INTO public.saas_invoices (id, business_id, amount_usd, status, payment_method, np_invoice_id, plan_purchased)
+  VALUES (invited_inv, invited_biz, 50.00, 'waiting', 'nowpayments', 'np_crypto_ref_001', 'pro')
+  ON CONFLICT DO NOTHING;
+END $$;
+
+-- 1b.10 Test: bonus applied on referred biz first finished payment
+SELECT ok(
+  (SELECT (fn_finalize_crypto_payment('np_crypto_ref_001', 'pay_ref', 'finished', 0.5, 'btc')).referral_bonus_applied),
+  'referral bonus applied on referred business first crypto payment'
+);
+
+-- 1b.11 Test: referrer subscription extended beyond its original +30 days
+SELECT ok(
+  (SELECT subscription_ends_at FROM public.businesses WHERE id = 'ffffffff-b0b0-b0b0-b0b0-b0b0b0b0b0a0')
+    > (NOW() + INTERVAL '45 days'),
+  'referrer subscription extended by referral bonus'
 );
 
 -- ────────────────────────────────────────────────────────────────────────────

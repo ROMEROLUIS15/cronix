@@ -62,6 +62,29 @@ export async function getClientDebts(businessId: string): Promise<Record<string,
   return debts
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Deriva el business_id del usuario autenticado a partir de la sesión.
+ * SECURITY: nunca confiar en el business_id que envía el cliente (defensa en
+ * profundidad sobre RLS) — un input manipulado no puede escribir en otro negocio.
+ * Usa el admin client solo para la lectura de contexto (evita la RLS recursiva
+ * sobre la tabla users).
+ */
+async function getSessionBusinessId(): Promise<string> {
+  const { createAdminClient } = await import('@/lib/supabase/server')
+  const { getRepos } = await import('@/lib/repositories')
+  const supabase = await createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autorizado.')
+  const { users } = getRepos(supabase)
+  const ctx = await users.getUserContextById(user.id)
+  if (ctx.error || !ctx.data?.business_id) {
+    throw new Error('No se pudo verificar el negocio del usuario.')
+  }
+  return ctx.data.business_id
+}
+
 // ── New client creation ────────────────────────────────────────────────────
 
 export async function createNewClient(input: {
@@ -74,11 +97,14 @@ export async function createNewClient(input: {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
 
+  // SECURITY: el business_id se deriva de la sesión, no del input del cliente.
+  const businessId = await getSessionBusinessId()
+
   // Plan limit check
   const { data: biz } = await supabase
     .from('businesses')
     .select('plan')
-    .eq('id', input.businessId)
+    .eq('id', businessId)
     .single()
 
   const limit = getClientLimit(biz?.plan ?? 'free')
@@ -86,7 +112,7 @@ export async function createNewClient(input: {
     const { count } = await supabase
       .from('clients')
       .select('id', { count: 'exact', head: true })
-      .eq('business_id', input.businessId)
+      .eq('business_id', businessId)
       .is('deleted_at', null)
 
     if ((count ?? 0) >= limit) {
@@ -97,7 +123,7 @@ export async function createNewClient(input: {
 
   const container = await getContainer()
   const result = await container.clients.insert({
-    business_id: input.businessId,
+    business_id: businessId,
     name: input.name,
     phone: input.phone,
     email: input.email,
@@ -118,7 +144,7 @@ export async function createNewClient(input: {
   }
 
   const { notificationForNewClient } = await import('@/lib/use-cases/notifications.use-case')
-  const notifPayload = notificationForNewClient(input.businessId, input.name, input.phone)
+  const notifPayload = notificationForNewClient(businessId, input.name, input.phone)
   container.notifications.create(notifPayload).catch(() => null)
 
   revalidatePath('/dashboard/clients')
@@ -158,16 +184,13 @@ export async function registerClientPayment(
   const validData = parsed.data
   const container = await getContainer()
 
-  // 2. Auth guard
-  const { createClient } = await import('@/lib/supabase/server')
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autorizado.')
+  // 2. Auth guard — business_id derived from session, never trusted from input.
+  const businessId = await getSessionBusinessId()
 
   // 3. If a specific appointment is provided, link directly
   if (validData.appointment_id) {
     const txResult = await container.finances.createTransaction({
-      business_id:      validData.business_id,
+      business_id:      businessId,
       amount:           validData.amount,
       net_amount:       validData.amount,
       method:           validData.method,
@@ -182,7 +205,7 @@ export async function registerClientPayment(
     // so all inserts succeed or all are rolled back together.
     const apptResult = await container.clients.getAppointments(
       validData.client_id,
-      validData.business_id,
+      businessId,
     )
     const appointments = apptResult.data ?? []
 
@@ -228,7 +251,7 @@ export async function registerClientPayment(
 
     if (batchItems.length > 0) {
       const batchResult = await container.finances.createTransactionBatch(
-        validData.business_id,
+        businessId,
         batchItems,
       )
       if (batchResult.error) throw new Error(batchResult.error)
