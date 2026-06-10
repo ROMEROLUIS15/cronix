@@ -407,3 +407,65 @@ describe('BookingEngine.searchClients', () => {
     expect((result as any).error).toBe('INVALID_ARGS')
   })
 })
+
+// ── dispatch — onBeforeDispatch hook ──────────────────────────────────────────
+
+describe('BookingEngine.dispatch — onBeforeDispatch hook', () => {
+  it('intercepta confirm_booking con UNAUTHORIZED cuando el hook deniega', async () => {
+    const hook = vi.fn().mockResolvedValue({ ok: false, reason: 'dos clientes Juan' })
+    const engine = new BookingEngine({
+      clients:            makeClientRepo(),
+      services:           makeServiceRepo(),
+      appointmentQuery:   makeQueryRepo(),
+      appointmentCommand: makeCommandRepo(),
+    }, hook)
+
+    const result = await engine.dispatch(ctx, 'confirm_booking', {
+      service_id: SVC_UUID, date: '2026-05-03', time: '10:00', client_name: 'Juan',
+    })
+
+    expect(result.success).toBe(false)
+    expect((result as any).error).toBe('UNAUTHORIZED')
+    expect((result as any).message).toContain('dos clientes Juan')
+    expect(hook).toHaveBeenCalledWith(
+      'confirm_booking',
+      expect.objectContaining({ service_id: SVC_UUID, client_name: 'Juan' }),
+      ctx,
+    )
+  })
+
+  it('NO invoca el hook para read tools (search_clients, get_available_slots)', async () => {
+    const hook = vi.fn()
+    const engine = new BookingEngine({
+      clients:            makeClientRepo(),
+      services:           makeServiceRepo(),
+      appointmentQuery:   makeQueryRepo(),
+      appointmentCommand: makeCommandRepo(),
+    }, hook)
+
+    await engine.dispatch(ctx, 'search_clients',      { query: 'Ana' })
+    await engine.dispatch(ctx, 'get_available_slots', { date: '2026-05-03', duration_min: 30 })
+
+    expect(hook).not.toHaveBeenCalled()
+  })
+
+  it('cuando el hook aprueba, dispatch continúa normalmente y crea la cita', async () => {
+    const hook = vi.fn().mockResolvedValue({ ok: true })
+    const engine = new BookingEngine({
+      clients:            makeClientRepo(),
+      services:           makeServiceRepo(),
+      appointmentQuery:   makeQueryRepo(),
+      appointmentCommand: makeCommandRepo(),
+    }, hook)
+
+    const result = await engine.dispatch(ctx, 'confirm_booking', {
+      service_id:  SVC_UUID,
+      date:        '2026-05-03',
+      time:        '10:00',
+      client_name: 'Ana García',
+    })
+
+    expect(result.success).toBe(true)
+    expect(hook).toHaveBeenCalledOnce()
+  })
+})

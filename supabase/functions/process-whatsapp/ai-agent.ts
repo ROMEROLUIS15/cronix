@@ -41,10 +41,16 @@ import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
 import { createTracer, shortHash } from "../_shared/observability/index.ts"
 import type { TraceOutcome, ToolStepStatus } from "../_shared/observability/contracts.ts"
+import { createSemanticRouter } from "../_shared/router/index.ts"
+import type { ClassifyResult }  from "../_shared/router/contracts.ts"
+import { createConstitutionalReviewer, reviewWriteOrFailOpen } from "../_shared/supervisor/index.ts"
+import type { WriteGuard } from "./tool-executor.ts"
 
 // Single instance per cold start. Stateless — safe to share across requests.
 const memoryEngine = createMemoryEngine()
 const tracer       = createTracer()
+const router       = createSemanticRouter()
+const reviewer     = createConstitutionalReviewer()
 
 export { LlmRateLimitError, CircuitBreakerError }
 
@@ -151,27 +157,57 @@ export async function runAgentLoop(
   // Cap history at 14 messages (~7 turns) for much better memory
   const cappedHistory = context.history.slice(-14)
 
-  // ── Memory recall (degrades to [] on failure — never blocks the loop) ─────
+  // ── Memory recall + intent classification (parallel, both degrade gracefully)
   const memoryScope: MemoryScope = {
     businessId: business.id,
     actorKind:  'client_phone',
     actorKey:   sender,
   }
-  const recalled: ReadonlyArray<MemoryRecord> =
-    await memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 })
+  const [recalled, intent] = await Promise.all([
+    memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 }),
+    router.classify(userText),
+  ])
 
-  addBreadcrumb('Memory recall completed', 'memory', 'info', { hits: recalled.length })
+  // Build the constitutional guard for this turn. recentMemory comes from
+  // the same recall above — never empty by accident, never a second round-trip.
+  const writeGuard: WriteGuard | undefined = reviewer
+    ? async (toolName, args) => {
+        const outcome = await reviewWriteOrFailOpen({
+          reviewer,
+          toolName,
+          args,
+          scope:         { businessId: business.id, channel: 'whatsapp' },
+          userUtterance: userText,
+          recentMemory:  recalled.map(r => ({
+            content:    r.content,
+            similarity: r.similarity,
+            createdAt:  r.createdAt,
+          })),
+        })
+        return outcome.allowed ? null : { blocked: true, reason: outcome.reason }
+      }
+    : undefined
+
+  addBreadcrumb('Memory recall + intent classification completed', 'agent', 'info', {
+    memory_hits: recalled.length,
+    intent:      intent?.intent     ?? 'unknown',
+    confidence:  intent?.confidence ?? 0,
+  })
 
   // ── Open the per-turn trace (closed in the finally block below) ───────────
   const trace = tracer.start(
     { businessId: business.id, channel: 'whatsapp', actorKind: 'client_phone', actorKey: sender },
     await shortHash(userText),
-    { memory_hits: recalled.length },
+    {
+      memory_hits:      recalled.length,
+      intent:           intent?.intent     ?? null,
+      intent_confidence: intent?.confidence ?? null,
+    },
   )
 
   // Build initial messages array
   const messages: AgentMessage[] = [
-    { role: 'system', content: buildMinimalSystemPrompt(context, customerName, recalled) },
+    { role: 'system', content: buildMinimalSystemPrompt(context, customerName, recalled, intent) },
     // Inject conversation history (convert 'model' role to 'assistant')
     ...cappedHistory.map(h => ({
       role:    (h.role === 'model' ? 'assistant' : h.role) as AgentMessage['role'],
@@ -299,7 +335,7 @@ export async function runAgentLoop(
 
       let toolResult: string
       try {
-        toolResult = await executeToolCall(toolCall, context, sender, customerName)
+        toolResult = await executeToolCall(toolCall, context, sender, customerName, writeGuard)
       } catch (err) {
         captureException(err, { stage: 'execute_tool_call', tool: toolCall.function.name })
         toolResult = JSON.stringify({ success: false, error: 'TOOL_EXECUTION_ERROR: error interno al ejecutar la acción' })

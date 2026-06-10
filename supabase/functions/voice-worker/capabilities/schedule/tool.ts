@@ -142,6 +142,18 @@ export async function executeSchedule(
     return { success: false, result: `El horario ${time} del ${date} ya está ocupado. Elige otra hora.` }
   }
 
+  if (ctx.runWriteGuard) {
+    const denied = await ctx.runWriteGuard('book_appointment', {
+      clientId:    client.id,
+      clientName:  client.name,
+      serviceId:   service.id,
+      serviceName: service.name,
+      date,
+      time,
+    })
+    if (denied) return denied
+  }
+
   const { data: created, error } = await ctx.supabase
     .from('appointments')
     .insert({

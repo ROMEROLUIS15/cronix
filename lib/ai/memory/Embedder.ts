@@ -29,6 +29,7 @@ export class SupabaseEdgeEmbedder implements IEmbedder {
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${this.serviceKey}`,
+          'apikey':        this.serviceKey,
         },
         body:   JSON.stringify({ text: trimmed }),
         signal: controller.signal,

@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --project=smoke",
     "e2e:setup": "tsx scripts/setup-e2e-data.ts",
+    "seed:intents": "tsx scripts/seed-intent-embeddings.ts",
     "prepare": "husky"
   },
   "dependencies": {

@@ -1,1385 +1,1169 @@
-# Cronix — Technical Documentation
+# Cronix — Comprehensive Technical Manual (EN)
 
-Deep technical dive into Cronix architecture, security implementation, AI agent behavior, database schema, and system integrations.
+> **Personal document of the author.** Listed in `.gitignore`.
+> Exact mirror: `TECHNICAL_DOCUMENTATION_ES.md` (ES).
+> Purpose: defend every decision of the project in Junior / Middle / Senior interviews.
+> Every claim is verified against the actual repository code.
 
 ---
 
 ## Table of Contents
 
-- [Security & Anti-Spam Architecture](#security--anti-spam-architecture)
-- [WhatsApp AI Agent — Comprehensive Workflow](#whatsapp-ai-agent--comprehensive-workflow)
-- [Voice Transcription (Groq Whisper)](#voice-transcription-groq-whisper)
-- [Push Notifications Architecture](#push-notifications-architecture)
-- [Database Design & RLS](#database-design--rls)
-- [Key TypeScript Interfaces](#key-typescript-interfaces)
-- [Performance Optimization](#performance-optimization)
-- [LLM Provider Abstraction](#llm-provider-abstraction)
-- [Error Handling & Logging](#error-handling--logging)
-- [Luis IA V4 — Strategic Evolution & Hardening](#luis-ia-v4--strategic-evolution--hardening)
+1. [The problem Cronix solves](#1-the-problem-cronix-solves)
+2. [Business model and monetization](#2-business-model-and-monetization)
+3. [Verified tech stack](#3-verified-tech-stack)
+4. [Runtime architecture (Node + Deno)](#4-runtime-architecture-node--deno)
+5. [Multi-tenant isolation — 5 layers](#5-multi-tenant-isolation--5-layers)
+6. [AI system — models, costs, decisions](#6-ai-system--models-costs-decisions)
+7. [The 10 anti-hallucination layers](#7-the-10-anti-hallucination-layers)
+8. [BookingEngine — single source of truth](#8-bookingengine--single-source-of-truth)
+9. [Voice Worker (Deno) — detailed pipeline](#9-voice-worker-deno--detailed-pipeline)
+10. [Process WhatsApp (Deno) — detailed pipeline](#10-process-whatsapp-deno--detailed-pipeline)
+11. [Vector episodic memory](#11-vector-episodic-memory)
+12. [Observability and training-data pipeline](#12-observability-and-training-data-pipeline)
+13. [Semantic router](#13-semantic-router)
+14. [Constitutional Reviewer (supervisor)](#14-constitutional-reviewer-supervisor)
+15. [Payment system — three gateways](#15-payment-system--three-gateways)
+16. [Referral system](#16-referral-system)
+17. [Roles, employees and permissions](#17-roles-employees-and-permissions)
+18. [Rate limiting, circuit breaker and resilience](#18-rate-limiting-circuit-breaker-and-resilience)
+19. [Notifications (in-app + push + WhatsApp)](#19-notifications-in-app--push--whatsapp)
+20. [Internationalization (i18n)](#20-internationalization-i18n)
+21. [PWA and service worker](#21-pwa-and-service-worker)
+22. [Authentication, session and Passkeys](#22-authentication-session-and-passkeys)
+23. [Frontend — App Router + RSC + state](#23-frontend--app-router--rsc--state)
+24. [Database — schema and migrations](#24-database--schema-and-migrations)
+25. [Test suite](#25-test-suite)
+26. [Quality and CI/CD pipelines](#26-quality-and-cicd-pipelines)
+27. [Deployment and operating costs](#27-deployment-and-operating-costs)
+28. [Architectural decisions (interview FAQ)](#28-architectural-decisions-interview-faq)
+29. [Defense script by level (Junior / Mid / Senior)](#29-defense-script-by-level)
+30. [Glossary](#30-glossary)
 
 ---
 
-## Security & Anti-Spam Architecture
+## 1. The problem Cronix solves
 
-Cronix implements a **3-layer defense system** to protect against WhatsApp AI abuse (spam, fake bookings, resource exhaustion):
+Service businesses in LATAM (hair salons, barber shops, clinics, spas, nail studios, tattoo parlors, physiotherapists) face five compounded pain points:
 
-### Layer 1: Message Rate Limiting (Atomic PostgreSQL)
+1. **Manual WhatsApp handling** burns hours. The owner ends up replying at 11pm.
+2. **Existing booking apps** (Booksy, Square, Mindbody) force the customer to download something and create an account — friction = lost customers.
+3. **Existing chatbots hallucinate**: they book in occupied slots, confuse clients with similar names, repeat bookings if the user insists, ignore local timezone.
+4. **Faulty multi-tenant isolation**: in typical B2B SaaS, a single `WHERE business_id = …` separates one business from another. A junior forgets it and data leaks cross-tenant.
+5. **Payments in LATAM**: credit cards don't always reach the gateway (Venezuela blocked, prepaid plans), crypto requires education, manual transfers require humans.
 
-**Table:** `wa_rate_limits` — sliding-window counter per `sender_phone`
+**Cronix tackles all 5 simultaneously**:
 
-```sql
-fn_wa_check_rate_limit(
-  p_sender: text,
-  p_window_secs: int = 60,
-  p_max_msgs: int = 10
-) → boolean
-```
+- **WhatsApp 24/7**: a single Cronix Cloud number serves every business. The customer just clicks the business' link and types.
+- **Voice in the dashboard**: the owner talks to the app ("book María tomorrow 3pm") and Cronix executes. Deepgram STT + TTS, end-to-end latency <2s.
+- **10 verifiable anti-hallucination layers**: phantom types, fast-paths, date-guards, fingerprint dedup, constitutional reviewer, etc. (section 7).
+- **5 isolation layers**: phantom-typed `TenantContext` → `TenantEnforcer.verify()` → filtered repos → Postgres RLS → semantic `ConstitutionalReviewer`.
+- **3 gateways converging into one `saas_invoices` table**: PayPal (card + balance), NOWPayments (USDT BSC), Pago Móvil VE + Binance Pay (manual).
 
-**Implementation Details:**
-- **Limit:** 10 messages per 60 seconds per phone number
-- **Strategy:** Atomic UPSERT in PostgreSQL — no race conditions, no locks needed
-- **Garbage Collection:** Automatic cleanup of windows older than 1 hour (prevents table bloat)
-- **Cost:** Zero external API calls — runs entirely in database
-- **Integration Point:** Called in `supabase/functions/whatsapp-webhook/index.ts` line 241 before message processing
+## 2. Business model and monetization
 
-**Behavior When Rate Limited:**
-- Message is logged to `wa_audit_logs` with status `RATE_LIMITED`
-- No processing occurs (cost avoidance)
-- No response sent to attacker (fail-secure, no confirmation of receipt)
-- Continues to next message attempt
+- **Free**: manual scheduling from the dashboard, no AI, no WhatsApp. Lets the owner try the tool.
+- **Pro**: WhatsApp AI + voice assistant + push notifications + branding + referrals. Monthly subscription.
+- **Enterprise** (upcoming): multi-location, consolidated reports, API.
 
-**Why Atomic?**
-- Prevents race conditions under concurrent requests
-- No need for distributed locks or Redis
-- Sub-millisecond execution on indexed column
+Plan limits live in `lib/plans/plan-limits.ts` (single source of truth). Every UseCase that may exceed a limit consults this file, not the DB. Benefits:
+1. If the owner downgrades, the limits change without a migration.
+2. Deterministic tests — they don't depend on actual DB state.
 
-### Layer 2: Message Sanitization (Anti Prompt Injection)
+### Referral system
 
-**Function:** `sanitizeMessage()` in `supabase/functions/whatsapp-webhook/index.ts` (lines 282-310)
+Every `business` has a unique `referral_code` generated at registration. When a new business registers with `?ref=<code>`, its `referred_by_id` is stored. Upon closing their **first** `finished` payment, `applyReferralBonus()` adds 30 days to the referrer's `subscription_ends_at` (only if the referrer has plan ≠ free).
 
-**Defenses:**
-1. **Hard Truncation:** Max 500 characters
-   - Prevents token abuse in Groq API requests
-   - Forces attacker to split message into multiple requests (subject to Layer 1 rate limit)
+Verifiable in `lib/payments/subscription-fulfillment.ts:7-53`.
 
-2. **Fake Action Tag Stripping:** Remove user-provided tags
-   - `[CONFIRM_BOOKING]` → removed
-   - `[RESCHEDULE_BOOKING]` → removed
-   - `[CANCEL_BOOKING]` → removed
-   - Prevents bypassing two-turn confirmation protocol
+## 3. Verified tech stack
 
-3. **Prompt Injection Patterns:** Strip common attacks
-   - "ignore previous instructions"
-   - "system prompt:"
-   - "you are now..."
-   - "assistant: " at message start
-   - XML/HTML tags (`<instruction>`, `<!--`, etc.)
+### Runtime A — Node.js (Vercel)
 
-4. **Whitespace Normalization:** Collapse excessive spaces
-   - Prevents token inflation via whitespace padding
-   - Improves message readability
+- **Next.js 15** with App Router + Server Components + Server Actions + Turbopack.
+- **React 19**.
+- **TypeScript 5** with `noUncheckedIndexedAccess`.
+- **Tailwind CSS 3** + **Framer Motion** + **lucide-react** + `shadcn`-style components.
+- **TanStack Query 5** for cached server-state.
+- **React Hook Form 7** + **Zod 3** for forms + runtime validation.
+- **next-intl 4** with 6 locales (es/en/fr/de/it/pt).
+- **@supabase/ssr** for server-side session and secure cookies.
+- **@upstash/redis** + **@upstash/qstash** for cache and queues.
+- **@sentry/nextjs** for errors + breadcrumbs.
+- **@simplewebauthn/server** and `/browser` for Passkeys.
+- **@paypal/react-paypal-js** for the PayPal button.
+- **@ducanh2912/next-pwa** (custom service worker).
 
-**Integration Point:** Called before routing to AI agent (line 259)
+### Runtime B — Deno (Supabase Edge Functions)
 
-**Why Before AI, Not After?**
-- AI processing is expensive (Groq API call)
-- Better to reject malicious input early
-- Prevents loading bad data into system prompt
+- `serve` from `https://deno.land/std@0.168.0/http/server.ts`.
+- `createClient` from `https://esm.sh/@supabase/supabase-js@2.39.7`.
+- `Deno.env` access for secrets.
+- `Supabase.ai.Session('gte-small')` for embeddings inside the edge itself.
+- **No** imports from `@/lib/...` Next.js allowed. To share logic with Node, code is duplicated byte-by-byte under `supabase/functions/_shared/` with parity tests.
 
-### Layer 3: Booking Rate Limiting (Anti Calendar Spam)
+### Data
 
-**Table:** `wa_booking_limits` — counter per `(sender_phone, business_id)`
+- **PostgreSQL 15** with **RLS** enabled on every table containing `business_id`.
+- **pgvector** for 384-dim embeddings.
+- **pg_cron** for daily tasks (expirations, training-data export, expired memory purge).
+- Supabase **Realtime** for `appointments` and `notifications`.
+- Supabase **Storage** for logos (`logos` bucket with RLS policies).
 
-```sql
-fn_wa_check_booking_limit(
-  p_sender: text,
-  p_business_id: uuid,
-  p_window_secs: int = 86400,      -- 24 hours
-  p_max_bookings: int = 2
-) → boolean
-```
+### Cache and queues
 
-**Implementation Details:**
-- **Limit:** 2 new bookings per sender per business per 24 hours
-- **Trigger:** Only executes when `CONFIRM_BOOKING` action tag is emitted (not on every message)
-  - Avoids punishing legitimate conversations
-  - Only counts actual booking attempts
-- **Window:** Rolling 24-hour window per sender per business
+- **Upstash Redis**: conversational session (voice-worker `core/session.ts`), rate-limits, daily token counters.
+- **Upstash QStash**: NOWPayments webhook → queue → worker `/api/queue/process-saas-payment`. Automatic retries with `Retry-After` ladder.
 
-**Behavior When Limited:**
-- User receives: "Has alcanzado el límite de citas nuevas por hoy. Por favor contáctanos directamente..."
-- Booking is not created
-- Logged to audit logs with `BOOKING_LIMIT_EXCEEDED` status
+### AI
 
-**Plan B — Pending Approval Workflow:**
-Even without rate limiting, all WhatsApp bookings arrive as `status='pending'`:
-- Requires explicit owner approval in dashboard
-- Shows green approval bar with Confirm/Reject buttons
-- Provides human oversight layer
-- Prevents calendar from being auto-confirmed with spam
+| Layer | Service | Plan |
+|---|---|---|
+| Primary LLM | Groq `llama-3.3-70b-versatile` | Free tier |
+| Fallback LLM | Groq `llama-3.1-8b-instant` | Free tier |
+| Optional alt LLM | Gemini `gemini-2.0-flash` (OpenAI-compat) | Free tier |
+| Reviewer | Groq `llama-3.1-8b-instant` @T=0 | Free tier |
+| Embeddings | `gte-small` (384 dim) via `Supabase.ai.Session` | No extra cost |
+| STT | Deepgram `nova-2` | Free tier ($200 credits) |
+| TTS | Deepgram `aura-2-nestor-es` | Same credits |
+| Cerebras (optional Node-side) | endpoint `api.cerebras.ai` | Free tier |
 
-**Why Three Layers Instead of One?**
-- **Layer 1** stops noisy attackers early (cheap)
-- **Layer 2** prevents AI exploitation (medium cost)
-- **Layer 3** prevents calendar flooding (high cost, avoided if possible)
-- **Plan B** provides human safeguard
+### Observability
 
----
+- **Sentry** for frontend + Server Actions + Edge Functions.
+- **Axiom** for structured logs.
+- **`ai_traces`** — our own table for every conversational turn.
+- **`ai_training_exports`** — daily versioned datasets.
+- **Vercel Logs** for hot path.
 
-## WhatsApp AI Agent — Comprehensive Workflow
+### Testing
 
-### System Architecture
+- **Vitest 3** (unit + components + integration).
+- **Playwright** (E2E).
+- **React Testing Library** + **MSW** for HTTP mocking.
+- **vitest-mock-extended** for typed mocks.
 
-**Single Shared Number:** `+584147531158` for all businesses (multi-tenancy via slug routing)
-
-**Edge Function:** `supabase/functions/whatsapp-webhook/`
-
-**Files:**
-- `index.ts` — Main webhook orchestrator & action execution
-- `ai-agent.ts` — AI conversation engine with Groq integration
-- `types.ts` — Type definitions for Meta webhooks
-- `whatsapp.ts` — WhatsApp API client (media download, message sending)
-- `database.ts` — Database layer with RLC functions
-
-### Input Processing Pipeline
+## 4. Runtime architecture (Node + Deno)
 
 ```
-Meta Webhook Event
-  ↓
-Signature Verification (HMAC-SHA256)
-  ↓
-Extract Message (text or audio)
-  ↓
-Rate Limit Check (Layer 1)
-  ↓
-Message Sanitization (Layer 2)
-  ↓
-Slug Extraction → Route to Business
-  ↓
-[If Audio] Transcribe → Groq Whisper
-  ↓
-Call AI Agent → Groq Llama 3.3
-  ↓
-Parse Action Tags
-  ↓
-Execute Actions (Layer 3 check for bookings)
-  ↓
-Database RPC (atomic insertion)
-  ↓
-Trigger Database Webhook → Push Notification
-  ↓
-Send Response Message
-  ↓
-Log to Audit
+┌─────────────────────────────────────┐        ┌─────────────────────────────────────┐
+│ RUNTIME A — Node.js (Vercel)        │        │ RUNTIME B — Deno (Supabase Edge)    │
+│                                     │        │                                     │
+│ app/                                │        │ supabase/functions/                 │
+│ ├─ [locale]/dashboard/              │        │ ├─ voice-worker/                    │
+│ ├─ api/webhooks/{paypal,nowpay}/    │        │ ├─ process-whatsapp/                │
+│ ├─ api/queue/process-saas-payment/  │        │ ├─ whatsapp-webhook/                │
+│ ├─ api/cron/check-subscriptions/    │        │ ├─ whatsapp-service/                │
+│ ├─ api/assistant/{proactive,tts}/   │        │ ├─ cron-reminders/                  │
+│ ├─ api/passkey/*                    │        │ ├─ push-notify/                     │
+│ └─ api/admin/*                      │        │ ├─ embed-text/                      │
+│                                     │        │ └─ export-ai-traces/                │
+│ lib/                                │        │                                     │
+│ ├─ ai/ (core+memory+router+...)     │ ◄────► │ supabase/functions/_shared/         │
+│ ├─ domain/ (use-cases+repos)        │  byte- │ (duplicate of lib/ai/* with .ts ext │
+│ ├─ repositories/                    │  copy  │  in imports — parity-tested)        │
+│ ├─ payments/                        │        │                                     │
+│ ├─ referrals/                       │        │                                     │
+│ ├─ plans/                           │        │                                     │
+│ ├─ supabase/ (SSR + admin clients)  │        │                                     │
+│ ├─ rate-limit/                      │        │                                     │
+│ ├─ security/                        │        │                                     │
+│ ├─ auth/                            │        │                                     │
+│ └─ i18n/                            │        │                                     │
+└─────────────────────────────────────┘        └─────────────────────────────────────┘
+                  │                                                │
+                  └──────────────── Supabase DB ───────────────────┘
+                                Postgres 15 + RLS + pgvector
 ```
 
-### 1. Meta Signature Verification
+**Golden rule**: no Node file can be imported from Deno and vice versa. The dividing line is physical. This forces:
+1. Shared code to be explicitly shared (visible duplication).
+2. A change on one side cannot silently break the other.
+3. Each runtime uses its idiomatic dependencies (Edge uses `esm.sh`, Node uses `@supabase/ssr`).
 
-**File:** `index.ts` lines 200-220
+**How logic is shared**: `supabase/functions/_shared/` duplicates byte-by-byte the modules under `lib/ai/{memory,router,supervisor,training,observability}/`. Parity tests in `__tests__/ai/*/parity.test.ts` fail on the smallest drift. See `docs/architecture/internals/SHARED_PARITY.md` for detail.
 
-**Implementation:**
-```typescript
-const expectedSignature = crypto.createHmac('sha256', WHATSAPP_APP_SECRET)
-  .update(raw)
-  .digest('hex')
+## 5. Multi-tenant isolation — 5 layers
 
-if (signature !== expectedSignature) {
-  return new Response('Forbidden', { status: 403 })
-}
-```
+### Layer 1 — Phantom-typed `TenantContext` (compile-time)
 
-**Why Critical:**
-- Verifies webhook is genuinely from Meta
-- Prevents spoofed webhook attacks
-- Required for business compliance
+`lib/ai/core/security/TenantEnforcer.ts:25-32`:
 
-**Secret Management:**
-- `WHATSAPP_APP_SECRET` stored in Supabase Edge Function secrets
-- Never logged or exposed
-- Rotated via Meta dashboard
-
-### 2. Rate Limit Check
-
-**File:** `index.ts` line 243
-
-```typescript
-const rateLimited = await checkRateLimit(
-  supabase,
-  senderPhone,
-  60,  // window seconds
-  10   // max messages
-)
-
-if (rateLimited) {
-  await logAudit('RATE_LIMITED', ...)
-  return new Response('OK', { status: 200 })  // silent, don't confirm to attacker
-}
-```
-
-**Behavior:**
-- Non-blocking: doesn't throw, returns boolean
-- Returns 200 to Meta (webhook processed) but doesn't process message
-- Logged for debugging, no notification to user
-
-### 3. Message Extraction
-
-**File:** `index.ts` lines 229-235
-
-**Handles Three Message Types:**
-
-**Text Message:**
-```typescript
-const textBody = msg.text?.body  // Extract text
-```
-
-**Voice Note:**
-```typescript
-const audioId = msg.audio?.id
-const mimeType = msg.audio?.mime_type || 'audio/ogg'
-```
-
-**Other Types:**
-- Button replies, document shares, etc. → ignored gracefully
-- Falls back to "non-text ignored" message
-
-### 4. Voice Transcription
-
-**File:** `ai-agent.ts` lines 50-90
-
-**Flow:**
-```
-audio.id (Meta CDN reference)
-  ↓
-downloadMediaBuffer(audioId, accessToken)
-  ├─ Resolve CDN URL via Meta API
-  └─ Download binary buffer (with timeout)
-  ↓
-transcribeAudio(buffer, mimeType, LLM_API_KEY)
-  ├─ Build FormData with audio blob
-  ├─ POST to Groq Whisper: https://api.groq.com/openai/v1/audio/transcriptions
-  ├─ Headers: Authorization: Bearer {LLM_API_KEY}
-  ├─ Params: model=whisper-large-v3-turbo, language=es, response_format=text
-  └─ Return: plain Spanish transcript
-  ↓
-Transcript replaces audio.id in message pipeline
-```
-
-**Error Handling:**
-- If download fails (timeout, 404, etc.) → log error, send "non-text ignored"
-- If transcription fails with 429 → throw `LlmRateLimitError` (bubble up, user gets retry message)
-- If transcription fails with other error → log, send "non-text ignored"
-- **No silent failures:** all errors logged to `wa_audit_logs`
-
-**Why Groq Whisper?**
-- Included in same API key as chat completions (no extra credential)
-- Supports Spanish language directly (hardcoded, configurable via business settings in future)
-- Cost: ~0.1¢ per minute of audio (cheaper than voice API + chat)
-- Latency: <3 seconds typically (satisfactory for async WhatsApp)
-
-### 5. Slug Extraction & Tenant Routing
-
-**File:** `index.ts` lines 257-264
-
-**Slug Format:** `#business-slug-xxxxx` (hashtag prefix required)
-
-**Extraction Regex:** `/^#([a-z0-9-]+)/i` (must be at start of message)
-
-**Routing Priority:**
-1. **Explicit `#slug` in message:**
-   - Call `getBusinessBySlug(slug)`
-   - Fails gracefully if slug not found → send SaaS landing page
-
-2. **No slug, but sender has session:**
-   - Check `wa_sessions` table for sender_phone + business_id
-   - Retrieve last-active business (user can switch by new `#slug`)
-
-3. **Neither:**
-   - Return SaaS landing page with instructions
-
-**Session Management:**
-- `wa_sessions` table: `(sender_phone, business_id, last_message_at)`
-- Updated on every message
-- Allows sender to have multi-business context without repeating slug every message
-
-**Why Before Sanitization?**
-- Sanitization runs AFTER slug extraction
-- Ensures `#slug` tag isn't stripped before routing
-- Slug validation happens before expensive processing
-
-### 6. Message Sanitization
-
-**File:** `index.ts` lines 282-310
-
-Runs after slug extraction, before AI agent
-
-See [Layer 2](#layer-2-message-sanitization-anti-prompt-injection) above for details
-
-### 7. AI Processing
-
-**File:** `ai-agent.ts`
-
-#### System Prompt Construction (lines 94-216)
-
-**Dynamic Context Injected:**
-
-1. **Business Identity:**
-   - Business name, category
-   - Isolation rule: "Only help with your business, not others"
-
-2. **Client Context:**
-   - Recurring vs new client
-   - Active appointment count
-   - Last appointment date
-
-3. **Service Catalog:**
-   ```
-   Servicio: Corte de cabello
-   Precio: $15
-   Duración: 30 minutos
-
-   Servicio: Tinte completo
-   Precio: $45
-   Duración: 90 minutos
-   ```
-
-4. **Working Hours:**
-   ```
-   Lunes–Viernes: 9:00 AM – 6:00 PM
-   Sábado: 10:00 AM – 2:00 PM
-   Domingo: Cerrado
-   ```
-
-5. **Available Staff:**
-   ```
-   Profesionales:
-   - María (especialista en tintes)
-   - Pedro (todos los servicios)
-   ```
-
-6. **Conversation History:**
-   - Last 8 messages (client + assistant)
-   - Prevents context loss in multi-turn conversations
-
-7. **Action Tag Rules (Critical):**
-   ```
-   Regla: SIEMPRE propone la cita, espera confirmación del cliente ("sí", "ok", etc.)
-   Solo después que el cliente confirma, emite:
-   [CONFIRM_BOOKING: service_id, YYYY-MM-DD, HH:mm]
-
-   Otros tags:
-   [RESCHEDULE_BOOKING: appointment_id, YYYY-MM-DD, HH:mm]
-   [CANCEL_BOOKING: appointment_id]
-   ```
-
-**Why This Approach?**
-- **In-Context Learning:** No RAG or external knowledge retrieval
-- **Low Latency:** All business data in prompt (fast)
-- **Deterministic:** Reduced hallucinations via "thinking" scratchpad
-- **Anti-Injection:** Tags can only be those defined in prompt
-
-#### API Call
-
-**File:** `ai-agent.ts` lines 222-260
-
-```typescript
-const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${LLM_API_KEY}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage }
-    ],
-    temperature: 0.1,
-    max_tokens: 500
-  })
-})
-```
-
-**Parameters:**
-- **temperature: 0.1** → Deterministic (reduced randomness, consistent tag format)
-- **max_tokens: 500** → Limit response size (cost + speed)
-- **Model:** Groq's fastest reasoning model (1.2s avg latency)
-
-**Response Format:**
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "content": "Perfecto, propongo una cita para mañana a las 3:00 PM para corte. ¿Te va bien? [CONFIRM_BOOKING: service123, 2026-03-30, 15:00]"
-      }
-    }
-  ]
-}
-```
-
-### 8. Action Tag Parsing & Execution
-
-**File:** `index.ts` lines 328-427
-
-#### CONFIRM_BOOKING
-
-**Regex:** `/\[CONFIRM_BOOKING:\s*([^,]+),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/g`
-
-**Execution Steps:**
-1. **Parse:** Extract `service_id`, `date`, `time` from tag
-2. **Validate:**
-   - Service exists and belongs to business
-   - Date is in future
-   - Time is within business hours
-3. **Check Booking Limit:** `checkBookingLimit(senderPhone, businessId)`
-4. **If Limited:** Send "Has alcanzado el límite..." and return
-5. **Create Appointment:**
-   - Call RPC `fn_book_appointment_wa`
-   - Passes: business_id, client_phone, service_id, start_at, notes='Agendado vía WhatsApp AI'
-   - Status: `pending` (requires owner approval)
-6. **Confirm to User:** "Solicitud recibida! Tu cita está pendiente de confirmación..."
-7. **Notify Owner:**
-   - Database Webhook triggers automatically on INSERT
-   - `push-notify` Edge Function sends Web Push
-   - Message: "Nueva solicitud de cita vía WhatsApp"
-8. **Audit Log:** Record appointment_id, status, timestamp
-
-**Why Pending Status?**
-- Provides human review layer
-- Owner can reject spam bookings
-- Prevents calendar from being auto-filled by attackers (even if rate limits bypassed)
-- Green approval bar in dashboard shows pending items
-
-#### RESCHEDULE_BOOKING
-
-**Regex:** `/\[RESCHEDULE_BOOKING:\s*([^,]+),\s*(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2})\]/g`
-
-**Steps:**
-1. Extract `appointment_id`, `new_date`, `new_time`
-2. Fetch existing appointment (must be active, not cancelled)
-3. Validate new time within business hours
-4. Calculate new duration (based on services)
-5. Update appointment: `start_at`, `end_at`
-6. Cancel old reminder, create new
-7. Confirm to user with new time
-8. Notify owner
-
-#### CANCEL_BOOKING
-
-**Regex:** `/\[CANCEL_BOOKING:\s*([^\]]+)\]/g`
-
-**Steps:**
-1. Extract `appointment_id`
-2. Update status to `cancelled`, set `cancelled_at`
-3. Delete pending reminder
-4. Confirm cancellation to user
-5. Notify owner
-6. **Supports multiple cancels in single message** (processes all tags)
-
-### 9. Graceful Degradation (429 Rate Limit)
-
-**Error Class:** `LlmRateLimitError` (lines 37-47 in `ai-agent.ts`)
-
-**When Groq Returns 429:**
-```typescript
-if (res.status === 429) {
-  const retryAfter = res.headers.get('retry-after') || '60'
-  throw new LlmRateLimitError(`Rate limited by LLM. Retry after ${retryAfter}s`)
-}
-```
-
-**Handling in Webhook (index.ts lines 441-465):**
-```typescript
-try {
-  const response = await getAiResponse(...)
-} catch (err) {
-  if (err instanceof LlmRateLimitError) {
-    // User-friendly message
-    await sendMessage(
-      senderPhone,
-      "Estoy atendiendo muchas consultas. Intenta de nuevo en " +
-      err.retrySeconds + " minutos."
-    )
-    // Log as info, not error
-    await logAudit('LLM_RATE_LIMITED', {
-      retry_after: err.retrySeconds
-    })
-    return new Response('OK', { status: 200 })
-  }
-  // Handle other errors...
-}
-```
-
-**Why Graceful?**
-- User gets clear, actionable message (not "technical difficulties")
-- Webhook returns quickly (200 OK), doesn't block Meta
-- Logged separately (doesn't pollute error logs)
-- Prevents cascade failures (retries happen on user initiative, not server retry loops)
-
----
-
-## Voice Transcription (Groq Whisper)
-
-### Architecture Diagram
-
-```
-Voice Note Sent
-  ↓
-Meta Webhook: msg.audio.id (CDN reference)
-  ↓
-downloadMediaBuffer(msg.audio.id, WHATSAPP_ACCESS_TOKEN)
-  ├─ Step 1: GET /media/{id} → returns URL + expires_after
-  ├─ Step 2: Download binary from URL (with timeout)
-  └─ Returns: Uint8Array buffer
-  ↓
-transcribeAudio(buffer, mimeType, LLM_API_KEY)
-  ├─ Build FormData:
-  │  ├─ file: buffer (as Blob)
-  │  ├─ model: whisper-large-v3-turbo
-  │  ├─ language: es
-  │  └─ response_format: text
-  ├─ POST https://api.groq.com/openai/v1/audio/transcriptions
-  ├─ Auth: Bearer {LLM_API_KEY}
-  └─ Returns: plain text transcript
-  ↓
-Transcript flows into AI agent as typed message
-```
-
-### Implementation Details
-
-**Files:**
-- `types.ts` — `MetaMessage.audio` interface (line 106)
-- `whatsapp.ts` — `downloadMediaBuffer()` function (lines 38-66)
-- `ai-agent.ts` — `transcribeAudio()` function (lines 50-90)
-- `index.ts` — voice detection & orchestration (lines 264-279)
-
-### Media Download (whatsapp.ts)
-
-```typescript
-export async function downloadMediaBuffer(
-  mediaId: string,
-  accessToken: string
-): Promise<Uint8Array> {
-  // Step 1: Get media URL
-  const metaResponse = await fetch(
-    `https://graph.instagram.com/v18.0/${mediaId}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  )
-  const { url } = await metaResponse.json()
-
-  // Step 2: Download from URL (expires after 1 hour)
-  const mediaResponse = await fetch(url, {
-    signal: AbortSignal.timeout(30000) // 30s timeout
-  })
-  return new Uint8Array(await mediaResponse.arrayBuffer())
-}
-```
-
-**Why Two Steps?**
-- Meta doesn't give direct CDN URL in webhook
-- First call gets URL (valid for 1 hour only)
-- Second call downloads binary
-- Prevents URL leakage, adds security layer
-
-**Timeout:** 30 seconds
-- Accounts for network latency
-- Prevents hanging requests if CDN slow
-- Fails gracefully if timeout exceeded
-
-### Transcription (ai-agent.ts)
-
-```typescript
-export async function transcribeAudio(
-  audioBuffer: Uint8Array,
-  mimeType: string,
-  apiKey: string
-): Promise<string> {
-  const formData = new FormData()
-  formData.append('file', new Blob([audioBuffer], { type: mimeType }))
-  formData.append('model', 'whisper-large-v3-turbo')
-  formData.append('language', 'es')
-  formData.append('response_format', 'text')
-
-  const res = await fetch(
-    'https://api.groq.com/openai/v1/audio/transcriptions',
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: formData
-    }
-  )
-
-  if (res.status === 429) {
-    // Throw special error for rate limit handling
-    throw new LlmRateLimitError(...)
-  }
-
-  return await res.text() // Plain text response
-}
-```
-
-**Groq Whisper Configuration:**
-- **Model:** `whisper-large-v3-turbo` (faster than regular whisper)
-- **Language:** `es` (Spanish) — hardcoded, could be dynamic per business_settings
-- **Response Format:** `text` (returns transcript only, not JSON with metadata)
-- **Auth:** Same `LLM_API_KEY` as chat completions (single credential)
-
-**Cost Analysis:**
-- ~$0.001 per minute of audio (0.1¢)
-- Much cheaper than voice API + chat completion combo
-- Groq typically faster than competitors
-
-### Error Handling
-
-**Download Errors:**
-```typescript
-try {
-  const buffer = await downloadMediaBuffer(audioId, accessToken)
-} catch (err) {
-  logger.warn('Download failed', err)
-  return 'non-text ignored' // Don't process further
-}
-```
-
-**Transcription Rate Limited (429):**
-```typescript
-try {
-  const transcript = await transcribeAudio(buffer, mimeType, apiKey)
-} catch (err) {
-  if (err instanceof LlmRateLimitError) {
-    throw err // Bubble up to webhook handler
-  }
-  logger.warn('Transcription failed', err)
-  return 'non-text ignored'
-}
-```
-
-**Other Transcription Errors:**
-- Log and ignore
-- Return to user: "non-text ignored"
-- No exception thrown
-
----
-
-## Push Notifications Architecture
-
-### RFC 8291 Web Push Implementation
-
-**Standards:**
-- RFC 8291: Generic Event Delivery Using HTTP Push
-- VAPID (Voluntary Application Server Identification)
-- AES-128-GCM encryption at rest
-
-### Subscription Lifecycle
-
-**On Client (useNotifications hook):**
-
-```
-1. Feature Detection
-   ├─ Check: Notification API available
-   ├─ Check: Push API available
-   └─ Check: ServiceWorker available
-
-2. Permission Request
-   └─ window.Notification.requestPermission()
-
-3. ServiceWorker Registration
-   └─ navigator.serviceWorker.ready (8s timeout)
-
-4. PushManager Subscription
-   └─ reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidKeyToUint8Array(publicKey)
-      })
-
-5. Serialize Subscription
-   └─ Extract: endpoint, p256dh (Elliptic Curve key), auth (shared secret)
-
-6. Persist to Database
-   └─ INSERT INTO notification_subscriptions
-      (user_id, business_id, endpoint, p256dh, auth, user_agent, updated_at)
-      VALUES (...)
-      ON CONFLICT (user_id, endpoint) DO UPDATE
-```
-
-**File:** `lib/hooks/use-notifications.ts` (144-212)
-
-**Multi-Tenant Safety:**
-- Scoped to `user_id` + `business_id` (RLS enforced)
-- User can have multiple devices subscribed
-- Unsubscribing removes row from DB too
-
-### Notification Sending
-
-**Trigger Events:**
-
-1. **Appointment Created (WhatsApp):**
-   - Database Webhook on `appointments` INSERT
-   - Calls `push-notify` Edge Function
-   - Message: "Nueva solicitud de cita vía WhatsApp"
-
-2. **Appointment Confirmed:**
-   - Server action approves appointment
-   - Calls `notifyOwner()` service
-   - Message: "Cita confirmada: [client name]"
-
-3. **Reminder Sent:**
-   - pg_cron triggers `cron-reminders` daily
-   - After WhatsApp reminder sent, calls `push-notify`
-
-**Non-Blocking Design:**
-```typescript
-export async function notifyOwner(params: PushNotifyParams): Promise<void> {
-  try {
-    const { error } = await supabase.functions.invoke('push-notify', {
-      body: params
-    })
-    if (error) logger.warn('push-notify error', error.message)
-  } catch (err) {
-    logger.warn('push-notify error', err)
-    // Never throws — push failure doesn't block original action
-  }
-}
-```
-
-### Edge Function: push-notify
-
-**Location:** `supabase/functions/push-notify/index.ts`
-
-**Flow:**
-```
-Request from Database Webhook (or Server Action)
-  ↓
-Extract: title, body, url
-  ↓
-Resolve business_id from JWT
-  ↓
-SELECT from notification_subscriptions WHERE business_id
-  ↓
-For each subscription:
-  ├─ Build encrypted message (AES-128-GCM)
-  ├─ Build VAPID JWT (signed with private key)
-  └─ POST to endpoint (Push Service provider, e.g., Google FCM)
-  ↓
-Log results (success/failure per device)
-  ↓
-Return 200 OK (fire-and-forget)
-```
-
-**VAPID JWT:**
-- Signed with `VAPID_PRIVATE_KEY` (stored in Edge Function secrets)
-- Contains: iss (HTTPS origin), sub (contact email), exp (1 hour)
-- Identifies server to Push Service
-
-**Encryption:**
-- Uses `p256dh` (public key from subscription)
-- Uses `auth` (shared secret from subscription)
-- Payload encrypted with AES-128-GCM
-- Decrypted by browser Service Worker
-
-### Service Worker: Message Handling
-
-**Location:** `worker/sw.ts` or compiled to `public/sw.js`
-
-**On Push Event:**
-```typescript
-self.addEventListener('push', (event) => {
-  const { title, body, url } = JSON.parse(event.data.text())
-
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      badge: '/icon-192x192.png',
-      icon: '/icon-192x192.png',
-      tag: 'cronix-notification'
-    })
-  )
-})
-
-// On Click
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-  event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
-      if (clientList.length > 0) {
-        return clientList[0].focus()
-      }
-      return clients.openWindow(event.notification.tag)
-    })
-  )
-})
-```
-
-**Why Service Worker?**
-- Receives notifications even if browser tab closed
-- Shows native OS notification (desktop, mobile)
-- Handles click events (focus app or open URL)
-
----
-
-## Database Design & RLS
-
-### Multi-Tenancy via RLS
-
-All user-facing tables have RLS policies enforced by database:
-
-```sql
--- Appointments
-CREATE POLICY appointments_select ON appointments
-  FOR SELECT
-  USING (
-    business_id IN (
-      SELECT id FROM businesses
-      WHERE owner_id = auth.uid()
-      OR id IN (SELECT business_id FROM team_members WHERE user_id = auth.uid())
-    )
-  );
-
--- Clients
-CREATE POLICY clients_select ON clients
-  FOR SELECT
-  USING (business_id = get_business_id());
-```
-
-**get_business_id() Function:**
-```sql
-CREATE OR REPLACE FUNCTION get_business_id() RETURNS UUID
-LANGUAGE SQL SECURITY DEFINER
-AS $$
-  SELECT business_id FROM business_context
-  WHERE user_id = auth.uid()
-  LIMIT 1
-$$;
-```
-
-**Why Database-Level RLS?**
-- Can't be bypassed by application code
-- Enforced even if admin client used (with explicit check)
-- All queries filtered automatically (no N+1 risks)
-
-### Key Tables
-
-**businesses**
-- `id` (UUID, PK)
-- `owner_id` (UUID, FK to auth.users)
-- `name` (text)
-- `slug` (text, UNIQUE)
-- `category` (enum: salon, clinic, gym, etc.)
-- `settings` (jsonb): hours, double_booking_policy, etc.
-- `created_at`, `updated_at`
-
-**appointments**
-- `id` (UUID, PK)
-- `business_id` (UUID, FK)
-- `client_id` (UUID, FK)
-- `start_at` (timestamp)
-- `end_at` (timestamp)
-- `status` (enum: pending, confirmed, completed, cancelled, no_show)
-- `notes` (text) — `"Agendado vía WhatsApp AI"` for AI bookings
-- `created_at`
-
-**appointment_services** (junction table)
-- `id` (UUID, PK)
-- `appointment_id` (UUID, FK)
-- `service_id` (UUID, FK)
-- Multi-service support in single appointment
-
-**appointment_reminders**
-- `id` (UUID, PK)
-- `appointment_id` (UUID, FK)
-- `business_id` (UUID, FK)
-- `remind_at` (timestamp)
-- `status` (enum: pending, sent, failed, cancelled)
-- `error_message` (text, nullable)
-
-**wa_rate_limits**
-- `id` (UUID, PK)
-- `sender_phone` (text)
-- `window_start` (timestamp)
-- `message_count` (int)
-- `updated_at` (timestamp)
-- Index: (sender_phone, window_start)
-
-**wa_booking_limits**
-- `id` (UUID, PK)
-- `sender_phone` (text)
-- `business_id` (UUID, FK)
-- `window_start` (timestamp)
-- `booking_count` (int)
-- `updated_at` (timestamp)
-- Index: (sender_phone, business_id, window_start)
-
-**wa_sessions**
-- `sender_phone` (text, PK)
-- `business_id` (UUID, FK)
-- `last_message_at` (timestamp)
-- Enables multi-turn conversations without repeating `#slug`
-
-**wa_audit_logs**
-- `id` (UUID, PK)
-- `business_id` (UUID, FK)
-- `sender_phone` (text)
-- `message_text` (text, truncated)
-- `ai_response` (text, nullable)
-- `status` (enum: RECEIVED, PROCESSED, RATE_LIMITED, BOOKING_LIMIT_EXCEEDED, etc.)
-- `error_message` (text, nullable)
-- `timestamp` (timestamp)
-
-**notification_subscriptions**
-- `id` (UUID, PK)
-- `user_id` (UUID, FK to auth.users)
-- `business_id` (UUID, FK)
-- `endpoint` (text, UNIQUE per user_id)
-- `p256dh` (text) — EC public key (base64url)
-- `auth` (text) — shared secret (base64url)
-- `user_agent` (text, first 200 chars)
-- `updated_at` (timestamp)
-- RLS: users see only their own subscriptions
-
-### Atomic RPC Functions
-
-**fn_book_appointment_wa()**
-```sql
-CREATE FUNCTION fn_book_appointment_wa(
-  p_business_id UUID,
-  p_client_phone TEXT,
-  p_service_id UUID,
-  p_start_at TIMESTAMP,
-  p_end_at TIMESTAMP
-) RETURNS JSON
-LANGUAGE PLPGSQL SECURITY DEFINER
-AS $$
-DECLARE
-  v_appointment_id UUID;
-  v_client_id UUID;
-BEGIN
-  -- Transaction-like: either all succeed or all fail
-
-  -- Upsert client
-  INSERT INTO clients (business_id, phone, name)
-  VALUES (p_business_id, p_client_phone, 'WhatsApp Client')
-  ON CONFLICT (business_id, phone) DO UPDATE SET updated_at = NOW()
-  RETURNING id INTO v_client_id;
-
-  -- Insert appointment
-  INSERT INTO appointments (
-    business_id, client_id, start_at, end_at, status, notes
-  )
-  VALUES (
-    p_business_id, v_client_id, p_start_at, p_end_at, 'pending',
-    'Agendado vía WhatsApp AI'
-  )
-  RETURNING id INTO v_appointment_id;
-
-  -- Link service
-  INSERT INTO appointment_services (appointment_id, service_id)
-  VALUES (v_appointment_id, p_service_id);
-
-  RETURN JSON_BUILD_OBJECT('success', true, 'appointment_id', v_appointment_id);
-END $$;
-```
-
-**Why RPC?**
-- Atomicity: all-or-nothing semantics
-- No round-trips: single network call
-- No race conditions: database handles locking
-- Runs with SECURITY DEFINER (bypasses RLS if needed)
-
----
-
-## Key TypeScript Interfaces
-
-**File:** `supabase/functions/whatsapp-webhook/types.ts`
-
-### Meta Webhook Types
-
-```typescript
-interface MetaWebhookEvent {
-  object: 'whatsapp_business_account'
-  entry: Array<{
-    id: string
-    changes: Array<{
-      value: MetaWebhookValue
-    }>
-  }>
-}
-
-interface MetaWebhookValue {
-  messaging_product: 'whatsapp'
-  metadata: {
-    display_phone_number: string
-    phone_number_id: string
-  }
-  messages?: MetaMessage[]
-  statuses?: MetaStatus[]
-}
-
-interface MetaMessage {
-  from: string  // Sender phone (without +)
-  id: string    // Message ID (for ACK)
-  timestamp: string  // Unix timestamp
-  type: 'text' | 'audio' | 'image' | 'button' | 'order' | 'interactive'
-  text?: { body: string }
-  audio?: {
-    id: string
-    mime_type?: string  // e.g., 'audio/ogg'
-  }
-  image?: { id: string; mime_type?: string }
-  document?: { id: string; mime_type?: string }
-  interactive?: {
-    type: 'button_reply' | 'list_reply'
-    button_reply?: { id: string; title: string }
-    list_reply?: { id: string; title: string }
-  }
-}
-
-interface MetaStatus {
-  id: string  // Message ID
-  status: 'sent' | 'delivered' | 'read'
-  timestamp: string
-  recipient_id: string
-}
-```
-
-### LLM Interfaces
-
-```typescript
-interface LlmResponse {
-  choices?: Array<{
-    message?: {
-      content?: string
-      role: 'assistant'
-    }
-    finish_reason: 'stop' | 'length' | 'content_filter'
-  }>
-  error?: {
-    type: string
-    message: string
-    code?: string
-  }
-}
-
-class LlmRateLimitError extends Error {
-  constructor(public retrySeconds: number) {
-    super(`Rate limited by LLM. Retry after ${retrySeconds}s`)
-    this.name = 'LlmRateLimitError'
-  }
-}
-```
-
-### Audit Log
-
-```typescript
-interface AuditLogData {
-  business_id: string
-  sender_phone: string
-  message_text: string  // Truncated to 500 chars
-  ai_response?: string  // Full AI response or error
-  status: 'RECEIVED' | 'PROCESSED' | 'RATE_LIMITED' | 'BOOKING_LIMIT_EXCEEDED'
-  error_message?: string
-  tool_calls?: Record<string, unknown>
-}
-```
-
----
-
-## Performance Optimization
-
-### Latency Targets
-
-- **Message → AI Response:** <2 seconds
-  - Rate limit check: <1ms
-  - Slug routing: <5ms
-  - AI call (Groq): ~1.2s
-  - Overhead: ~0.8s
-- **Voice → Transcription:** <3 seconds
-  - Download: ~1.5s
-  - Transcribe: ~1.5s
-- **RLS Check:** <10ms per query
-- **Atomic SQL:** <1ms (rate limit check)
-
-### Caching Strategies
-
-**React Query (Client):**
-- Global query cache
-- Stale-while-revalidate pattern
-- Mutations update cache immediately (optimistic updates)
-
-**Business Context (Hook):**
-```typescript
-const supabase = useMemo(() => createClient(), [])
-const { data: business, isLoading } = useQuery({
-  queryKey: ['business', businessId],
-  queryFn: () => fetchBusiness(businessId),
-  staleTime: 5 * 60 * 1000  // 5 minutes
-})
-```
-
-**Session Cookie (Server):**
-- User `active`/`rejected` status cached for 5 minutes
-- Reduces Auth roundtrip on every dashboard navigation
-
-**Database Indexes:**
-
-```sql
--- wa_rate_limits lookups
-CREATE INDEX idx_wa_rate_limits_sender_window
-  ON wa_rate_limits(sender_phone, window_start DESC);
-
--- wa_booking_limits lookups
-CREATE INDEX idx_wa_booking_limits_sender_business
-  ON wa_booking_limits(sender_phone, business_id, window_start DESC);
-
--- wa_sessions lookups
-CREATE INDEX idx_wa_sessions_sender_business
-  ON wa_sessions(sender_phone, business_id);
-
--- Appointments filtering
-CREATE INDEX idx_appointments_business_status
-  ON appointments(business_id, status);
-
--- Audit logs archival queries
-CREATE INDEX idx_wa_audit_logs_business_timestamp
-  ON wa_audit_logs(business_id, timestamp DESC);
-```
-
-### Throughput Capacity
-
-- **Concurrent Users:** ~1,000 per Vercel instance
-- **WhatsApp Messages:** ~100/sec sustained (with rate limiting)
-- **Database Connections:** 100 max (Supabase free tier), pooled via PgBouncer
-- **Edge Function Concurrency:** 1,000 concurrent executions (Deno runtime)
-
----
-
-## LLM Provider Abstraction
-
-To change LLM providers (Groq → OpenAI, Anthropic, etc.), modify **2 files only**:
-
-**supabase/functions/whatsapp-webhook/ai-agent.ts (lines 28–29):**
 ```ts
-const LLM_API_URL = 'https://api.openai.com/v1/chat/completions'
-const LLM_MODEL = 'gpt-4-turbo'
-```
+declare const __tenantBrand: unique symbol
 
-**lib/actions/voice-assistant.ts (lines 14–15):**
-```ts
-const LLM_API_URL = 'https://api.openai.com/v1/chat/completions'
-const LLM_MODEL = 'gpt-4-turbo'
-```
-
-**Environment:** No change needed
-- Same `LLM_API_KEY` env var for all OpenAI-compatible providers
-- Works with Groq, OpenAI, Anthropic, Together AI, etc.
-
-**Request Format (Universal OpenAI-Compatible):**
-```typescript
-{
-  "model": "gpt-4-turbo",
-  "messages": [
-    { "role": "system", "content": "..." },
-    { "role": "user", "content": "..." }
-  ],
-  "temperature": 0.1,
-  "max_tokens": 500
+export type TenantContext = {
+  readonly businessId: string
+  readonly userId:     string
+  readonly timezone:   string
+  readonly [__tenantBrand]: true
 }
 ```
 
-**Why This Design?**
-- Decouples business logic from provider implementation
-- Single point of change (avoids grep-refactoring)
-- Supports provider rotation (Groq down? Switch to OpenAI)
-- No vendor lock-in at application level
+`__tenantBrand` doesn't exist at runtime — it's erased by the transpiler. But at compile-time, TypeScript blocks any attempt to do `const ctx: TenantContext = {...}` directly. The only place that does `as TenantContext` is `TenantEnforcer.verify()`. Any other attempt **does not compile**.
 
----
+### Layer 2 — `TenantEnforcer.verify()` (runtime DB check)
 
-## Error Handling & Logging
-
-### Error Propagation
-
-```
-Layer 1 (Webhook)
-  ↓ validate signature
-  ↓ rate limit check (fail-secure: silent)
-  ↓ extract message
-  ↓ [if audio] transcribe
-  │  ├─ Download fails → log, continue (ignore voice)
-  │  ├─ Transcribe 429 → throw LlmRateLimitError (bubble up)
-  │  └─ Transcribe other → log, continue (ignore voice)
-  ↓ sanitize message
-  ↓ route to business
-  ↓ [if no business] → return landing page (graceful)
-  ↓ call AI agent
-  │  ├─ 429 → catch, send retry message, log as info, return 200
-  │  ├─ other error → catch, send "server error" message, log as error, return 200
-  └─ (always return 200 to Meta to confirm webhook receipt)
-  ↓ parse action tags
-  ↓ execute actions
-  │  ├─ Database errors → log, include in response to user
-  │  └─ Booking limit → send user message
-  ↓ send response
-  ↓ audit log
+```ts
+const ctx = await TenantEnforcer.verify(requestedBusinessId, authUserId, timezone)
+// Reads users.business_id; if !== requestedBusinessId → throws UNAUTHORIZED
 ```
 
-**Key Principle:** Never block the webhook (always return 200 to Meta)
+For external channels (WA webhooks) there is `TenantEnforcer.verifyWebhook(businessId, timezone)` that only checks the business exists. Intentionally different because WA has no authenticated user.
 
-### Logging Utility
+### Layer 3 — Filtered repositories + ownership asserts
 
-**File:** `lib/logger.ts`
+Every repository (`lib/repositories/Supabase*Repository.ts`) includes `.eq('business_id', businessId)` in **every** query. For mutations, an explicit assert is also done:
 
-```typescript
-export const logger = {
-  info: (service: string, message: string, data?: unknown) => {
-    console.log(`[${service}] ${message}`, data)
-  },
-  warn: (service: string, message: string, data?: unknown) => {
-    console.warn(`[${service}] ${message}`, data)
-  },
-  error: (service: string, message: string, data?: unknown) => {
-    console.error(`[${service}] ${message}`, data)
+```ts
+// SupabaseAppointmentRepository.updateStatus
+if (apt.business_id !== businessId) throw new Error('Ownership mismatch')
+```
+
+Verifies that the read row actually belongs to the tenant before updating — protects against the paranoid case where RLS gets accidentally disabled.
+
+### Layer 4 — Row Level Security in Postgres
+
+Every table with `business_id` has policy `USING (business_id = current_business_id())`. The function `current_business_id()` reads from the JWT (`auth.uid()` → `users.business_id`). Relevant migrations:
+- `20260414000000_rls_current_business_id.sql`
+- `20260413000000_fix_users_rls_tenant_isolation.sql`
+- `20260418100000_fix_appointment_services_rls.sql`
+
+Even if `service_role` got compromised, RLS blocks client traffic. `service_role` bypasses RLS but is **only** used from authenticated server-side code. Never exposed to the browser.
+
+### Layer 5 — Constitutional Reviewer (semantic)
+
+On every supervised write (`confirm_booking`, `cancel_booking`, `reschedule_booking`), a reviewer LLM emits `allow | block | warn`. Detects semantic incoherence that technical layers don't catch: ambiguous client, double-intent, contradiction with memory. Detail in `docs/architecture/internals/SUPERVISOR.md`.
+
+### How an attacker would fail
+
+- Compile-time bypass → impossible (phantom type).
+- Forging JWT → impossible if Supabase Auth is intact.
+- Modifying `business_id` in the payload → `TenantEnforcer.verify` rejects.
+- Skipping the repo and using `.from(...)` directly → RLS blocks.
+- Compromising service-role key → RLS still applies, but the attacker would read everything if calling with `service_role`. **That's why the key is only server-side**, never in `NEXT_PUBLIC_*`.
+
+## 6. AI system — models, costs, decisions
+
+### Production models (verified)
+
+| Layer | Actual model | File |
+|---|---|---|
+| Primary voice LLM | `llama-3.3-70b-versatile` | `voice-worker/providers/GroqProvider.ts:36` |
+| Voice fallback | `llama-3.1-8b-instant` | same file:37 |
+| Alt chain | `gemini-2.0-flash` (OpenAI-compat) | `voice-worker/providers/GeminiProvider.ts:32` |
+| WhatsApp ReAct decider | `llama-3.1-8b-instant` (SMALL_MODEL) | `process-whatsapp/groq-client.ts` |
+| WA final synthesis | `llama-3.3-70b-versatile` (skipped via template) | `process-whatsapp/ai-agent.ts:411` |
+| Reviewer | `llama-3.1-8b-instant` @T=0 + json_object | `lib/ai/supervisor/GroqReviewerLlm.ts:11` |
+| Embeddings | `gte-small` 384 dim | `supabase/functions/embed-text/index.ts:4` |
+| STT | Deepgram Nova-2 ES | `voice-worker/stt.ts`, `process-whatsapp/ai-agent.ts:519` |
+| TTS | Deepgram Aura-2 `aura-2-nestor-es` | `voice-worker/tts.ts`, `app/api/assistant/proactive/route.ts:34` |
+| Cerebras (optional Node) | Cerebras endpoint | `lib/ai/providers/groq-provider.ts:25` |
+
+### Why Groq
+
+- **Robust free tier**: covers MVP traffic.
+- **OpenAI tool-calling format**: zero translation to integrate Llama 3.x.
+- **Key rotation 429**: `LLM_API_KEY` accepts CSV. If a key hits rate-limit, the next is tried. Lets us saturate free plans gradually.
+- **Ultra-low latency**: the Groq cluster is famously fast (>300 tokens/s on 70B).
+
+### Why optional Gemini
+
+- Provider diversification. If Groq dies globally, `LLM_PROVIDER=gemini,groq` keeps service up.
+- OpenAI-compat endpoint (`v1beta/openai/chat/completions`) → zero translation.
+- Free tier separate from Groq.
+
+### Why Deepgram
+
+- **Nova-2 Spanish** accepts `keywords[]` to bias recognition toward the business' real names. Verifiable at `voice-worker/index.ts:267-275`:
+
+```ts
+const [transcript, [ctx, sessionResult]] = await Promise.all([
+  getClientFirstNamesForBoost(supabase, userCtx.businessId)
+    .catch(() => [] as string[])
+    .then(keywords => transcribe(audio, { keywords })),
+  Promise.all([
+    loadBusinessContext(supabase, userCtx.businessId, timezone),
+    loadSession(userCtx.userId, clientHistory),
+  ]),
+])
+```
+
+Active client names are passed as `keywords` to STT — this solves the typical STT mangling cases (Lizvet ↔ Lisbeth, Gardi → Gardi Suárez). **Zero extra cost**, much better accuracy.
+
+- **Aura-2 `nestor-es`**: neutral Spanish male voice, <500ms latency.
+
+### Real operating cost
+
+| Service | Plan | Enough for |
+|---|---|---|
+| Groq | Free tier | ~50K requests/day with key rotation |
+| Gemini | Free tier | Backup |
+| Deepgram | $200 initial credits | Thousands of minutes |
+| Supabase | Free | 500MB DB + 2GB storage + Edge functions |
+| Upstash Redis | Free | 10K cmd/day |
+| Upstash QStash | Free | 500 msgs/day |
+| Vercel | Free hobby | Enough for MVP |
+| Sentry | Free dev | 5K errors/month |
+| **Total** | **$0/month** | **The whole MVP running** |
+
+As traffic grows, the first costs will be Deepgram (STT volume) and Supabase (storage). The stack scales linearly without re-architecture.
+
+## 7. The 10 anti-hallucination layers
+
+Each layer has its file, verifiable lines and associated test:
+
+### 7.1 Phantom-typed `TenantContext` (compile-time)
+
+`lib/ai/core/security/TenantEnforcer.ts:25-32`. Already covered in §5.1.
+
+### 7.2 Total fast-paths without LLM
+
+`supabase/functions/voice-worker/capabilities/_shared/registry.ts`. Every capability has a regex/heuristic detector. If it fires, the tool runs directly bypassing the LLM. 9 capabilities documented in `docs/architecture/internals/VOICE_CAPABILITY_REGISTRY.md`.
+
+Example (`capabilities/list-appointments/fast-path.ts`): detects "qué tengo mañana", "agenda de hoy", "qué citas tengo el sábado" → runs `get_appointments_by_date` directly with the date resolved deterministically.
+
+### 7.3 Deterministic date guard
+
+`voice-worker/agent.ts:104-115`. If the user said "hoy / mañana / pasado mañana", `detectTemporalIntent` returns `{date, reason}`. When the LLM emits a tool with a different `date`, it gets overridden:
+
+```ts
+if (dateOverride && DATE_TOOLS.has(tc.name) && typeof parsedArgs.date === 'string') {
+  const llmDate = parsedArgs.date as string
+  if (llmDate !== dateOverride.date) {
+    console.warn(`Date guard: user said ${dateOverride.reason} but LLM passed ${llmDate} → overriding to ${dateOverride.date}`)
+    parsedArgs.date = dateOverride.date
   }
 }
-
-// Usage:
-logger.info('whatsapp-webhook', 'Message received', { from, text })
-logger.warn('push-notify', 'Subscription failed', { endpoint, reason })
-logger.error('ai-agent', 'LLM call failed', { error, url })
 ```
 
-**Audit Logging**
+Order matters: `pasado mañana` is checked **before** `mañana` (the latter is a substring of the former).
 
-All WhatsApp events logged to `wa_audit_logs`:
+### 7.4 Corpus frame-cutoff
 
-```typescript
-await logAudit(supabase, {
-  business_id: businessId,
-  sender_phone: from,
-  message_text: messageBody.slice(0, 500),
-  ai_response: aiContent.slice(0, 1000),
-  status: 'PROCESSED',
-  tool_calls: { tags: parsedTags }
-})
+`voice-worker/index.ts:329-340`. The text corpus passed to guards (date-guard, fuzzy-guard) is built from the last non-question assistant turn. This prevents tokens from a failed previous attempt ("sábado 5pm") from contaminating an unrelated new attempt:
+
+```ts
+let cutoff = -1
+for (let i = history.length - 1; i >= 0; i--) {
+  const msg = history[i]
+  if (msg && msg.role === 'assistant' && !/[?¿]/.test(msg.content)) {
+    cutoff = i
+    break
+  }
+}
+const relevantHistory = history.slice(cutoff + 1)
 ```
 
-**Query Audit Logs:**
+Rules:
+- "Listo. Agendé a María..." → closes the frame.
+- "¿Para qué servicio?" → keeps the frame open (multi-turn collection).
+- "No encontré cita activa..." → closes the frame.
+
+### 7.5 Per-turn fingerprint dedup
+
+`voice-worker/agent.ts:336-351` and `process-whatsapp/ai-agent.ts:322-334`. Before executing a tool, `{toolName + sortedArgsJSON}` is canonicalized and checked against a `Set<string>`. If already executed this turn with the same args, it's blocked with a message to the model:
+
+```
+This action has already been executed in this turn with the same data.
+DO NOT repeat it. Synthesize the previous result and finish.
+```
+
+Prevents double bookings if Llama 3.x loops on tool-result mishandling.
+
+### 7.6 Response bypass (`bypassLLM`)
+
+`voice-worker/agent.ts:410-418` and `capabilities/_shared/registry.ts`. If the only tool executed this turn has `bypassLLM=true` and returned user-facing prose, it's returned directly without going through the synthesis LLM:
+
+```ts
+if (resp.toolCalls.length === 1 && lastResultText && BYPASS_CAPABILITIES.has(resp.toolCalls[0].name)) {
+  finalText = lastResultText
+  break
+}
+```
+
+Standard pattern — equivalent to LangChain's `return_direct=True`.
+
+### 7.7 2-turn confirmation gate (WhatsApp)
+
+`process-whatsapp/confirmation-gate.ts`. Write tools are only callable when:
+1. The assistant's last reply ends in a confirmation question.
+2. The user's last message is affirmative per the semantic router (intent `affirmation`).
+
+When the gate is closed, **the tools array is passed empty to the LLM** → the model doesn't see the schemas → cannot hallucinate them. Stronger than output sanitization.
+
+### 7.8 Embedded `<function>` recovery (WhatsApp)
+
+`process-whatsapp/ai-agent.ts:270-301`. The 8B sometimes emits plain text `<function=confirm_booking>{...}</function>`. If the gate was open and the JSON parses and `fnName ∈ {confirm_booking, reschedule_booking, cancel_booking}`, it's promoted to a real `tool_calls[]`. Any other pattern is ignored and `INTERNAL_SYNTAX_FALLBACK` is returned.
+
+### 7.9 Semantic router
+
+`lib/ai/router/SemanticRouter.ts`. 9 canonical intents with precomputed embeddings. At runtime, a single embedder call + cosine similarity → deterministic routing. Threshold 0.78. Detail in `docs/architecture/internals/SEMANTIC_ROUTER.md`.
+
+### 7.10 Constitutional reviewer
+
+`lib/ai/supervisor/`. Reviewer LLM emits `allow | block | warn` with codes. Fail-open. Detail in `docs/architecture/internals/SUPERVISOR.md`.
+
+## 8. BookingEngine — single source of truth
+
+`lib/ai/core/booking/BookingEngine.ts`.
+
+### Invariants (verbatim from the file comment)
+
+1. Only accepts `TenantContext` — tenant verification is structural.
+2. Validates with Zod BEFORE any DB operation.
+3. Converts timezone once, at the correct layer (before writing).
+4. Never throws — every error is a `ToolResult`.
+5. Invalidates cache after every successful write.
+
+### Public API
+
+```ts
+class BookingEngine {
+  constructor(repos: BookingEngineRepos, onBeforeDispatch?: OnBeforeDispatchHook)
+
+  async createAppointment(ctx, rawArgs, opts?):    Promise<ToolResult<BookingData>>
+  async cancelAppointment(ctx, rawArgs):           Promise<ToolResult<BookingData>>
+  async rescheduleAppointment(ctx, rawArgs):       Promise<ToolResult<BookingData>>
+  async getAppointmentsByDate(ctx, rawArgs):       Promise<ToolResult<void>>
+  async getAvailableSlots(ctx, rawArgs, wh?):      Promise<ToolResult<void>>
+  async createClient(ctx, rawArgs):                Promise<ToolResult<{id, name}>>
+  async searchClients(ctx, rawArgs):               Promise<ToolResult<void>>
+
+  async dispatch(ctx, toolName, rawArgs, opts?):   Promise<ToolResult<unknown>>
+}
+```
+
+### `createAppointment` flow (detailed)
+
+1. **Zod safeParse** of the payload → `INVALID_ARGS` on failure.
+2. **`ClientResolver.resolve`**:
+   - If `client_id` provided → UUID lookup.
+   - If `client_name` provided → fuzzy match against the active roster (`findActiveForAI`).
+   - Multiple matches → returns `ambiguous` with candidates.
+   - None → if `autoCreateClient` (default true), creates via `CreateClientUseCase`.
+3. **`ServiceResolver.resolve`**:
+   - Exact UUID → direct.
+   - Name → fuzzy + ambig handling.
+4. **`localToUTC(date, time, ctx.timezone)`** → UTC ISO.
+5. **`CreateAppointmentUseCase.execute`** atomic:
+   - Conflict check vs `findConflicts(businessId, startISO, endISO, excludeId?)`.
+   - INSERT into `appointments` + `appointment_services` (M2M).
+6. **`cache.invalidate(businessId, 'appointments' | 'dashboard')`** — forces dashboard re-fetch.
+7. **`toolOk(data, prose)`** with user-facing message.
+
+### Why resolve client/service inside the engine
+
+Previously each channel (dashboard, WhatsApp) had its own matching logic. Result: the dashboard accepted "María" but WhatsApp required "María Pérez full name". Centralizing matching eliminates that bias and allows a single set of adversarial tests (`ClientResolver.test.ts`, `ServiceResolver.test.ts`).
+
+### `onBeforeDispatch` hook
+
+Detail in `docs/architecture/internals/BOOKING_ENGINE_HOOK.md`. Fires only for `{confirm_booking, cancel_booking, reschedule_booking}`. The call-site (voice or WA) builds a closure that already captured the turn's `userUtterance` and `recentMemory`.
+
+## 9. Voice Worker (Deno) — detailed pipeline
+
+`supabase/functions/voice-worker/index.ts`.
+
+### Steps
+
+1. **CORS preflight** OPTIONS → 204.
+2. **POST validation** — Authorization header required.
+3. **`resolveUserAndBusiness(auth)`** — `auth.getUser(jwt)` + `users.business_id` lookup.
+4. **Rate-limit 30/min per user** via Redis (`redis.ts:checkRateLimit`).
+5. **Parse payload**:
+   - Multipart with `audio` + `timezone` + `history?` → Deepgram STT with keyword boost.
+   - JSON `{text, timezone, history?}` (Web Speech API on desktop) → direct.
+6. **Parallel load**:
+   - `transcribe(audio, {keywords})` (Deepgram Nova-2).
+   - `loadBusinessContext(businessId, tz)` (services, clients, today's appointments, working hours, aiRules).
+   - `loadSession(userId, clientHistory)` (Redis with fallback to sanitized client history).
+   - `getClientFirstNamesForBoost(businessId)` (names injected into Deepgram).
+7. **Corpus frame-cutoff**.
+8. **Constitutional guard**: pre-recall memory + closure injected into `ctx.runWriteGuard`.
+9. **Registry fast-paths**: if it fires, runs directly and returns.
+10. **LLM loop** (MAX_STEPS=3):
+    - Provider chat (Groq 70B → 8B fallback, optional Gemini in chain).
+    - Date-guard on tools with `date` arg.
+    - Per-turn fingerprint dedup.
+    - Execute tool → record result.
+    - If `bypassLLM` and the only tool of the turn → cut and return prose.
+11. **Parallel persistence**: `saveSession` + `dispatchBellNotification[]`.
+12. **Deepgram Aura-2 TTS** synchronous.
+13. **Response**: `{text, audioUrl, actionPerformed, transcription, modelUsed}`.
+
+### `LastReferencedAppointment` and anaphora
+
+When a write tool succeeds, `lastRefCandidate` updates with `{appointmentId, clientName, serviceName, date, time}`. The session saves with that ref. In the next turn, fast-path detectors (cancel, reschedule) use it to resolve "cancélala" / "reagéndala" without re-naming the client.
+
+If the action was `cancelled`, `lastRefCandidate = null` (the appointment is gone — anaphora would be nonsense).
+
+`pruneStaleRef` (inside `core/session.ts`) discards refs >10 min old.
+
+### Why three providers (Groq + optional Gemini + Cerebras)
+
+Free-tier diversification and resilience. `FallbackChain` (`providers/registry.ts`) tries providers in order and only propagates the last error. Detail in `docs/architecture/internals/PROVIDER_FALLBACK.md`.
+
+## 10. Process WhatsApp (Deno) — detailed pipeline
+
+`supabase/functions/process-whatsapp/message-handler.ts` + `ai-agent.ts`.
+
+### Pipeline
+
+1. **`whatsapp-webhook`** receives Meta POST → verifies HMAC `x-hub-signature-256` → publishes to QStash.
+2. **`process-whatsapp`** dequeues:
+   - **Layer 1**: `verifyQStash(req, rawBody)`.
+   - Audio → Deepgram Nova-2 STT.
+   - **Layer 2**: phone rate-limit (10/60s) via RPC `fn_wa_check_rate_limit`.
+   - Slug extraction `#slug` BEFORE sanitize (the `#` would otherwise be stripped).
+   - **Sanitize anti prompt-injection**.
+   - **3-tier routing**: slug → Redis session → landing fallback.
+   - **`VINCULAR-{slug}`** intercept for owner verification.
+   - **Layer 3**: business usage quota (50/60s).
+   - **Layer 4**: daily token quota.
+   - Parallel load: `getBusinessServices`, `getClientByPhone`, `getActiveAppointments`, `getConversationHistory(6)`, `getBookedSlots`.
+   - `memoryEngine.recall` + `router.classify` in parallel.
+   - `tracer.start` (open ai_traces handle).
+   - **SMALL_MODEL ReAct loop** (MAX_STEPS=3):
+     - `toolsAllowedThisTurn` decides whether write tools are active.
+     - `BOOKING_TOOLS` or `[]` passed to the LLM.
+     - Embedded `<function>` recovery if the model emits syntax leaks.
+     - Fingerprint dedup.
+     - `executeToolCall` → `BookingEngine.dispatch` (with `onBeforeDispatch = writeGuard`).
+   - **End decision tree**:
+     - Last tool success → `renderBookingSuccessTemplate` (skip LARGE_MODEL).
+     - Last tool failed with known errorCode → deterministic message per code.
+     - No tool, no text → fallback clarification.
+     - 8B text present → use direct.
+   - **`sanitizeOutput`** + `containsInternalSyntax` check.
+   - `memoryEngine.write` fire-and-forget (TTL 180d).
+   - `sendWhatsAppMessage` (with retry).
+   - `logInteraction` + `trace.finish(outcome, errorCode, finalTextSha)`.
+
+### Retry ladder
+
+- `LlmRateLimitError` or `CircuitBreakerError` → `return retryLater(retryAfterSecs)` → 503 + Retry-After. QStash waits and retries. The WhatsApp client gets the answer once the backend unblocks.
+- Other errors → 202 + DLQ log. Prevents QStash from infinite-looping on fatal bugs.
+
+### Confirmation gate
+
+`confirmation-gate.ts:toolsAllowedThisTurn(history, userText)`:
+- Finds the last assistant question.
+- If NOT ending in `?` → gate closed.
+- If ending in `?` → checks the last user message:
+  - intent `affirmation` (via router) → gate open.
+  - anything else → gate closed.
+
+When the gate is closed, `activeTools = []`. The model only talks.
+
+### Why cutting the second LLM call on success
+
+Historical: when the tool succeeded and the result was passed to the LARGE_MODEL (70B) for empathic synthesis, the 70B sometimes responded with 400 (rate-limit) → circuit-breaker opened → 503 → client without reply. The solution: use `renderBookingSuccessTemplate` directly. Loses some "warmth" in the reply but gains absolute reliability.
+
+## 11. Vector episodic memory
+
+Full detail in `docs/architecture/internals/MEMORY.md`. Summary:
+
+- Table `ai_memories_v2` (migration `20260518000000`).
+- 384-dim embeddings via `gte-small`.
+- RPC `match_ai_memories_v2` applies tenant filter BEFORE vector scan.
+- `MemoryEngine.recall(scope, query, {topK, threshold})` returns sorted hits.
+- `MemoryEngine.write(scope, {kind, content, metadata, ttlDays})` fire-and-forget.
+- Recall mandatory before reviewer — `reviewWriteOrFailOpen` throws `TypeError` if `recentMemory` is not an array.
+
+### Use cases
+
+- WhatsApp: after success, persists `Cliente {nombre}: {tool} — {userText}`. The next turn from the same client recalls that context and the reviewer can detect duplicate intent (same client booking the same thing in <10 min).
+- Voice (dashboard): persists owner decisions ("agendé a María Pérez Mon 15h") → next turn enables anaphora.
+
+## 12. Observability and training-data pipeline
+
+Detail in `docs/architecture/internals/OBSERVABILITY.md` and `docs/architecture/internals/TRAINING_PIPELINE.md`.
+
+### `ai_traces`
+
+Every turn = 1 row with:
+- `business_id`, `channel`, `actor_kind`, `actor_key`.
+- `query_hash` (SHA-256 truncated input — NOT the text).
+- `outcome ∈ {success, failure, error, rate_limited, no_action}`.
+- `error_code`, `final_text_sha`, `latency_ms`, `total_tokens`, `steps_count`, `tools_count`.
+- `llm_steps[]` with model, latency, tokens, hadToolCalls.
+- `tool_calls[]` with tool, duration, status, argsFingerprint (hash), errorCode.
+- `metadata` with `memory_hits`, `intent`, `intent_confidence`.
+
+### `ai_training_exports` (daily cron)
+
+Pipeline in `supabase/functions/export-ai-traces/index.ts`:
+
+1. Cron 03:00 UTC (via pg_cron + `https_call`).
+2. For each `business_id`, samples up to 500 traces from the last 24h (RPC `ai_traces_sample_window`).
+3. Transforms to `TrainingSample` (no PII):
+   - `latency_bucket: fast | normal | slow | critical`
+   - `tokens_bucket: low | medium | high | extreme`
+   - `outcome`, `error_code`, `tool_sequence` (names only), `intent`, counts.
+4. INSERT into `ai_training_exports` with `schema_version`.
+
+**Zero-PII guaranteed by type**: the `rowToSample` function only reads structural fields. TypeScript prevents access to others.
+
+Buckets live in `lib/ai/training/TrainingExporter.ts` (not in DB). Changing thresholds requires no migration.
+
+## 13. Semantic router
+
+Detail in `docs/architecture/internals/SEMANTIC_ROUTER.md`.
+
+9 intents: `book_appointment`, `cancel_appointment`, `reschedule_appointment`, `check_availability`, `pricing_inquiry`, `list_appointments`, `greeting`, `affirmation`, `negation`.
+
+### Why precomputed embeddings
+
+- Offline `npm run seed:intents` runs `scripts/seed-intent-embeddings.ts` which for each `IntentDefinition.examples[]` calls the embedder and persists the JSON.
+- Runtime: a single embedder call per turn + cosine vs N prototypes (N=9*examples=45 vectors). In microseconds.
+- Versioning: the JSON is committed. Any change to `intents.ts` requires re-running the seed and committing the resulting JSON.
+
+### Runtime usage
+
+- **`process-whatsapp/ai-agent.ts:167`** — `router.classify(userText)` parallel to `memoryEngine.recall`. Result `{intent, confidence}` is injected into the system prompt + saved to trace metadata.
+- **`confirmation-gate.ts`** — `affirmation` classification decides whether to open the gate.
+
+## 14. Constitutional Reviewer (supervisor)
+
+Detail in `docs/architecture/internals/SUPERVISOR.md`.
+
+- Model: Groq `llama-3.1-8b-instant`, `temperature=0`, `response_format={type:'json_object'}`.
+- Timeout 1500ms. Fail-open on timeout, network error, parse fail.
+- Rubric v1 (versioned in code): 6 codes (`TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`).
+- Hard rules: explicit utterance overrides any "suspicion by empty memory"; reviewer does NOT validate RLS/SQL/slot conflicts.
+
+### Injection into BookingEngine
+
+```ts
+const ctx = {
+  ...ctxBase,
+  runWriteGuard: async (toolName, args) => {
+    const outcome = await reviewWriteOrFailOpen({
+      reviewer, toolName, args,
+      scope:         { businessId, channel: 'voice' | 'whatsapp' },
+      userUtterance: userText,
+      recentMemory:  recalled.map(r => ({ content, similarity, createdAt })),
+    })
+    return outcome.allowed ? null : { /* failure result */ }
+  },
+}
+```
+
+BookingEngine invokes the hook **only** for tools in `REVIEWED_WRITE_TOOLS`. Reads go through directly.
+
+## 15. Payment system — three gateways
+
+Detail in `docs/architecture/PAYMENTS.md` and `docs/architecture/internals/PAYPAL_RPC_DESIGN.md`.
+
+### Convergence in `saas_invoices`
+
 ```sql
-SELECT * FROM wa_audit_logs
-WHERE business_id = '...'
-ORDER BY timestamp DESC
-LIMIT 100;
+CREATE TABLE saas_invoices (
+  id              uuid PRIMARY KEY,
+  business_id     uuid REFERENCES businesses(id),
+  plan_purchased  text,
+  amount_usd      numeric,
+  status          saas_invoice_status,
+  payment_provider text,
+  paypal_order_id text UNIQUE,
+  np_invoice_id   text UNIQUE,
+  np_payment_id   text,
+  crypto_amount   numeric,
+  crypto_currency text,
+  created_at      timestamptz,
+  updated_at      timestamptz
+);
 ```
 
-**Statuses:**
-- `RECEIVED` — Message entered system
-- `PROCESSED` — Fully handled, action executed
-- `RATE_LIMITED` — Blocked by Layer 1
-- `BOOKING_LIMIT_EXCEEDED` — Blocked by Layer 3
-- `LLM_RATE_LIMITED` — Groq 429, user got retry message
-- `ERROR` — Unexpected error, user got apology message
+### PayPal — dual frontend + webhook
 
----
-
-**Last Updated:** 2026-03-29
-
-**Author:** Luis C.
-## Luis IA V4 — Strategic Evolution & Hardening
-
-The V4 evolution transforms Luis from a reactive assistant into a **Proactive Growth Agent**, implementing "Platinum Architecture" standards for resilience and security.
-
-### 1. AI Shielding & Hardening (Defense in Depth)
-
-We implement a 3-layer security system to protect the AI Orchestrator:
-
-#### Layer 1: Prompt Firewall (Alignment)
-The `SYSTEM_PROMPT` (managed in `assistant-prompt-helper.ts`) includes non-negotiable security directives:
-- **Instruction Protection**: Explicitly forbids revealing internal prompts or system rules.
-- **Jailbreak Resistance**: Ignores common injection patterns like "ignore previous instructions".
-- **Purpose Alignment**: Refuses any request outside the scope of business management.
-
-#### Layer 2: Domain Guardrails (Execution)
-Every tool in `assistant-tools.ts` now features strict input validation:
-- **Amount Validation**: `register_payment` rejects non-positive or suspiciously high amounts.
-- **Date validation**: `book_appointment` validates dates to prevent ghost bookings in the far past or future.
-- **Multi-tenant Verification**: Tools perform an explicit ownership check (client belongs to business) before execution.
-
-#### Layer 3: Response Sanitization (Transport)
-- **Error Masking**: Database or technical errors are caught at the `AssistantService` level. 
-- **Friendly Fallback**: The user receives a polite "Technical difficulty" message instead of raw SQL or system traces, preventing architectural leakage.
-
-### 2. CFO Advanced: Monthly Forecasting
-
-Luis can now project revenue based on real-time data:
-- **Logic**: Aggregates confirmed transactions + projected income from future appointments (based on service price).
-- **Tool**: `get_monthly_forecast`.
-- **Business Rule**: Only accounts for the current calendar month to maintain focus.
-
-### 3. Active CRM: WhatsApp Reactivation
-
-A strategic tool to recover "sleeping" revenue:
-- **Inactive Detection**: Identifies clients without appointments in >60 days via `get_inactive_clients_rpc` (optimized at the DB level).
-- **One-Click Reactivation**: A voice command ("Who hasn't come lately? ... Send them a message") triggers a template-based WhatsApp message via the `whatsapp-service` Edge Function.
-
-### 4. Performance Shield (Platinum Infrastructure)
-
-To ensure the "Executive Assistant" experience feels premium and lag-free:
-- **DB Indexing**: Compound indexes on `start_at` and `paid_at` for sub-second BI queries.
-- **RPC Migration**: Heavy data processing (like client filtering) moved from Node/Deno memory to PostgreSQL RPCs for maximum efficiency.
-- **AbortController UX**: The dashboard voice greeting handles component unmounting professionally to avoid resource leaks.
-
----
-
-## 10. B2B Crypto Payments Integration (NOWPayments)
-
-### Architecture Diagram
-
-The SaaS billing architecture is completely isolated from the final customer's transactions to ensure data purity. It uses Upstash QStash to guarantee webhook delivery and idempotency.
-
-```text
-Dashboard UI -> Select Plan ($10 / $15)
-  ↓
-Server Action (createInvoice)
-  ├─ Calls NOWPayments API
-  └─ Returns checkout URL
-  ↓
-Business Owner pays via Crypto Wallet
-  ↓
-NOWPayments IPN Webhook (POST /api/webhooks/nowpayments)
-  ├─ Validates HMAC SHA-512 Signature
-  ├─ Publishes to QStash Queue (Deduplication-Id = np_payment_id)
-  └─ Returns 200 OK immediately
-  ↓
-QStash Worker (POST /api/queue/process-saas-payment)
-  ├─ Normalizes Status (waiting, confirming, finished, partially_paid)
-  ├─ Updates `saas_invoices` table
-  ├─ If finished: Updates `businesses.plan` & `subscription_ends_at`
-  └─ Inserts in-app Notification (Billing Success / Alert)
+```
+1. Server action createPaypalOrder → POST /v2/checkout/orders → stores paypal_order_id in saas_invoices
+2. User approves in popup
+3.A Frontend onApprove → capturePayPalOrderAction → finalizePayPalPayment(orderId, amount)
+3.B PayPal webhook PAYMENT.CAPTURE.COMPLETED → /api/webhooks/paypal
+   ├─ verifyWebhookSignature (official PayPal API /v1/notifications/verify-webhook-signature)
+   └─ finalizePayPalPayment(orderId, amount)
+4. RPC fn_finalize_paypal_payment (FOR UPDATE):
+   - Lock row
+   - status=finished? → already_processed
+   - amount mismatch? → amount_mismatch
+   - else → status=finished + business.plan = plan_purchased + subscription_ends_at additive
+5. Post-RPC (in Node):
+   - notifications.insert('Payment confirmed!')
+   - applyReferralBonus
 ```
 
-### Database Isolation
+**Atomic Postgres idempotency**: if both callers (frontend + webhook) arrive simultaneously, the first locks, the second waits and sees `status=finished` → returns `already_processed`. No application code needed.
 
-We strictly avoid polluting the `transactions` table (which is meant for B2C).
-- **`saas_invoices`**: A dedicated table handling only NOWPayments B2B invoices.
-- **`businesses.subscription_ends_at`**: A timestamp managing the SaaS lifecycle.
+**Amount validation**: if the frontend lied about the amount, the RPC compares against `saas_invoices.amount_usd` (recorded at order creation, before the user flow). $0.01 tolerance for float.
 
-### Resilience & Idempotency (Vercel-Safe)
+**Opt-in `PAYPAL_ENV=live`**: because Vercel injects `NODE_ENV=production` in previews. If we trusted `NODE_ENV`, every PR would charge real money.
 
-To prevent double-provisioning or race conditions in serverless environments:
-1. **QStash Deduplication**: Every webhook payload from NOWPayments generates an `Upstash-Deduplication-Id` header based on the unique `payment_id`. QStash guarantees that duplicate webhooks (common in crypto networks) are rejected before hitting the worker.
-2. **Asynchronous Processing**: Webhooks return `200 OK` in <50ms. All heavy DB logic and notifications happen in the background queue.
-3. **Partial Payments (Crypto Chaos)**: If a business sends less crypto than required (`partially_paid`), the system creates a database alert but does *not* provision the plan.
+### NOWPayments (crypto)
 
-### Lifecycle Management (CRON)
+```
+1. Server action createSaaSCheckoutSession → POST nowpayments.io/v1/invoice → np_invoice_id
+2. saas_invoices.insert(status='waiting', np_invoice_id, payment_provider='nowpayments')
+3. User pays on NOWPayments hosted page (USDT BSC or others)
+4. NOWPayments IPN webhook → /api/webhooks/nowpayments
+   ├─ verify HMAC with NOWPAYMENTS_IPN_SECRET
+   └─ Publish to QStash (back-pressure)
+5. QStash dequeue → /api/queue/process-saas-payment
+   ├─ verifySignatureAppRouter (QSTASH_CURRENT_SIGNING_KEY / NEXT_SIGNING_KEY)
+   ├─ toInvoiceStatus(payment_status) → unified enum
+   ├─ Update saas_invoices
+   ├─ If 'finished' → update businesses.plan + additive + notification + applyReferralBonus
+   └─ If 'partially_paid' → warning notification
+```
 
-A daily CRON job (`/api/cron/check-subscriptions`) polls the `businesses` table:
+**Why QStash instead of inline processing**: the NOWPayments webhook must respond quickly. If we processed inline and the transaction is slow (5-30s), NOWPayments retries → potential duplication. QStash returns 200 OK immediately and the heavy processing goes serialized in a queue with dedup.
+
+### Manual (Pago Móvil VE + Binance Pay)
+
+`/dashboard/admin/payments` accessible only to `role === 'platform_admin'`. The owner submits a receipt via form → row in `manual_payments` → admin approves/rejects → if approved, triggers the same activation flow. BCV rate (Central Bank of Venezuela) + 30% markup in `lib/payments/bcv-rate.ts`.
+
+### Additive `computeNextSubscriptionEnd`
+
+```ts
+function computeNextSubscriptionEnd(currentEndsAt, daysToAdd=30) {
+  const now = new Date()
+  const currentEnd = currentEndsAt ? new Date(currentEndsAt) : now
+  const baseDate = currentEnd > now ? currentEnd : now
+  baseDate.setDate(baseDate.getDate() + daysToAdd)
+  return baseDate.toISOString()
+}
+```
+
+Early renewal adds to the current end — loyalty reward, not penalty.
+
+### Expiration cron
+
+`/api/cron/check-subscriptions` (daily). For every `businesses.subscription_ends_at < now` and `plan ≠ free`:
+1. Downgrade to free.
+2. Notification with renewal CTA.
+
+## 16. Referral system
+
+`lib/referrals/rewards.ts` + `applyReferralBonus` in `subscription-fulfillment.ts`.
+
+### Flow
+
+```
+1. Each business.referral_code is generated at registration (SQL trigger).
+2. Public landing /[locale]/invite/[code] shows the offer and CTA.
+3. /[locale]/register/ captures ?ref=<code> from the URL, persists in sessionStorage.
+4. On business creation, businesses.referred_by_id = (lookup by referral_code).
+5. When the referee closes their FIRST 'finished' saas_invoice:
+   - count(*) FROM saas_invoices WHERE business_id=referee AND status='finished' = 1
+   - Lookup referrer
+   - Validate referrer.plan ≠ free
+   - subscription_ends_at += REFERRAL_BONUS_DAYS (30)
+   - notification 'success': "Month earned!"
+```
+
+### Why `count === 1`
+
+If it fired on every payment, the referrer would get +30 days forever. The "only the first payment" rule turns the referee into a real customer (not just a sign-up).
+
+## 17. Roles, employees and permissions
+
+`users` table:
 ```sql
-UPDATE businesses
-SET plan = 'free', subscription_ends_at = NULL
-WHERE subscription_ends_at < NOW() AND plan != 'free';
+id            uuid PRIMARY KEY REFERENCES auth.users(id),
+business_id   uuid REFERENCES businesses(id),
+name          text,
+role          text CHECK (role IN ('owner','employee','platform_admin')),
+status        text,
+phone         text,
+created_at    timestamptz
 ```
-This automatically degrades businesses that did not renew their crypto-subscription, requiring no manual intervention.
 
-### UI & Realtime
+### Roles
 
-- The `PlanManager` component subscribes to `saas_invoices` changes via **Supabase Realtime**.
-- The dashboard automatically updates the active plan and displays a success state without requiring a page refresh, offering a seamless UX despite the asynchronous nature of blockchains.
+| Role | Capabilities |
+|---|---|
+| `owner` | Creates/edits business, manages employees, sees finances, pays subscription, full dashboard access. |
+| `employee` | Handles appointments, marks completed, sees business agenda, does NOT see finances or billing. |
+| `platform_admin` | Cronix internal support. Sees `/dashboard/admin/payments`. Manually assigned only. |
+
+### Multi-employee
+
+- Owner invites employees from `/dashboard/settings/team` (server action `inviteEmployee`).
+- Magic-link email to `/auth/callback` that creates the `users` row with `business_id` already set and `role='employee'`.
+- `appointments` rows have an optional `assigned_user_id` → allows assigning specific staff.
+- `GetAvailableSlotsUseCase` can receive `staffId` and filter slots by employee schedule.
+
+### Protective migration `protect_admin_role_trigger`
+
+Migration `20260504000000_fix_protect_admin_role_trigger.sql` adds a trigger preventing a client/RLS request from setting `role='platform_admin'` except from service_role.
+
+## 18. Rate limiting, circuit breaker and resilience
+
+### Layered rate limits
+
+| Layer | Scope | Implementation | Default |
+|---|---|---|---|
+| WA phone | sender → 60s | RPC `fn_wa_check_rate_limit` (Postgres sliding window) | 10/60s |
+| WA business | business → 60s | similar RPC | 50/60s |
+| WA token | business → day | `wa_token_usage` counter | 300K tokens/day |
+| WA booking | sender → 24h | RPC `fn_book_appointment_wa` (idempotent) | 2/24h |
+| Voice request | userId → 60s | Redis INCR + EXPIRE | 30/min |
+| API login | IP → 15min | `lib/rate-limit/` (Redis sliding) | 5/15min |
+| Passkey register | IP → 1h | same module | 3/h |
+
+### Circuit breaker
+
+`lib/ai/circuit-breaker.ts` (Node) and `process-whatsapp/guards.ts:checkCircuitBreaker` (Deno). Per external service (LLM, STT, TTS):
+
+- N consecutive failures → state `open`.
+- While `open`, calls rejected immediately with `CircuitBreakerError`.
+- After a cool-off, goes to `half-open` and allows a probe call.
+- Probe passes → `closed`. Probe fails → `open` again.
+
+### QStash retry ladder
+
+When the handler returns 503 + Retry-After, QStash waits and retries. Combined with circuit breaker:
+- LLM rate-limit → 503 + Retry-After (rate-limit seconds).
+- Circuit open → 503 + Retry-After=30.
+- Transient crash → 503 + Retry-After=15.
+
+The end client (WhatsApp) gets the reply when the backend unblocks. Never sees the error.
+
+### DLQ (Dead Letter Queue)
+
+`supabase/functions/_shared/supabase.ts:logToDLQ`. Fatal errors or bugs go to a `dlq` table with `rawBody` + `error` + `service`. Allows reproducing the case and postmortem.
+
+## 19. Notifications (in-app + push + WhatsApp)
+
+### In-app (dashboard bell)
+
+`notifications` table:
+```sql
+id          uuid PRIMARY KEY,
+business_id uuid,
+title       text,
+content     text,
+type        text CHECK (type IN ('info','success','warning','error')),
+metadata    jsonb,
+read_at     timestamptz,
+created_at  timestamptz
+```
+
+Hook `lib/hooks/use-in-app-notifications.ts` subscribes via Supabase Realtime to `notifications WHERE business_id = X` and keeps an unread badge.
+
+TTL: daily cron purges `notifications` with `created_at < now() - 30 days` (migration `20260418000000_notifications_ttl.sql`).
+
+### Push notifications (Web Push + VAPID)
+
+- `lib/push-notifications/` + `supabase/functions/push-notify/`.
+- VAPID keys in env (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`).
+- User grants permission → service worker registers subscription → saved in `push_subscriptions`.
+- Any `notifications` with certain `type` triggers push via `push-notify` edge function.
+
+### WhatsApp notifications
+
+When an appointment is created/cancelled/rescheduled via the WA channel, the bot also sends a business-branded message to the client via `whatsapp-service`. Verifiable in `process-whatsapp/tool-executor.ts`.
+
+## 20. Internationalization (i18n)
+
+- `next-intl 4` with namespace-per-file under `messages/{locale}/`.
+- Supported locales: `es` (default), `en`, `fr`, `de`, `it`, `pt`.
+- App Router carries the locale in the path: `/[locale]/dashboard/...`.
+- Middleware (`middleware.ts`) detects the browser locale and redirects on first hit.
+- Server Components use `useTranslations(namespace)` (next-intl-aware).
+
+## 21. PWA and service worker
+
+- `@ducanh2912/next-pwa` (better-maintained fork of next-pwa).
+- Custom service worker handles:
+  - Static asset cache.
+  - Push notifications.
+  - Offline fallback for `/dashboard`.
+- Installable on mobile and desktop.
+
+## 22. Authentication, session and Passkeys
+
+### Auth flow
+
+- **Supabase Auth** handles email/password + Google OAuth.
+- **Magic links** for employee invitations.
+- **JWT** signed by Supabase → `@supabase/ssr` persists it in httpOnly + secure cookies.
+- Middleware reads the cookie and populates `auth.uid()` in RLS.
+
+### Session timeout
+
+`lib/auth/with-session-timeout.ts` wraps API routes that require active session. If JWT is expired → 401 + clear-cookie.
+
+### Passkeys (WebAuthn)
+
+- `@simplewebauthn/server` to verify credentials.
+- `@simplewebauthn/browser` to create them.
+- Flow:
+  1. `/api/passkey/register/options` → server issues challenge.
+  2. Browser signs with Touch ID / Windows Hello → POST to `/api/passkey/register/verify`.
+  3. Server validates and persists credential in `webauthn_credentials`.
+
+Detail: `docs/architecture/PASSKEY_WEBAUTHN_IMPLEMENTATION.md`.
+
+## 23. Frontend — App Router + RSC + state
+
+### Structure
+
+```
+app/
+├─ [locale]/
+│  ├─ layout.tsx               ← LocaleProvider + ThemeProvider + Providers (RQ)
+│  ├─ dashboard/
+│  │  ├─ layout.tsx            ← Sidebar + AuthGuard
+│  │  ├─ appointments/
+│  │  ├─ clients/
+│  │  ├─ finances/
+│  │  ├─ plans/                ← plan cards + referrals
+│  │  ├─ settings/
+│  │  │  ├─ team/              ← invite employees
+│  │  │  ├─ branding/          ← logo + colors
+│  │  │  ├─ working-hours/
+│  │  │  ├─ ai-rules/          ← free-form instructions for the bot
+│  │  │  └─ payment-method-modal.tsx
+│  │  ├─ profile/
+│  │  └─ admin/payments/       ← platform_admin only
+│  ├─ login/
+│  ├─ register/
+│  └─ invite/[code]/
+├─ api/...
+└─ auth/callback/
+```
+
+### Patterns
+
+- **RSC by default**: `'use client'` is only marked when there is state, events or hooks.
+- **Server Actions** for dashboard mutations. Direct Supabase access with cookies → RLS applies.
+- **TanStack Query** for client-side data fetching where granular cache + invalidation is needed.
+- **Realtime subscriptions** for `notifications` and `appointments`.
+- **Zod schemas** shared between forms and server-side validation.
+
+### Voice assistant in the dashboard
+
+- Recorder via `MediaRecorder` API (mobile) or `WebSpeech` API (desktop).
+- POST to `/api/assistant/token` to obtain a short-lived JWT (~1 min).
+- POST audio/JSON to the edge → reply `{text, audioUrl, actionPerformed}`.
+- TTS plays in the browser. `actionPerformed=true` invalidates affected queries.
+
+### Proactive welcome
+
+`/api/assistant/proactive` (GET) runs on dashboard mount. Generates a dynamic greeting with `get_today_summary` using Groq + Deepgram Aura-2 TTS.
+
+## 24. Database — schema and migrations
+
+69 versioned migrations in `supabase/migrations/`. Categories:
+
+| Category | Examples |
+|---|---|
+| Base schema | `businesses`, `users`, `services`, `clients`, `appointments`, `appointment_services` |
+| RLS hardening | `20260413..._fix_users_rls_tenant_isolation.sql`, `20260414..._rls_current_business_id.sql`, `20260415..._fix_users_rls_recursion.sql` |
+| Security fixes | `20260410000001_fix_security_definer_view.sql`, `20260410000002_fix_function_search_paths.sql`, `20260410000003_final_privacy_hardening.sql` |
+| Performance | `20260411..._composite_indexes_hot_paths.sql`, `20260412..._performance_phase1.sql` |
+| Realtime | `20260421010000_appointments_realtime.sql`, `20260421160000_notifications_realtime.sql` |
+| Cron | `20260421120000_activate_cron_reminders.sql`, `20260421170000_fix_cron_reminders_hourly.sql` |
+| Payments | `20260430120000_saas_invoices.sql`, `20260502000000_manual_payments.sql`, `20260516120000_paypal_support.sql`, `20260516130000_paypal_finalize_rpc.sql` |
+| Referrals | `20260504100000_referral_system.sql` |
+| Storage | `20260421000000_logos_storage_bucket.sql` |
+| WhatsApp | `20260419183229_add_phone_get_businesses_at_hour.sql`, `20260516000000_wa_rpc_phone_normalization.sql`, `20260515120000_harden_client_uniqueness.sql` |
+| Idempotency | `20260416000000_transactions_idempotency.sql`, `20260420000002_fn_batch_create_transactions.sql` |
+| Custom RPCs | `20260420000001_fn_create_business_and_link_owner.sql`, `20260420000005_client_debts_rpc.sql`, `20260420000006_fn_reschedule_appointment_wa.sql`, `20260412000003_dashboard_stats_rpc.sql` |
+| AI | `20260518000000_ai_memory_v2.sql`, `20260519000000_ai_traces.sql`, `20260520000000_entity_relationships.sql`, `20260521000000_ai_training_export.sql` |
+
+### Relevant custom RPCs
+
+- `fn_create_business_and_link_owner` — atomic onboarding.
+- `fn_batch_create_transactions` — atomic batch of financial movements.
+- `fn_book_appointment_wa` — phone-keyed idempotent booking.
+- `fn_reschedule_appointment_wa` — WA reschedule with upsert by phone_digits.
+- `fn_finalize_paypal_payment` — atomic idempotency with FOR UPDATE.
+- `fn_wa_check_rate_limit` — atomic sliding window.
+- `client_debts_rpc` — live debt calculation.
+- `dashboard_stats_rpc` — dashboard metrics in a single query.
+- `match_ai_memories_v2` — vector search with tenant filter.
+- `ai_traces_sample_window` — sampling for training export.
+- `get_businesses_at_hour` — for reminder crons.
+
+## 25. Test suite
+
+Detail in `docs/TESTING.md`. Summary:
+
+- **114 test files**.
+- Vitest unit + integration + Playwright E2E.
+- Critical tests:
+  - `TenantEnforcer.test.ts` + `adversarial.test.ts` (multi-tenant).
+  - `BookingEngine.test.ts` + resolvers (domain).
+  - `parity.test.ts` for each `_shared/` module (Node↔Deno).
+  - `fast-path.test.ts` for each voice-worker capability.
+  - `nowpayments.test.ts` (HMAC).
+- Target coverage: 90% in use-cases, 85% in `lib/ai/core`, 80% in `lib/payments`.
+
+## 26. Quality and CI/CD pipelines
+
+- **Pre-commit (Husky + lint-staged)**: `eslint --fix` on staged files.
+- **Pre-push**: `npm run lint && npm run typecheck && npm test && npm audit`. Any failure cancels the push. **Do not use `--no-verify`**.
+- **Vercel preview** on every PR. `PAYPAL_ENV` is not set to `live` there.
+- **Sentry release** auto-created on merge to `main`.
+- **Supabase migrations** applied manually with `npx supabase db push` after review.
+
+Detail: `docs/operations/CI_CD_GATEKEEPER.md`.
+
+## 27. Deployment and operating costs
+
+### Deployment
+
+- **Vercel**: `git push` to `main` → preview build. Manual promotion to production.
+- **Supabase Edge Functions**: `npx supabase functions deploy <name>`.
+- **Migrations**: `npx supabase db push`.
+- **pg_cron**: configured via SQL in migrations.
+
+### Costs today
+
+**$0/month**. Free tiers of Groq, Gemini, Deepgram, Supabase, Upstash and Vercel cover the MVP.
+
+## 28. Architectural decisions (interview FAQ)
+
+### Why two runtimes instead of a unified monorepo?
+
+Supabase Edge Functions run on Deno. Deno has its own module resolver (`.ts` explicit in imports), doesn't understand `@/` paths, and uses `Deno.env`. Forcing a single runtime would force me to:
+- Bundle Node → Edge with esbuild → high deploy latency + painful debug.
+- Or abandon Edge Functions and use Vercel Cron (more expensive and higher latency when fetching to Postgres).
+
+The option I took (two runtimes with duplicated `_shared/` + parity tests) is the balance between simplicity and reuse.
+
+### Why phantom types for `TenantContext`?
+
+A `businessId: string` is indistinguishable from "any string" to TypeScript. A junior could write `bookingEngine.create('uuid-of-another-business', ...)` and it would compile. Phantom-typed `TenantContext` makes **only `TenantEnforcer.verify()`** capable of emitting one. It's safety by types, not by convention.
+
+### Why fail-open in the reviewer?
+
+The reviewer is layer 5 — the first 4 already suffice to guarantee correctness. If the reviewer fails (Groq timeout, malformed JSON, etc.), blocking legitimate bookings is a higher cost than letting one anomalous edge case through. Traces record every fail-open for audit.
+
+### Why explicit opt-in `PAYPAL_ENV=live`?
+
+Vercel injects `NODE_ENV=production` in ALL deploys, including PR previews. If we trusted `NODE_ENV` as the signal, every PR a collaborator pushes **would charge real money** on its preview deploy.
+
+### Why deterministic template in WA success path instead of LLM?
+
+Historical: when the 70B had to synthesize the final reply after a successful tool, it sometimes responded with 400 (rate-limit) → circuit-breaker opened → 503 → client without reply. The deterministic template (`renderBookingSuccessTemplate`) eliminates that failure point.
+
+### Why Zod as single source of truth?
+
+Each tool has a Zod schema. That schema serves **simultaneously** as:
+1. Runtime payload validator (`safeParse` before DB).
+2. `function.parameters` definition for the LLM.
+
+If you change a schema field, **both consumers update automatically**.
+
+### Why does the confirmation gate pass empty tools instead of sanitizing output?
+
+Sanitizing output is reactive: the model already thought up the tool, emitted it as text, and we erase it. Passing `tools=[]` is preventive: the model **doesn't see** the schemas → cannot "hallucinate" them. You remove the hallucination surface entirely.
+
+### Why is `recall` mandatory and throws if missing?
+
+The reviewer requires `recentMemory` as input for judgment. Accidentally passing `undefined` would mean the reviewer judges without context and could block legitimate bookings. The "always recall once per turn" rule guarantees that **the reviewer always sees the real memory (or an explicit empty array)**.
+
+### Why `FOR UPDATE` instead of `INSERT ... ON CONFLICT`?
+
+`ON CONFLICT` solves the "insert the same row twice" case, but here the problem is different: the row already exists (`saas_invoices` with `paypal_order_id`), and two callers want to **update** it simultaneously. `FOR UPDATE` is the correct primitive.
+
+### Why `business_id` in each repository, if RLS already filters?
+
+Defense in depth. If a future migration accidentally disables RLS, the repository still filters. If a repository is mistakenly called with service_role (which bypasses RLS), the explicit filter in code still protects.
+
+### Why separate episodic memory + observability instead of one table?
+
+Different life cycles:
+- **Memory** is model input → must be easily "recallable" by similarity + scope. Compact table, indexed by `(business_id, actor_kind, actor_key)` + IVFFLAT vector.
+- **Traces** are model output → structured metadata for BI + training.
+
+### Why zero-PII in the training export?
+
+A contractual promise to the businesses: "your client data doesn't leave your tenant". The pure transform to `TrainingSample` is restricted by TypeScript to structural fields — it can't leak PII even by accident.
+
+### Why two versions of the WhatsApp agent (8B decider + 70B synthesis)?
+
+- 8B is faster and cheaper for the ReAct loop.
+- 70B produces more natural replies.
+- Today the 70B is mostly skipped (deterministic template) on success.
+
+### Why CSV key rotation in `LLM_API_KEY`?
+
+Groq's free tier is measured per key. Having several keys ($0 each) lets us saturate gradually without touching paid plans.
+
+### Why Deepgram instead of OpenAI Whisper?
+
+- **Latency**: Deepgram Nova-2 ~300-700ms vs Whisper ~1-2s.
+- **Keywords boost**: Deepgram accepts a list of words to bias.
+- **$200 free tier**: many minutes.
+- **Aura-2 TTS in neutral Spanish**: competitive voice, <500ms latency.
+
+## 29. Defense script by level
+
+### Junior
+
+"Cronix is a multi-tenant SaaS for booking appointments via WhatsApp and a dashboard with a voice assistant. It's built with Next.js 15, React 19, TypeScript, Tailwind, Supabase (Postgres + Edge Functions + RLS) and Upstash (Redis + QStash). I wrote the dashboard frontend, payment server actions, repositories against Supabase, and unit tests. The most interesting thing I learned: how to isolate tenants with Postgres RLS and TypeScript phantom types, and how to avoid duplicate bookings with a per-turn fingerprint."
+
+### Middle
+
+"The stack is Next.js 15 (App Router + RSC) on Vercel for the dashboard and Server Actions, and Deno Edge Functions on Supabase for the AI agents (voice-worker, process-whatsapp) and webhooks. The runtime separation is physical — Node and Deno don't import each other — and we share logic by duplicating byte-by-byte under `supabase/functions/_shared/` with parity tests that fail on the slightest drift.
+
+AI uses Groq (Llama 3.3-70B + 3.1-8B with key rotation) and optional Gemini as fallback chain. Embeddings with `gte-small` running inside Supabase Edge runtime. STT/TTS with Deepgram Nova-2/Aura-2. All on free tiers — the production stack costs $0/month.
+
+Multi-tenant isolation is 5-layer: compile-time `TenantContext` phantom type, runtime `TenantEnforcer.verify()` with check against `users.business_id`, `.eq('business_id', X)` filters in every repository, RLS in Postgres, and a semantic `ConstitutionalReviewer` reviewing the coherence of every write.
+
+Payments with three gateways converging to `saas_invoices`: PayPal with async webhook + atomic `fn_finalize_paypal_payment` RPC with `FOR UPDATE` (atomic Postgres idempotency), NOWPayments crypto via QStash with back-pressure, and manual with admin approval. The referral system adds 30 days to the referrer when their referee closes the first `finished` payment.
+
+Tests: 114 files between unit (Vitest), integration (against local Supabase), components (RTL) and E2E (Playwright). Adversarial tests against prompt injection and cross-tenant. Pre-push runs lint + tsc + vitest + npm audit; no `--no-verify`."
+
+### Senior
+
+"The project tackles two scale problems: LLM hallucinations in operations with side effects (booking), and data isolation in multi-tenant SaaS.
+
+For hallucinations I implemented **10 verifiable mechanisms** combined: phantom typing of the tenant context, total fast-paths without LLM, deterministic date-guard, corpus frame-cutoff, per-turn fingerprint dedup, response bypass (`return_direct`), 2-turn confirmation gate that passes `tools=[]` to the model, embedded `<function>` recovery, semantic router with precomputed embeddings, and a fail-open constitutional reviewer with rubric versioned in code.
+
+For isolation I also combined 5 layers: phantom-typed `TenantContext`, `TenantEnforcer` with DB check, filtered repositories + ownership asserts, RLS with `current_business_id()` derived from JWT, and the constitutional reviewer detecting semantic `TENANT_MISMATCH`.
+
+Noteworthy decisions I justify:
+- Byte-by-byte duplication of `lib/ai/{memory,router,supervisor,training,observability}` under `supabase/functions/_shared/` with parity tests because Deno and Node can't cross-import and bundling was more expensive.
+- Zero synthesis LLM calls in WhatsApp when the tool succeeded: using a deterministic template closes the `400→circuit-breaker→503` loop we suffered.
+- `PAYPAL_ENV=live` explicit opt-in because Vercel sets `NODE_ENV=production` in previews — without opt-in every PR would charge real money.
+- Fail-open in the reviewer because the first 4 layers are sufficient and blocking legitimate bookings due to reviewer flakiness is worse than letting one anomalous edge case through.
+- Episodic memory with TTL instead of eternal retention because the reviewer only needs recent context (10 min) to detect `DUPLICATE_INTENT`.
+
+Observability: every turn generates an `ai_traces` row with latency, tokens, tool sequence (no args), outcome and query_hash (truncated SHA-256). A daily cron samples up to 500 traces per business, buckets them and exports them to `ai_training_exports` with `schema_version`. Zero PII guaranteed by types.
+
+Idempotent payments with RPC `fn_finalize_paypal_payment` using `SELECT ... FOR UPDATE` — Postgres locks the second caller until the first commits, and the second sees `status='finished'` → returns `already_processed`. Atomic at DB level, no distributed claim or application locks.
+
+Stack that fits in $0/month: Groq free + Gemini free + Deepgram $200 credits + Supabase free + Upstash free + Vercel free. End-to-end voice latency: 1.2-2.0s. WhatsApp with QStash retry ladder absorbs LLM rate-limits transparently to the client.
+
+The suite covers 114 files: adversarial tests against prompt-injection, Node-Deno parity, fast-paths, RPC idempotency, RLS audit, Playwright E2E. Pre-push runs lint + tsc + vitest + npm audit."
+
+## 30. Glossary
+
+| Term | Definition |
+|---|---|
+| BookingEngine | Central class that executes all appointment operations. `lib/ai/core/booking/BookingEngine.ts`. |
+| TenantContext | Phantom-typed object proving the caller verified the tenant. Only `TenantEnforcer.verify()` emits it. |
+| Fast-path | Agent path that runs a tool without going through the LLM, based on deterministic text patterns. |
+| LLM Bypass | Returning the tool's response directly to the user, without re-synthesis. `return_direct=True` pattern. |
+| Constitutional Reviewer | Reviewer LLM (Groq 8B) emitting verdict on semantic coherence of every write. Fail-open. |
+| Frame-cutoff | History point where the corpus is cut to avoid contamination from old attempts. |
+| Per-turn fingerprint | Canonical `(toolName + sortedArgs)` hash preventing executing the same tool twice in the same turn. |
+| RLS | Postgres Row Level Security. Policy filtering rows by JWT conditions. |
+| Parity test | Test verifying two files (Node and Deno) are byte-equivalent. |
+| Fail-open | Policy where a component's failure does NOT block the main flow — only the error is logged. |
+| Idempotency | Executing the same operation N times produces the same final state as executing it once. |
+| Anaphora | Reference to a conversational antecedent ("cancel it" → last appointment mentioned). |
+| QStash | Upstash queue with dedupe + retry. |
+| ReAct loop | LLM Reason+Act pattern: model decides which tool to call, sees the result, decides the next. |
+| ToolResult | Type returned by every BookingEngine operation. Never throws. |
+| pgvector | Postgres extension for vectors and similarity search. |
+| gte-small | Lightweight embeddings model (384 dim, L2-normalized) running inside Supabase Edge AI. |
+| VAPID | Web Push standard for authenticating the server. |
+| Phantom type | TypeScript type with a `unique symbol` brand that doesn't exist at runtime but prevents direct construction. |
+| Single source of truth | Pattern where a single entity governs multiple consumers. |

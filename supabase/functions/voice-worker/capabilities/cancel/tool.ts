@@ -62,6 +62,17 @@ export async function executeCancel(
     if (svc) serviceName = svc.name
   }
 
+  if (ctx.runWriteGuard) {
+    const denied = await ctx.runWriteGuard('cancel_appointment', {
+      appointmentId: apt.id,
+      clientName,
+      serviceName,
+      date: apt.start_at.slice(0, 10),
+      time: apt.start_at.slice(11, 16),
+    })
+    if (denied) return denied
+  }
+
   const { error } = await ctx.supabase
     .from('appointments')
     .update({ status: 'cancelled' })

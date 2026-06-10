@@ -19,3 +19,4 @@ export type { INotificationRepository, CreateNotificationPayload } from './INoti
 export type { IUserRepository, BusinessContext, TeamMember, CreateEmployeePayload } from './IUserRepository'
 export type { IBusinessRepository } from './IBusinessRepository'
 export type { IReminderRepository, PendingReminderRow } from './IReminderRepository'
+export type { IGraphRepository } from './IGraphRepository'

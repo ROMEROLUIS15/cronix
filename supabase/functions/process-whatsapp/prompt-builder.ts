@@ -9,6 +9,7 @@
 
 import type { BusinessRagContext } from "./types.ts"
 import type { MemoryRecord }       from "../_shared/memory/contracts.ts"
+import type { ClassifyResult }     from "../_shared/router/contracts.ts"
 
 // ── Shared Utility ────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ export function buildMinimalSystemPrompt(
   context:      BusinessRagContext,
   customerName: string,
   recalled?:    ReadonlyArray<MemoryRecord>,
+  intent?:      ClassifyResult | null,
 ): string {
   const { business, services, client, activeAppointments, bookedSlots } = context
   const { settings, timezone } = business
@@ -161,6 +163,15 @@ IDENTIFICADORES:
     for (const m of recalled) {
       prompt += `• ${m.content}\n`
     }
+  }
+
+  // Intent hint — only injected when confidence is high enough to be useful.
+  // The 'matched' phrase is intentionally hidden to avoid the LLM parroting it.
+  if (intent && intent.confidence >= 0.85) {
+    const confidencePct = Math.round(intent.confidence * 100)
+    prompt += `\n--- INTENCIÓN DETECTADA (señal interna) ---\n`
+    prompt += `Probable intención del usuario: ${intent.intent} (confianza ${confidencePct}%).\n`
+    prompt += `Úsala como pista, NO como certeza. Si las palabras del cliente la contradicen, ignora esta señal.\n`
   }
 
   return prompt
