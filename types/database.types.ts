@@ -34,6 +34,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_agent_alerts: {
+        Row: {
+          breakdown: Json
+          created_at: string
+          delivered: boolean
+          error_rate: number
+          error_turns: number
+          id: string
+          total_turns: number
+          window_min: number
+        }
+        Insert: {
+          breakdown?: Json
+          created_at?: string
+          delivered?: boolean
+          error_rate: number
+          error_turns: number
+          id?: string
+          total_turns: number
+          window_min: number
+        }
+        Update: {
+          breakdown?: Json
+          created_at?: string
+          delivered?: boolean
+          error_rate?: number
+          error_turns?: number
+          id?: string
+          total_turns?: number
+          window_min?: number
+        }
+        Relationships: []
+      }
       ai_memories: {
         Row: {
           business_id: string | null
@@ -79,6 +112,53 @@ export type Database = {
           },
         ]
       }
+      ai_memories_v2: {
+        Row: {
+          actor_key: string
+          actor_kind: string
+          business_id: string
+          content: string
+          created_at: string
+          embedding: string
+          expires_at: string | null
+          id: string
+          kind: string
+          metadata: Json
+        }
+        Insert: {
+          actor_key: string
+          actor_kind: string
+          business_id: string
+          content: string
+          created_at?: string
+          embedding: string
+          expires_at?: string | null
+          id?: string
+          kind: string
+          metadata?: Json
+        }
+        Update: {
+          actor_key?: string
+          actor_kind?: string
+          business_id?: string
+          content?: string
+          created_at?: string
+          embedding?: string
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_memories_v2_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_tool_audit_log: {
         Row: {
           args_fingerprint: string | null
@@ -111,6 +191,115 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      ai_traces: {
+        Row: {
+          actor_key: string
+          actor_kind: string
+          business_id: string
+          channel: string
+          created_at: string
+          error_code: string | null
+          final_text_sha: string | null
+          id: string
+          latency_ms: number
+          llm_steps: Json
+          metadata: Json
+          outcome: string
+          query_sha: string
+          steps_count: number
+          tool_calls: Json
+          tools_count: number
+          total_tokens: number
+        }
+        Insert: {
+          actor_key: string
+          actor_kind: string
+          business_id: string
+          channel: string
+          created_at?: string
+          error_code?: string | null
+          final_text_sha?: string | null
+          id?: string
+          latency_ms?: number
+          llm_steps?: Json
+          metadata?: Json
+          outcome: string
+          query_sha: string
+          steps_count?: number
+          tool_calls?: Json
+          tools_count?: number
+          total_tokens?: number
+        }
+        Update: {
+          actor_key?: string
+          actor_kind?: string
+          business_id?: string
+          channel?: string
+          created_at?: string
+          error_code?: string | null
+          final_text_sha?: string | null
+          id?: string
+          latency_ms?: number
+          llm_steps?: Json
+          metadata?: Json
+          outcome?: string
+          query_sha?: string
+          steps_count?: number
+          tool_calls?: Json
+          tools_count?: number
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_traces_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_training_exports: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          jsonl: Json
+          range_end: string
+          range_start: string
+          sample_count: number
+          schema_version: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          jsonl?: Json
+          range_end: string
+          range_start: string
+          sample_count: number
+          schema_version?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          jsonl?: Json
+          range_end?: string
+          range_start?: string
+          sample_count?: number
+          schema_version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_training_exports_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       appointment_reminders: {
         Row: {
@@ -427,6 +616,56 @@ export type Database = {
           },
         ]
       }
+      entity_relationships: {
+        Row: {
+          business_id: string
+          confidence: number
+          created_at: string
+          edge_type: Database["public"]["Enums"]["edge_type"]
+          expires_at: string | null
+          from_id: string
+          from_kind: Database["public"]["Enums"]["entity_kind"]
+          id: string
+          metadata: Json
+          to_id: string
+          to_kind: Database["public"]["Enums"]["entity_kind"]
+        }
+        Insert: {
+          business_id: string
+          confidence?: number
+          created_at?: string
+          edge_type: Database["public"]["Enums"]["edge_type"]
+          expires_at?: string | null
+          from_id: string
+          from_kind: Database["public"]["Enums"]["entity_kind"]
+          id?: string
+          metadata?: Json
+          to_id: string
+          to_kind: Database["public"]["Enums"]["entity_kind"]
+        }
+        Update: {
+          business_id?: string
+          confidence?: number
+          created_at?: string
+          edge_type?: Database["public"]["Enums"]["edge_type"]
+          expires_at?: string | null
+          from_id?: string
+          from_kind?: Database["public"]["Enums"]["entity_kind"]
+          id?: string
+          metadata?: Json
+          to_id?: string
+          to_kind?: Database["public"]["Enums"]["entity_kind"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_relationships_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
@@ -477,6 +716,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      failed_password_attempts: {
+        Row: {
+          attempt_count: number
+          business_id: string | null
+          created_at: string
+          email: string
+          id: string
+          last_attempt_at: string
+          locked_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          business_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          last_attempt_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          business_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          last_attempt_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       notification_subscriptions: {
         Row: {
@@ -648,6 +920,75 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_alerts: {
+        Row: {
+          alert_type: Database["public"]["Enums"]["security_alert_type"]
+          business_id: string
+          created_at: string
+          id: string
+          ip_address: unknown
+          lockout_count_24h: number | null
+          recommended_action: string | null
+          resolution_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          severity: Database["public"]["Enums"]["alert_severity"]
+          status: string | null
+          updated_at: string
+          user_agent: string | null
+          user_email: string
+        }
+        Insert: {
+          alert_type: Database["public"]["Enums"]["security_alert_type"]
+          business_id: string
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          lockout_count_24h?: number | null
+          recommended_action?: string | null
+          resolution_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity: Database["public"]["Enums"]["alert_severity"]
+          status?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_email: string
+        }
+        Update: {
+          alert_type?: Database["public"]["Enums"]["security_alert_type"]
+          business_id?: string
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          lockout_count_24h?: number | null
+          recommended_action?: string | null
+          resolution_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          status?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_alerts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "security_alerts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1176,6 +1517,29 @@ export type Database = {
       _table_privs: { Args: never; Returns: unknown[] }
       _temptypes: { Args: { "": string }; Returns: string }
       _todo: { Args: never; Returns: string }
+      ai_traces_sample_window: {
+        Args: {
+          p_business_id: string
+          p_limit?: number
+          p_range_end: string
+          p_range_start: string
+        }
+        Returns: {
+          channel: string
+          created_at: string
+          error_code: string
+          intent: string
+          latency_ms: number
+          outcome: string
+          steps_count: number
+          tool_sequence: string[]
+          tools_count: number
+          total_tokens: number
+          trace_id: string
+        }[]
+      }
+      ai_traces_summary_24h: { Args: { p_business_id: string }; Returns: Json }
+      check_ai_agent_error_rate: { Args: never; Returns: undefined }
       col_is_null:
         | {
             Args: {
@@ -1236,7 +1600,7 @@ export type Database = {
       findfuncs: { Args: { "": string }; Returns: string[] }
       finish: { Args: { exception_on_failure?: boolean }; Returns: string[] }
       fn_apply_referral_bonus: {
-        Args: { p_referred_business_id: string; p_days?: number }
+        Args: { p_days?: number; p_referred_business_id: string }
         Returns: {
           applied: boolean
           referrer_id: string
@@ -1253,6 +1617,14 @@ export type Database = {
           p_client_phone: string
           p_service_id: string
           p_start_at: string
+        }
+        Returns: Json
+      }
+      fn_check_password_attempts: {
+        Args: {
+          lockout_minutes?: number
+          max_attempts?: number
+          p_email: string
         }
         Returns: Json
       }
@@ -1285,21 +1657,21 @@ export type Database = {
           }
       fn_finalize_crypto_payment: {
         Args: {
-          p_np_invoice_id: string
-          p_np_payment_id: string
-          p_status: string
           p_crypto_amount: number
           p_crypto_currency: string
           p_days?: number
+          p_np_invoice_id: string
+          p_np_payment_id: string
+          p_status: string
         }
         Returns: {
-          result_status: string
-          invoice_id: string
           business_id: string
-          plan_purchased: string
+          invoice_id: string
           invoice_status: string
+          plan_purchased: string
           referral_bonus_applied: boolean
           referrer_business_id: string
+          result_status: string
         }[]
       }
       fn_finalize_paypal_payment: {
@@ -1308,9 +1680,9 @@ export type Database = {
           business_id: string
           invoice_id: string
           plan_purchased: string
-          result_status: string
           referral_bonus_applied: boolean
           referrer_business_id: string
+          result_status: string
         }[]
       }
       fn_find_client_by_phone: {
@@ -1383,6 +1755,10 @@ export type Database = {
         Args: { target_business_id: string }
         Returns: undefined
       }
+      fn_record_failed_password_attempt: {
+        Args: { p_business_id?: string; p_email: string }
+        Returns: Json
+      }
       fn_reschedule_appointment_wa: {
         Args: {
           p_appointment_id: string
@@ -1392,6 +1768,20 @@ export type Database = {
         Returns: Json
       }
       fn_reset_all_web_rate_limits: { Args: never; Returns: undefined }
+      fn_reset_password_attempts: { Args: { p_email: string }; Returns: Json }
+      fn_resolve_security_alert: {
+        Args: { p_alert_id: string; p_notes?: string; p_status: string }
+        Returns: Json
+      }
+      fn_upsert_reminder: {
+        Args: {
+          p_appointment_id: string
+          p_business_id: string
+          p_minutes_before: number
+          p_remind_at: string
+        }
+        Returns: string
+      }
       fn_wa_check_booking_limit: {
         Args: {
           p_business_id: string
@@ -1423,19 +1813,10 @@ export type Database = {
       }
       fn_wa_gc_business_usage: { Args: never; Returns: undefined }
       fn_wa_gc_rate_limits: { Args: never; Returns: undefined }
-      fn_wa_report_service_failure:
-        | {
-            Args: {
-              p_error?: string
-              p_service_name: string
-              p_threshold?: number
-            }
-            Returns: undefined
-          }
-        | {
-            Args: { p_service_name: string; p_threshold?: number }
-            Returns: undefined
-          }
+      fn_wa_report_service_failure: {
+        Args: { p_service_name: string; p_threshold?: number }
+        Returns: undefined
+      }
       fn_wa_report_service_success: {
         Args: { p_service_name: string }
         Returns: undefined
@@ -1517,6 +1898,7 @@ export type Database = {
         | { Args: { "": string }; Returns: boolean[] }
     }
     Enums: {
+      alert_severity: "none" | "warning" | "critical" | "immediate_review"
       appointment_status:
         | "pending"
         | "confirmed"
@@ -1525,6 +1907,8 @@ export type Database = {
         | "no_show"
       auth_provider: "email" | "google" | "hybrid"
       business_plan: "free" | "pro" | "enterprise"
+      edge_type: "aliases_with" | "prefers_time_window"
+      entity_kind: "client" | "service" | "staff" | "business" | "appointment"
       expense_category:
         | "supplies"
         | "rent"
@@ -1542,6 +1926,13 @@ export type Database = {
         | "failed"
         | "expired"
         | "refunded"
+      security_alert_type:
+        | "password_lockout_threshold"
+        | "suspicious_ip"
+        | "suspicious_user_agent"
+        | "credential_stuffing_detected"
+        | "account_recovery_attempted"
+        | "unusual_login_location"
       user_role: "owner" | "employee" | "platform_admin"
       user_status: "pending" | "active" | "rejected"
     }
@@ -1676,6 +2067,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      alert_severity: ["none", "warning", "critical", "immediate_review"],
       appointment_status: [
         "pending",
         "confirmed",
@@ -1685,6 +2077,8 @@ export const Constants = {
       ],
       auth_provider: ["email", "google", "hybrid"],
       business_plan: ["free", "pro", "enterprise"],
+      edge_type: ["aliases_with", "prefers_time_window"],
+      entity_kind: ["client", "service", "staff", "business", "appointment"],
       expense_category: [
         "supplies",
         "rent",
@@ -1704,8 +2098,17 @@ export const Constants = {
         "expired",
         "refunded",
       ],
+      security_alert_type: [
+        "password_lockout_threshold",
+        "suspicious_ip",
+        "suspicious_user_agent",
+        "credential_stuffing_detected",
+        "account_recovery_attempted",
+        "unusual_login_location",
+      ],
       user_role: ["owner", "employee", "platform_admin"],
       user_status: ["pending", "active", "rejected"],
     },
   },
 } as const
+
