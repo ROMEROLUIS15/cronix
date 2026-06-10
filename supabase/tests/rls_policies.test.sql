@@ -606,8 +606,8 @@ BEGIN
   VALUES ('ff000001-0000-0000-0000-000000000001', biz_a, 'client', client_a, 'service', svc_a, 'prefers_time_window')
   ON CONFLICT DO NOTHING;
 
-  INSERT INTO public.security_alerts (id, alert_type, severity, user_email)
-  VALUES ('99000001-0000-0000-0000-000000000001', 'password_lockout_threshold', 'warning', 'victim@test.com')
+  INSERT INTO public.security_alerts (id, business_id, alert_type, severity, user_email)
+  VALUES ('99000001-0000-0000-0000-000000000001', biz_a, 'password_lockout_threshold', 'warning', 'victim@test.com')
   ON CONFLICT DO NOTHING;
 END $$;
 
