@@ -117,7 +117,7 @@ export async function finalizePayPalPayment(
     return { status: 'db_error', message: error.message };
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
+  const row = Array.isArray(data) ? data[0]! : data;
   if (!row) {
     return { status: 'db_error', message: 'RPC returned no rows' };
   }

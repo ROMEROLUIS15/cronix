@@ -31,8 +31,8 @@ export type NOWPaymentsInvoiceResponse = {
 };
 
 export class NOWPaymentsAPI {
-  private apiKey: string;
-  private ipnSecret: string;
+  apiKey: string;
+  ipnSecret: string;
 
   constructor() {
     this.apiKey = process.env.NOWPAYMENTS_API_KEY || '';
@@ -69,7 +69,7 @@ export class NOWPaymentsAPI {
         invoice_url: resData.invoice_url,
         invoice_id: resData.id?.toString()
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('NOWPayments Fetch Error:', error);
       return { error: 'Internal error communicating with payment gateway' };
     }
@@ -91,9 +91,9 @@ export class NOWPaymentsAPI {
     } else {
       // Sort keys alphabetically as per NOWPayments docs
       const sortedKeys = Object.keys(payload).sort();
-      const sortedPayload: Record<string, any> = {};
+      const sortedPayload: Record<string, unknown> = {};
       for (const key of sortedKeys) {
-        sortedPayload[key] = (payload as any)[key];
+        sortedPayload[key] = (payload as Record<string, unknown>)[key];
       }
       stringPayload = JSON.stringify(sortedPayload);
     }

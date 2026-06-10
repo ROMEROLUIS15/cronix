@@ -19,8 +19,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
-    // Verificamos la firma criptográfica para asegurar que vino de NOWPayments
-    const isValid = nowpayments.verifyIpnSignature(payload, signature);
+    // Verificamos la firma criptográfica contra el body RAW (NOWPayments firma el JSON crudo)
+    const isValid = nowpayments.verifyIpnSignature(rawBody, signature);
     if (!isValid) {
       console.error('Invalid NOWPayments signature for payload:', payload);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
