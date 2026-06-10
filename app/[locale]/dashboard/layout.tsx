@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { getCachedSessionUser, getCachedUserProfile } from '@/lib/supabase/server-cache'
+import { shouldRedirectToSetup } from './access-control'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers, ServerBusinessContextProvider } from '@/components/providers'
@@ -17,8 +18,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   // ── User profile — React.cache() deduplicates across layout + page ────────
   const dbUser = await getCachedUserProfile(user.id)
 
-  const isPlatformAdmin = dbUser?.role === 'platform_admin'
-
   // ── Sentry: bind user + tenant context to this request ───────────────────
   if (user) {
     const businessName = dbUser?.businesses && !Array.isArray(dbUser.businesses)
@@ -28,13 +27,13 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   // ── Routing logic ─────────────────────────────────────────────────────────
+  // Regular users without a business → onboarding.
+  // platform_admin bypasses this gate (no business_id by design).
+  // Decision extracted to access-control.ts so the test exercises this exact fn.
   const headersList = await headers()
   const nextUrl     = headersList.get('next-url') ?? ''
-  const isSetupPage = nextUrl.includes('/setup') || nextUrl === ''
 
-  // Regular users without a business → onboarding
-  // platform_admin bypasses this gate (no business_id by design)
-  if (!dbUser?.business_id && !isSetupPage && !isPlatformAdmin) {
+  if (shouldRedirectToSetup(dbUser, nextUrl)) {
     redirect('/dashboard/setup')
   }
 
