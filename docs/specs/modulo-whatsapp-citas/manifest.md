@@ -43,7 +43,7 @@ para toda la lógica de negocio.
 ### Proveedor STT
 **Deepgram Nova-2** (`model=nova-2&language=es&smart_format=true`).
 Acepta cualquier formato de audio que Meta envíe (ogg/opus, mp4, webm).
-Proveedor real: `transcribeAudio` en `ai-agent.ts` llama a `api.deepgram.com` con `DEEPGRAM_AURA_API_KEY`. Este path migró de Groq Whisper a Deepgram. **Deuda legacy (no confundir):** persisten identificadores `whisper*` de la migración — `WHISPER_MODEL`/`WHISPER_API_URL` en `groq-client.ts` (código muerto, sin usos), la variable `whisperTokens` y breadcrumbs "Whisper" en `message-handler.ts`. El proveedor es Deepgram pese a esos nombres.
+Proveedor real: `transcribeAudio` en `ai-agent.ts` llama a `api.deepgram.com` con `DEEPGRAM_AURA_API_KEY`. Este path migró de Groq Whisper a Deepgram Nova-2 (los identificadores `whisper*` muertos de la migración fueron eliminados de `groq-client.ts`/`message-handler.ts`).
 
 ### Flujo de Procesamiento
 Cliente envía nota de voz

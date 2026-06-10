@@ -70,7 +70,7 @@ El dashboard monta un **Floating Action Button (FAB)** de voz (`components/dashb
 
 - **Endpoint**: llama a `supabase/functions/v1/voice-worker` directamente
 - **Autenticación**: envía el JWT del usuario (`Authorization: Bearer <access_token>`)
-- **Input**: audio vía Web Speech API (desktop Chrome/Edge) o MediaRecorder + STT server-side del `voice-worker` (Deepgram Nova-2) en mobile/fallback; o texto si falla STT. (Nota: algunos comentarios en `voice-assistant-fab.tsx` aún dicen "Whisper" — deuda legacy de la migración; el STT real es Deepgram.)
+- **Input**: audio vía Web Speech API (desktop Chrome/Edge) o MediaRecorder + STT server-side del `voice-worker` (Deepgram Nova-2) en mobile/fallback; o texto si falla STT
 - **Response**: recibe `{ text, audioUrl, actionPerformed, transcription }`
 - **Invalidación post-acción**: si `actionPerformed=true`, invalida las queries de React Query para `appointments`, `dashboard-stats`, `clients` y `notifications`
 - **Persistencia de historial**: guarda los últimos 15 turnos en `sessionStorage`
