@@ -44,7 +44,8 @@ export async function sendWhatsAppMessage(to: string, text: string) {
  *  1. Resolve the CDN URL from Meta's media API using the media ID
  *  2. Download the binary from the CDN URL
  *
- * The returned buffer is passed directly to Groq Whisper for transcription.
+ * The returned buffer is passed directly to Deepgram Nova-2 for transcription
+ * (see transcribeAudio in ai-agent.ts; migrated from Groq Whisper).
  */
 export async function downloadMediaBuffer(mediaId: string): Promise<{ buffer: ArrayBuffer; mimeType: string }> {
   // @ts-ignore — Deno runtime
