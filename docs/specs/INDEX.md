@@ -19,7 +19,12 @@ Todo agente de IA o desarrollador que vaya a tocar código DEBE leer este índic
 4. **Zona sin spec → confirmar.** Si el área no tiene spec o está marcada 🔴, decláralo y pide confirmación antes de codificar — es alto riesgo de regresión.
 5. **Declaración de lectura.** Al inicio de tu respuesta a cualquier tarea de código, declara qué specs leíste, ej: `SDD: constitution + modulo-pagos`. Si no puedes nombrarlos, NO has cumplido el gate y debes volver atrás.
 
-> Este protocolo es la **fuente canónica**. Las reglas always-on de cada agente (`.agent/rules/*`, `CLAUDE.md`) solo lo invocan y refuerzan — no lo redefinen.
+> Este protocolo es la **fuente canónica**. Las reglas always-on de cada agente solo lo invocan y refuerzan — no lo redefinen:
+> - `.agent/rules/good-development-practices.md` — Antigravity (`trigger: always_on`)
+> - `CLAUDE.md` — Claude Code (con `@import` de este índice)
+> - `AGENTS.md` — opencode + clientes compatibles (modelos vía OpenRouter, etc.)
+> - `.cursor/rules/sdd-gate.mdc` — Cursor (`alwaysApply: true`)
+> - `.github/copilot-instructions.md` — VS Code / GitHub Copilot
 
 ---
 
