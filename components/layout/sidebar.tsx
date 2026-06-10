@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   CreditCard,
   Gem,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signout } from "@/lib/actions/auth";
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/team",        labelKey: "team",      icon: UsersRound, ownerOnly: true },
   { href: "/dashboard/finances",    labelKey: "finances",  icon: DollarSign },
   { href: "/dashboard/reports",     labelKey: "reports",   icon: BarChart3 },
+  { href: "/dashboard/observability", labelKey: "observability", icon: Sparkles, ownerOnly: true },
   { href: "/dashboard/settings",    labelKey: "settings",  icon: Settings },
   { href: "/dashboard/plans",       labelKey: "plans",     icon: Gem },
   // Admin-only tools: labels kept in English — internal, locale-agnostic
