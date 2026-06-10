@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database.types';
+import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
 
 type AdminClient = SupabaseClient<Database>;
 
@@ -20,7 +21,7 @@ export function sendReferralBonusPush(referrerId: string): void {
         body: JSON.stringify({
           business_id: referrerId,
           title: '¡Mes gratis ganado! 🎁',
-          body:  'Un negocio que invitaste activó su plan. +30 días añadidos.',
+          body:  `Un negocio que invitaste activó su plan. +${REFERRAL_BONUS_DAYS} días añadidos.`,
           url:   '/dashboard/settings',
           tag:   `referral-bonus-${referrerId}-${Date.now()}`,
         }),
@@ -55,7 +56,7 @@ export async function finalizePayPalPayment(
   const { data, error } = await supabaseAdmin.rpc('fn_finalize_paypal_payment', {
     p_order_id: orderId,
     p_captured_amount: capturedAmount ?? 0,
-    p_days: 30,
+    p_days: REFERRAL_BONUS_DAYS,
   });
 
   if (error) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { sendReferralBonusPush } from '@/lib/payments/subscription-fulfillment';
+import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
 import { Database } from '@/types/database.types';
 
 const supabaseAdmin = createAdminClient();
@@ -45,7 +46,7 @@ async function handler(req: Request) {
       p_status:          invoiceStatus,
       p_crypto_amount:   cryptoAmount ?? null,
       p_crypto_currency: cryptoCurrency ?? null,
-      p_days:            30,
+      p_days:            REFERRAL_BONUS_DAYS,
     });
 
     if (error) {
