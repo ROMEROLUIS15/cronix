@@ -92,25 +92,25 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     // Extract text or transcribe voice note
     let rawText = msg.text?.body ?? null
-    let whisperTokens = 0
+    let sttTokens = 0
     const wasAudio = !rawText && !!msg.audio?.id
 
     if (!rawText && msg.audio?.id) {
       addBreadcrumb('Voice note received, downloading media', 'whatsapp', 'info')
       try {
         const { buffer, mimeType } = await downloadMediaBuffer(msg.audio.id)
-        addBreadcrumb('Media downloaded, transcribing with Whisper', 'llm', 'info')
+        addBreadcrumb('Media downloaded, transcribing with Deepgram', 'llm', 'info')
         const result = await transcribeAudio(buffer, mimeType)
         rawText       = result.text
-        whisperTokens = result.tokens
+        sttTokens = result.tokens
       } catch (err) {
         if (err instanceof LlmRateLimitError) {
-          addBreadcrumb('Whisper rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
+          addBreadcrumb('STT rate limit — delegating retry to QStash', 'llm', 'warning', { retryAfter: err.retryAfterSecs })
           await flushSentry()
           return retryLater(err.retryAfterSecs)
         }
         if (err instanceof CircuitBreakerError) {
-          addBreadcrumb('Whisper Circuit open hit — delegating retry to QStash buffer', 'llm', 'warning')
+          addBreadcrumb('STT circuit open hit — delegating retry to QStash buffer', 'llm', 'warning')
           await flushSentry()
           return retryLater(30)
         }
@@ -224,7 +224,7 @@ export async function handleMessage(req: Request): Promise<Response> {
     setSentryTag('business_slug', business.slug || 'unknown')
     addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
 
-    if (whisperTokens > 0) await trackTokenUsage(business.id, whisperTokens)
+    if (sttTokens > 0) await trackTokenUsage(business.id, sttTokens)
 
     const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 300000
     const [withinBusinessQuota, withinTokenQuota] = await Promise.all([

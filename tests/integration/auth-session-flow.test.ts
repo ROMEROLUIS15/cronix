@@ -3,7 +3,7 @@
  *
  * Tests complete flow:
  * - Middleware validates session and refreshes JWT
- * - getSession() retrieves user + business context
+ * - getVerifiedSession() retrieves user + business context
  * - getBusinessId() extracts tenant ID
  * - Multi-tenant isolation enforced
  *
@@ -72,16 +72,16 @@ describeIntegration('Auth Session Flow (Middleware → DB → Business)', () => 
     TEST_USER_ID = user.id
   })
 
-  it('getSession returns user with dbUser and business_id', async () => {
-    const { getSession } = await import('@/lib/auth/get-session')
+  it('getVerifiedSession returns user with dbUser and business_id', async () => {
+    const { getVerifiedSession } = await import('@/lib/auth/get-session')
 
     // This would normally be called in middleware context with real auth
     // For testing, we mock Supabase to return test data
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
-    // Note: getSession uses real Supabase, so this test validates
+    // Note: getVerifiedSession uses real Supabase, so this test validates
     // that the function signature and error handling work
-    expect(typeof getSession).toBe('function')
+    expect(typeof getVerifiedSession).toBe('function')
   })
 
   it('getBusinessId resolves business_id from authenticated user', async () => {

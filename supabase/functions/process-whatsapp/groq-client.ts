@@ -1,5 +1,6 @@
 /**
- * Groq HTTP client — shared by the ReAct loop and Whisper STT.
+ * Groq HTTP client for the ReAct loop (LLM chat completions). STT is handled
+ * separately by Deepgram in ai-agent.ts.
  *
  * Exposes:
  *  - callLlm          → unified LLM caller (chat completions)
@@ -16,7 +17,6 @@ import {
 
 export const SMALL_MODEL   = 'llama-3.1-8b-instant'         // decision loop + tool calling (fast, literal, free)
 export const LARGE_MODEL   = 'llama-3.3-70b-versatile'      // final empathetic response (only when needed)
-export const WHISPER_MODEL = 'whisper-large-v3-turbo'
 export const MAX_STEPS     = 3
 // @ts-ignore — Deno runtime global
 const HELICONE_API_KEY = Deno.env.get('HELICONE_API_KEY') ?? ''
@@ -25,7 +25,6 @@ const GROQ_BASE        = HELICONE_API_KEY
   : 'https://api.groq.com/openai/v1'
 
 export const LLM_API_URL     = `${GROQ_BASE}/chat/completions`
-export const WHISPER_API_URL = `${GROQ_BASE}/audio/transcriptions`
 
 export function heliconeHeaders(properties: Record<string, string> = {}, cache = false): Record<string, string> {
   if (!HELICONE_API_KEY) return {}

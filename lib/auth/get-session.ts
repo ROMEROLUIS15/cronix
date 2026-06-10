@@ -23,11 +23,28 @@ export interface SessionUser {
   [key: string]: unknown
 }
 
-export async function getSession(): Promise<SessionUser | null> {
+/**
+ * getVerifiedSession — Authoritative identity accessor (server-side validated).
+ *
+ * Calls Supabase `auth.getUser()`, which round-trips to the auth server and
+ * re-validates the JWT (it does NOT trust the locally-decoded cookie). Use this
+ * on any surface that is NOT already gated by the auth middleware — it is the
+ * only accessor that can be trusted standalone.
+ *
+ * Contrast with `getCachedSessionUser()` in `lib/supabase/server-cache.ts`,
+ * which does a cheap LOCAL cookie decode (`auth.getSession()`) and relies on the
+ * middleware (`lib/middleware/with-session.ts`) having already validated the JWT.
+ * The two are NOT interchangeable: this one validates, that one trusts upstream.
+ *
+ * Returns `null` (never partial state) on: no authenticated user, DB error while
+ * loading the `users` row, or an auth row with no matching DB profile.
+ */
+export async function getVerifiedSession(): Promise<SessionUser | null> {
   try {
     const supabase = await createClient()
 
-    // 1. CAMBIO DE SEGURIDAD: Usamos getUser() en lugar de getSession()
+    // Server-side validation: getUser() re-checks the JWT against the auth
+    // server, unlike auth.getSession() which only decodes the local cookie.
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -42,7 +59,7 @@ export async function getSession(): Promise<SessionUser | null> {
       .maybeSingle()
 
     if (dbError) {
-      logger.error('getSession', 'Error fetching dbUser', dbError.message)
+      logger.error('getVerifiedSession', 'Error fetching dbUser', dbError.message)
       // SECURITY: On DB error (e.g., RLS recursion), return null instead of
       // partial state. Downstream code may assume business_id exists and crash.
       return null
@@ -59,7 +76,7 @@ export async function getSession(): Promise<SessionUser | null> {
       business_id: dbUser.business_id
     }
   } catch (e) {
-    logger.error('getSession', 'Critical failure', e)
+    logger.error('getVerifiedSession', 'Critical failure', e)
     return null
   }
 }

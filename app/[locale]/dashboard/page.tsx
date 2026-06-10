@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { getAuthUser, getAuthUserProfile } from "@/lib/supabase/server-cache"
+import { getCachedSessionUser, getCachedUserProfile } from "@/lib/supabase/server-cache"
 import { getRepos } from "@/lib/repositories"
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-fns"
 import { DashboardClient } from "./_client/dashboard-client"
@@ -13,7 +13,7 @@ import { DashboardClient } from "./_client/dashboard-client"
 export default async function DashboardPage() {
   // React.cache() deduplicates these calls — layout already ran them in the same
   // request, so no extra network round-trips happen here.
-  const user = await getAuthUser()
+  const user = await getCachedSessionUser()
 
   if (!user) {
     return (
@@ -25,7 +25,7 @@ export default async function DashboardPage() {
     )
   }
 
-  const dbUser = await getAuthUserProfile(user.id)
+  const dbUser = await getCachedUserProfile(user.id)
 
   if (!dbUser?.business_id) {
     return (

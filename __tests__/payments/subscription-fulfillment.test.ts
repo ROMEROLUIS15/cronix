@@ -10,10 +10,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  finalizePayPalPayment,
-  applyReferralBonus,
-} from '@/lib/payments/subscription-fulfillment';
+import { finalizePayPalPayment } from '@/lib/payments/subscription-fulfillment';
+import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
 
 interface QueryChainMock {
   select: ReturnType<typeof vi.fn>;
@@ -107,10 +105,12 @@ describe('finalizePayPalPayment', () => {
       );
 
       expect(result).toEqual({ status: 'already_processed' });
+      // Guardián de SSOT: el wrapper DEBE inyectar la constante REFERRAL_BONUS_DAYS
+      // como p_days, no un literal. Si alguien rehardcodea un valor distinto, falla.
       expect(supabase.rpc).toHaveBeenCalledWith('fn_finalize_paypal_payment', {
         p_order_id: 'order-duplicate-001',
         p_captured_amount: 29.99,
-        p_days: 30,
+        p_days: REFERRAL_BONUS_DAYS,
       });
       expect(supabase.from).not.toHaveBeenCalled();
     });
@@ -137,21 +137,19 @@ describe('finalizePayPalPayment', () => {
 
   describe('Estado completed — side effects', () => {
     it('inserta notificación cuando el pago se completa', async () => {
+      // El bono de referido ya se aplica DENTRO del RPC; el branch completed solo
+      // inserta la notificación in-app del pago y dispara pushes best-effort.
       supabase.rpc.mockResolvedValue({
         data: [{
           result_status: 'completed',
           business_id: 'biz-completed-001',
           invoice_id: 'inv-completed-001',
           plan_purchased: 'pro',
+          referral_bonus_applied: false,
+          referrer_business_id: null,
         }],
         error: null,
       });
-
-      // `completed` branch inserts notification + calls applyReferralBonus
-      // Mock applyReferralBonus queries: first businesses, then saas_invoices count
-      chain._setResolveValues([
-        { data: { referred_by_id: null }, error: null }, // applyReferralBonus — no referrer → early return
-      ]);
 
       const result = await finalizePayPalPayment(
         supabase as unknown as Parameters<typeof finalizePayPalPayment>[0],
@@ -201,138 +199,5 @@ describe('finalizePayPalPayment', () => {
 
       expect(result).toEqual({ status: 'invoice_not_found' });
     });
-  });
-});
-
-// ─── Tests: applyReferralBonus (AC-3) ─────────────────────────────────────────
-
-describe('applyReferralBonus', () => {
-  let chain: MockChain;
-  let supabase: MockSupabase;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    chain = createQueryChain();
-    supabase = createMockSupabase(chain);
-  });
-
-  describe('AC-3 — Bonus de referido se aplica una sola vez', () => {
-    it('no aplica bonus cuando el negocio referido tiene más de una factura pagada', async () => {
-      chain._setResolveValues([
-        { data: { referred_by_id: 'referrer-abc' }, error: null }, // Call 1: businesses → referred_by_id
-        { data: null, count: 2, error: null },                      // Call 2: saas_invoices → count !== 1
-      ]);
-
-      await applyReferralBonus(
-        supabase as unknown as Parameters<typeof applyReferralBonus>[0],
-        'referred-biz-001',
-      );
-
-      expect(chain.update).not.toHaveBeenCalled();
-      expect(chain.insert).not.toHaveBeenCalled();
-      expect(supabase.from).toHaveBeenNthCalledWith(1, 'businesses');
-      expect(supabase.from).toHaveBeenNthCalledWith(2, 'saas_invoices');
-    });
-
-    it('no aplica bonus si el negocio no fue referido (referred_by_id es null)', async () => {
-      chain._setResolveValues([
-        { data: { referred_by_id: null }, error: null },
-      ]);
-
-      await applyReferralBonus(
-        supabase as unknown as Parameters<typeof applyReferralBonus>[0],
-        'biz-no-referral-002',
-      );
-
-      expect(chain.update).not.toHaveBeenCalled();
-      expect(chain.insert).not.toHaveBeenCalled();
-      expect(supabase.from).toHaveBeenCalledOnce();
-    });
-
-    it('no aplica bonus si el referidor está en plan free', async () => {
-      chain._setResolveValues([
-        { data: { referred_by_id: 'referrer-free' }, error: null },  // Call 1
-        { data: null, count: 1, error: null },                         // Call 2 — count === 1
-        {                                                               // Call 3 — referrer plan free
-          data: { id: 'referrer-free', plan: 'free', subscription_ends_at: null },
-          error: null,
-        },
-      ]);
-
-      await applyReferralBonus(
-        supabase as unknown as Parameters<typeof applyReferralBonus>[0],
-        'referred-biz-003',
-      );
-
-      expect(chain.update).not.toHaveBeenCalled();
-      expect(chain.insert).not.toHaveBeenCalled();
-    });
-
-    it('aplica bonus cuando se cumplen todas las condiciones', async () => {
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 60);
-
-      chain._setResolveValues([
-        { data: { referred_by_id: 'referrer-active' }, error: null },  // Call 1
-        { data: null, count: 1, error: null },                           // Call 2 — count === 1
-        {                                                                 // Call 3 — referrer active pro
-          data: {
-            id: 'referrer-active',
-            plan: 'pro',
-            subscription_ends_at: futureDate.toISOString(),
-          },
-          error: null,
-        },
-        { data: null, error: null },                                      // Call 4 — insert notification
-      ]);
-
-      await applyReferralBonus(
-        supabase as unknown as Parameters<typeof applyReferralBonus>[0],
-        'referred-biz-004',
-      );
-
-      expect(chain.update).toHaveBeenCalled();
-      expect(chain.insert).toHaveBeenCalled();
-      expect(supabase.from).toHaveBeenCalledWith('notifications');
-    });
-  });
-});
-
-// ─── Tests: computeNextSubscriptionEnd ────────────────────────────────────────
-
-describe('computeNextSubscriptionEnd', () => {
-  it('extiende desde subscription_ends_at si la fecha actual es futura', async () => {
-    const { computeNextSubscriptionEnd } = await import('@/lib/payments/subscription-fulfillment');
-
-    const future = new Date();
-    future.setDate(future.getDate() + 10);
-    const result = computeNextSubscriptionEnd(future.toISOString(), 30);
-
-    const expected = new Date(future);
-    expected.setDate(expected.getDate() + 30);
-    expect(result).toBe(expected.toISOString());
-  });
-
-  it('extiende desde hoy si subscription_ends_at ya expiró', async () => {
-    const { computeNextSubscriptionEnd } = await import('@/lib/payments/subscription-fulfillment');
-
-    const past = new Date();
-    past.setDate(past.getDate() - 10);
-    const result = computeNextSubscriptionEnd(past.toISOString(), 30);
-
-    const expected = new Date();
-    expected.setDate(expected.getDate() + 30);
-    const diff = Math.abs(new Date(result).getTime() - expected.getTime());
-    expect(diff).toBeLessThan(2000);
-  });
-
-  it('usa valor por defecto de 30 días si no se especifica daysToAdd', async () => {
-    const { computeNextSubscriptionEnd } = await import('@/lib/payments/subscription-fulfillment');
-
-    const result = computeNextSubscriptionEnd(null);
-    const expected = new Date();
-    expected.setDate(expected.getDate() + 30);
-    const diff = Math.abs(new Date(result).getTime() - expected.getTime());
-    expect(diff).toBeLessThan(2000);
   });
 });

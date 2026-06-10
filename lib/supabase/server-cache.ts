@@ -8,7 +8,9 @@
 import { cache } from 'react'
 import { createClient, createAdminClient } from './server'
 
-// One user lookup per request, shared between layout and page.
+// getCachedSessionUser — Cheap, middleware-trusting identity read (NOT validated here).
+//
+// One user lookup per request, shared between layout and page via React.cache().
 //
 // We use `auth.getSession()` (local cookie decode, ~1ms) instead of
 // `auth.getUser()` (network call to Supabase auth, ~100-200ms). The middleware
@@ -17,19 +19,15 @@ import { createClient, createAdminClient } from './server'
 // is guaranteed authentic. Doing a second network round-trip here just to
 // re-validate the same token wastes ~150ms on every dashboard navigation.
 //
-// Reverting to getUser() would be required if the middleware ever stops
-// validating — keep the two in lock-step.
-// SECURITY NOTE: The project's middleware (`lib/middleware/with-session.ts`)
-// performs a full `supabase.auth.getUser()` check and rejects requests with
-// invalid, expired, or otherwise unauthenticated tokens. Because that
-// validation runs earlier in the request pipeline, reading the locally-
-// decoded session here is safe and does not open an authentication bypass.
+// SECURITY CONTRACT: this accessor does NOT validate the JWT itself — it trusts
+// that the middleware ran first. It is therefore ONLY safe under `/dashboard/**`
+// (and any other route the middleware guards). On surfaces NOT covered by the
+// middleware, use `getVerifiedSession()` (`lib/auth/get-session.ts`) instead,
+// which calls `auth.getUser()` and validates the token server-side.
 //
-// Keep these two behaviors in sync: if the middleware ever stops
-// revalidating tokens, revert this code to use `auth.getUser()` instead.
-// This trade-off preserves ~150ms of latency per navigation while
-// retaining server-side authentication guarantees enforced by the middleware.
-export const getAuthUser = cache(async () => {
+// Keep these two behaviors in lock-step: if the middleware ever stops
+// revalidating tokens, this must switch to `auth.getUser()`.
+export const getCachedSessionUser = cache(async () => {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
   return session?.user ?? null
@@ -38,7 +36,7 @@ export const getAuthUser = cache(async () => {
 // One user profile query per request, shared between layout and page.
 // Uses admin client to bypass the RLS recursion bug on the users table (affects
 // platform_admin and some edge cases with the regular client).
-export const getAuthUserProfile = cache(async (userId: string) => {
+export const getCachedUserProfile = cache(async (userId: string) => {
   const admin = createAdminClient()
   const { data } = await admin
     .from('users')

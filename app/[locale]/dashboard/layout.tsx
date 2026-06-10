@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { getAuthUser, getAuthUserProfile } from '@/lib/supabase/server-cache'
+import { getCachedSessionUser, getCachedUserProfile } from '@/lib/supabase/server-cache'
+import { shouldRedirectToSetup } from './access-control'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers, ServerBusinessContextProvider } from '@/components/providers'
@@ -11,13 +12,11 @@ interface DashboardLayoutProps { children: React.ReactNode }
 
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   // ── Auth check — React.cache() deduplicates across layout + page ──────────
-  const user = await getAuthUser()
+  const user = await getCachedSessionUser()
   if (!user) redirect('/login')
 
   // ── User profile — React.cache() deduplicates across layout + page ────────
-  const dbUser = await getAuthUserProfile(user.id)
-
-  const isPlatformAdmin = dbUser?.role === 'platform_admin'
+  const dbUser = await getCachedUserProfile(user.id)
 
   // ── Sentry: bind user + tenant context to this request ───────────────────
   if (user) {
@@ -28,13 +27,13 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   // ── Routing logic ─────────────────────────────────────────────────────────
+  // Regular users without a business → onboarding.
+  // platform_admin bypasses this gate (no business_id by design).
+  // Decision extracted to access-control.ts so the test exercises this exact fn.
   const headersList = await headers()
   const nextUrl     = headersList.get('next-url') ?? ''
-  const isSetupPage = nextUrl.includes('/setup') || nextUrl === ''
 
-  // Regular users without a business → onboarding
-  // platform_admin bypasses this gate (no business_id by design)
-  if (!dbUser?.business_id && !isSetupPage && !isPlatformAdmin) {
+  if (shouldRedirectToSetup(dbUser, nextUrl)) {
     redirect('/dashboard/setup')
   }
 

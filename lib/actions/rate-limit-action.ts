@@ -4,6 +4,12 @@
  * Uses Upstash Redis for distributed enforcement.
  * Falls back to in-memory limiter when Redis is unavailable.
  *
+ * ⚠️ DEGRADACIÓN CONOCIDA: el fallback en memoria es PER-PROCESO. Con varias
+ * réplicas (Docker `output: 'standalone'`) cada réplica cuenta por separado,
+ * por lo que el límite efectivo se multiplica por el número de réplicas mientras
+ * Redis no esté disponible. Es protección degradada aceptable durante un outage
+ * de Redis, no una garantía. Mantener Redis disponible para enforcement real.
+ *
  * Usage:
  *   await withActionRateLimit('team-create', 10, 60, async () => {
  *     return createEmployeeAction(input)
@@ -14,6 +20,20 @@ import { redisRateLimit, isRedisAvailable } from '@/lib/rate-limit/redis-rate-li
 import { headers } from 'next/headers'
 
 const inMemoryWindows = new Map<string, { count: number; resetAt: number }>()
+let lastPrune = 0
+
+/**
+ * Elimina ventanas expiradas para que el Map no crezca sin límite (una entrada
+ * por par IP+acción viviría indefinidamente). Se ejecuta como mucho una vez por
+ * minuto para no penalizar cada request.
+ */
+function pruneExpiredWindows(now: number): void {
+  if (now - lastPrune < 60_000) return
+  lastPrune = now
+  for (const [key, window] of inMemoryWindows) {
+    if (now >= window.resetAt) inMemoryWindows.delete(key)
+  }
+}
 
 /**
  * Extract client IP from Next.js headers() in Server Action context.
@@ -53,6 +73,7 @@ export async function withActionRateLimit(
 
   // Fallback: in-memory limiter (per-instance)
   const now = Date.now()
+  pruneExpiredWindows(now)
   const windowKey = `${ip}:${key}`
   const window = inMemoryWindows.get(windowKey)
 

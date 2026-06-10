@@ -96,33 +96,44 @@ Lanzar excepciones desde PL/pgSQL fuerza al cliente a `try/catch` y oscurece la 
 
 ```ts
 switch (row.result_status) {
-  case 'completed':         /* fire notifications + applyReferralBonus */
+  case 'completed':         /* persiste plan + bono dentro de la TX; pushes best-effort en Node */
   case 'already_processed': /* 200 OK silencioso */
   case 'amount_mismatch':   /* alert security */
   case 'invoice_not_found': /* warn — race con frontend? */
 }
 ```
 
-## Side effects fuera de la transacción
+## Bono de referido DENTRO de la transacción
 
-`applyReferralBonus` y la inserción de la notificación de éxito se hacen **después** del COMMIT, en Node:
+> **Saneamiento (migración `20260610120000_referral_bonus_atomic.sql`).** Antes, `applyReferralBonus`
+> corría en Node **después** del COMMIT del RPC. Si Node moría entre el COMMIT y el UPDATE del bono,
+> el reintento del webhook veía la factura ya `finished` (idempotencia) y **saltaba el bono** → el
+> referidor perdía sus 30 días de forma permanente e irreconciliable. El cron de reconciliación que
+> mitigaba este caso nunca se implementó.
 
-```ts
-switch (row.result_status) {
-  case 'completed':
-    await supabaseAdmin.from('notifications').insert({ ... })
-    await applyReferralBonus(supabaseAdmin, row.business_id)
-    return { status: 'completed', ... }
-}
+Ahora el bono vive en una única función SQL, **fuente de verdad**, aplicada en la misma transacción:
+
+```sql
+-- dentro de fn_finalize_paypal_payment, tras activar el plan:
+SELECT * INTO v_bonus FROM public.fn_apply_referral_bonus(v_invoice.business_id, p_days);
+RETURN QUERY SELECT 'completed', ..., COALESCE(v_bonus.applied, false), v_bonus.referrer_id;
 ```
 
-Por qué fuera de la RPC:
-- `applyReferralBonus` lee `count(*)` de `saas_invoices` (debe ver el COMMIT) y actualiza otra fila de `businesses` (el referrer). Mejor mantenerlo en Node.
-- Si la inserción de notification falla, no queremos rollback de la activación.
+`fn_apply_referral_bonus` cuenta las facturas `finished` (la recién marcada es visible en la misma TX,
+por lo que el conteo da exactamente 1 en el primer pago → idempotente), valida que el referidor tenga
+plan de pago, extiende su suscripción y persiste la notificación in-app. Node solo dispara el Web Push
+best-effort (llamada externa, nunca transaccional) cuando el RPC reporta `referral_bonus_applied = true`.
 
-## Trade-off
+La vía cripto (`process-saas-payment`) tiene su propio RPC atómico análogo
+`fn_finalize_crypto_payment` (migración `20260610130000_crypto_finalize_rpc.sql`), que también
+llama a `fn_apply_referral_bonus` dentro de su transacción — una sola fuente de verdad para el
+bono. A diferencia de PayPal, persiste la factura en cada transición de estado y solo activa
+plan + bono cuando el estado entrante es `finished`. Cobertura: pgTAP en
+`supabase/tests/critical_functions.test.sql` (flujo completed/updated/already_processed +
+aplicación del bono al referidor).
 
-Si Node muere entre el COMMIT del RPC y `applyReferralBonus`, el plan queda activo pero el referidor no recibe el bono. Mitigación: el cron diario `check-subscriptions` puede tener una rutina secundaria que escanee referrals huérfanos. Por hoy no se ha observado el caso.
+La notificación de éxito del pago (in-app) sí queda fuera de la TX a propósito: si su INSERT falla, no
+queremos hacer rollback de la activación del plan.
 
 ## Tests
 
