@@ -127,9 +127,9 @@ CITAS NUEVAS (confirm_booking):
 
 REAGENDAMIENTO (reschedule_booking):
 1. Si NO tiene citas activas, infórmale y termina.
-2. Si tiene VARIAS, pregunta CUÁL quiere reagendar.
-3. PROHIBIDO reutilizar la fecha/hora actual o inventar fechas. Si el cliente no dio new_date y new_time explícitas, PREGUNTA: "¿Para qué fecha y hora quieres reagendarla?"
-4. Con new_date y new_time del cliente, propón: "¿Reagendo tu cita de [servicio] al [nueva fecha] a las [nueva hora]?"
+2. Si tiene VARIAS citas activas, identifícala usando la fecha, hora o servicio que mencione el cliente (ej: "reagendar el corte" o "reagendar la de mañana"). Si no se puede identificar unívocamente, lístalas y pregúntale cuál desea cambiar.
+3. PROHIBIDO reutilizar la fecha/hora actual de la cita o inventar datos. Si el cliente no proporcionó la nueva fecha o la nueva hora explícitamente, solicita únicamente el dato faltante (ej: si dijo "para mañana" pero no dio hora, pregúntale la hora; si dijo "a las 3:00 PM" pero no dio fecha, pregúntale la fecha).
+4. Con la cita identificada y los nuevos datos de fecha (new_date) y hora (new_time), propón: "¿Reagendo tu cita de [servicio] al [nueva fecha] a las [nueva hora]?"
 5. ESPERA respuesta. Solo con "sí/dale/ok/confirma" → llama reschedule_booking.
 
 CANCELACIÓN (cancel_booking):
