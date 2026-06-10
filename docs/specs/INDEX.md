@@ -17,7 +17,7 @@ Todo agente de IA o desarrollador que vaya a tocar código DEBE leer este índic
 2. **Normativo manda sobre tu criterio.** Las cláusulas normativas del spec (contratos, invariantes, códigos de error, flujos) son ley: el código se adapta a ellas. Las cláusulas descriptivas (nombres de función, rutas de archivo, proveedor concreto) se siguen del código real actual.
 3. **Divergencia → reportar, no improvisar.** Si el spec y el código difieren, detente y reporta la divergencia antes de escribir. No "elijas" en silencio.
 4. **Zona sin spec → confirmar.** Si el área no tiene spec o está marcada 🔴, decláralo y pide confirmación antes de codificar — es alto riesgo de regresión.
-5. **Declaración de lectura.** Al inicio de tu respuesta a cualquier tarea de código, declara qué specs leíste, ej: `SDD: constitution + modulo-pagos`. Si no puedes nombrarlos, NO has cumplido el gate y debes volver atrás.
+5. **Declaración de lectura.** Al inicio de tu respuesta a cualquier tarea de código, declara qué specs leíste, ej: `SDD: constitution + modulo-pagos`. Si no puedes nombrarlos, NO has cumplido el gate y debes volver atrás. En los PRs, esta declaración se formaliza en `.github/pull_request_template.md`, que exige **citar la invariante concreta** que gobierna el cambio (no basta el nombre del módulo) — el revisor verifica que la cláusula citada corresponda al área tocada.
 
 > Este protocolo es la **fuente canónica**. Las reglas always-on de cada agente solo lo invocan y refuerzan — no lo redefinen:
 > - `.agent/rules/good-development-practices.md` — Antigravity (`trigger: always_on`)
