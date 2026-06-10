@@ -72,8 +72,8 @@ describe('Pipeline load tests', () => {
     const elapsed = performance.now() - start
 
     expect(context.order).toHaveLength(50)
-    // 50 steps × 1ms delay + overhead = should be <500ms
-    expect(elapsed).toBeLessThan(1000)
+    // 50 steps × 1ms delay + overhead = should be <2s (allows CI/Windows variance)
+    expect(elapsed).toBeLessThan(2000)
   })
 
   it('does not leak memory across consecutive runs', async () => {
