@@ -10,7 +10,7 @@
  *
  * Exposes:
  *  - runAgentLoop    → ReAct loop: reasons, calls tools, returns final text
- *  - transcribeAudio → Groq Whisper STT
+ *  - transcribeAudio → Deepgram Nova-2 STT (model=nova-2&language=es&smart_format=true)
  *
  * Module map:
  *  - groq-client.ts   → LLM types, callLlm(), heliconeHeaders(), error classes

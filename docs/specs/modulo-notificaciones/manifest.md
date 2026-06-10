@@ -72,10 +72,11 @@ emitBookingEvent(event)
 
 ## 5. Implementaciones por Runtime
 
-### Runtime Next.js (`lib/application/` o server actions)
-- Usa `NotificationService` inyectado desde `lib/container.ts`
+### Runtime Next.js (`lib/notifications/` + server actions)
+- Usa `emitBookingEvent()` de `lib/notifications/emit-booking-event.ts`
 - Retorna `Result<void>` como contrato de error
-- Acceso a Supabase Admin vía cliente del servidor
+- Acceso a Supabase Admin vía cliente del servidor (inyectado como parámetro)
+- Tipos del evento en `lib/notifications/appointment-event.ts`
 
 ### Runtime Deno (Edge Functions WhatsApp)
 - Usa `emitBookingEvent()` de `supabase/functions/process-whatsapp/notifications.ts`
