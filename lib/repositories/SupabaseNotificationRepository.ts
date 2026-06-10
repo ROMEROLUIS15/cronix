@@ -4,10 +4,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
-import { Result, ok, fail } from '@/types/result'
-import {
+import type { Result } from '@/types/result'
+import { ok, fail } from '@/types/result'
+import type {
   INotificationRepository,
-  CreateNotificationPayload
+  CreateNotificationPayload,
 } from '@/lib/domain/repositories/INotificationRepository'
 import type { InAppNotification } from '@/components/layout/notification-panel'
 
