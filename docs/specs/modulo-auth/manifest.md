@@ -28,9 +28,18 @@ Usuario
                                                   }
 ```
 
-## 2. Contrato de `SessionUser`
+## 2. Los Dos Accesores de Identidad (NO son intercambiables)
 
-La función `getSession()` en `lib/auth/get-session.ts` es el **único punto de acceso** a la identidad del usuario autenticado en el runtime Next.js. Retorna `SessionUser | null`.
+El runtime Next.js tiene **dos** accesores de identidad con garantías de seguridad distintas. Elegir el equivocado abre un bypass de autenticación o desperdicia ~150 ms por navegación. La regla es: **¿la superficie está detrás del middleware?**
+
+| Accesor | Archivo | Primitiva Supabase | Garantía | Cuándo usar |
+|---|---|---|---|---|
+| `getVerifiedSession()` | `lib/auth/get-session.ts` | `auth.getUser()` (round-trip al servidor) | **Valida el JWT server-side.** Retorna `SessionUser` (con `dbUser` embebido) o `null`. Seguro de forma autónoma. | Superficies **NO** cubiertas por el middleware. |
+| `getCachedSessionUser()` + `getCachedUserProfile()` | `lib/supabase/server-cache.ts` | `auth.getSession()` (decode local de cookie) | **NO valida** — confía en que el middleware (`lib/middleware/with-session.ts`) ya ejecutó `getUser()`. Envuelto en `React.cache()` (dedup por request). | Hot-path del dashboard (`/dashboard/**`), donde el middleware ya validó. |
+
+> ⚠️ **Inversión histórica de nombres (corregida):** los nombres de Cronix NO siguen las primitivas de Supabase de forma intuitiva. `getVerifiedSession()` es el que valida (`auth.getUser()`); `getCachedSessionUser()` es el que solo decodifica local (`auth.getSession()`). El portón real del dashboard (`app/[locale]/dashboard/layout.tsx`) usa `getCachedSessionUser` + `getCachedUserProfile`, NO `getVerifiedSession`. Este último se usa hoy solo en `app/[locale]/dashboard/clients/[id]/page.tsx`.
+
+`getVerifiedSession()` retorna `SessionUser | null`.
 
 ```typescript
 interface SessionUser {
@@ -49,7 +58,7 @@ interface SessionUser {
 }
 ```
 
-**Regla crítica:** `getSession()` usa `supabase.auth.getUser()` — NO `getSession()` de Supabase. `getUser()` valida el JWT contra el servidor (no confía en la cookie local sin verificar). Esto previene ataques de manipulación de sesión local.
+**Regla crítica:** `getVerifiedSession()` usa `supabase.auth.getUser()` — NO `auth.getSession()` de Supabase. `getUser()` valida el JWT contra el servidor (no confía en la cookie local sin verificar). Esto previene ataques de manipulación de sesión local. El accesor del hot-path, `getCachedSessionUser()`, SÍ usa `auth.getSession()` (decode local) **por diseño**: es seguro únicamente porque el middleware ya ejecutó `getUser()` antes de que corra el RSC. Si el middleware dejara de validar, `getCachedSessionUser()` debe migrar a `getUser()`.
 
 ## 3. Reglas de Autorización
 
@@ -87,9 +96,9 @@ Las Edge Functions de Supabase NO tienen acceso a la sesión Next.js. El `busine
 ## 6. Criterios de Aceptación
 
 **AC-1 — Fallo de DB no expone sesión parcial:**
-- DADO un error de DB al consultar la tabla `users` durante `getSession()`,
+- DADO un error de DB al consultar la tabla `users` durante `getVerifiedSession()`,
 - CUANDO ocurre el error de DB,
-- ENTONCES `getSession()` retorna `null` — no retorna un `SessionUser` sin `business_id`.
+- ENTONCES `getVerifiedSession()` retorna `null` — no retorna un `SessionUser` sin `business_id`.
 
 **AC-2 — Tenant isolation en server actions:**
 - DADO un usuario autenticado con `business_id: 'A'`,

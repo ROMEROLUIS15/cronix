@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getAuthUser, getAuthUserProfile } from "@/lib/supabase/server-cache";
+import { getCachedSessionUser, getCachedUserProfile } from "@/lib/supabase/server-cache";
 import type { ReferralBusiness, ReferralInvite } from "@/types";
 import { PlanManager } from "@/app/[locale]/dashboard/settings/plan-manager";
 import { ReferralClient } from "@/app/[locale]/dashboard/referrals/referral-client";
@@ -18,12 +18,12 @@ const ADMIN_PREVIEW: ReferralBusiness = {
 export default async function PlansPage() {
   const [t, user] = await Promise.all([
     getTranslations("plans"),
-    getAuthUser(),
+    getCachedSessionUser(),
   ]);
 
   if (!user) return null;
 
-  const dbUser = await getAuthUserProfile(user.id);
+  const dbUser = await getCachedUserProfile(user.id);
   const adminSupabase = createAdminClient();
 
   let business: ReferralBusiness | null = null;

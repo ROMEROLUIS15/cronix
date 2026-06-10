@@ -9,11 +9,11 @@
  *     ("redirects unauthenticated user from /dashboard to /login")
  *
  *   AC-2 (redirect to /setup sin business_id) → el layout es un Server Component
- *     de Next.js que usa redirect() de next/navigation y getAuthUserProfile()
+ *     de Next.js que usa redirect() de next/navigation y getCachedUserProfile()
  *     de lib/supabase/server-cache. No es testeable con Vitest sin el runtime
  *     completo de Next.js (requiere E2E con Playwright/Cypress).
  *
- *     La lógica de getSession / getBusinessId YA está cubierta:
+ *     La lógica de getVerifiedSession / getBusinessId YA está cubierta:
  *       - __tests__/auth/get-session.test.ts → session con business_id: null
  *       - __tests__/auth/get-business-id.test.ts → business_id null sin perfil
  *

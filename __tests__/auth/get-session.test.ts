@@ -1,7 +1,11 @@
 /**
  * lib/auth/get-session.ts — Session Retrieval Tests
  *
- * Tests the core getSession() function which authenticates all requests.
+ * Tests getVerifiedSession() — the server-side-validated identity accessor
+ * (calls Supabase auth.getUser()). NOTE: this is NOT the dashboard hot-path
+ * gate. Dashboard surfaces use getCachedSessionUser() in
+ * lib/supabase/server-cache.ts (local cookie decode, trusts the middleware).
+ * getVerifiedSession() is for surfaces NOT covered by the middleware.
  * Validates that:
  * - Valid auth users are mapped to database records
  * - Missing database records return null (incomplete registration)
@@ -10,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getSession, SessionUser } from '@/lib/auth/get-session'
+import { getVerifiedSession, SessionUser } from '@/lib/auth/get-session'
 
 // ── Mock Supabase ────────────────────────────────────────────────────────────
 vi.mock('@/lib/supabase/server', () => ({
@@ -27,7 +31,7 @@ import { createClient } from '@/lib/supabase/server'
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('getSession()', () => {
+describe('getVerifiedSession()', () => {
   const mockAuthUser = {
     id: 'user-123',
     email: 'test@example.com',
@@ -77,7 +81,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeDefined()
     expect(session?.id).toBe('user-123')
@@ -98,7 +102,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeNull()
   })
@@ -115,7 +119,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeNull()
   })
@@ -142,7 +146,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeNull()
   })
@@ -169,7 +173,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeNull()
   })
@@ -177,7 +181,7 @@ describe('getSession()', () => {
   it('returns null on critical exception (catch block)', async () => {
     vi.mocked(createClient).mockRejectedValue(new Error('Supabase connection failed'))
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeNull()
   })
@@ -210,7 +214,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session).toBeDefined()
     expect(session?.user_metadata).toBeDefined()
@@ -241,7 +245,7 @@ describe('getSession()', () => {
 
     vi.mocked(createClient).mockResolvedValue(mockAuth as any)
 
-    const session = await getSession()
+    const session = await getVerifiedSession()
 
     expect(session?.business_id).toBeNull()
     expect(session?.dbUser?.business_id).toBeNull()

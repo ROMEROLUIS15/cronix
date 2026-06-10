@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { getAuthUser, getAuthUserProfile } from '@/lib/supabase/server-cache'
+import { getCachedSessionUser, getCachedUserProfile } from '@/lib/supabase/server-cache'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { SessionTimeout } from '@/components/session-timeout'
 import { Providers, ServerBusinessContextProvider } from '@/components/providers'
@@ -11,11 +11,11 @@ interface DashboardLayoutProps { children: React.ReactNode }
 
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   // ── Auth check — React.cache() deduplicates across layout + page ──────────
-  const user = await getAuthUser()
+  const user = await getCachedSessionUser()
   if (!user) redirect('/login')
 
   // ── User profile — React.cache() deduplicates across layout + page ────────
-  const dbUser = await getAuthUserProfile(user.id)
+  const dbUser = await getCachedUserProfile(user.id)
 
   const isPlatformAdmin = dbUser?.role === 'platform_admin'
 
