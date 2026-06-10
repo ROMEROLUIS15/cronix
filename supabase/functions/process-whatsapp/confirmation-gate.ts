@@ -68,3 +68,26 @@ export function toolsAllowedThisTurn(
 ): boolean {
   return lastAssistantWasConfirmation(history) && isAffirmative(userText)
 }
+
+// ── Hybrid Gate: Direct Booking Params Detection ──────────────────────────────
+
+/**
+ * Returns true when the user message contains explicit date and time references
+ * suitable for a direct booking tool call without a confirmation turn.
+ *
+ * Used by the Hybrid Gate in ai-agent.ts to bypass the 2-turn confirmation
+ * gate when the user provides all explicit parameters in a single message.
+ *
+ * Checks for:
+ *  - Date: "hoy", "mañana", "pasado mañana", ISO dates, DD/MM patterns
+ *  - Time: HH:mm patterns, "a las/a la/para las/para la" + number
+ */
+export function textHasExplicitBookingParams(text: string): boolean {
+  const t = text.toLowerCase()
+  const hasDate = /\b(hoy|mañana|pasado\s+mañana|\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre))\b/i.test(t)
+    || /\b\d{4}-\d{2}-\d{2}\b/.test(t)
+    || /\b\d{1,2}\/\d{1,2}\b/.test(t)
+  const hasTime = /\b\d{1,2}:\d{2}\b/.test(t)
+    || /\b(a\s+las|a\s+la|para\s+las|para\s+la)\s+\d{1,2}\b/i.test(t)
+  return hasDate && hasTime
+}

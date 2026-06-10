@@ -141,3 +141,49 @@ El sistema captura y responde de forma determinista mediante las estructuras def
 - DADO cualquier mensaje del usuario donde el turno anterior del asistente NO fue una pregunta de confirmación,
 - CUANDO el pipeline procesa el turno,
 - ENTONCES `activeTools = []` — ninguna tool de escritura es accesible para el LLM en ese turno.
+
+## 6. Optimizaciones de Rendimiento: Fast Path y Compuerta Híbrida
+
+### Fast Path (Bypass de LLM)
+
+Para reducir el consumo de tokens y latencia, las intenciones de tipo FAQ con confianza alta (>= 0.90) se responden con una plantilla determinista sin invocar `callLlm()`.
+
+| Intención | Respuesta |
+|---|---|
+| `greeting` (saludo) | Plantilla de bienvenida con el nombre del negocio. |
+| `pricing_inquiry` (consulta de servicios/horarios) | Lista de servicios con precio y duración del catálogo del negocio. |
+
+El conjunto de intenciones FAQ se define en `FAQ_INTENTS` dentro de `faq-responses.ts`. Para agregar una nueva intención FAQ, basta con añadir su label al `Set` e implementar el caso en `buildFaqResponse()`.
+
+### Compuerta Híbrida (Agendamiento Directo en Turno 1)
+
+Excepción a la regla de 2 turnos: si la intención es `book_appointment` con confianza >= 0.90 **y** el texto del usuario contiene referencias explícitas de fecha y hora (detectadas por `textHasExplicitBookingParams()`), la compuerta de herramientas se abre directamente (`activeTools = BOOKING_TOOLS`) permitiendo que el LLM llame a `confirm_booking` sin un turno de confirmación redundante.
+
+La validación de seguridad de parámetros y solapamiento de horarios se delega al `WriteGuard` y al caso de uso del dominio (`WhatsAppBookingAdapter`).
+
+| Condición | Comportamiento |
+|---|---|
+| `intent === 'book_appointment'` + `confidence >= 0.90` + fecha + hora explícitos | Compuerta abierta en Turno 1 |
+| Cualquier otro caso | Compuerta cerrada hasta confirmación explícita (regla de 2 turnos) |
+
+### Criterios de Aceptación
+
+**AC-FF-1 — Fast Path para saludos:**
+- DADO un mensaje "Hola" del cliente,
+- CUANDO `router.classify()` retorna `{ intent: 'greeting', confidence: 0.95 }`,
+- ENTONCES `runAgentLoop` retorna la plantilla de bienvenida sin llamar a `callLlm()`.
+
+**AC-FF-2 — Fast Path solo para confianza alta:**
+- DADO un mensaje con intención `greeting` pero confianza < 0.90,
+- CUANDO el pipeline procesa el mensaje,
+- ENTONCES el flujo continúa al ReAct loop normalmente (no hay bypass).
+
+**AC-HG-1 — Compuerta híbrida con parámetros explícitos:**
+- DADO un mensaje "Quiero agendar un corte para mañana a las 3:00 PM",
+- CUANDO `intent === 'book_appointment'` con confidence >= 0.90 y `textHasExplicitBookingParams()` retorna `true`,
+- ENTONCES `activeTools = BOOKING_TOOLS` aunque la confirmation-gate esté cerrada.
+
+**AC-HG-2 — Compuerta híbrida NO se abre sin parámetros:**
+- DADO un mensaje "Quiero agendar" sin fecha ni hora,
+- CUANDO `textHasExplicitBookingParams()` retorna `false`,
+- ENTONCES `activeTools = []` (gate cerrada, se requiere turno de confirmación).

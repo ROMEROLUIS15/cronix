@@ -36,8 +36,9 @@ import {
 import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
-import { toolsAllowedThisTurn } from "./confirmation-gate.ts"
+import { toolsAllowedThisTurn, textHasExplicitBookingParams } from "./confirmation-gate.ts"
 import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
+import { FAQ_INTENTS, buildFaqResponse } from "./faq-responses.ts"
 import { selectFinalResponse } from "./final-response.ts"
 import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
@@ -213,6 +214,14 @@ export async function runAgentLoop(
     confidence:  intent?.confidence ?? 0,
   })
 
+  // ── Fast Path: FAQ intents with high confidence bypass the LLM entirely ──
+  // Avoids burning tokens on small-talk or info queries that have a
+  // deterministic, pre-configured answer.
+  if (intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent)) {
+    const text = buildFaqResponse(intent.intent, context)
+    return { text, tokens: 0, toolCallsTrace: [] }
+  }
+
   // ── Open the per-turn trace (closed in the finally block below) ───────────
   const trace = tracer.start(
     { businessId: business.id, channel: 'whatsapp', actorKind: 'client_phone', actorKey: sender },
@@ -240,7 +249,12 @@ export async function runAgentLoop(
   // When blocked, we pass an empty tools array so the model does not see the
   // tool schemas at all — removes the hallucination surface entirely.
   const toolsAllowed       = toolsAllowedThisTurn(cappedHistory, userText)
-  const activeTools        = toolsAllowed ? BOOKING_TOOLS : []
+  // Hybrid Gate: if intent is 'book_appointment' with high confidence and the
+  // user text already contains explicit date + time references, open the tool
+  // gate directly (skip the confirmation turn). Safety is delegated to the
+  // WriteGuard and the domain use-case.
+  const canDirectOpen      = intent?.intent === 'book_appointment' && intent.confidence >= 0.90 && textHasExplicitBookingParams(userText)
+  const activeTools        = (toolsAllowed || canDirectOpen) ? BOOKING_TOOLS : []
   const toolChoice: 'auto' | 'none' = 'auto'
 
   let totalTokens:    number    = 0
