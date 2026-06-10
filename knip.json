@@ -13,7 +13,6 @@
   ],
   "ignore": [
     "supabase/functions/**",
-    "lib/database.types.ts",
     "types/database.types.ts",
     "lib/mock/**",
     "tests/load/**",

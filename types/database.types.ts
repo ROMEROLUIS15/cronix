@@ -1235,6 +1235,13 @@ export type Database = {
         | { Args: { "": string }; Returns: string }
       findfuncs: { Args: { "": string }; Returns: string[] }
       finish: { Args: { exception_on_failure?: boolean }; Returns: string[] }
+      fn_apply_referral_bonus: {
+        Args: { p_referred_business_id: string; p_days?: number }
+        Returns: {
+          applied: boolean
+          referrer_id: string
+        }[]
+      }
       fn_batch_create_transactions: {
         Args: { p_business_id: string; p_transactions: Json }
         Returns: Json
@@ -1276,6 +1283,25 @@ export type Database = {
             }
             Returns: Json
           }
+      fn_finalize_crypto_payment: {
+        Args: {
+          p_np_invoice_id: string
+          p_np_payment_id: string
+          p_status: string
+          p_crypto_amount: number
+          p_crypto_currency: string
+          p_days?: number
+        }
+        Returns: {
+          result_status: string
+          invoice_id: string
+          business_id: string
+          plan_purchased: string
+          invoice_status: string
+          referral_bonus_applied: boolean
+          referrer_business_id: string
+        }[]
+      }
       fn_finalize_paypal_payment: {
         Args: { p_captured_amount: number; p_days?: number; p_order_id: string }
         Returns: {
@@ -1283,6 +1309,8 @@ export type Database = {
           invoice_id: string
           plan_purchased: string
           result_status: string
+          referral_bonus_applied: boolean
+          referrer_business_id: string
         }[]
       }
       fn_find_client_by_phone: {

@@ -28,8 +28,13 @@ Si mañana se cambia el proveedor, solo se modifica el wrapper. El caller no cam
 
 ### NowPayments (`lib/payments/nowpayments.ts`)
 - Proveedor para pagos en criptomonedas
-- Flujo: Crear invoice → Webhook de confirmación de pago on-chain
-- También finaliza via `fn_finalize_paypal_payment` (mismo RPC, mismo contrato)
+- Flujo: Crear invoice → Webhook → QStash → `app/api/queue/process-saas-payment/route.ts`
+- Finalización idempotente y atómica via RPC: `fn_finalize_crypto_payment(np_invoice_id, np_payment_id, status, crypto_amount, crypto_currency, days)`
+- A diferencia de PayPal, el webhook cripto dispara en cada transición de estado
+  (waiting → confirming → finished/partially_paid). El RPC **siempre** persiste la factura
+  y solo activa plan + bono cuando el estado entrante es `finished`. Devuelve `result_status`
+  ∈ {`completed`, `updated`, `already_processed`, `invoice_not_found`}. No valida monto:
+  NowPayments lo enforce on-chain (estado `finished` = pago completo).
 
 ### Tasa BCV (`lib/payments/bcv-rate.ts`)
 - Wrapper para consultar la tasa oficial BCV (Banco Central de Venezuela)
@@ -42,7 +47,8 @@ El fulfillment es el proceso post-pago: activar el plan del negocio.
 
 ```
 fn_finalize_paypal_payment (RPC atómica)
-    │ actualiza factura + negocio en una transacción
+    │ EN UNA SOLA TRANSACCIÓN: actualiza factura + negocio + aplica bono de referido
+    │ (llama internamente a fn_apply_referral_bonus) y devuelve referral_bonus_applied
     ▼
 finalizePayPalPayment()
     │
@@ -50,21 +56,26 @@ finalizePayPalPayment()
     ├─ status: 'invoice_not_found' → return error
     ├─ status: 'amount_mismatch'   → return error (fraude/manipulación)
     └─ status: 'completed'
-          │
+          │  (plan, fecha y bono YA quedaron persistidos atómicamente en el RPC)
           ├─ INSERT en notifications (confirmación de pago al dueño)
           ├─ void fetch('push-notify') (Web Push al PWA)
-          └─ applyReferralBonus() (si el negocio fue referido)
+          └─ void push al referidor si referral_bonus_applied === true
 ```
 
-**Regla de idempotencia:** El RPC `fn_finalize_paypal_payment` usa `UPDATE ... WHERE status != 'finished'` como optimistic lock. Si el webhook llega dos veces para el mismo `orderId`, la segunda ejecución retorna `already_processed` sin efectos secundarios.
+**Regla de idempotencia:** El RPC `fn_finalize_paypal_payment` usa `FOR UPDATE` + chequeo de `status = 'finished'` como optimistic lock. Si el webhook llega dos veces para el mismo `orderId`, la segunda ejecución retorna `already_processed` sin efectos secundarios.
 
-## 4. Flujo de Bonus por Referido (`applyReferralBonus`)
+**Por qué el bono va dentro de la TX (saneamiento, migración `20260610120000_referral_bonus_atomic.sql`):** antes el bono se aplicaba en Node DESPUÉS del COMMIT; si Node moría en esa ventana, el reintento veía la factura ya `finished` y saltaba el bono → pérdida irreversible para el referidor. Ahora el conteo de facturas `finished` ocurre en la misma TX (la recién marcada es visible → da exactamente 1 en el primer pago), garantizando atomicidad e idempotencia.
+
+## 4. Flujo de Bonus por Referido (`fn_apply_referral_bonus`)
+
+**Fuente única de verdad = la función SQL `fn_apply_referral_bonus(p_referred_business_id, p_days)`.** El wrapper TS `applyReferralBonus()` solo la invoca vía rpc y dispara el push best-effort.
 
 - Se ejecuta solo si el negocio tiene `referred_by_id`
-- Se activa solo en la **primera** factura pagada del negocio referido
-- Extiende la suscripción del referidor en `REFERRAL_BONUS_DAYS` días
+- Se activa solo en la **primera** factura `finished` del negocio referido (conteo en SQL)
+- Extiende la suscripción del referidor en `REFERRAL_BONUS_DAYS` días (debe coincidir con la constante TS en `lib/plans/plan-limits.ts`)
 - Si el referidor está en plan `free`, no aplica bonus
 - Genera notificación al referidor: "¡Mes gratis ganado! 🎁"
+- **Ambas vías** (PayPal y cripto) la aplican dentro de su respectivo RPC de finalización (`fn_finalize_paypal_payment` / `fn_finalize_crypto_payment`), en la misma transacción. Node solo dispara el push best-effort al referidor cuando el RPC devuelve `referral_bonus_applied = true`.
 
 ## 5. Reglas de Seguridad
 
@@ -87,4 +98,9 @@ finalizePayPalPayment()
 **AC-3 — Bonus de referido se aplica una sola vez:**
 - DADO un negocio referido que ya pagó su primera factura,
 - CUANDO paga una segunda factura,
-- ENTONCES `applyReferralBonus` verifica que `count !== 1` y no aplica bonus adicional.
+- ENTONCES `fn_apply_referral_bonus` cuenta las facturas `finished` (`count <> 1`) y no aplica bonus adicional.
+
+**AC-4 — Atomicidad del bono (PayPal y cripto):**
+- DADO un pago de un negocio referido elegible (vía PayPal o NowPayments),
+- CUANDO `fn_finalize_paypal_payment` / `fn_finalize_crypto_payment` confirma el pago (`finished`),
+- ENTONCES el bono al referidor se persiste en la MISMA transacción; ningún fallo de Node posterior al COMMIT puede perderlo, y un reintento (`already_processed`) no lo duplica.
