@@ -189,7 +189,7 @@ describe('AC-3/AC-4 — buildNotificationFromWrite: genera notificación correct
     expect(lastRef).toBeNull()
   })
 
-  it('debería retornar objeto vacío cuando result.data es undefined', () => {
+  it('debería retornar lastRef null cuando result.data es undefined', () => {
     // Arrange
     const result = { success: false, result: 'error' }
 
@@ -198,7 +198,7 @@ describe('AC-3/AC-4 — buildNotificationFromWrite: genera notificación correct
 
     // Assert
     expect(out.notification).toBeUndefined()
-    expect(out.lastRef).toBeUndefined()
+    expect(out.lastRef).toBeNull()
   })
 
   it('debería retornar notification undefined cuando action no reconocida', () => {
