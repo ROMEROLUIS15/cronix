@@ -377,7 +377,7 @@ export function VoiceAssistantFab() {
     // Mobile Android Chrome PWA: Web Speech API conflicts with parallel getUserMedia
     // (volume monitor) and returns empty transcripts — silent failure, the button
     // never enters "processing" state and goes straight back to idle.
-    // On mobile we force the MediaRecorder + server-side Whisper path which always works.
+    // On mobile we force the MediaRecorder + server-side STT (Deepgram) path which always works.
     const isMobile = typeof navigator !== 'undefined'
       && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 
@@ -566,7 +566,7 @@ export function VoiceAssistantFab() {
         // Only block if literally NO audio was captured. The VAD speech-detection
         // gate (`hasSpokenRef`) was discarding valid audio on mobile because the
         // noise-floor calibration races with the user starting to speak immediately
-        // after tapping. Whisper has its own empty-audio guard server-side.
+        // after tapping. The server-side STT has its own empty-audio guard.
         if (audioChunksRef.current.length === 0) {
           setState('idle')
           return
@@ -602,7 +602,7 @@ export function VoiceAssistantFab() {
         const elapsed = Date.now() - startTime
 
         // Hard cap — always honored, regardless of VAD state.
-        // Sends whatever audio was captured to Whisper for server-side handling.
+        // Sends whatever audio was captured to the server-side STT for handling.
         if (elapsed >= MAX_RECORD_MS) {
           stopRecording()
           return

@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser, getAuthUserProfile } from '@/lib/supabase/server-cache'
+import { getCachedSessionUser, getCachedUserProfile } from '@/lib/supabase/server-cache'
 import { ObservabilityRepo } from './_data/observability-repo'
 import { SummaryCards }      from './_components/summary-cards'
 import { TopErrors }         from './_components/top-errors'
@@ -17,10 +17,10 @@ import { RecentTraces }      from './_components/recent-traces'
 export const dynamic = 'force-dynamic'
 
 export default async function ObservabilityPage() {
-  const user = await getAuthUser()
+  const user = await getCachedSessionUser()
   if (!user) redirect('/login')
 
-  const profile = await getAuthUserProfile(user.id)
+  const profile = await getCachedUserProfile(user.id)
   if (!profile?.business_id) redirect('/dashboard/setup')
 
   const business = !Array.isArray(profile.businesses) ? profile.businesses : null

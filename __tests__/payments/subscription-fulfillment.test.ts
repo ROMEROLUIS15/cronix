@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { finalizePayPalPayment } from '@/lib/payments/subscription-fulfillment';
+import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
 
 interface QueryChainMock {
   select: ReturnType<typeof vi.fn>;
@@ -104,10 +105,12 @@ describe('finalizePayPalPayment', () => {
       );
 
       expect(result).toEqual({ status: 'already_processed' });
+      // Guardián de SSOT: el wrapper DEBE inyectar la constante REFERRAL_BONUS_DAYS
+      // como p_days, no un literal. Si alguien rehardcodea un valor distinto, falla.
       expect(supabase.rpc).toHaveBeenCalledWith('fn_finalize_paypal_payment', {
         p_order_id: 'order-duplicate-001',
         p_captured_amount: 29.99,
-        p_days: 30,
+        p_days: REFERRAL_BONUS_DAYS,
       });
       expect(supabase.from).not.toHaveBeenCalled();
     });

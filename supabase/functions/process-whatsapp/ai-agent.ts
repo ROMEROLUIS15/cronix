@@ -478,7 +478,11 @@ export async function runAgentLoop(
 // ── Public API: Audio Transcription ───────────────────────────────────────────
 
 /**
- * Transcribes a voice note buffer to text using Groq Whisper.
+ * Transcribes a voice note buffer to text using Deepgram Nova-2 STT.
+ *
+ * Provider note: this path migrated from Groq Whisper to Deepgram (Nova-2 accepts
+ * the WebM/ogg-opus audio Meta sends without the EBML header Whisper required).
+ * The real call is to api.deepgram.com with DEEPGRAM_AURA_API_KEY.
  *
  * @param buffer   - Raw audio bytes (ogg/mp4/webm — whatever Meta sends)
  * @param mimeType - MIME type from Meta (e.g. 'audio/ogg; codecs=opus')

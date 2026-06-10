@@ -9,40 +9,30 @@
  *     ("redirects unauthenticated user from /dashboard to /login")
  *
  *   AC-2 (redirect to /setup sin business_id) → el layout es un Server Component
- *     de Next.js que usa redirect() de next/navigation y getAuthUserProfile()
+ *     de Next.js que usa redirect() de next/navigation y getCachedUserProfile()
  *     de lib/supabase/server-cache. No es testeable con Vitest sin el runtime
  *     completo de Next.js (requiere E2E con Playwright/Cypress).
  *
- *     La lógica de getSession / getBusinessId YA está cubierta:
+ *     La lógica de getVerifiedSession / getBusinessId YA está cubierta:
  *       - __tests__/auth/get-session.test.ts → session con business_id: null
  *       - __tests__/auth/get-business-id.test.ts → business_id null sin perfil
  *
- *     Este archivo testea la condición pura de redirección extraída de la lógica
- *     del layout como función helper hipotética.
+ *     Este archivo ejerce la función real `shouldRedirectToSetup()` de
+ *     `app/[locale]/dashboard/access-control.ts`, que el layout importa y usa.
+ *     No es una copia: si el layout diverge, el test se entera.
  *
  *   AC-3 (loading/error/empty) → patrón de UI, requiere Storybook o testing
  *     visual. No testeable con Vitest puro.
  */
 
 import { describe, it, expect } from 'vitest'
+import { shouldRedirectToSetup, type AccessProfile } from '@/app/[locale]/dashboard/access-control'
 
-// ── Pure logic extracted from layout.tsx ─────────────────────────────────────
-//
-// The real layout does:
-//   if (!dbUser?.business_id && !isSetupPage && !isPlatformAdmin) {
-//     redirect('/dashboard/setup')
-//   }
+// Exercises the SAME shouldRedirectToSetup() that layout.tsx imports and calls
+// — NOT a re-implemented copy. Previously this file duplicated the predicate
+// locally, so it stayed green even if the real layout diverged (tautological).
 
-type DbUser = { business_id: string | null; role?: string } | null
-
-function shouldRedirectToSetup(
-  dbUser: DbUser,
-  nextUrl: string,
-): boolean {
-  const isSetupPage = nextUrl.includes('/setup') || nextUrl === ''
-  const isPlatformAdmin = dbUser?.role === 'platform_admin'
-  return !dbUser?.business_id && !isSetupPage && !isPlatformAdmin
-}
+type DbUser = AccessProfile
 
 // ────────────────────────────────────────────────────────────────────────────
 // AC-2 — Usuario sin business_id → redirect a /setup

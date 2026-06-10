@@ -72,7 +72,7 @@ finalizePayPalPayment()
 
 - Se ejecuta solo si el negocio tiene `referred_by_id`
 - Se activa solo en la **primera** factura `finished` del negocio referido (conteo en SQL)
-- Extiende la suscripción del referidor en `REFERRAL_BONUS_DAYS` días (debe coincidir con la constante TS en `lib/plans/plan-limits.ts`)
+- Extiende la suscripción del referidor en `p_days` días. **Fuente única de verdad = la constante TS `REFERRAL_BONUS_DAYS` en `lib/plans/plan-limits.ts`.** Node la inyecta como `p_days` en ambos RPC de finalización (`fn_finalize_paypal_payment` en `subscription-fulfillment.ts`, `fn_finalize_crypto_payment` en `process-saas-payment/route.ts`); el RPC la propaga a `fn_apply_referral_bonus`. El `DEFAULT 30` de la firma SQL es solo fallback para llamadas directas — el runtime nunca lo usa. El texto de la notificación y el push también derivan de ese valor (no se hardcodea el número). El test `subscription-fulfillment.test.ts` actúa de guardián: el assert compara contra `REFERRAL_BONUS_DAYS`, no contra un literal.
 - Si el referidor está en plan `free`, no aplica bonus
 - Genera notificación al referidor: "¡Mes gratis ganado! 🎁"
 - **Ambas vías** (PayPal y cripto) la aplican dentro de su respectivo RPC de finalización (`fn_finalize_paypal_payment` / `fn_finalize_crypto_payment`), en la misma transacción. Node solo dispara el push best-effort al referidor cuando el RPC devuelve `referral_bonus_applied = true`.

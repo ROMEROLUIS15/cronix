@@ -1,0 +1,24 @@
+---
+description: SDD Startup Gate — leer specs antes de tocar código
+alwaysApply: true
+---
+
+# 🚦 LEY CERO — Gate SDD (Cursor)
+
+Este repositorio opera bajo **Spec-Driven Development**. ANTES de generar, modificar o refactorizar código, ejecuta el Protocolo de Arranque definido en `docs/specs/INDEX.md`:
+
+1. Leer `docs/specs/INDEX.md` e identificar el módulo a tocar.
+2. Leer `docs/specs/constitution.md` (reglas globales).
+3. Leer el `manifest.md` del módulo correspondiente.
+
+Reglas del gate (innegociables):
+
+- Sin excepción por "cambio pequeño": aplica a cada tarea de código.
+- Lo normativo del spec (contratos, invariantes, errores) manda sobre tu criterio; lo descriptivo (nombres, rutas) se sigue del código real.
+- Si spec y código divergen, reporta la divergencia antes de escribir — no improvises.
+- Área sin spec (🔴) → declara y pide confirmación antes de codificar.
+- Declara qué specs leíste al inicio de tu respuesta (ej: `SDD: constitution + modulo-pagos`).
+
+El detalle de estilo/arquitectura vive en `.agent/rules/good-development-practices.md`. Ver también `AGENTS.md`.
+
+@docs/specs/INDEX.md

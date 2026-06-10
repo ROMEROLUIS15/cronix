@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Badge, AppointmentStatusBadge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { getSession } from "@/lib/auth/get-session";
+import { getVerifiedSession } from "@/lib/auth/get-session";
 import { formatCurrency, formatDate, formatRelative } from "@/lib/utils";
 import type { AppointmentStatus, ClientAppointmentWithDetails } from "@/types";
 import { isPast } from "date-fns";
@@ -27,7 +27,7 @@ interface Props {
 
 export default async function ClientDetailPage({ params }: Props) {
   const { id } = await params
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session?.business_id) return notFound();
 
   const data = await getClientDetail(id, session.business_id);

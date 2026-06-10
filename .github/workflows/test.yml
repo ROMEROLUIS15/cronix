@@ -49,6 +49,14 @@ jobs:
       - name: Dead-code scan (knip)
         run: npm run knip
 
+      # SDD spec↔code drift: fails if a file path cited in docs/specs/ no longer
+      # exists on disk (the "dead map" class the June 2026 SDD audit found).
+      # Non-blocking for now (continue-on-error) — same warning-first rollout knip
+      # had; promote to blocking once the spec touch-up backlog settles.
+      - name: SDD spec-drift check
+        run: npm run check:spec-drift
+        continue-on-error: true
+
   # ── Job 1.5: Production Build Verification ────────────────────────────────
   build:
     name: Production Build
