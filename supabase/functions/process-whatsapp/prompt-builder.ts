@@ -43,7 +43,7 @@ export function buildMinimalSystemPrompt(
   // but since we format with user timezone via Intl, it will yield the correct local tomorrow).
   const tomorrow       = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-  const currentYear    = now.toLocaleDateString('en-CA', { timeZone: timezone, year: 'numeric' }).slice(0, 4)
+  const _currentYear   = now.toLocaleDateString('en-CA', { timeZone: timezone, year: 'numeric' }).slice(0, 4)
   const currentDateISO = now.toLocaleDateString('en-CA', { timeZone: timezone })
   const tomorrowISO    = tomorrow.toLocaleDateString('en-CA', { timeZone: timezone })
   

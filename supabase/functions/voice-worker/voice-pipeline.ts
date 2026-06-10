@@ -74,7 +74,7 @@ export function toNeutralTools(): NeutralTool[] {
 
 // ── Pipeline Context ─────────────────────────────────────────────────────────
 
-export interface VoiceLlmContext {
+export interface VoiceLlmContext { [key: string]: unknown
   provider:     { chat: (opts: { system: string; messages: NeutralMessage[]; tools: NeutralTool[]; temperature: number; maxOutputTokens: number }) => Promise<{ modelUsed: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; content: string | null; tokensUsed?: number }> }
   tools:        NeutralTool[]
   system:       string
@@ -84,7 +84,7 @@ export interface VoiceLlmContext {
   trace:        { recordLlmStep: (d: { model: string; latencyMs: number; tokens?: number; hadToolCalls: boolean }) => void; recordToolCall: (d: { tool: string; durationMs: number; status: string; argsFingerprint: string; errorCode?: string }) => void }
 }
 
-export interface VoiceLlmResult {
+export interface VoiceLlmResult { [key: string]: unknown
   finalText:            string
   actionPerformed:      boolean
   modelUsed:            string
@@ -110,9 +110,9 @@ function applyDateOverride(
 }
 
 function buildToolFingerprint(args: Record<string, unknown>): string {
-  return Object.keys(args).sort().reduce<Record<string, unknown>>((acc, k) => {
+  return JSON.stringify(Object.keys(args).sort().reduce<Record<string, unknown>>((acc, k) => {
     acc[k] = args[k]; return acc
-  }, {})
+  }, {}))
 }
 
 export function buildNotificationFromWrite(
@@ -120,7 +120,7 @@ export function buildNotificationFromWrite(
   businessId: string,
   userId: string,
 ): { notification?: AppointmentNotification; lastRef: AgentOutput['lastRefCandidate'] } {
-  if (!result.data) return {}
+  if (!result.data) return { lastRef: null }
 
   const eventType = ACTION_TO_EVENT_TYPE[result.data.action]
   const notification = eventType
