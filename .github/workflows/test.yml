@@ -220,3 +220,104 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # ── Job 5: Authenticated E2E vs an EPHEMERAL Supabase (E1 remediation) ────────
+  # Spins up a throwaway Supabase (CLI + Docker) seeded from the repo's migrations
+  # + seed.sql, then seeds the E2E fixture and runs a focused auth subset in
+  # chromium. It NEVER touches the production database — the prod secrets are
+  # deliberately overridden with the local instance's URL/keys.
+  #
+  # STATUS (E1): the ephemeral stack is PROVEN end-to-end in CI (start → 81
+  # migrations → seed.sql → fixture → build → app serving → Playwright running;
+  # direct-URL authed pages pass). BUT the dashboard-core subset still fails: the
+  # dashboard SHELL (sidebar navigation, avatar, responsive layout) doesn't mount
+  # its interactive UI under the ephemeral build — sidebar-click/nav tests fail
+  # while direct page.goto content assertions pass. That's an E2E-stabilization
+  # task (likely client hydration / a missing runtime env), not validatable locally.
+  #
+  # Kept as workflow_dispatch (MANUAL) so it does NOT add red noise to every PR.
+  # To finish E1: stabilize the dashboard shell under the ephemeral build, then
+  # switch `if:` to pull_request and mark "E2E Auth" a required check (blocking).
+  e2e-auth:
+    name: E2E Auth (ephemeral Supabase)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    if: github.event_name == 'workflow_dispatch'
+    needs: [unit]
+
+    # Override the workflow-level prod secrets: this job must talk ONLY to the
+    # local ephemeral Supabase, never production.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ''
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ''
+      SUPABASE_SERVICE_ROLE_KEY: ''
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start ephemeral Supabase (applies migrations + seed.sql)
+        run: supabase start
+
+      - name: Export local Supabase URL + keys (overrides prod)
+        run: |
+          STATUS=$(supabase status -o json)
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | jq -r '.API_URL')"              >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | jq -r '.ANON_KEY')"        >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')"    >> "$GITHUB_ENV"
+          echo "CRON_SECRET=e2e-local-cron-secret"                                          >> "$GITHUB_ENV"
+
+      - name: Seed E2E fixture data
+        run: npm run e2e:setup
+
+      - name: Build production bundle (against local Supabase)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Copy standalone static assets
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+
+      - name: Create auth directory
+        run: mkdir -p playwright/.auth
+
+      # Authenticated subset only: dashboard-core runs under the chromium project
+      # (logged-in storageState). auth-login is an UNAUTHENTICATED-page suite — it
+      # belongs to the smoke job, not here (logged-in → /login redirects to /dashboard).
+      - name: Run auth E2E subset (chromium, with retries)
+        run: npx playwright test --project=chromium dashboard-core-pages.spec.ts --reporter=list
+        env:
+          CI: 'true'
+          PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop || true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report-e2e-auth
+          path: playwright-report/
+          retention-days: 7
+
