@@ -249,3 +249,136 @@ describe('voice-worker capability execution', () => {
     expect(sel.gte?.[1]).not.toBe('2026-06-15T00:00:00')
   })
 })
+
+describe('voice-worker capability execution — edge & safety paths', () => {
+  it('schedule → horario ocupado: NO inserta y avisa', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
+      if (op.table === 'appointments' && op.type === 'select') return { data: [{ id: 'busy' }] } // findConflicts → ocupado
+      return { data: null }
+    })
+    const res = await executeSchedule(ctxWith(m), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2026-06-15', time: '15:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('ocupado')
+    expect(m.opsFor('appointments').find(o => o.type === 'insert')).toBeUndefined()
+  })
+
+  it('schedule → cliente inexistente sin register: NO inserta, ofrece registrar', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: [] } // roster vacío → not_found
+      return { data: null }
+    })
+    const res = await executeSchedule(ctxWith(m), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2026-06-15', time: '15:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('registre')
+    expect(m.opsFor('appointments').find(o => o.type === 'insert')).toBeUndefined()
+  })
+
+  it('reschedule → faltan fecha y hora: pregunta y NO actualiza', async () => {
+    const m = createMockSupabase(() => ({ data: null }))
+    const res = await executeReschedule(ctxWith(m), { client_name: 'Ana Torres' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('fecha y hora')
+    expect(m.opsFor('appointments').find(o => o.type === 'update')).toBeUndefined()
+  })
+
+  it('cancel → cliente no encontrado: NO actualiza', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: [] }
+      return { data: null }
+    })
+    const res = await executeCancel(ctxWith(m), { client_name: 'Ana Torres' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('No encontré')
+    expect(m.opsFor('appointments').find(o => o.type === 'update')).toBeUndefined()
+  })
+
+  it('delete-client → bloqueado por cita futura: NO borra (safety)', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'appointments' && op.type === 'select') return { count: 2 } // tiene futuras
+      return { data: null }
+    })
+    const res = await executeDeleteClient(ctxWith(m), { client_name: 'Ana Torres' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('No se puede eliminar')
+    expect(m.opsFor('clients').find(o => o.type === 'update')).toBeUndefined()
+  })
+
+  it('delete-client → duplicados con teléfonos distintos: pide desambiguar, NO borra', async () => {
+    const DUPES = [
+      { id: 'a', name: 'Ana Torres', phone: '04141110000' },
+      { id: 'b', name: 'Ana Torres', phone: '04242220000' },
+    ]
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: DUPES }
+      return { data: null }
+    })
+    const res = await executeDeleteClient(ctxWith(m), { client_name: 'Ana Torres' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('Cuál elimino')
+    expect(m.opsFor('clients').find(o => o.type === 'update')).toBeUndefined()
+  })
+
+  it('last-visit → todas canceladas/no-show: lo dice, no inventa una visita', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'appointments' && op.type === 'select') {
+        return op.selectOpts?.count ? { count: 3 } : { data: [] } // sin asistidas, pero hubo pasadas
+      }
+      return { data: null }
+    })
+    const res = await executeLastVisit(ctxWith(m), { client_name: 'Ana Torres' })
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('no tiene visitas asistidas')
+  })
+
+  it('list-appointments → día vacío: "No hay citas"', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      return { data: null }
+    })
+    const res = await executeListAppointments(ctxWith(m), { date: '2026-06-15' })
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('No hay citas')
+  })
+
+  it('next-appointment → sin próximas: lo informa', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      return { data: null }
+    })
+    const res = await executeNextAppointment(ctxWith(m), {})
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('No tienes citas próximas')
+  })
+
+  it('available-slots → día cerrado: lo informa, no consulta agenda', async () => {
+    const allClosed = Object.fromEntries(
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d => [d, null]),
+    )
+    const m = createMockSupabase(() => ({ data: null }))
+    const res = await executeAvailableSlots(
+      ctxWith(m, { workingHours: allClosed }),
+      { date: '2026-06-15', duration_min: 30 },
+    )
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('cerrado')
+    expect(m.opsFor('appointments')).toHaveLength(0)
+  })
+})
