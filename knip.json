@@ -2,9 +2,6 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "scripts/**/*.{ts,js}",
-    "instrumentation.ts",
-    "instrumentation-client.ts",
-    "middleware.ts",
     "worker/index.js",
     "i18n/**/*.ts",
     "vitest.components.config.ts",
@@ -15,10 +12,9 @@
     "supabase/functions/**",
     "types/database.types.ts",
     "lib/mock/**",
-    "tests/load/**",
-    "**/*.d.ts"
+    "tests/load/**"
   ],
-  "ignoreBinaries": ["deno", "supabase"],
+  "ignoreBinaries": ["python"],
   "ignoreDependencies": [
     "@rushstack/eslint-patch",
     "@typescript-eslint/eslint-plugin",
