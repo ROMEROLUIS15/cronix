@@ -88,5 +88,6 @@ cv/
 evals/.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .deepeval/
 .deepeval_telemetry.txt
