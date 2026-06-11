@@ -106,12 +106,15 @@ async function setupTestData() {
   }
 
   // ── Step 3: Link user to business in public.users ─────────────────────────
+  // role 'owner' = representative business user. The dashboard shell (sidebar,
+  // home stats, avatar) renders the owner UI the E2E specs assert against;
+  // 'platform_admin' bypasses the business gate and renders a different shell.
   const { error: upsertErr } = await supabase.from('users').upsert({
     id:          userId,
     business_id: bizId,
     name:        'Test Admin',
     email:       TEST_EMAIL,
-    role:        'platform_admin' as 'owner' | 'employee' | 'platform_admin',
+    role:        'owner' as 'owner' | 'employee' | 'platform_admin',
   }, { onConflict: 'id' })
 
   if (upsertErr) {
