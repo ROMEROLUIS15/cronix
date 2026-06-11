@@ -1,5 +1,6 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
+import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 
 export interface CreateClientArgs extends Record<string, unknown> {
   name:   string
@@ -11,6 +12,16 @@ export async function executeCreateClient(
   args: CreateClientArgs,
 ): Promise<ToolResult> {
   if (!args.name) return { success: false, result: 'Necesito el nombre del cliente.' }
+
+  // Anti-substitution guard: never register a client under a name the user
+  // never said. create_client is a write that inserts a row — a fabricated
+  // name would silently pollute the roster. Same guard the other client_name
+  // tools use; empty corpus ⇒ fail-open.
+  const corpus = ctx.userTextCorpus ?? ''
+  if (corpus && !nameMentionedInCorpus(corpus, args.name)) {
+    console.log(`[VOICE-WORKER-CREATE-CLIENT] REJECTED — hallucinated name="${args.name}"`)
+    return { success: false, result: 'No te entendí bien el nombre. ¿Cómo se llama el cliente?' }
+  }
 
   const { data, error } = await ctx.supabase
     .from('clients')
