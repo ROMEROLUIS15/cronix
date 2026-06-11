@@ -3,6 +3,7 @@ import type { ToolResult, BookingEventData } from '../../types.ts'
 import { utcToLocalParts } from '../../core/time-format.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
+import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 import {
   findAppointmentByClientName, findAppointmentById, resolveAppointmentServiceId,
 } from '../../core/repos/appointments.ts'
@@ -36,6 +37,14 @@ export async function executeCancel(
       .single()
     clientName = (cli as { name?: string } | null)?.name ?? args.client_name
   } else {
+    // Anti-substitution guard (explicit-name path only — the anaphoric branch
+    // above resolves by appointment_id and never trusts a model-supplied name).
+    // A cancel is destructive: never act on a registered name the user didn't say.
+    const corpus = ctx.userTextCorpus ?? ''
+    if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
+      console.log(`[VOICE-WORKER-CANCEL] REJECTED — hallucinated client="${args.client_name}"`)
+      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le cancelo la cita?' }
+    }
     const resolution = await resolveClient(ctx, args.client_name)
     if (resolution.status !== 'found') {
       if (resolution.status === 'ambiguous') {

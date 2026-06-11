@@ -124,15 +124,27 @@ export async function runAgent(
   const dateOverride = detectTemporalIntent(input.text, todayLocal)
 
   const pipeline = buildVoicePipeline()
-  const { context: llmResult } = await pipeline.run({
-    provider,
-    tools,
-    system,
-    dateOverride,
-    ctx,
-    input,
-    trace,
-  })
+  let llmResult
+  try {
+    const ran = await pipeline.run({
+      provider,
+      tools,
+      system,
+      dateOverride,
+      ctx,
+      input,
+      trace,
+    })
+    llmResult = ran.context
+  } catch (err) {
+    // A provider/LLM throw here propagates to index.ts as a 500 and the user
+    // hears nothing. The trace is only persisted on finish() — without this the
+    // turn vanishes from /dashboard/observability entirely, which is exactly
+    // how a "la voz no respondió" turn became invisible. Close it as a failure
+    // (idempotent) and rethrow so index.ts still returns its 500.
+    await trace.finish({ outcome: 'failure', errorCode: 'LLM_EXCEPTION', finalTextSha: await shortHash('') })
+    throw err
+  }
 
   const { finalText, actionPerformed, modelUsed, pendingNotifications, lastRefCandidate } = llmResult
 

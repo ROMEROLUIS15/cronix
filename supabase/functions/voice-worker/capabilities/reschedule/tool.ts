@@ -1,7 +1,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData }  from '../../types.ts'
 import { localToUTC, buildEndISO, utcToLocalParts } from '../../core/time-format.ts'
-import { extractSlotsFromCorpus } from '../../core/conversation/slot-extractor.ts'
+import { extractSlotsFromCorpus, nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
 import {
@@ -67,6 +67,14 @@ export async function executeReschedule(
       .single()
     clientName = (cli as { name?: string } | null)?.name ?? args.client_name
   } else {
+    // Anti-substitution guard (explicit-name path only — the anaphoric branch
+    // resolves by appointment_id). Reschedule is destructive: never act on a
+    // registered name the user didn't say.
+    const corpus = ctx.userTextCorpus ?? ''
+    if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
+      console.log(`[VOICE-WORKER-RESCHEDULE] REJECTED — hallucinated client="${args.client_name}"`)
+      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le reagendo la cita?' }
+    }
     const resolution = await resolveClient(ctx, args.client_name)
     if (resolution.status !== 'found') {
       if (resolution.status === 'ambiguous') {
