@@ -18,6 +18,7 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 import { resolveClient } from '../../core/repos/clients.ts'
 import { humanizeDate }  from '../../core/time-format.ts'
+import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 
 export interface LastVisitArgs extends Record<string, unknown> {
   client_name: string
@@ -50,6 +51,19 @@ export async function executeLastVisit(
 ): Promise<ToolResult> {
   if (!args.client_name) {
     return { success: false, result: 'Necesito el nombre del cliente.' }
+  }
+
+  // Anti-substitution guard. The LLM must not approximate a registered name the
+  // user never said: when the spoken name ("Gardiana") isn't in the roster the
+  // model otherwise passes the nearest registered one ("Adriana") and we'd
+  // answer about the wrong person. nameMentionedInCorpus tolerates STT/phonetic
+  // variants of what the user DID say but rejects fabrications. Fast-path names
+  // come from the user text so they pass; empty corpus ⇒ fail-open (mirrors
+  // smart_schedule's client_name guard).
+  const corpus = ctx.userTextCorpus ?? ''
+  if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
+    console.log(`[VOICE-WORKER-LAST-VISIT] REJECTED — hallucinated client="${args.client_name}"`)
+    return { success: false, result: 'No te entendí bien el nombre. ¿De qué cliente quieres la última visita?' }
   }
 
   const resolution = await resolveClient(ctx, args.client_name)

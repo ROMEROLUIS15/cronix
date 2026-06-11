@@ -1,6 +1,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 import { getActiveClients, resolveClient } from '../../core/repos/clients.ts'
+import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 
 export interface SearchClientsArgs extends Record<string, unknown> {
   query: string
@@ -12,6 +13,14 @@ export async function executeSearchClients(
 ): Promise<ToolResult> {
   if (!args.query || args.query.length < 2) {
     return { success: false, result: 'Necesito al menos 2 caracteres para buscar.' }
+  }
+
+  // Anti-substitution guard — same rationale as last_visit: don't let the LLM
+  // search for a registered name the user never uttered.
+  const corpus = ctx.userTextCorpus ?? ''
+  if (corpus && !nameMentionedInCorpus(corpus, args.query)) {
+    console.log(`[VOICE-WORKER-SEARCH-CLIENTS] REJECTED — hallucinated query="${args.query}"`)
+    return { success: false, result: 'No te entendí bien el nombre. ¿A quién busco?' }
   }
 
   const all = await getActiveClients(ctx)

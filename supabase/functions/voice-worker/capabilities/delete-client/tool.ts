@@ -24,6 +24,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 import { type ClientRow, resolveClient, normalisePhone, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
+import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 
 export interface DeleteClientArgs extends Record<string, unknown> {
   client_name:    string
@@ -36,6 +37,17 @@ export async function executeDeleteClient(
   args: DeleteClientArgs,
 ): Promise<ToolResult> {
   if (!args.client_name) return { success: false, result: 'Necesito el nombre del cliente.' }
+
+  // Anti-substitution guard. Skip on the consent paths (any_duplicate / phone):
+  // there the name echoes a prior disambiguation listing the user already
+  // accepted, which may not appear verbatim in the user-side corpus. On the
+  // plain path a delete is destructive — never act on a registered name the
+  // user never said.
+  const corpus = ctx.userTextCorpus ?? ''
+  if (corpus && !args.any_duplicate && !args.phone && !nameMentionedInCorpus(corpus, args.client_name)) {
+    console.log(`[VOICE-WORKER-DELETE-CLIENT] REJECTED — hallucinated client="${args.client_name}"`)
+    return { success: false, result: 'No te entendí bien el nombre. ¿A qué cliente elimino?' }
+  }
 
   const resolution = await resolveClient(ctx, args.client_name)
   if (resolution.status === 'not_found') {
