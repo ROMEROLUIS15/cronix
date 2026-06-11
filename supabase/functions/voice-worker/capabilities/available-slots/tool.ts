@@ -32,13 +32,21 @@ export async function executeAvailableSlots(
   const open  = wh?.open  ?? '09:00'
   const close = wh?.close ?? '18:00'
 
+  // Bound the booked-set query by the LOCAL day converted to UTC — start_at is
+  // stored in UTC, so naive `${date}T00:00:00` strings would query a UTC day
+  // that's offset from the business's local day. In tz ≠ UTC that dropped
+  // evening appointments from the conflict set and offered already-booked slots
+  // as free. Mirror list-appointments' boundary handling.
+  const dayStartISO = localToUTC(args.date, '00:00', ctx.timezone)
+  const dayEndISO   = localToUTC(args.date, '23:59', ctx.timezone)
+
   const { data: booked, error } = await ctx.supabase
     .from('appointments')
     .select('start_at, end_at')
     .eq('business_id', ctx.businessId)
     .in('status', ['pending', 'confirmed'])
-    .gte('start_at', `${args.date}T00:00:00`)
-    .lte('start_at', `${args.date}T23:59:59`)
+    .gte('start_at', dayStartISO)
+    .lte('start_at', dayEndISO)
     .order('start_at')
 
   if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}` }
