@@ -313,119 +313,122 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
     if (!businessId) return
     setSaving(true)
 
-    // Re-validate right before saving
-    const fresh = await runValidation(appointmentId)
-    if (fresh.slotBlocked) {
-      setValidation(v => ({ ...v, slotError: fresh.slotMsg ?? null, doubleBookingLevel: 'blocked' }))
-      setSaving(false)
-      return
-    }
-    if (fresh.bookingLevel === 'blocked') {
-      setValidation(v => ({ ...v, doubleBookingLevel: 'blocked', doubleBookingMsg: fresh.bookingMsg }))
-      setSaving(false)
-      return
-    }
-    if (fresh.bookingLevel === 'warn' && !validation.confirmed) {
-      setValidation(v => ({ ...v, doubleBookingLevel: 'warn', doubleBookingMsg: fresh.bookingMsg }))
-      setSaving(false)
-      return
-    }
+    try {
+      // Re-validate right before saving
+      const fresh = await runValidation(appointmentId)
+      if (fresh.slotBlocked) {
+        setValidation(v => ({ ...v, slotError: fresh.slotMsg ?? null, doubleBookingLevel: 'blocked' }))
+        return
+      }
+      if (fresh.bookingLevel === 'blocked') {
+        setValidation(v => ({ ...v, doubleBookingLevel: 'blocked', doubleBookingMsg: fresh.bookingMsg }))
+        return
+      }
+      if (fresh.bookingLevel === 'warn' && !validation.confirmed) {
+        setValidation(v => ({ ...v, doubleBookingLevel: 'warn', doubleBookingMsg: fresh.bookingMsg }))
+        return
+      }
 
-    const startObj = new Date(form.start_at)
-    const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
+      const startObj = new Date(form.start_at)
+      const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
-    // Update appointment — container doesn't support update yet, use supabase directly
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('appointments')
-      .update({
-        client_id:        form.client_id,
-        service_id:       form.service_ids[0] ?? null,
-        assigned_user_id: form.assigned_user_id || null,
-        start_at:         startObj.toISOString(),
-        end_at:           endObj.toISOString(),
-        status:           form.status as 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show',
-        notes:            form.notes || null,
-        is_dual_booking:  validation.doubleBookingLevel === 'warn',
-        updated_at:       new Date().toISOString(),
-      })
-      .eq('id', appointmentId)
-      .eq('business_id', businessId)
+      // Update appointment — container doesn't support update yet, use supabase directly
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          client_id:        form.client_id,
+          service_id:       form.service_ids[0] ?? null,
+          assigned_user_id: form.assigned_user_id || null,
+          start_at:         startObj.toISOString(),
+          end_at:           endObj.toISOString(),
+          status:           form.status as 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show',
+          notes:            form.notes || null,
+          is_dual_booking:  validation.doubleBookingLevel === 'warn',
+          updated_at:       new Date().toISOString(),
+        })
+        .eq('id', appointmentId)
+        .eq('business_id', businessId)
 
-    // Sync junction table: delete old rows + insert new ones
-    if (!error) {
-      await supabase
-        .from('appointment_services')
-        .delete()
-        .eq('appointment_id', appointmentId)
-
-      if (form.service_ids.length > 0) {
+      // Sync junction table: delete old rows + insert new ones
+      if (!error) {
         await supabase
           .from('appointment_services')
-          .insert(form.service_ids.map((sid, i) => ({
-            appointment_id: appointmentId,
-            service_id:     sid,
-            sort_order:     i,
-          })))
-      }
-    }
+          .delete()
+          .eq('appointment_id', appointmentId)
 
-    // Handle reminders and notifications via container
-    if (!error) {
-      const container = getBrowserContainer()
-      await container.reminders.cancelByAppointment(appointmentId).catch(() => null)
-      if (bizNotif.whatsapp) {
-        const remindAt = new Date(Date.UTC(
-          startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
-        )).toISOString()
-
-        if (!skipReminder) {
-          await container.reminders.upsert(appointmentId, businessId, remindAt, 0).catch(() => null)
-        } else {
-          await supabase.from('appointment_reminders').insert({
-            appointment_id: appointmentId,
-            business_id:    businessId,
-            remind_at:      remindAt,
-            minutes_before: 0,
-            status:         'cancelled',
-            channel:        'whatsapp',
-          }).then(() => null, () => null)
+        if (form.service_ids.length > 0) {
+          await supabase
+            .from('appointment_services')
+            .insert(form.service_ids.map((sid, i) => ({
+              appointment_id: appointmentId,
+              service_id:     sid,
+              sort_order:     i,
+            })))
         }
       }
 
-      // In-app notification for appointment update
-      const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
-      const serviceName = services.filter(s => form.service_ids.includes(s.id)).map(s => s.name).join(', ') || 'servicio'
-      const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      // Handle reminders and notifications via container
+      if (!error) {
+        const container = getBrowserContainer()
+        await container.reminders.cancelByAppointment(appointmentId).catch(() => null)
+        if (bizNotif.whatsapp) {
+          const remindAt = new Date(Date.UTC(
+            startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
+          )).toISOString()
 
-      const notifPayload = {
-        business_id: businessId,
-        title: '📝 Cita actualizada',
-        content: `${clientName} • ${serviceName} a las ${timeStr}`,
-        type: 'info' as const,
-        metadata: {
-          event: 'appointment.updated',
-          appointmentId: appointmentId,
-        },
+          if (!skipReminder) {
+            await container.reminders.upsert(appointmentId, businessId, remindAt, 0).catch(() => null)
+          } else {
+            await supabase.from('appointment_reminders').insert({
+              appointment_id: appointmentId,
+              business_id:    businessId,
+              remind_at:      remindAt,
+              minutes_before: 0,
+              status:         'cancelled',
+              channel:        'whatsapp',
+            }).then(() => null, () => null)
+          }
+        }
+
+        // In-app notification for appointment update
+        const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
+        const serviceName = services.filter(s => form.service_ids.includes(s.id)).map(s => s.name).join(', ') || 'servicio'
+        const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+
+        const notifPayload = {
+          business_id: businessId,
+          title: '📝 Cita actualizada',
+          content: `${clientName} • ${serviceName} a las ${timeStr}`,
+          type: 'info' as const,
+          metadata: {
+            event: 'appointment.updated',
+            appointmentId: appointmentId,
+          },
+        }
+        container.notifications.create(notifPayload).catch(() => null)
+
+        // Web push notification
+        const { notifyOwner } = await import('@/lib/services/push-notify.service')
+        notifyOwner({
+          title: notifPayload.title,
+          body:  notifPayload.content,
+          url:   `/dashboard/appointments/${appointmentId}`,
+          tag:   `updated-${appointmentId}`,
+        }).catch(() => null)
       }
-      container.notifications.create(notifPayload).catch(() => null)
 
-      // Web push notification
-      const { notifyOwner } = await import('@/lib/services/push-notify.service')
-      notifyOwner({
-        title: notifPayload.title,
-        body:  notifPayload.content,
-        url:   `/dashboard/appointments/${appointmentId}`,
-        tag:   `updated-${appointmentId}`,
-      })
-    }
-
-    setSaving(false)
-    if (error) {
-      setMsg({ type: 'error', text: 'Error al actualizar: ' + error.message })
-    } else {
-      setMsg({ type: 'success', text: 'Cita actualizada correctamente' })
-      setTimeout(() => { router.push('/dashboard/appointments'); router.refresh() }, 1200)
+      if (error) {
+        setMsg({ type: 'error', text: 'Error al actualizar: ' + error.message })
+      } else {
+        setMsg({ type: 'success', text: 'Cita actualizada correctamente' })
+        setTimeout(() => { router.push('/dashboard/appointments'); router.refresh() }, 1200)
+      }
+    } catch (err) {
+      logger.error('appointment-update', 'Failed to update appointment', err)
+      setMsg({ type: 'error', text: 'Error al actualizar la cita. Intenta de nuevo.' })
+    } finally {
+      setSaving(false)
     }
   }
 

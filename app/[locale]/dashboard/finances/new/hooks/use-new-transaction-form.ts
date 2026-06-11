@@ -71,25 +71,32 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
     }
 
     setSaving(true);
-    const amount = parseFloat(form.amount);
+    setMsg(null);
 
-    const container = getBrowserContainer();
-    const result = await container.finances.createTransaction({
-      business_id: businessId!,
-      client_id: form.client_id,
-      amount,
-      net_amount: amount,
-      method: form.method,
-      notes: form.notes.trim() || null,
-      paid_at: form.date ? new Date(form.date).toISOString() : new Date().toISOString(),
-    });
+    try {
+      const amount = parseFloat(form.amount);
 
-    setSaving(false);
-    if (result.error) {
-      setMsg({ type: 'error', text: 'Error al guardar el cobro' });
-    } else {
+      const container = getBrowserContainer();
+      const result = await container.finances.createTransaction({
+        business_id: businessId!,
+        client_id: form.client_id,
+        amount,
+        net_amount: amount,
+        method: form.method,
+        notes: form.notes.trim() || null,
+        paid_at: form.date ? new Date(form.date).toISOString() : new Date().toISOString(),
+      });
+
+      if (result.error) {
+        setMsg({ type: 'error', text: 'Error al guardar el cobro' });
+        return;
+      }
       router.push('/dashboard/finances');
       router.refresh();
+    } catch {
+      setMsg({ type: 'error', text: 'Error al guardar el cobro' });
+    } finally {
+      setSaving(false);
     }
   }, [businessId, form, router]);
 

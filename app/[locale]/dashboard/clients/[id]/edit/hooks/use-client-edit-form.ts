@@ -116,57 +116,73 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
     if (!businessId) return;
     setSaving(true);
 
-    const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
+    try {
+      const fullPhone = buildPhone(selectedCountry, form.phoneLocal);
 
-    // Check duplicate phone (exclude current client)
-    if (fullPhone) {
-      const { data: existing } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('business_id', businessId)
-        .eq('phone', fullPhone)
-        .is('deleted_at', null)
-        .neq('id', clientId)
-        .maybeSingle();
+      // Check duplicate phone (exclude current client)
+      if (fullPhone) {
+        const { data: existing } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('business_id', businessId)
+          .eq('phone', fullPhone)
+          .is('deleted_at', null)
+          .neq('id', clientId)
+          .maybeSingle();
 
-      if (existing) {
-        setSaving(false);
-        return showMsg('error', `El número ya está registrado para el cliente "${existing.name}".`);
+        if (existing) {
+          showMsg('error', `El número ya está registrado para el cliente "${existing.name}".`);
+          return;
+        }
       }
+
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          name: form.name.trim(),
+          phone: fullPhone,
+          email: form.email.trim() || null,
+          notes: form.notes.trim() || null,
+          tags: form.tags.length > 0 ? form.tags : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', clientId)
+        .eq('business_id', businessId);
+
+      if (error) {
+        showMsg('error', 'Error al guardar: ' + error.message);
+        return;
+      }
+      setLegacyPhone(false);
+      showMsg('success', 'Cliente actualizado correctamente');
+      setTimeout(() => router.push(`/dashboard/clients/${clientId}`), 1200);
+    } catch {
+      showMsg('error', 'No se pudo guardar el cliente. Intenta de nuevo.');
+    } finally {
+      setSaving(false);
     }
-
-    const { error } = await supabase
-      .from('clients')
-      .update({
-        name: form.name.trim(),
-        phone: fullPhone,
-        email: form.email.trim() || null,
-        notes: form.notes.trim() || null,
-        tags: form.tags.length > 0 ? form.tags : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', clientId)
-      .eq('business_id', businessId);
-
-    setSaving(false);
-    if (error) return showMsg('error', 'Error al guardar: ' + error.message);
-    setLegacyPhone(false);
-    showMsg('success', 'Cliente actualizado correctamente');
-    setTimeout(() => router.push(`/dashboard/clients/${clientId}`), 1200);
   }, [form, businessId, clientId, selectedCountry, supabase, router, showMsg]);
 
   const handleDelete = useCallback(async () => {
     if (!businessId) return;
     setDeleting(true);
-    const { error } = await supabase
-      .from('clients')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', clientId)
-      .eq('business_id', businessId);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', clientId)
+        .eq('business_id', businessId);
 
-    setDeleting(false);
-    if (error) return showMsg('error', 'Error al eliminar: ' + error.message);
-    router.push('/dashboard/clients');
+      if (error) {
+        showMsg('error', 'Error al eliminar: ' + error.message);
+        return;
+      }
+      router.push('/dashboard/clients');
+    } catch {
+      showMsg('error', 'No se pudo eliminar el cliente. Intenta de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
   }, [businessId, clientId, supabase, router, showMsg]);
 
   return {
