@@ -293,8 +293,11 @@ jobs:
       - name: Create auth directory
         run: mkdir -p playwright/.auth
 
+      # Authenticated subset only: dashboard-core runs under the chromium project
+      # (logged-in storageState). auth-login is an UNAUTHENTICATED-page suite — it
+      # belongs to the smoke job, not here (logged-in → /login redirects to /dashboard).
       - name: Run auth E2E subset (chromium, with retries)
-        run: npx playwright test --project=chromium auth-login.spec.ts dashboard-core-pages.spec.ts --reporter=list
+        run: npx playwright test --project=chromium dashboard-core-pages.spec.ts --reporter=list
         env:
           CI: 'true'
           PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
