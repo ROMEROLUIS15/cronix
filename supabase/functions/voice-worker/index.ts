@@ -28,6 +28,8 @@ import { dispatchBellNotification } from './notifications.ts'
 import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
 import { buildUserCorpus }       from './core/conversation/frame.ts'
+import { createTracer, shortHash } from '../_shared/observability/index.ts'
+import type { TraceOutcome }     from '../_shared/observability/contracts.ts'
 import type { ToolContext }      from './core/tool-context.ts'
 import type {
   AgentInput, BusinessContext, UserRole, VoiceWorkerResponse,
@@ -84,6 +86,33 @@ interface UserContext {
   userName:   string
   userRole:   UserRole
   businessId: string
+}
+
+// Per-turn tracer. The agent loop opens/closes its own trace, but turns that
+// bail BEFORE runAgent (rate-limit, unintelligible STT, payload error) used to
+// produce no trace row at all — a "la voz no respondió" turn vanished from
+// /dashboard/observability. This records a minimal trace for those exits so the
+// dashboard sees them. Only callable once userCtx is known (we need a scope).
+const tracer = createTracer()
+
+async function recordEarlyExitTrace(
+  userCtx:   UserContext,
+  timezone:  string,
+  text:      string,
+  outcome:   TraceOutcome,
+  errorCode: string,
+): Promise<void> {
+  try {
+    const trace = tracer.start(
+      { businessId: userCtx.businessId, channel: 'voice-worker', actorKind: 'user', actorKey: userCtx.userId },
+      await shortHash(text),
+      { timezone },
+    )
+    await trace.finish({ outcome, errorCode })
+  } catch (err) {
+    // Observability must never break the actual response path.
+    console.error('[VOICE-WORKER] early-exit trace failed', err)
+  }
 }
 
 // JWT-keyed auth cache. Skips both `auth.getUser` (verifies JWT signature
@@ -224,6 +253,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // 2. Rate limit
   const rl = await checkRateLimit(userCtx.userId, 30)
   if (!rl.allowed) {
+    await recordEarlyExitTrace(userCtx, 'UTC', '', 'rate_limited', 'RATE_LIMITED')
     return jsonResponse({ error: `Demasiadas solicitudes. Reintenta en ${rl.retryAfter}s.` }, 429)
   }
 
@@ -260,6 +290,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // Noise / gibberish guard (text path)
       const MEANINGFUL_TEXT = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
       if (inputText.length < 3 || !MEANINGFUL_TEXT.test(inputText)) {
+        await recordEarlyExitTrace(userCtx, timezone, inputText, 'no_action', 'STT_NOISE')
         return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
       }
 
@@ -314,6 +345,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // Noise / gibberish guard (audio path — applied after STT resolves)
       const MEANINGFUL_AUDIO = /[a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9]/
       if (inputText.length < 3 || !MEANINGFUL_AUDIO.test(inputText)) {
+        await recordEarlyExitTrace(userCtx, timezone, inputText, 'no_action', 'STT_NOISE')
         return jsonResponse({ error: 'No logré captar lo que dijiste. ¿Puedes repetir?' }, 422)
       }
 
