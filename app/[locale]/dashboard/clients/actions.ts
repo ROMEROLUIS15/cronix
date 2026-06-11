@@ -140,9 +140,14 @@ export async function createNewClient(input: {
   if (result.error) {
     // DB-level unique constraints enforce phone+email uniqueness per business
     // (idx_clients_business_phone_digits / idx_clients_business_email_norm).
-    // Map the constraint name to a friendly message so the UI never surfaces
-    // raw Postgres errors.
-    if (result.error.includes('idx_clients_business_phone_digits')) {
+    // The legacy clients_business_phone_unique_key is dropped in migration
+    // 20260611120000 but is still matched here so the message stays friendly even
+    // before that migration is applied. Map the constraint name to a friendly
+    // message so the UI never surfaces raw Postgres errors.
+    if (
+      result.error.includes('idx_clients_business_phone_digits') ||
+      result.error.includes('clients_business_phone_unique_key')
+    ) {
       return { error: 'Ya tienes un cliente activo con ese número de teléfono.' }
     }
     if (result.error.includes('idx_clients_business_email_norm')) {

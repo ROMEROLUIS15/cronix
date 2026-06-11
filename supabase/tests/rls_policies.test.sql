@@ -379,9 +379,9 @@ SELECT ok(
 SELECT ok(
   EXISTS(
     SELECT 1 FROM pg_indexes
-    WHERE tablename = 'clients' AND indexname IN ('clients_business_phone_unique', 'clients_business_phone_unique_key')
+    WHERE tablename = 'clients' AND indexname = 'idx_clients_business_phone_digits'
   ),
-  'unique index on clients business_id + phone exists'
+  'unique index on clients business_id + phone (normalised digits) exists'
 );
 
 -- Insert a client with phone for business A
