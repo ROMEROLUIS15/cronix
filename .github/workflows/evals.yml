@@ -1,0 +1,62 @@
+name: Evals (DeepEval)
+
+# Voice-Agent LLM-judge evals. Two tiers:
+#   - rotator (BLOCKING): offline unit tests of the Groq key-rotation/backoff
+#     logic. No network egress to Groq, so it is deterministic and CI-safe.
+#   - live (MANUAL, workflow_dispatch): the real AnswerRelevancy + Hallucination
+#     suite judged by Groq. Kept manual + non-blocking because Groq blocks some
+#     CI/datacenter egress IPs (HTTP 403 "Access denied"), which would add red
+#     noise on every PR. Needs the GROQ_API_KEYS secret to run.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch: # manual trigger — runs the live Groq-judged eval suite
+
+jobs:
+  # ── Offline rotation logic — blocking, no Groq egress ─────────────────────
+  evals-rotator:
+    name: Eval Rotator (offline)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install eval dependencies
+        run: pip install -r evals/requirements.txt
+
+      - name: Run rotator unit tests (offline)
+        run: python -m pytest evals/test_groq_rotator.py -v
+
+  # ── Live Groq-judged evals — manual + non-blocking ────────────────────────
+  evals-live:
+    name: Eval Suite (live Groq)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    if: github.event_name == 'workflow_dispatch'
+    needs: [evals-rotator]
+
+    env:
+      GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install eval dependencies
+        run: pip install -r evals/requirements.txt
+
+      - name: Run live eval suite (AnswerRelevancy + Hallucination)
+        run: python -m pytest evals/test_agent_evals.py -v

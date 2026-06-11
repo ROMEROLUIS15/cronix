@@ -17,6 +17,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --project=smoke",
+    "test:evals": "python -m pytest evals -v",
+    "test:evals:rotator": "python -m pytest evals/test_groq_rotator.py -v",
     "e2e:setup": "tsx scripts/setup-e2e-data.ts",
     "seed:intents": "tsx scripts/seed-intent-embeddings.ts",
     "prepare": "husky"

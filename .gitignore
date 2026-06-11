@@ -83,3 +83,10 @@ CRONIX_AUDIT_REPORT.md
 
 # CV (ExclusiÃ³n de repositorio)
 cv/
+
+# Python evals (DeepEval)
+evals/.venv/
+__pycache__/
+*.pyc
+.deepeval/
+.deepeval_telemetry.txt

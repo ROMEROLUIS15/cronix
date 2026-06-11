@@ -1,0 +1,42 @@
+[
+  {
+    "name": "next_appointment_read",
+    "input": "¿Cuál es mi próxima cita?",
+    "actual_output": "Tu próxima cita es con María González hoy a las 3:00 PM para un corte de cabello.",
+    "context": [
+      "Próxima cita del dueño: cliente María González, fecha 2026-06-10, hora 15:00, servicio Corte de cabello."
+    ]
+  },
+  {
+    "name": "available_slots_read",
+    "input": "¿Qué horarios tengo libres mañana?",
+    "actual_output": "Mañana tienes libre a las 10:00, a las 11:30 y a las 4:00 de la tarde.",
+    "context": [
+      "Disponibilidad para 2026-06-11: 10:00, 11:30, 16:00."
+    ]
+  },
+  {
+    "name": "schedule_write_confirmation",
+    "input": "Agéndame a Carlos Pérez mañana a las 10 para un corte.",
+    "actual_output": "Listo, agendé a Carlos Pérez mañana a las 10:00 AM para un corte de cabello.",
+    "context": [
+      "Cita creada: cliente Carlos Pérez, fecha 2026-06-11, hora 10:00, servicio Corte de cabello, estado confirmada."
+    ]
+  },
+  {
+    "name": "search_clients_read",
+    "input": "¿Tengo registrada a una clienta llamada Lisset?",
+    "actual_output": "Sí, tienes a Lisset Vázquez registrada con teléfono terminado en 4567.",
+    "context": [
+      "Cliente encontrado por similitud: Lisset Vázquez, teléfono +57 300 000 4567."
+    ]
+  },
+  {
+    "name": "cancel_write_anaphora",
+    "input": "Cancélala.",
+    "actual_output": "Cancelé la cita de María González que tenías hoy a las 3:00 PM.",
+    "context": [
+      "Última cita referida (lastRef): cliente María González, fecha 2026-06-10, hora 15:00; acción solicitada: cancelar; resultado: cancelada."
+    ]
+  }
+]
