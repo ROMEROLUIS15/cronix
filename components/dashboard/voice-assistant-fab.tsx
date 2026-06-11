@@ -233,12 +233,32 @@ export function VoiceAssistantFab() {
     currentAudioRef.current = el
   }
 
+  // ── Report a genuinely-silent turn to the server for observability ───────
+  // The voice-worker returns audioUrl=null and trace=success, so a TTS playback
+  // failure here would otherwise be invisible (the dashboard shows success while
+  // the user heard nothing). Fire-and-forget; telemetry must never affect UX.
+  const reportTtsFailure = (text: string, reason: string) => {
+    try {
+      void fetch('/api/assistant/tts-failure', {
+        method:    'POST',
+        headers:   { 'Content-Type': 'application/json' },
+        body:      JSON.stringify({ text: text.slice(0, 500), reason }),
+        keepalive: true,
+      }).catch(() => { /* ignore */ })
+    } catch { /* ignore */ }
+  }
+
   // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
+  // This is the last-resort speech path; if it errors the user hears nothing,
+  // so report it as a terminal "no voice" turn.
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
     playOnUnlockedElement(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`, {
       onEnd:   () => setState('idle'),
-      onError: () => setState('idle'),
+      onError: () => {
+        setState('idle')
+        reportTtsFailure(msg, 'tts_playback_failed')
+      },
     })
   }
 
