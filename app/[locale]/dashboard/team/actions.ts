@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getRepos } from '@/lib/repositories'
 import { withActionRateLimit } from '@/lib/actions/rate-limit-action'
@@ -37,11 +37,17 @@ const EmployeeIdSchema = z.object({
  * SECURITY: Derives business_id from the authenticated session, NOT from client input.
  */
 async function assertOwnerAndGetBusinessContext(): Promise<{ userId: string; businessId: string }> {
-  const supabase = await createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // La identidad se lee del client ligado a las cookies de sesión; el admin
+  // client (service_role) no transporta el JWT del usuario y auth.getUser()
+  // sobre él devuelve siempre null.
+  const authClient = await createClient()
+  const { data: { user } } = await authClient.auth.getUser()
   if (!user) throw new Error('No autorizado.')
 
-  const { users: usersRepoInstance } = getRepos(supabase)
+  // La lectura de contexto usa el admin client para evitar la RLS recursiva
+  // sobre la tabla users.
+  const admin = createAdminClient()
+  const { users: usersRepoInstance } = getRepos(admin)
   const ctxResult = await usersRepoInstance.getUserContextById(user.id)
   if (ctxResult.error || !ctxResult.data) throw new Error('No se pudo verificar el rol del usuario.')
   if (!ctxResult.data.business_id) throw new Error('El usuario no pertenece a ningún negocio.')

@@ -72,12 +72,20 @@ export async function getClientDebts(businessId: string): Promise<Record<string,
  * sobre la tabla users).
  */
 async function getSessionBusinessId(): Promise<string> {
-  const { createAdminClient } = await import('@/lib/supabase/server')
+  const { createClient, createAdminClient } = await import('@/lib/supabase/server')
   const { getRepos } = await import('@/lib/repositories')
-  const supabase = await createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
+
+  // La identidad del usuario se lee del client ligado a las cookies de sesión:
+  // el admin client (service_role) no transporta el JWT del usuario, por lo que
+  // auth.getUser() sobre él devuelve siempre null.
+  const authClient = await createClient()
+  const { data: { user } } = await authClient.auth.getUser()
   if (!user) throw new Error('No autorizado.')
-  const { users } = getRepos(supabase)
+
+  // La lectura de contexto usa el admin client para evitar la RLS recursiva
+  // sobre la tabla users.
+  const admin = createAdminClient()
+  const { users } = getRepos(admin)
   const ctx = await users.getUserContextById(user.id)
   if (ctx.error || !ctx.data?.business_id) {
     throw new Error('No se pudo verificar el negocio del usuario.')

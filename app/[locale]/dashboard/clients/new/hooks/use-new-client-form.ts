@@ -50,23 +50,27 @@ export function useNewClientForm(
       setSaving(true);
       setError(null);
 
-      const result = await createNewClient({
-        businessId,
-        name: form.name.trim(),
-        phone: fullPhone,
-        email: form.email.trim() || undefined,
-        tags: selectedTags,
-      });
+      try {
+        const result = await createNewClient({
+          businessId,
+          name: form.name.trim(),
+          phone: fullPhone,
+          email: form.email.trim() || undefined,
+          tags: selectedTags,
+        });
 
-      setSaving(false);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
 
-      if (result.error) {
-        setError(result.error);
-        return;
+        router.push('/dashboard/clients');
+        router.refresh();
+      } catch {
+        setError('No se pudo guardar el cliente. Intenta de nuevo.');
+      } finally {
+        setSaving(false);
       }
-
-      router.push('/dashboard/clients');
-      router.refresh();
     },
     [businessId, form, selectedTags, router],
   );
