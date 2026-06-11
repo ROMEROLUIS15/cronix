@@ -310,86 +310,88 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     if (!businessId) return
     setSaving(true)
 
-    const fresh = await runValidation()
-    if (fresh.slotBlocked) {
-      setValidation(v => ({ ...v, slotError: fresh.slotMsg ?? null, doubleBookingLevel: 'blocked' }))
-      setSaving(false)
-      return
-    }
-    if (fresh.bookingLevel === 'blocked') {
-      setValidation(v => ({ ...v, doubleBookingLevel: 'blocked', doubleBookingMsg: fresh.bookingMsg }))
-      setSaving(false)
-      return
-    }
-    if (fresh.bookingLevel === 'warn' && !validation.confirmed) {
-      setValidation(v => ({ ...v, doubleBookingLevel: 'warn', doubleBookingMsg: fresh.bookingMsg }))
-      setSaving(false)
-      return
-    }
-
-    const startObj = new Date(form.start_at)
-    const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
-
-    // Plan limit: max appointments per month on free plan
-    const limitCheck = await checkAppointmentLimit(businessId)
-    if (!limitCheck.allowed) {
-      setMsg({ type: 'limit_error', text: tPlan('appointments', { limit: limitCheck.limit }) })
-      setSaving(false)
-      return
-    }
-
-    const container = getBrowserContainer()
-
-    let newApt: { id: string } | null = null
-    const result = await container.appointments.create({
-      business_id:      businessId,
-      client_id:        form.client_id,
-      service_ids:      form.service_ids,
-      assigned_user_id: form.assigned_user_id || null,
-      start_at:         startObj.toISOString(),
-      end_at:           endObj.toISOString(),
-      notes:            form.notes || null,
-      status:           'pending',
-      is_dual_booking:  validation.doubleBookingLevel === 'warn',
-    })
-
-    if (!result.error) newApt = result.data
-
-    if (newApt) {
-      if (bizNotif.whatsapp) {
-        const remindAt = new Date(Date.UTC(
-          startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
-        )).toISOString()
-
-        if (!skipReminder) {
-          await container.reminders.upsert(newApt.id, businessId, remindAt, 0)
-        } else {
-          await container.reminders.forceCancel(newApt.id, businessId, remindAt, 0)
-        }
+    try {
+      const fresh = await runValidation()
+      if (fresh.slotBlocked) {
+        setValidation(v => ({ ...v, slotError: fresh.slotMsg ?? null, doubleBookingLevel: 'blocked' }))
+        return
+      }
+      if (fresh.bookingLevel === 'blocked') {
+        setValidation(v => ({ ...v, doubleBookingLevel: 'blocked', doubleBookingMsg: fresh.bookingMsg }))
+        return
+      }
+      if (fresh.bookingLevel === 'warn' && !validation.confirmed) {
+        setValidation(v => ({ ...v, doubleBookingLevel: 'warn', doubleBookingMsg: fresh.bookingMsg }))
+        return
       }
 
-      const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
-      const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
-      const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
-      const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
-      container.notifications.create(notifPayload)
+      const startObj = new Date(form.start_at)
+      const endObj   = new Date(startObj.getTime() + (totalDuration || 30) * 60_000)
 
-      notifyOwner({
-        title: '📅 Nueva cita agendada',
-        body:  `${clientName} · ${serviceName} · ${timeStr}`,
-        url:   `/dashboard/appointments/${newApt.id}`,
-        tag:   `created-${newApt.id}`,
-      }).catch(err => {
-        logger.error('Failed to send push notification to owner', err)
+      // Plan limit: max appointments per month on free plan
+      const limitCheck = await checkAppointmentLimit(businessId)
+      if (!limitCheck.allowed) {
+        setMsg({ type: 'limit_error', text: tPlan('appointments', { limit: limitCheck.limit }) })
+        return
+      }
+
+      const container = getBrowserContainer()
+
+      let newApt: { id: string } | null = null
+      const result = await container.appointments.create({
+        business_id:      businessId,
+        client_id:        form.client_id,
+        service_ids:      form.service_ids,
+        assigned_user_id: form.assigned_user_id || null,
+        start_at:         startObj.toISOString(),
+        end_at:           endObj.toISOString(),
+        notes:            form.notes || null,
+        status:           'pending',
+        is_dual_booking:  validation.doubleBookingLevel === 'warn',
       })
-    }
 
-    setSaving(false)
-    if (!newApt) {
+      if (!result.error) newApt = result.data
+
+      if (newApt) {
+        if (bizNotif.whatsapp) {
+          const remindAt = new Date(Date.UTC(
+            startObj.getUTCFullYear(), startObj.getUTCMonth(), startObj.getUTCDate()
+          )).toISOString()
+
+          if (!skipReminder) {
+            await container.reminders.upsert(newApt.id, businessId, remindAt, 0)
+          } else {
+            await container.reminders.forceCancel(newApt.id, businessId, remindAt, 0)
+          }
+        }
+
+        const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
+        const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
+        const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
+        container.notifications.create(notifPayload)
+
+        notifyOwner({
+          title: '📅 Nueva cita agendada',
+          body:  `${clientName} · ${serviceName} · ${timeStr}`,
+          url:   `/dashboard/appointments/${newApt.id}`,
+          tag:   `created-${newApt.id}`,
+        }).catch(err => {
+          logger.error('Failed to send push notification to owner', err)
+        })
+      }
+
+      if (!newApt) {
+        setMsg({ type: 'error', text: 'Error al crear la cita. Intenta de nuevo.' })
+      } else {
+        setMsg({ type: 'success', text: 'Cita creada correctamente' })
+        setTimeout(() => { router.push('/dashboard/appointments'); router.refresh() }, 1200)
+      }
+    } catch (err) {
+      logger.error('appointment-create', 'Failed to create appointment', err)
       setMsg({ type: 'error', text: 'Error al crear la cita. Intenta de nuevo.' })
-    } else {
-      setMsg({ type: 'success', text: 'Cita creada correctamente' })
-      setTimeout(() => { router.push('/dashboard/appointments'); router.refresh() }, 1200)
+    } finally {
+      setSaving(false)
     }
   }
 

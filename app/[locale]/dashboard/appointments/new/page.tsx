@@ -241,6 +241,18 @@ function NewAppointmentForm() {
               </div>
             )}
 
+            {/* Double booking blocked — daily limit reached */}
+            {!validation.slotError && validation.doubleBookingLevel === 'blocked' && validation.doubleBookingMsg && (
+              <div className="flex items-start gap-3 p-4 rounded-2xl"
+                style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)' }}>
+                <Ban size={18} style={{ color: '#FF3B30', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#FF3B30' }}>{t('slotErrors.doubleTitle')}</p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,59,48,0.75)' }}>{validation.doubleBookingMsg}</p>
+                </div>
+              </div>
+            )}
+
             {/* Double booking warn */}
             {!validation.slotError && validation.doubleBookingLevel === 'warn' && (
               <div className="flex flex-col sm:flex-row items-start gap-3 p-4 rounded-2xl"
