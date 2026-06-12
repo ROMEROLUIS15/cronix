@@ -285,3 +285,43 @@ positivos en `/dashboard/observability`.
   deterministas entre turnos.
 - `smart_schedule` acepta `phone` opcional para el cliente nuevo
   (`register_new_client=true`); sin él, el cliente queda sin teléfono.
+
+## 9. Dimensión de Staff (terreno para el sprint multi-empleado)
+
+Decisión de producto tomada (2026-06-12): **una cita por voz se asigna al
+miembro del equipo que el dueño NOMBRE** ("con Marielys", "conmigo"). Si no
+nombra a nadie, la cita queda **sin asignar** (`assigned_user_id = NULL`) —
+la política de auto-asignación para negocios multi-staff se decidirá en el
+sprint multi-empleado, no aquí.
+
+### Implementado (groundwork)
+
+- `core/repos/staff.ts`: roster activo (`users` con `business_id`,
+  `is_active=true`, roles owner/admin/employee), `resolveStaffByName()` con
+  la misma barra de confianza de writes (≥0.80; débil/ambiguo → pregunta,
+  nunca adivina) y `extractStaffFromCorpus()` ("con <nombre>" / "conmigo"),
+  que ignora candidatos que solapen tokens con el CLIENTE agendado
+  ("agenda una cita con Ana" nombra al cliente, no al staff).
+- `smart_schedule`: arg opcional `staff_name` (mention guard incluido; si
+  no se puede trazar al corpus se descarta, no bloquea el booking), insert
+  con `assigned_user_id`, y confirmación hablada "… con Marielys".
+- `findConflicts(…, staffId?)`: cuando la cita tiene staff, el conflicto se
+  evalúa SOLO contra la agenda de ese miembro; sin staff se mantiene el
+  chequeo a nivel negocio (comportamiento histórico, correcto para negocios
+  single-staff, que son los que no nombran a nadie). `reschedule` hereda el
+  scope del `assigned_user_id` de la fila.
+
+### Contexto de datos (verificado en prod 2026-06-12)
+
+`appointments` tiene `assigned_user_id` e `is_dual_booking`; existen miles
+de solapes activos legítimos a nivel negocio (multi-staff). Por eso
+cualquier exclusion constraint anti double-booking debe ser **por
+`assigned_user_id`** y respetar `is_dual_booking` — nunca por negocio.
+
+### Pendiente para el sprint multi-empleado
+
+- Política de asignación por defecto cuando no se nombra staff.
+- RPC transaccional de booking + exclusion constraint per-staff (decidir
+  semántica de `is_dual_booking` y de filas con staff NULL).
+- `available-slots` por staff (requiere horarios laborales por empleado).
+- Semántica de `is_dual_booking` en `findConflicts`.

@@ -8,15 +8,27 @@ export interface AppointmentForLookup {
   end_at:     string
   client_id:  string | null
   service_id: string | null
+  assigned_user_id?: string | null
   /** Service IDs from the junction table — used as fallback when service_id is null. */
   appointment_services?: Array<{ service_id: string; sort_order: number }>
 }
 
+/**
+ * Overlap check with an optional staff dimension. Production data has
+ * thousands of LEGITIMATE business-level overlaps (multi-staff salons,
+ * is_dual_booking) — so when the booking targets a specific team member,
+ * only that member's appointments can conflict. Without a staff target we
+ * keep the business-level check: it's the historical behaviour and it's
+ * correct for single-staff businesses, which are exactly the ones that
+ * don't name an employee. Per-staff slots/working-hours land in the
+ * multi-employee sprint.
+ */
 export async function findConflicts(
   ctx:       ToolContext,
   startISO:  string,
   endISO:    string,
   excludeId?: string,
+  staffId?:   string,
 ): Promise<boolean> {
   let q = ctx.supabase
     .from('appointments')
@@ -25,6 +37,7 @@ export async function findConflicts(
     .in('status', ['pending', 'confirmed'])
     .lt('start_at', endISO)
     .gt('end_at', startISO)
+  if (staffId)   q = q.eq('assigned_user_id', staffId)
   if (excludeId) q = q.neq('id', excludeId)
   const { data, error } = await q
   if (error) return false  // fail-open: assume no conflict, let DB handle
@@ -44,7 +57,7 @@ export async function findAppointmentById(
 ): Promise<AppointmentForLookup | { error: string }> {
   const { data, error } = await ctx.supabase
     .from('appointments')
-    .select('id, start_at, end_at, client_id, service_id, appointment_services(service_id, sort_order), status')
+    .select('id, start_at, end_at, client_id, service_id, assigned_user_id, appointment_services(service_id, sort_order), status')
     .eq('business_id', ctx.businessId)
     .eq('id', id)
     .single()
@@ -85,7 +98,7 @@ export async function findAppointmentByClientName(
 
   const { data, error } = await ctx.supabase
     .from('appointments')
-    .select('id, start_at, end_at, client_id, service_id, appointment_services(service_id, sort_order)')
+    .select('id, start_at, end_at, client_id, service_id, assigned_user_id, appointment_services(service_id, sort_order)')
     .eq('business_id', ctx.businessId)
     .eq('client_id', client.id)
     .in('status', ['pending', 'confirmed'])
