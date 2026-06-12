@@ -1,6 +1,6 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
-import { localToUTC, buildEndISO } from '../../core/time-format.ts'
+import { localToUTC, buildEndISO, humanizeDate, formatTimeFromISO } from '../../core/time-format.ts'
 
 export interface AvailableSlotsArgs extends Record<string, unknown> {
   date:         string
@@ -26,7 +26,7 @@ export async function executeAvailableSlots(
 
   const wh = ctx.workingHours?.[dayOfWeek]
   if (ctx.workingHours && Object.prototype.hasOwnProperty.call(ctx.workingHours, dayOfWeek) && !wh) {
-    return { success: true, result: `El negocio está cerrado el ${args.date}.` }
+    return { success: true, result: `El negocio está cerrado el ${humanizeDate(args.date, ctx.timezone)}.` }
   }
 
   const open  = wh?.open  ?? '09:00'
@@ -64,10 +64,13 @@ export async function executeAvailableSlots(
       const conflict = (booked ?? []).some((b: { start_at: string; end_at: string }) =>
         new Date(b.start_at) < new Date(endISO) && new Date(b.end_at) > new Date(startISO)
       )
-      if (!conflict) free.push(candidateTime)
+      // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
+      // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.
+      if (!conflict) free.push(formatTimeFromISO(startISO, ctx.timezone))
     }
   }
 
-  if (!free.length) return { success: true, result: `No hay horarios libres para el ${args.date}.` }
-  return { success: true, result: `Horarios libres el ${args.date}: ${free.join(', ')}.` }
+  const dateLabel = humanizeDate(args.date, ctx.timezone)
+  if (!free.length) return { success: true, result: `No hay horarios libres el ${dateLabel}.` }
+  return { success: true, result: `Horarios libres el ${dateLabel}: ${free.join(', ')}.` }
 }

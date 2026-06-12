@@ -15,6 +15,7 @@ import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType
 import {
   executeByName, getToolDefinitions, WRITE_CAPABILITIES, BYPASS_CAPABILITIES,
 } from './capabilities/_shared/registry.ts'
+import { coerceToolArgs } from './core/tool-args.ts'
 
 // ── Re-export shared utilities (moved from agent.ts) ─────────────────────────
 
@@ -206,7 +207,7 @@ async function stepLlmLoop(ctx: VoiceLlmContext): Promise<VoiceLlmResult> {
     for (const tc of resp.toolCalls) {
       let parsedArgs: Record<string, unknown> = {}
       try {
-        parsedArgs = JSON.parse(tc.arguments) as Record<string, unknown>
+        parsedArgs = coerceToolArgs(JSON.parse(tc.arguments))
       } catch {
         messages.push({
           role: 'tool', tool_call_id: tc.id, name: tc.name,

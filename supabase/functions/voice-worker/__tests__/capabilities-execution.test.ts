@@ -241,7 +241,8 @@ describe('voice-worker capability execution', () => {
     )
 
     expect(res.success).toBe(true)
-    expect(res.result).toContain('09:00')
+    // Spoken time format (read aloud verbatim), not raw 24h "09:00".
+    expect(res.result).toContain('9 de la mañana')
     // F1 regression: booked-set window must use localToUTC, not naive date strings.
     const sel = m.opsFor('appointments')[0]
     expect(sel.gte?.[1]).toBe(localToUTC('2026-06-15', '00:00', TZ))
