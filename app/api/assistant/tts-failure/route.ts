@@ -34,7 +34,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: { text?: unknown; reason?: unknown }
   try { body = await req.json() } catch { body = {} }
   const text   = typeof body.text   === 'string' ? body.text.slice(0, 500)  : ''
-  const reason = typeof body.reason === 'string' ? body.reason.slice(0, 40) : 'unknown'
+  const reason = typeof body.reason === 'string' ? body.reason.slice(0, 80) : 'unknown'
+
+  // reason is "<kind>|http=<status>" (e.g. "never-started|http=200"). Break it
+  // into structured fields so the dashboard can tell autoplay blocks (http=200)
+  // apart from endpoint failures (401/502/503) without parsing strings.
+  const m = /^([a-z-]+)\|http=(\d+)$/.exec(reason)
+  const detail = m
+    ? { source: 'client-tts', reason, ttsKind: m[1], ttsHttpStatus: Number(m[2]) }
+    : { source: 'client-tts', reason }
 
   try {
     const tracer  = createTracer({ supabase: createAdminClient() })
@@ -42,7 +50,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const trace = tracer.start(
       { businessId, channel: 'voice-worker', actorKind: 'user', actorKey: user.id },
       textSha,
-      { source: 'client-tts', reason },
+      detail,
     )
     await trace.finish({ outcome: 'failure', errorCode: 'CLIENT_TTS_FAILED', finalTextSha: textSha })
   } catch (err) {

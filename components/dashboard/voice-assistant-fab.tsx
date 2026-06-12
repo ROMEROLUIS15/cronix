@@ -171,7 +171,7 @@ export function VoiceAssistantFab() {
    *   - all paths converge to a single `finish()` so the caller's promise
    *     ALWAYS resolves
    */
-  const playOnUnlockedElement = (src: string, opts: { onEnd?: () => void; onError?: () => void } = {}): void => {
+  const playOnUnlockedElement = (src: string, opts: { onEnd?: () => void; onError?: (kind: 'error' | 'timeout' | 'never-started') => void } = {}): void => {
     const el = unlockPrimerRef.current ?? new Audio()
     if (!unlockPrimerRef.current) unlockPrimerRef.current = el
 
@@ -200,7 +200,7 @@ export function VoiceAssistantFab() {
         srcKind: src.startsWith('data:') ? 'data-url' : 'http',
       })
       if (kind === 'end') opts.onEnd?.()
-      else                opts.onError?.()
+      else                opts.onError?.(kind)
     }
 
     el.onplaying = () => { startedPlaying = true }
@@ -248,16 +248,31 @@ export function VoiceAssistantFab() {
     } catch { /* ignore */ }
   }
 
+  // Best-effort probe of the TTS endpoint's HTTP status when playback fails.
+  // This is what separates the failure causes that the generic beacon cannot:
+  //   never-started/timeout + http=200 → browser autoplay/decode block (client)
+  //   error + http=401/502/503         → endpoint problem (auth / Deepgram / key)
+  // Fire-and-forget; never affects UX. Returns 0 on a network error.
+  const probeTtsStatus = async (url: string): Promise<number> => {
+    try {
+      const r = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' })
+      return r.status
+    } catch { return 0 }
+  }
+
   // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
   // This is the last-resort speech path; if it errors the user hears nothing,
   // so report it as a terminal "no voice" turn.
   const vocalizeSilentFailsafe = (msg: string) => {
     setState('speaking')
-    playOnUnlockedElement(`/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`, {
+    const url = `/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`
+    playOnUnlockedElement(url, {
       onEnd:   () => setState('idle'),
-      onError: () => {
+      onError: (kind) => {
         setState('idle')
-        reportTtsFailure(msg, 'tts_playback_failed')
+        // Probe the endpoint so the beacon carries the real cause, e.g.
+        // "never-started|http=200" (autoplay) vs "error|http=503" (no key).
+        void probeTtsStatus(url).then(status => reportTtsFailure(msg, `${kind}|http=${status}`))
       },
     })
   }
