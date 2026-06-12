@@ -100,4 +100,5 @@ docs/specs/
 | 2026-06-09 | Creación del INDEX.md. Constitution v3 + Manifest WhatsApp v3. Nuevos specs: notificaciones, citas-core, pagos, auth. |
 | 2026-06-09 | Nuevos specs: modulo-voice-agent (Voice Worker) y modulo-dashboard (Dashboard UI). Actualización de cobertura al 🟢. |
 | 2026-06-12 | modulo-voice-agent §8: capa antialucinación (frame corpus, mention guards por token, filtro de args declarados, write-guard en delete_client, invariantes de available-slots/delete_client/smart_schedule, códigos GUARD_REJECTED). |
+| 2026-06-12 | modulo-voice-agent: 12ª capability `get_client_appointments` (citas futuras por cliente). Supervisor: rúbrica v2 con `conversationWindow` + memoria episódica desde voz (espejos Node/Deno en paridad). |
 

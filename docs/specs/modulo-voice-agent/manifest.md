@@ -40,7 +40,7 @@ El agente recibe audio o texto, transcribe, ejecuta intenciones vía LLM o fast 
 
 ### Agent Loop (máximo 3 pasos)
 
-1. **Fast Path detection**: recorre las 11 capabilities en orden de prioridad. Si una matchea el texto del usuario, ejecuta la tool directamente sin LLM.
+1. **Fast Path detection**: recorre las 12 capabilities en orden de prioridad. Si una matchea el texto del usuario, ejecuta la tool directamente sin LLM.
 2. **Date Override**: `detectTemporalIntent()` analiza el texto del usuario buscando "hoy", "mañana", "pasado mañana". Si encuentra uno, calcula la fecha ISO real y la fuerza en cualquier tool call del LLM que tenga parámetro `date`. Esto protege contra alucinaciones de fecha del LLM.
 3. **LLM Loop** (stepLlmLoop, máx 3 iteraciones):
    - Envía historial + tool definitions al proveedor LLM
@@ -60,12 +60,13 @@ El agente recibe audio o texto, transcribe, ejecuta intenciones vía LLM o fast 
 
 ### Registro central (`_shared/registry.ts`)
 
-Las 11 capabilities se registran en orden de prioridad en el array `CAPABILITIES`:
+Las 12 capabilities se registran en orden de prioridad en el array `CAPABILITIES`:
 
 | Capability | Directorio | WRITE / READ | bypassLLM |
 |---|---|---|---|
 | `nextAppointment` | `next-appointment/` | READ | Sí |
 | `listAppointments` | `list-appointments/` | READ | Sí |
+| `clientAppointments` | `client-appointments/` | READ | Sí |
 | `reschedule` | `reschedule/` | WRITE | Sí |
 | `cancel` | `cancel/` | WRITE | Sí |
 | `deleteClient` | `delete-client/` | WRITE | Sí |
@@ -78,7 +79,15 @@ Las 11 capabilities se registran en orden de prioridad en el array `CAPABILITIES
 
 **Clasificación:**
 - **WRITE (5)**: schedule, cancel, reschedule, create-client, delete-client
-- **READ (6)**: list-appointments, next-appointment, search-clients, last-visit, get-services, available-slots
+- **READ (7)**: list-appointments, next-appointment, client-appointments, search-clients, last-visit, get-services, available-slots
+
+`clientAppointments` (`get_client_appointments`) lista las citas futuras
+activas (pending/confirmed, máx. 5) de UN cliente — "¿qué citas tiene Ana?",
+"¿cuándo viene Lisset?". Antes de existir, el LLM respondía esa pregunta
+desde el extracto "CITAS DE HOY" del prompt o inventaba. Su detector cede
+ante fechas ("citas de mañana" → list-appointments), intención pasada
+("última cita de Ana" → last-visit), nombres de servicio del catálogo y
+cualquier verbo de escritura.
 
 **Shared infra** en `_shared/`: `Capability.ts` (interface `ICapability`) y `registry.ts` (registro, dispatch, fast path detection).
 
@@ -242,11 +251,20 @@ rama anafórica que salta los guards.
 
 `schedule`, `cancel`, `reschedule` y `delete-client` invocan
 `ctx.runWriteGuard` (ConstitutionalReviewer, fail-open) antes del SQL.
-Limitación conocida: en el canal voz `recentMemory` llega vacía (voice no
-escribe memoria episódica y el scope `user` no cruza con el scope
-`client_phone` de WhatsApp), por lo que el reviewer solo puede bloquear
-`UNSAFE_ARGS`. Pendiente: escritura de memoria desde voz + historial del
-frame en el `ReviewRequest` (rúbrica v2).
+
+- **Memoria episódica desde voz**: todo write exitoso (fast path y LLM
+  path) registra `"<lo que dijo el usuario> → <resultado hablado>"` con
+  scope `{businessId, user, userId}` y TTL 180 días (`recordWriteEpisode`,
+  fire-and-forget per constitución §3). Sin esto, `recentMemory` llegaba
+  siempre vacía en voz y la regla 5 de la rúbrica reducía al reviewer a
+  `UNSAFE_ARGS`.
+- **Rúbrica v2 + `conversationWindow`**: el `ReviewRequest` lleva los
+  últimos 6 turnos del historial (300 chars c/u), y la rúbrica instruye
+  resolver confirmaciones cortas ("sí", "dale") contra la acción que el
+  asistente propuso. Los espejos Node/Deno del supervisor se mantienen en
+  paridad byte-a-byte (test `contracts-parity`).
+- Pendiente: el call-site de WhatsApp aún no pasa `conversationWindow`
+  (campo opcional; requiere gate de `modulo-whatsapp-citas`).
 
 ### Observabilidad de guards
 

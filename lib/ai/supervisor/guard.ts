@@ -1,5 +1,6 @@
 import type {
   IReviewer,
+  ReviewConversationTurn,
   ReviewMemorySnippet,
   ReviewRejectionCode,
   ReviewRequest,
@@ -21,6 +22,7 @@ export interface GuardInput {
   readonly scope:         TenantScope
   readonly userUtterance: string
   readonly recentMemory:  ReadonlyArray<ReviewMemorySnippet>
+  readonly conversationWindow?: ReadonlyArray<ReviewConversationTurn>
   readonly timeoutMs?:    number
 }
 
@@ -44,6 +46,7 @@ export async function reviewWriteOrFailOpen(input: GuardInput): Promise<GuardOut
     scope:         input.scope,
     userUtterance: input.userUtterance,
     recentMemory:  input.recentMemory,
+    conversationWindow: input.conversationWindow,
   }
 
   const verdict = await input.reviewer.review(request, { timeoutMs: input.timeoutMs })

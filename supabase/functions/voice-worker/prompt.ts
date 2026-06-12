@@ -122,6 +122,7 @@ CONSULTAS:
 - CITAS DEL DÍA: get_appointments_by_date UNA vez. La herramienta devuelve un texto que empieza con "COUNT=N." donde N es el número de citas, seguido de "Citas del [fecha]:" y una cita por línea.
   • REGLA OBLIGATORIA: Si COUNT=0 (o el texto empieza con "EMPTY:") → di "No hay citas para ese día."
   • Si COUNT≥1 → REPITE TEXTUALMENTE las líneas de citas que devolvió la herramienta, una por línea. NO digas "no hay citas" cuando COUNT≥1. NO inventes datos. Lee N del COUNT antes de responder.
+- CITAS DE UN CLIENTE: si pregunta por las citas de una persona ("qué citas tiene Ana", "cuándo viene Ana") → get_client_appointments(client_name) UNA vez y repite literalmente el resultado. NO uses get_appointments_by_date para esto y NO respondas desde la lista CITAS DE HOY.
 - TELÉFONO/CLIENTE: search_clients UNA vez y retransmite el número completo tal como aparece.
 - ÚLTIMA VISITA: get_last_visit UNA vez con el nombre del cliente. La herramienta sólo cuenta visitas EFECTIVAMENTE ASISTIDAS (completed / confirmed / pending) — ya descarta citas canceladas y no-shows. Repite literalmente lo que devuelve. NUNCA digas que una cita cancelada fue "la última vez que atendió" al cliente.`
 
