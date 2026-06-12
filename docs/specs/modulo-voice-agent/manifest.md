@@ -146,7 +146,10 @@ Equivalencias fonéticas aplicadas (función `phoneticKey()`):
 - v → b           ("Vázquez" = "Bázquez")
 - ll → y          ("Yolanda" = "Llolanda")
 - qu → k          ("Vázquez" → "Bázquez" → "baskes")
+- gu+vocal → g    ("Guardiana" = "Gardiana" — STT encaja nombres raros en palabras de diccionario)
 - dobles → simple ("Lisseth" = "Liseth")
+
+Además, los tokens descriptores del lado del query ("cliente", "clienta", "señora", "sr", etc.) se excluyen antes de matchear: nunca otorgan el tier de token exacto (rosters importados contienen apellidos literales "Cliente" y un descriptor suelto daría 0.90 de confianza sobre la persona equivocada).
 
 **Nivel 2 — Prefijo compartido** (fallback):
 Si no hay token exacto, se acepta un candidato si comparte un

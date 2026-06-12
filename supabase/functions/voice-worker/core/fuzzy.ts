@@ -49,7 +49,14 @@ export function tokens(s: string): string[] {
  *   v                  → b     (Vázquez / Bázquez     → baskes)
  *   ll                 → y     (Yolanda / Llolanda    → yolanda)
  *   qu                 → k     (Vázquez               → baskes)
+ *   gu + vowel         → g     (Guardiana / Gardiana  → gardiana)
  *   double letters     → single (Lisseth → liseth → liset)
+ *
+ * The gu→g rule exists because STT snaps rare names onto dictionary words:
+ * the owner says "Gardiana" and Web Speech transcribes "guardiana" (a real
+ * Spanish word), which broke both the literal-prefix bridge ("guar" ≠ "gard")
+ * and the phonetic one. Dropping the u after g bridges gue/gui (silent u)
+ * exactly and gua/guo approximately — acceptable for a matching skeleton.
  *
  * Order matters: drop `h` first (otherwise "ch" survives), do `c(e|i)→s`
  * BEFORE `c→k` would mis-route (we keep `c` outside e/i untouched), and
@@ -69,9 +76,24 @@ export function phoneticKey(token: string): string {
   s = s.replace(/v/g, 'b')
   s = s.replace(/ll/g, 'y')
   s = s.replace(/qu/g, 'k')
+  s = s.replace(/gu([aeiou])/g, 'g$1')
   s = s.replace(/(.)\1+/g, '$1')
   return s
 }
+
+/**
+ * Descriptor words a user attaches to a name ("la cliente Gardiana", "busca a
+ * la señora Ana") that must never count as name tokens on the QUERY side.
+ * This roster imports names like "Adriana Cliente" — without the filter, the
+ * query token "cliente" hits the exact-token tier against ANY of those and
+ * returns the wrong person at 0.90 confidence, above the write threshold.
+ * Candidate-side tokens are untouched: "Adriana Cliente" still matches via
+ * "adriana". Accent-free forms only — `tokens()` normalizes first.
+ */
+const GENERIC_QUERY_TOKENS = new Set([
+  'cliente', 'clienta', 'clientes', 'clientas',
+  'senora', 'senor', 'senorita', 'sra', 'sr', 'srta',
+])
 
 /**
  * True when two tokens share a stem, either literally or phonetically:
@@ -198,7 +220,12 @@ function computeConfidence(top: { score: number; exactTokenMatch: boolean }): nu
 export function fuzzyFind<T extends { name: string }>(items: T[], query: string): FuzzyMatch<T> {
   if (!items.length) return { status: 'not_found' }
   const needle  = normalize(query)
-  const qTokens = tokens(query)
+  const allQTokens = tokens(query)
+  // Drop descriptor words ("cliente", "señora") from the query side; if the
+  // query was ONLY descriptors, keep them — better a noisy lookup than a new
+  // not_found path for a client genuinely named that way.
+  const filtered = allQTokens.filter(t => !GENERIC_QUERY_TOKENS.has(t))
+  const qTokens  = filtered.length > 0 ? filtered : allQTokens
   if (qTokens.length === 0) return { status: 'not_found' }
 
   const scored = items
