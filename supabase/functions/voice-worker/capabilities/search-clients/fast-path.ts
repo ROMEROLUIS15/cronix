@@ -11,6 +11,12 @@ export interface SearchClientsArgs extends Record<string, unknown> {
 const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
 const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
 
+// Catalog questions ("hay servicios disponibles", "qué servicios tienes") used
+// to fall into the name-capture patterns below — the agent then answered
+// "no encontré a 'servicios disponibles' entre tus clientes". A mention of
+// servicio/servicios is never a client lookup; let get-services handle it.
+const SERVICE_INTENT = /\bservicios?\b/
+
 const NOT_A_NAME = new Set([
   'hoy', 'mañana', 'manana', 'ayer', 'anteayer', 'pasado',
   'lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo',
@@ -44,6 +50,7 @@ const PATTERNS: RegExp[] = [
 export function detectSearchClients(text: string): SearchClientsArgs | null {
   const t = text.toLowerCase().trim()
   if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
+  if (SERVICE_INTENT.test(t)) return null
 
   for (const re of PATTERNS) {
     const m = t.match(re)

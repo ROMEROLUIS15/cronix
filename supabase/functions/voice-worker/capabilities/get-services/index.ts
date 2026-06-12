@@ -1,13 +1,13 @@
 /**
- * get_services — read-only catalog lookup. LLM-only: there's no useful fast
- * path because the user can phrase this dozens of ways ("qué servicios
- * ofreces", "lista los servicios", "qué puedes hacer") and the cost of a
- * wrong fast-path classification outweighs the latency win. The system
+ * get_services — read-only catalog lookup. Deterministic fast path for the
+ * common question shapes ("qué servicios tienes", "servicios disponibles");
+ * anything else ("qué puedes hacer") still reaches the LLM, whose system
  * prompt knows when to call this tool.
  */
 
 import type { ICapability, FastPathInput } from '../_shared/Capability.ts'
 import { executeGetServices, type GetServicesArgs } from './tool.ts'
+import { detectGetServices } from './fast-path.ts'
 
 export const getServicesCapability: ICapability<GetServicesArgs> = {
   name:      'get_services',
@@ -21,8 +21,8 @@ export const getServicesCapability: ICapability<GetServicesArgs> = {
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
-  detectFastPath(_input: FastPathInput) {
-    return null
+  detectFastPath(input: FastPathInput) {
+    return detectGetServices(input.text)
   },
   execute: (ctx, _args) => executeGetServices(ctx),
 }
