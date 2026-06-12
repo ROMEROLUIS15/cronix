@@ -14,7 +14,7 @@
 
 import { parseDateExpression } from '../date-parser.ts'
 import { parseTimeExpression, userMentionedTime } from '../time-parser.ts'
-import { normalize, tokens }    from '../fuzzy.ts'
+import { tokens, shareToken }  from '../fuzzy.ts'
 
 export interface CorpusSlots {
   date: string | null
@@ -29,15 +29,33 @@ export function extractSlotsFromCorpus(corpus: string, todayLocal: string): Corp
 }
 
 /**
- * True when ANY token of `name` (≥3 chars) appears in the normalized corpus.
- * Catches name fabrications without rejecting fuzzy/STT-mangled mentions.
+ * Connector/article tokens inside multi-word names ("Corte de cabello",
+ * "María de los Ángeles"). They appear in almost any Spanish utterance, so
+ * matching on them would let a fabricated name pass the guard via its "de".
+ * If the name is ONLY connectors, fall back to all tokens — better a noisy
+ * match than rejecting a client genuinely named that way.
+ */
+const NAME_CONNECTOR_TOKENS = new Set([
+  'de', 'del', 'la', 'las', 'el', 'los', 'le', 'y', 'con', 'para', 'por',
+])
+
+/**
+ * True when any meaningful token of `name` matches a token of the corpus —
+ * literally, phonetically, or by ≥4-char prefix (shareToken, same bridging
+ * the fuzzy resolver uses). Token-boundary matching, NOT substring:
+ * the previous `corpus.includes(token)` let "Ana" pass whenever the user
+ * said "mañana" (normalized "manana" contains "ana"), and names whose
+ * tokens were all <3 chars could never pass at all.
  */
 export function nameMentionedInCorpus(corpus: string, name: string): boolean {
   if (!name) return false
-  const normalized = normalize(corpus)
-  const ts = tokens(name)
-  if (ts.length === 0) return false
-  return ts.some(t => t.length >= 3 && normalized.includes(t))
+  const allNameTokens = tokens(name)
+  if (allNameTokens.length === 0) return false
+  const meaningful = allNameTokens.filter(t => !NAME_CONNECTOR_TOKENS.has(t))
+  const nameTokens = meaningful.length > 0 ? meaningful : allNameTokens
+  const corpusTokens = tokens(corpus)
+  if (corpusTokens.length === 0) return false
+  return shareToken(nameTokens, corpusTokens)
 }
 
 export function timeMentionedInCorpus(corpus: string): boolean {

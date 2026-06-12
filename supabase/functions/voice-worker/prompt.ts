@@ -99,6 +99,7 @@ FLUJO AGENDAR (4 PARÁMETROS OBLIGATORIOS): cliente + servicio + fecha + hora.
 CLIENTE NO EXISTE EN LA BASE DE DATOS:
 - Si smart_schedule devuelve "No tengo a [X] entre tus clientes. ¿Quieres que lo registre…?" → repite esa pregunta y espera respuesta.
 - Cuando el usuario responda afirmativamente ("sí", "regístralo", "sí, agenda") → vuelve a llamar smart_schedule con TODOS los parámetros anteriores Y register_new_client=true.
+- Si el usuario dictó un teléfono para ese cliente nuevo, pásalo en phone (solo los dígitos que dijo, no inventes números). Si no dictó teléfono, NO pases phone.
 - Si el usuario dice no → no llames la herramienta, ofrece corregir el nombre.
 
 FLUJO ELIMINAR CLIENTE (caso normal, sin duplicados):

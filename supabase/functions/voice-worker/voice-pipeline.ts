@@ -15,7 +15,19 @@ import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType
 import {
   executeByName, getToolDefinitions, WRITE_CAPABILITIES, BYPASS_CAPABILITIES,
 } from './capabilities/_shared/registry.ts'
-import { coerceToolArgs } from './core/tool-args.ts'
+import { coerceToolArgs, stripUndeclaredArgs } from './core/tool-args.ts'
+
+// Declared parameter names per tool, straight from each capability's JSON
+// Schema. Args outside this set never reach a tool from the LLM path —
+// internal-only args (appointment_id from lastRef) stay fast-path-exclusive.
+const DECLARED_ARGS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  getToolDefinitions().map(def => [
+    def.function.name,
+    new Set(Object.keys(
+      (def.function.parameters as { properties?: Record<string, unknown> }).properties ?? {},
+    )),
+  ]),
+)
 
 // ── Re-export shared utilities (moved from agent.ts) ─────────────────────────
 
@@ -216,6 +228,15 @@ async function stepLlmLoop(ctx: VoiceLlmContext): Promise<VoiceLlmResult> {
         continue
       }
 
+      const declared = DECLARED_ARGS.get(tc.name)
+      if (declared) {
+        const stripped = stripUndeclaredArgs(parsedArgs, declared)
+        if (stripped.dropped.length > 0) {
+          console.warn(`[VOICE-WORKER-AGENT] Undeclared args dropped on ${tc.name}: ${stripped.dropped.join(', ')}`)
+        }
+        parsedArgs = stripped.args
+      }
+
       applyDateOverride(tc, parsedArgs, ctx.dateOverride)
 
       const sortedArgs = buildToolFingerprint(parsedArgs)
@@ -237,7 +258,14 @@ async function stepLlmLoop(ctx: VoiceLlmContext): Promise<VoiceLlmResult> {
         tool: tc.name, durationMs: Date.now() - toolStart,
         status: result.success ? 'success' : 'error',
         argsFingerprint: await shortHash(JSON.stringify(sortedArgs)),
-        errorCode: result.success ? undefined : 'TOOL_FAILURE',
+        // GUARD_REJECTED distinguishes an anti-hallucination guard catch from
+        // a genuine tool failure — without it the guards' hit rate (and their
+        // false-positive rate) is unmeasurable in /dashboard/observability.
+        errorCode: result.success
+          ? undefined
+          : (result.error === 'GUARD_REJECTED' || result.error === 'REVIEWER_BLOCKED'
+              ? result.error
+              : 'TOOL_FAILURE'),
       })
       messages.push({
         role: 'tool', tool_call_id: tc.id, name: tc.name,

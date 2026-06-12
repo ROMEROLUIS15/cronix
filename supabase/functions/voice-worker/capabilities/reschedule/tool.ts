@@ -73,7 +73,7 @@ export async function executeReschedule(
     const corpus = ctx.userTextCorpus ?? ''
     if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
       console.log(`[VOICE-WORKER-RESCHEDULE] REJECTED — hallucinated client="${args.client_name}"`)
-      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le reagendo la cita?' }
+      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le reagendo la cita?', error: 'GUARD_REJECTED' }
     }
     const resolution = await resolveClient(ctx, args.client_name)
     if (resolution.status !== 'found') {

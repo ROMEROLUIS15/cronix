@@ -5,11 +5,16 @@ import { fuzzyFind, WRITE_CONFIDENCE_THRESHOLD } from '../fuzzy.ts'
 export interface ClientRow { id: string; name: string; phone: string | null }
 
 export async function getActiveClients(ctx: ToolContext): Promise<ClientRow[]> {
+  // Deterministic order matters: fuzzyFind's sort is stable, so exact-homonym
+  // ties keep this order, and delete-client's "el primero" ordinal pick must
+  // land on the same row the user was read in the previous turn. Without an
+  // ORDER BY, Postgres returns rows in unspecified (plan-dependent) order.
   const { data, error } = await ctx.supabase
     .from('clients')
     .select('id, name, phone')
     .eq('business_id', ctx.businessId)
     .is('deleted_at', null)
+    .order('created_at', { ascending: true })
   if (error || !data) return []
   return data as ClientRow[]
 }

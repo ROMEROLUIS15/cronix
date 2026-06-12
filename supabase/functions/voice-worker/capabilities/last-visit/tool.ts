@@ -63,7 +63,7 @@ export async function executeLastVisit(
   const corpus = ctx.userTextCorpus ?? ''
   if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
     console.log(`[VOICE-WORKER-LAST-VISIT] REJECTED — hallucinated client="${args.client_name}"`)
-    return { success: false, result: 'No te entendí bien el nombre. ¿De qué cliente quieres la última visita?' }
+    return { success: false, result: 'No te entendí bien el nombre. ¿De qué cliente quieres la última visita?', error: 'GUARD_REJECTED' }
   }
 
   const resolution = await resolveClient(ctx, args.client_name)

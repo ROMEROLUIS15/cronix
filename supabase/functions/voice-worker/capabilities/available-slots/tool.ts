@@ -55,19 +55,23 @@ export async function executeAvailableSlots(
   const [oh, om] = open.split(':').map(Number)
   const [ch, cm] = close.split(':').map(Number)
 
-  for (let h = oh!; h < ch!; h++) {
-    for (let m = (h === oh ? om! : 0); m < 60; m += SLOT_INTERVAL) {
-      if (h === ch && m >= cm!) break
-      const candidateTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      const startISO = localToUTC(args.date, candidateTime, ctx.timezone)
-      const endISO   = buildEndISO(startISO, args.duration_min)
-      const conflict = (booked ?? []).some((b: { start_at: string; end_at: string }) =>
-        new Date(b.start_at) < new Date(endISO) && new Date(b.end_at) > new Date(startISO)
-      )
-      // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
-      // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.
-      if (!conflict) free.push(formatTimeFromISO(startISO, ctx.timezone))
-    }
+  // Minute-based walk with the invariant: the service must END by closing
+  // time. The previous hour-based loop (h < ch) silently dropped the last
+  // half-hour when close was fractional (close 18:30 never offered 18:00)
+  // and never checked duration against close at all — a 120-min service at
+  // 17:30 with close 18:00 was offered even though it ends 19:30.
+  const openMin  = oh! * 60 + om!
+  const closeMin = ch! * 60 + cm!
+  for (let t = openMin; t + args.duration_min <= closeMin; t += SLOT_INTERVAL) {
+    const candidateTime = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+    const startISO = localToUTC(args.date, candidateTime, ctx.timezone)
+    const endISO   = buildEndISO(startISO, args.duration_min)
+    const conflict = (booked ?? []).some((b: { start_at: string; end_at: string }) =>
+      new Date(b.start_at) < new Date(endISO) && new Date(b.end_at) > new Date(startISO)
+    )
+    // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
+    // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.
+    if (!conflict) free.push(formatTimeFromISO(startISO, ctx.timezone))
   }
 
   const dateLabel = humanizeDate(args.date, ctx.timezone)

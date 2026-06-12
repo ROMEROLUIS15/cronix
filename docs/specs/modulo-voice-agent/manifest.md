@@ -194,3 +194,76 @@ pueden operar con confianza baja — son inofensivas.
 - ENTONCES `fuzzyFind()` retorna `status: 'ambiguous'`
   y el agente pregunta "¿Cuál María: Torres o Ruiz?"
   sin ejecutar ninguna escritura.
+
+## 8. Capa Antialucinación: Corpus de Frame + Mention Guards
+
+Complementa el Date Override y el dedup del §3. Vive en
+`core/conversation/frame.ts` y `core/conversation/slot-extractor.ts`.
+
+### Corpus de usuario por frame
+
+`buildUserCorpus()` concatena el input actual + los turnos de usuario desde
+el último **frame boundary** (máx. 4000 chars). Un frame cierra en mensajes
+asistente terminales: `Listo…`, `Cancelado…`, `Reagendado…`, `Agendado…`,
+`No encontré…`, `No pude…`, `No hay…`, `…ya está ocupado`, y
+`Cliente … eliminado` (un cliente borrado no tiene anáfora legítima).
+
+**Invariante de apertura:** los listados READ ("Tienes 3 citas…",
+"Horarios libres…", "Sí, X está entre tus clientes…"), el alta
+("Cliente X registrado.") y el rechazo de borrado ("No se puede eliminar…")
+NO cierran el frame — su turno de usuario alimenta el write siguiente
+("busca el teléfono de Ana" → "agéndala mañana"). Cerrar ahí evicta el
+nombre del corpus y los guards rechazarían el follow-up legítimo.
+
+### Mention guards (anti-sustitución)
+
+Toda capability que reciba un nombre del LLM verifica que ese nombre
+provenga del corpus mediante `nameMentionedInCorpus()`:
+
+- Matching por **fronteras de token** (nunca substring): igualdad literal,
+  igualdad fonética (`phoneticKey`), o prefijo ≥4 chars (`shareToken`,
+  el mismo puente del resolver fuzzy).
+- Los conectores ("de", "la", "del"…) del lado del nombre nunca otorgan
+  match — "Corte de cabello" no pasa por el "de" de cualquier frase.
+- Corpus vacío ⇒ fail-open (sin contexto no se puede verificar).
+- `smart_schedule` verifica además hora y fecha (`timeMentionedInCorpus`,
+  `dateMentionedInCorpus`) y, si registra cliente nuevo con `phone`, los
+  dígitos deben aparecer en el corpus (número inventado ⇒ se descarta).
+
+### Frontera LLM→tool: solo args declarados
+
+`stepLlmLoop` filtra los args de cada tool call contra las `properties` del
+JSON Schema declarado (`stripUndeclaredArgs`). Args internos del fast path
+(`appointment_id` resuelto desde `lastRef`) son **inalcanzables desde el
+LLM** — un `appointment_id` fabricado ya no rutea cancel/reschedule a la
+rama anafórica que salta los guards.
+
+### Write-guard constitucional
+
+`schedule`, `cancel`, `reschedule` y `delete-client` invocan
+`ctx.runWriteGuard` (ConstitutionalReviewer, fail-open) antes del SQL.
+Limitación conocida: en el canal voz `recentMemory` llega vacía (voice no
+escribe memoria episódica y el scope `user` no cruza con el scope
+`client_phone` de WhatsApp), por lo que el reviewer solo puede bloquear
+`UNSAFE_ARGS`. Pendiente: escritura de memoria desde voz + historial del
+frame en el `ReviewRequest` (rúbrica v2).
+
+### Observabilidad de guards
+
+Toda denegación de guard retorna `error: 'GUARD_REJECTED'` (y las del
+reviewer `REVIEWER_BLOCKED`); el trace las registra con ese `errorCode`,
+distinguible de `TOOL_FAILURE`, para medir tasa de captura y falsos
+positivos en `/dashboard/observability`.
+
+### Invariantes adicionales de capabilities
+
+- `available-slots`: un slot solo se ofrece si `inicio + duración ≤ cierre`
+  (recorrido por minutos; cierres fraccionarios como 18:30 ofrecen el
+  último slot completo).
+- `delete_client`: con match único, `any_duplicate` NUNCA salta la
+  confirmación de baja confianza; solo un `phone` que coincida con el del
+  candidato cuenta como pick deliberado. `getActiveClients` ordena por
+  `created_at` para que los picks ordinales ("el primero") sean
+  deterministas entre turnos.
+- `smart_schedule` acepta `phone` opcional para el cliente nuevo
+  (`register_new_client=true`); sin él, el cliente queda sin teléfono.

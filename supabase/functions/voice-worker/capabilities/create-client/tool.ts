@@ -20,7 +20,7 @@ export async function executeCreateClient(
   const corpus = ctx.userTextCorpus ?? ''
   if (corpus && !nameMentionedInCorpus(corpus, args.name)) {
     console.log(`[VOICE-WORKER-CREATE-CLIENT] REJECTED — hallucinated name="${args.name}"`)
-    return { success: false, result: 'No te entendí bien el nombre. ¿Cómo se llama el cliente?' }
+    return { success: false, result: 'No te entendí bien el nombre. ¿Cómo se llama el cliente?', error: 'GUARD_REJECTED' }
   }
 
   const { data, error } = await ctx.supabase

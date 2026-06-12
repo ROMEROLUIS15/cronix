@@ -13,3 +13,26 @@ export function coerceToolArgs(raw: unknown): Record<string, unknown> {
     ? raw as Record<string, unknown>
     : {}
 }
+
+/**
+ * Drops every arg the tool's JSON Schema doesn't declare. The LLM boundary
+ * is the only caller — fast-path detectors invoke tools directly and may
+ * pass internal-only args (e.g. `appointment_id` resolved from lastRef).
+ *
+ * Without this, a hallucinated `appointment_id` on cancel/reschedule routed
+ * the tool into its anaphoric branch, skipping the mention guard and client
+ * resolution entirely. The model never legitimately knows IDs (results are
+ * prose, the prompt forbids them), so any undeclared key is noise or worse.
+ */
+export function stripUndeclaredArgs(
+  args:     Record<string, unknown>,
+  declared: ReadonlySet<string>,
+): { args: Record<string, unknown>; dropped: string[] } {
+  const dropped = Object.keys(args).filter(k => !declared.has(k))
+  if (dropped.length === 0) return { args, dropped }
+  const clean: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(args)) {
+    if (declared.has(k)) clean[k] = v
+  }
+  return { args: clean, dropped }
+}

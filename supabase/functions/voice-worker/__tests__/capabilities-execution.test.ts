@@ -368,6 +368,70 @@ describe('voice-worker capability execution — edge & safety paths', () => {
     expect(res.result).toContain('No tienes citas próximas')
   })
 
+  it('available-slots → cierre fraccionario: ofrece el último slot que cabe (close 09:30 → 09:00)', async () => {
+    const allDaysOpen = Object.fromEntries(
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        .map(d => [d, { open: '09:00', close: '09:30' }]),
+    )
+    const m = createMockSupabase(op => {
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      return { data: null }
+    })
+    const res = await executeAvailableSlots(
+      ctxWith(m, { workingHours: allDaysOpen }),
+      { date: '2026-06-15', duration_min: 30 },
+    )
+
+    expect(res.success).toBe(true)
+    // The old hour-based loop (h < ch) produced ZERO slots for this window.
+    expect(res.result).toContain('9 de la mañana')
+    expect(res.result).not.toContain('No hay horarios')
+  })
+
+  it('available-slots → servicio más largo que la ventana restante: no ofrece slots que terminen después del cierre', async () => {
+    const allDaysOpen = Object.fromEntries(
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        .map(d => [d, { open: '09:00', close: '10:00' }]),
+    )
+    const m = createMockSupabase(op => {
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      return { data: null }
+    })
+    const res = await executeAvailableSlots(
+      ctxWith(m, { workingHours: allDaysOpen }),
+      { date: '2026-06-15', duration_min: 90 },
+    )
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('No hay horarios libres')
+  })
+
+  it('delete-client → any_duplicate=true con match único de baja confianza: pide confirmación, NO borra', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: [CLIENT] }
+      return { data: null }
+    })
+    // "Torr" matchea "Ana Torres" solo por prefijo (similarity-only, <0.80).
+    // El LLM no puede saltarse la confirmación emitiendo any_duplicate=true
+    // sin que exista una lista de duplicados previa.
+    const res = await executeDeleteClient(ctxWith(m), { client_name: 'Torr', any_duplicate: true })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('¿')
+    expect(m.opsFor('clients').find(o => o.type === 'update')).toBeUndefined()
+  })
+
+  it('delete-client → phone que NO corresponde al match único: pide confirmación, NO borra', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: [CLIENT] }
+      return { data: null }
+    })
+    const res = await executeDeleteClient(ctxWith(m), { client_name: 'Torr', phone: '09998887766' })
+
+    expect(res.success).toBe(false)
+    expect(m.opsFor('clients').find(o => o.type === 'update')).toBeUndefined()
+  })
+
   it('available-slots → día cerrado: lo informa, no consulta agenda', async () => {
     const allClosed = Object.fromEntries(
       ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d => [d, null]),

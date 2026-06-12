@@ -43,7 +43,7 @@ export async function executeCancel(
     const corpus = ctx.userTextCorpus ?? ''
     if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
       console.log(`[VOICE-WORKER-CANCEL] REJECTED — hallucinated client="${args.client_name}"`)
-      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le cancelo la cita?' }
+      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le cancelo la cita?', error: 'GUARD_REJECTED' }
     }
     const resolution = await resolveClient(ctx, args.client_name)
     if (resolution.status !== 'found') {

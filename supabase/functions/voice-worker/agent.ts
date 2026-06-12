@@ -82,6 +82,7 @@ export async function runAgent(
         return {
           success: false,
           result:  `No puedo ejecutar esa acción: ${outcome.reason}`,
+          error:   'REVIEWER_BLOCKED',
         }
       },
     }
@@ -108,7 +109,11 @@ export async function runAgent(
       durationMs:      Date.now() - fastStart,
       status:          result.success ? 'success' : 'error',
       argsFingerprint: await shortHash(JSON.stringify(registryHit.args)),
-      errorCode:       result.success ? undefined : 'FAST_PATH_FAILURE',
+      errorCode:       result.success
+        ? undefined
+        : (result.error === 'GUARD_REJECTED' || result.error === 'REVIEWER_BLOCKED'
+            ? result.error
+            : 'FAST_PATH_FAILURE'),
     })
     if (result.fallthroughToLLM) {
       console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}) → falling through to LLM (not_found)`)

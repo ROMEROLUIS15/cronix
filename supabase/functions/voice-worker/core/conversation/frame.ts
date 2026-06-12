@@ -38,6 +38,19 @@ const TERMINAL_PATTERNS: readonly RegExp[] = [
   new RegExp(`^\\s*No pude${END}`,      'i'),
   new RegExp(`^\\s*No hay${END}`,       'i'),
   /ya est[áa] ocupado/i,
+  // Delete success doesn't start with "Listo" ("Cliente Carmen (teléfono…)
+  // eliminado."). Without this the frame stayed open and the dangling
+  // "carmen" token kept validating LLM-fabricated client names in later
+  // writes — and a deleted client has no legitimate follow-up anaphora.
+  //
+  // Deliberately NOT terminal, because their user turn feeds the next one:
+  //   - "Cliente X registrado."        → "ahora agéndalo mañana a las 3"
+  //   - "No se puede eliminar: …"      → "ok, cancélalas primero"
+  //   - READ listings ("Tienes 3 citas…", "Horarios libres…", "Sí, Ana está
+  //     entre tus clientes…")          → "agéndala mañana a las 3"
+  // Closing there would evict the client name from the corpus and the
+  // mention guards would reject those legitimate follow-up writes.
+  /^\s*Cliente\b.*\beliminado/i,
 ]
 
 export function isTerminalAssistantMessage(content: string): boolean {
