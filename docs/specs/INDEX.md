@@ -102,4 +102,5 @@ docs/specs/
 | 2026-06-12 | modulo-voice-agent §8: capa antialucinación (frame corpus, mention guards por token, filtro de args declarados, write-guard en delete_client, invariantes de available-slots/delete_client/smart_schedule, códigos GUARD_REJECTED). |
 | 2026-06-12 | modulo-voice-agent: 12ª capability `get_client_appointments` (citas futuras por cliente). Supervisor: rúbrica v2 con `conversationWindow` + memoria episódica desde voz (espejos Node/Deno en paridad). |
 | 2026-06-12 | modulo-voice-agent §9: dimensión de staff — asignación por nombre ("con Marielys"/"conmigo"), `assigned_user_id` en writes de voz, `findConflicts` per-staff. Sin nombrar → NULL (política default queda para el sprint multi-empleado). |
+| 2026-06-13 | modulo-voice-agent §7: equivalencia de clase vocal (`vowelClassKey`, i↔e/o↔u) sobre la clave fonética — resuelve confusión vocal del STT para cualquier nombre, preservando precisión por consonante. Detectores fast-path (próxima-cita/servicios) normalizados + ampliados. |
 
