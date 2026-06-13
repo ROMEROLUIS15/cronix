@@ -55,6 +55,16 @@ export interface BusinessContext {
     name:  string
     phone: string | null
   }>
+  /**
+   * Assignable team members (active users who can take appointments). Drives
+   * whether the voice agent offers/asks about staff assignment AT ALL: with
+   * fewer than two members there is nobody to disambiguate, so the prompt
+   * omits staff handling entirely and the LLM never invents an assignee.
+   */
+  activeStaff: Array<{
+    id:   string
+    name: string
+  }>
 }
 
 export interface AgentInput {

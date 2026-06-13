@@ -88,7 +88,6 @@ FLUJO AGENDAR (4 PARÁMETROS OBLIGATORIOS): cliente + servicio + fecha + hora.
 - PROHIBIDO inventar, asumir o usar valores por defecto en ninguno de los 4 parámetros.
 - PROHIBIDO pasar valores placeholder ("?", "tbd", "pendiente", "por definir", "n/a", cadenas vacías) — la herramienta los rechazará.
 - PROHIBIDO copiar el servicio de citas anteriores o de la lista de servicios disponibles si el usuario NO lo dijo explícitamente en algún turno del flujo actual. La herramienta valida que el servicio aparezca en lo que el usuario realmente dijo y rechazará el llamado si lo inventas. Pero SÍ puedes usar un servicio que el usuario mencionó hace dos o tres turnos dentro del mismo flujo de agendar.
-- STAFF (opcional): si el dueño nombra a un miembro del equipo ("con Marielys") → pasa staff_name="Marielys". Si dice "conmigo" → staff_name="${input.userName}". Si NO nombra a nadie, NO pases staff_name — la cita queda sin asignar, eso es correcto.
 - Si FALTA cualquiera de los 4 → NO llames smart_schedule. Pregunta SOLO por ese dato faltante con una pregunta corta y directa, un dato a la vez.
 - Orden de pregunta: cliente → servicio → fecha → hora.
 - Ejemplos:
@@ -157,6 +156,21 @@ CONSULTAS:
     p += '\n- Pasa a las herramientas el nombre TAL COMO LO DIJO el usuario. El resolver fonético del backend bridge-a variantes ortográficas y de pronunciación automáticamente (Lizeth↔Lisset, Liseth↔Lisset, Vázquez↔Bázquez, etc.).'
     p += '\n- Solo pide confirmación al usuario cuando la HERRAMIENTA devuelva un mensaje del tipo "Hay varios clientes similares: …" o "No estoy seguro a quién te refieres". Entonces lee la lista y deja que el usuario elija.'
     p += '\n- Si la herramienta devuelve "No encontré al cliente X", revisa la lista de arriba: si hay un nombre claramente parecido al que el usuario dijo, repítelo en voz alta y pídele que confirme antes de volver a llamar la herramienta. Pero por defecto, CONFÍA en el resolver — no rechaces preguntas por tu cuenta solo porque el nombre del usuario no aparece literal en la lista.'
+  }
+
+  // Staff assignment is offered ONLY when the business has ≥2 assignable
+  // members — below that there is nobody to disambiguate, so we say NOTHING
+  // about staff and the LLM can neither invent an assignee nor ask "¿con
+  // quién?". The roster below is the authoritative list; the resolver fuzzy-
+  // matches against it and the tool rejects anything not traceable to it.
+  if (input.context.activeStaff.length >= 2) {
+    const staffNames = input.context.activeStaff.map(s => s.name).join(', ')
+    p += '\n\nEQUIPO DEL NEGOCIO (miembros a los que puedes asignar una cita): ' + staffNames
+    p += '\n\nASIGNACIÓN A MIEMBRO DEL EQUIPO (solo al agendar):'
+    p += '\n- Si el dueño nombra a uno de estos miembros ("con Marielys", "que se la haga Carlos") → pasa staff_name con ese nombre TAL CUAL lo dijo.'
+    p += `\n- Si dice "conmigo" → staff_name="${input.userName}".`
+    p += '\n- Si NO nombra a ningún miembro, NO pases staff_name. La cita queda sin asignar y eso es correcto. NUNCA preguntes "¿con quién?" por tu cuenta.'
+    p += '\n- Solo si la herramienta te responde "¿Con cuál miembro del equipo…?", repítele esa pregunta al dueño.'
   }
 
   if (input.context.workingHours) {

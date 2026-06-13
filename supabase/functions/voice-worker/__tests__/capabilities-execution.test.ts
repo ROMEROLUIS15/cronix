@@ -69,12 +69,17 @@ describe('voice-worker capability execution', () => {
     })
   })
 
+  // A team needs ≥2 assignable members for staff handling to be active.
+  const TEAM = [
+    { id: 'staff-1', name: 'Marielys Pérez', role: 'employee' },
+    { id: 'staff-2', name: 'Carlos Gómez',   role: 'employee' },
+  ]
+
   it('schedule → staff nombrado (staff_name): asigna assigned_user_id y acota el conflicto a ese staff', async () => {
-    const STAFF = { id: 'staff-1', name: 'Marielys Pérez', role: 'employee' }
     const m = createMockSupabase(op => {
       if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
       if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
-      if (op.table === 'users'        && op.type === 'select') return { data: [STAFF] }
+      if (op.table === 'users'        && op.type === 'select') return { data: TEAM }
       if (op.table === 'appointments' && op.type === 'select') return { data: [] }
       if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
       return { data: null }
@@ -93,11 +98,10 @@ describe('voice-worker capability execution', () => {
   })
 
   it('schedule → "con <staff>" en el corpus sin arg explícito: extracción determinista asigna', async () => {
-    const STAFF = { id: 'staff-1', name: 'Marielys Pérez', role: 'employee' }
     const m = createMockSupabase(op => {
       if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
       if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
-      if (op.table === 'users'        && op.type === 'select') return { data: [STAFF] }
+      if (op.table === 'users'        && op.type === 'select') return { data: TEAM }
       if (op.table === 'appointments' && op.type === 'select') return { data: [] }
       if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
       return { data: null }
@@ -113,11 +117,14 @@ describe('voice-worker capability execution', () => {
   })
 
   it('schedule → "cita con <cliente>" NO se confunde con staff: queda sin asignar', async () => {
-    const STAFF = { id: 'staff-1', name: 'Ana López', role: 'employee' }
+    const TEAM_ANA = [
+      { id: 'staff-1', name: 'Ana López',   role: 'employee' },
+      { id: 'staff-2', name: 'Carlos Gómez', role: 'employee' },
+    ]
     const m = createMockSupabase(op => {
       if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
       if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
-      if (op.table === 'users'        && op.type === 'select') return { data: [STAFF] }
+      if (op.table === 'users'        && op.type === 'select') return { data: TEAM_ANA }
       if (op.table === 'appointments' && op.type === 'select') return { data: [] }
       if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
       return { data: null }
@@ -132,11 +139,11 @@ describe('voice-worker capability execution', () => {
     expect(insert.insertPayload).toMatchObject({ assigned_user_id: null })
   })
 
-  it('schedule → staff nombrado que no existe en el equipo: pregunta, NO agenda', async () => {
+  it('schedule → staff nombrado que no existe en el equipo (≥2 miembros): pregunta, NO agenda', async () => {
     const m = createMockSupabase(op => {
       if (op.table === 'clients'  && op.type === 'select') return { data: [CLIENT] }
       if (op.table === 'services' && op.type === 'select') return { data: [SERVICE] }
-      if (op.table === 'users'    && op.type === 'select') return { data: [{ id: 's1', name: 'Marielys Pérez', role: 'employee' }] }
+      if (op.table === 'users'    && op.type === 'select') return { data: TEAM }
       return { data: null }
     })
     const res = await executeSchedule(ctxWith(m), {
@@ -147,6 +154,51 @@ describe('voice-worker capability execution', () => {
     expect(res.success).toBe(false)
     expect(res.result).toContain('equipo')
     expect(m.opsFor('appointments').find(o => o.type === 'insert')).toBeUndefined()
+  })
+
+  it('schedule → negocio de UNA sola persona + staff_name: NO pregunta, agenda sin asignar', async () => {
+    const SOLO = [{ id: 'owner-1', name: 'Glendys Lara', role: 'owner' }]
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
+      if (op.table === 'users'        && op.type === 'select') return { data: SOLO }
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+      return { data: null }
+    })
+    // Even if a staff_name leaks through, a one-person business must never ask.
+    const res = await executeSchedule(ctxWith(m), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2026-06-15', time: '15:00',
+      staff_name: 'Valentina',
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.result).not.toContain('equipo')
+    const insert = m.opsFor('appointments').find(o => o.type === 'insert')!
+    expect(insert.insertPayload).toMatchObject({ assigned_user_id: null })
+    // Business-level conflict scope (no per-staff filter) when unassigned.
+    const conflictSel = m.opsFor('appointments').find(o => o.type === 'select')!
+    expect(conflictSel.eq.find(([c]) => c === 'assigned_user_id')).toBeUndefined()
+  })
+
+  it('schedule → negocio de UNA sola persona + "con X" en corpus: ignora staff, sin asignar', async () => {
+    const SOLO = [{ id: 'owner-1', name: 'Glendys Lara', role: 'owner' }]
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'services'     && op.type === 'select') return { data: [SERVICE] }
+      if (op.table === 'users'        && op.type === 'select') return { data: SOLO }
+      if (op.table === 'appointments' && op.type === 'select') return { data: [] }
+      if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+      return { data: null }
+    })
+    const res = await executeSchedule(
+      ctxWith(m, { userTextCorpus: 'agenda a ana torres para corte mañana a las 3 con marielys' }),
+      { service_name: 'Corte', client_name: 'Ana Torres', date: '2026-06-15', time: '15:00' },
+    )
+
+    expect(res.success).toBe(true)
+    const insert = m.opsFor('appointments').find(o => o.type === 'insert')!
+    expect(insert.insertPayload).toMatchObject({ assigned_user_id: null })
   })
 
   it('reschedule → reagenda: UPDATE de start_at/end_at de la cita encontrada', async () => {
