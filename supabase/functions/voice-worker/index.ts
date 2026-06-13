@@ -201,11 +201,13 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
       .order('created_at',    { ascending: false })
       .limit(100),
     // Assignable team members — gates the staff-assignment prompt section.
+    // Roles must match the user_role enum exactly {owner, employee,
+    // platform_admin}; only owner+employee take appointments.
     supabase.from('users')
       .select('id, name')
       .eq('business_id', businessId)
       .eq('is_active', true)
-      .in('role', ['owner', 'admin', 'employee'])
+      .in('role', ['owner', 'employee'])
       .order('created_at', { ascending: true }),
   ])
 

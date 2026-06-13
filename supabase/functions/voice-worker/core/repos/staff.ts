@@ -26,7 +26,10 @@ export async function getActiveStaff(ctx: ToolContext): Promise<StaffRow[]> {
     .from('users')
     .select('id, name, role')
     .eq('business_id', ctx.businessId)
-    .in('role', ['owner', 'admin', 'employee'])
+    // user_role enum is exactly {owner, employee, platform_admin}; only owner
+    // and employee take appointments. platform_admin is a Cronix-platform role,
+    // never a salon staff member. ('admin' is NOT a valid enum value.)
+    .in('role', ['owner', 'employee'])
     .eq('is_active', true)
     .order('created_at', { ascending: true })
   if (error || !data) return []
