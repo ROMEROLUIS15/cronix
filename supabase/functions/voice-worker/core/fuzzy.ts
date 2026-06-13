@@ -218,10 +218,13 @@ export const FUZZY_EXACT_TOKEN_CONFIDENCE = 0.90
 /**
  * Minimum confidence a destructive / write capability requires before acting
  * without a confirmation prompt. Below this, the tool surfaces the candidate
- * list and asks the user to disambiguate. Reads (last-visit, list-appointments,
- * search-clients) intentionally do not gate on this — they may be wrong but
- * are never destructive, and forcing a confirmation on every soft query would
- * destroy the agent's UX.
+ * list and asks the user to disambiguate. `last-visit` also gates on this — it
+ * reads back ONE named person's history, so a wrong resolution is a real miss
+ * (manifest §7). Low-risk reads that don't reveal a single person's record
+ * (list-appointments, get-services, available-slots, search-clients)
+ * intentionally do not gate — forcing a confirmation on every soft query would
+ * destroy the agent's UX. Exact/phonetic token hits floor at 0.90, so a
+ * clearly-named client never trips the gate.
  */
 export const WRITE_CONFIDENCE_THRESHOLD = 0.80
 

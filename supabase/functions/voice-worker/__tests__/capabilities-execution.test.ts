@@ -501,6 +501,41 @@ describe('voice-worker capability execution — edge & safety paths', () => {
     expect(m.opsFor('clients').find(o => o.type === 'update')).toBeUndefined()
   })
 
+  it('last-visit → match débil (<0.80): pide confirmar el nombre, NO lee el historial', async () => {
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients' && op.type === 'select') return { data: [CLIENT] }
+      return { data: null }
+    })
+    // "Torr" matchea "Ana Torres" solo por prefijo (similarity-only, <0.80):
+    // el validador no está seguro → confirma antes de exponer la visita.
+    const res = await executeLastVisit(ctxWith(m), { client_name: 'Torr' })
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('Ana Torres')
+    expect(res.result).toContain('¿')
+    // No debe consultar el historial de citas hasta confirmar la persona.
+    expect(m.opsFor('appointments')).toHaveLength(0)
+  })
+
+  it('last-visit → token exacto (confianza 0.90): responde directo, sin confirmar', async () => {
+    const ROW = {
+      id: 'apt-1', start_at: '2026-05-01T14:00:00.000Z', status: 'completed',
+      service: { name: 'Corte' }, appointment_services: [],
+    }
+    const m = createMockSupabase(op => {
+      if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }
+      if (op.table === 'appointments' && op.type === 'select') return { data: [ROW] }
+      return { data: null }
+    })
+    // "Ana" es token exacto de "Ana Torres" → confianza pisada a 0.90 → NO nag.
+    const res = await executeLastVisit(ctxWith(m), { client_name: 'Ana' })
+
+    expect(res.success).toBe(true)
+    expect(res.result).toContain('última visita')
+    expect(res.result).not.toContain('¿')
+    expect(m.opsFor('appointments')).toHaveLength(1)
+  })
+
   it('last-visit → todas canceladas/no-show: lo dice, no inventa una visita', async () => {
     const m = createMockSupabase(op => {
       if (op.table === 'clients'      && op.type === 'select') return { data: [CLIENT] }

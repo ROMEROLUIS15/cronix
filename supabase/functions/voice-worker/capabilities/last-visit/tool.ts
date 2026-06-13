@@ -16,7 +16,7 @@
 
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
-import { resolveClient } from '../../core/repos/clients.ts'
+import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { humanizeDate }  from '../../core/time-format.ts'
 import { nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 
@@ -73,6 +73,17 @@ export async function executeLastVisit(
   if (resolution.status === 'ambiguous') {
     const names = resolution.candidates.map(c => c.name).join(', ')
     return { success: true, result: `Hay varios clientes con nombre similar: ${names}. ¿A cuál te refieres?` }
+  }
+
+  // Weak single match → confirm the person before reading back their history.
+  // last-visit is a READ but it exposes ONE named person's record, so a wrong
+  // resolution is a real correctness/privacy miss. We gate on the SAME write
+  // confidence bar (<0.80): exact/phonetic/vowel-class token hits floor at 0.90
+  // (see fuzzy.ts), so a clearly-named client never trips this — only genuinely
+  // weak similarity/prefix matches do. The prompt is a deterministic string on a
+  // bypassLLM capability: it costs no LLM tokens, just a one-word reply turn.
+  if (needsConfirmation(resolution)) {
+    return { success: true, result: formatConfirmationPrompt(resolution, args.client_name) }
   }
   const client = resolution.client
 

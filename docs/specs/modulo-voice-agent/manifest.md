@@ -200,12 +200,27 @@ del query. Protege contra STT que recorta nombres.
 | `ambiguous` | Dos candidatos similares | Lista nombres: "¿Cuál es: Ana Torres o Ana Ruiz?" |
 | `not_found` | Sin match | Ofrece registrar como cliente nuevo |
 
-### Regla de Seguridad para Operaciones de Escritura
+### Regla de Seguridad: Writes y Reads que nombran a una persona
 
 Las capabilities de WRITE (`schedule`, `reschedule`, `cancel`,
-`delete-client`) NUNCA actúan con confianza < 0.80.
-Las capabilities de READ (`search-clients`, `last-visit`) sí
-pueden operar con confianza baja — son inofensivas.
+`delete-client`) NUNCA actúan con confianza < 0.80: con `found` débil
+confirman vía `needsConfirmation()` + `formatConfirmationPrompt()`.
+
+`last-visit` es un **read sensible**: aunque no muta datos, lee el historial
+de UNA persona nombrada, y leer el de la persona equivocada es un fallo de
+correctitud (y de privacidad). Por eso aplica el MISMO gate de confianza que
+los writes — con `found` + confianza < 0.80 vuelve a preguntar
+("Entendí … ¿confirmas?" / "¿a quién te refieres?") en vez de responder.
+La invariante que evita el nag: los matches de token exacto/fonético/clase
+vocal pisan a 0.90 (`FUZZY_EXACT_TOKEN_CONFIDENCE`), así que un cliente
+nombrado con claridad responde directo al 100% y solo los matches realmente
+débiles (similitud/prefijo recortado) disparan la confirmación. El prompt es
+determinista sobre una capability `bypassLLM` → no consume tokens de LLM.
+
+Los reads de bajo riesgo que NO exponen el registro de una sola persona
+(`list-appointments`, `get-services`, `available-slots`, y `search-clients`
+que ya lista varios candidatos) sí pueden operar con confianza baja — son
+inofensivos y confirmar cada consulta destruiría la UX.
 
 ### AC adicional — AC-5 — Fuzzy matching resuelve errores de STT
 

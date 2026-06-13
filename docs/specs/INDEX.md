@@ -103,4 +103,5 @@ docs/specs/
 | 2026-06-12 | modulo-voice-agent: 12ª capability `get_client_appointments` (citas futuras por cliente). Supervisor: rúbrica v2 con `conversationWindow` + memoria episódica desde voz (espejos Node/Deno en paridad). |
 | 2026-06-12 | modulo-voice-agent §9: dimensión de staff — asignación por nombre ("con Marielys"/"conmigo"), `assigned_user_id` en writes de voz, `findConflicts` per-staff. Sin nombrar → NULL (política default queda para el sprint multi-empleado). |
 | 2026-06-13 | modulo-voice-agent §7: equivalencia de clase vocal (`vowelClassKey`, i↔e/o↔u) sobre la clave fonética — resuelve confusión vocal del STT para cualquier nombre, preservando precisión por consonante. Detectores fast-path (próxima-cita/servicios) normalizados + ampliados. |
+| 2026-06-13 | modulo-voice-agent §7: `last-visit` reclasificado como **read sensible** — aplica el gate de confianza de writes (`found` <0.80 → reconfirma "¿confirmas?/¿a quién te refieres?"). Match de token exacto/fonético sigue pisando a 0.90, así que el acierto responde 100% directo y solo el match débil pregunta. Prompt determinista (`bypassLLM`) → sin coste de tokens. |
 

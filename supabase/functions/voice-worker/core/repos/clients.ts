@@ -60,9 +60,12 @@ export async function resolveClient(ctx: ToolContext, name: string): Promise<Res
 /**
  * Returns true when a `found` resolution doesn't meet the write-tool
  * confidence bar. Callers should NOT silently proceed in this case — they
- * should surface the candidate list and ask the user to confirm. Reads
- * (last-visit, list-appointments, search-clients) intentionally never call
- * this helper: they may be wrong, but they're never destructive.
+ * should surface the candidate list and ask the user to confirm. Writes use
+ * it; `last-visit` also uses it because it reads back ONE named person's
+ * history (a sensitive read — see manifest §7). Low-risk reads that don't
+ * expose a single person's record (list-appointments, get-services,
+ * available-slots, search-clients) intentionally never call this helper:
+ * they may be wrong, but they're never destructive nor person-revealing.
  */
 export function needsConfirmation(r: ResolveOk): boolean {
   return r.confidence < WRITE_CONFIDENCE_THRESHOLD
@@ -96,14 +99,22 @@ export function normalisePhone(raw: string | null | undefined): string {
  *
  * We boost ONLY first names: they are the distinctive token the user typically
  * says when referring to a client. Boosting full names would dilute the bias
- * across less-relevant surnames. The cap (default 50) matches Deepgram's
- * comfortable upper bound — beyond that, the boost effect levels off.
+ * across less-relevant surnames.
+ *
+ * The list is ranked by `last_visit_at DESC`, which favours recently-active
+ * clients. That biases AGAINST the exact case `get_last_visit` asks about — a
+ * dormant client the owner hasn't seen in a while — so a 50-cap left those
+ * names unboosted and mis-transcribed. The cap is 100 to widen coverage to the
+ * whole roster of a typical single-location business; beyond ~100 the boost
+ * effect levels off and dilutes, so it is not a full fix for large rosters —
+ * the confidence-gated confirmation in last-visit (manifest §7) is the net for
+ * the dormant client that still falls off the list.
  */
 // deno-lint-ignore no-explicit-any
 export async function getClientFirstNamesForBoost(
   supabase:   SupabaseClient<any, any, any>,
   businessId: string,
-  limit = 50,
+  limit = 100,
 ): Promise<string[]> {
   const { data } = await supabase
     .from('clients')
