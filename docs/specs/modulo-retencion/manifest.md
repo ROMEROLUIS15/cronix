@@ -1,110 +1,182 @@
 # 📋 Manifiesto de Dominio: Módulo de Retención y Reenganche de Clientes
 
-Este documento define el contrato de negocio y las especificaciones técnicas para identificar clientes inactivos y automatizar el envío de recordatorios de reenganche en Cronix.
+> **Estado:** 🟡 Spec de diseño — feature en construcción (sprint 2). Esta versión
+> está alineada con la realidad del código (infra de WhatsApp saliente, cron y
+> esquema verificados el 2026-06-13). Define el alcance **v1**; lo diferido a v2
+> está marcado explícitamente.
+
+Define el contrato de negocio y las especificaciones técnicas para identificar
+clientes inactivos y reenganchar­los por WhatsApp en Cronix.
 
 ---
 
 ## 1. Propósito
 
-El módulo de retención tiene como objetivo mantener la agenda del negocio llena mediante la detección automática de clientes que han superado su frecuencia habitual de visita sin programar una nueva cita, disparando un mensaje de contacto a través de WhatsApp.
+Mantener la agenda llena detectando clientes que superaron su frecuencia
+habitual de visita sin reservar de nuevo, y permitir al **dueño** enviarles un
+mensaje de reenganche por WhatsApp. La IA NO está en el camino crítico: la
+detección es una consulta determinista (SQL), no un juicio de LLM.
 
 ---
 
 ## 2. Invariantes de Negocio (Reglas de Oro)
 
-Para garantizar la integridad de los datos, la privacidad de los clientes y una buena experiencia de usuario, este módulo está sujeto a las siguientes reglas inmutables:
-
-*   **Aislamiento Multi-Tenant (Aislamiento por Negocio):** Toda operación de consulta o envío de mensajes debe estar estrictamente filtrada por `business_id`. Un tenant jamás debe tener acceso a la lista de clientes o agenda de otro tenant.
-*   **Invariante de Inactividad Dinámica:** Un cliente es elegible para reenganche si y solo si:
-    1. Su última cita completada (`MAX(start_at)` con estado `completed`) ocurrió hace más de $N$ días, donde $N$ se resuelve en orden de precedencia:
-       - Frecuencia específica del cliente (`clients.attendance_frequency_days`).
-       - Frecuencia recomendada del servicio de su última cita (`services.recommended_return_days`).
-       - Frecuencia por defecto del negocio (`businesses.default_attendance_frequency_days`).
-    2. No tiene ninguna cita futura agendada en estado activo (`pending`, `confirmed`, `rescheduled` con `start_at > NOW()`).
-*   **Invariante Anti-Spam (Frecuencia de Contacto):** Para evitar que el cliente perciba los mensajes como molestos o invasivos, no se le enviará un mensaje de reenganche si ya ha recibido uno en los últimos $M$ días (ej. 30 días), controlado por el campo `last_reengaged_at` de la tabla `clients`.
-*   **Canal Único de Envío:** Los mensajes se enviarán exclusivamente a través del canal oficial de WhatsApp del negocio usando plantillas autorizadas.
+* **Aislamiento Multi-Tenant:** toda consulta/envío filtra por `business_id`
+  (constitution §4). Un tenant nunca ve clientes ni agenda de otro.
+* **Plantilla Meta obligatoria fuera de la ventana de 24h (CRÍTICO):** un cliente
+  inactivo está, por definición, fuera de la ventana de sesión de 24h de
+  WhatsApp. El mensaje de reenganche DEBE enviarse con una **plantilla Meta
+  aprobada (HSM)**, nunca texto libre. La infra ya existe (`whatsapp-service`
+  acepta `type:"template"`; lo usa `cron-reminders` para el resumen del dueño).
+  El texto libre solo es válido dentro de la ventana de 24h y NO aplica aquí.
+* **Dueño-en-el-loop (decisión de producto v1):** el sistema **detecta y propone**
+  candidatos; el **dueño revisa y dispara** el envío (selección de `clientIds`).
+  NO hay envío 100% automático en v1 — protege la reputación del número de
+  WhatsApp y da control sobre tono/momento. El modo automático (cron) queda para
+  v2 detrás de un toggle por negocio.
+* **Anti-Spam (frecuencia de contacto):** no se reenvía a un cliente que ya
+  recibió un reenganche en los últimos `antiSpamDays` (default 30), controlado
+  por `clients.last_reengaged_at`.
+* **Excluir citas futuras:** un cliente con una cita futura activa
+  (`pending`/`confirmed`, `start_at > now()`) NUNCA es candidato — ya va a volver.
+* **Solo clientes con visita previa real (v1):** candidato = tuvo al menos una
+  cita `completed` pasada y superó la frecuencia. Los "nunca vinieron" (lead
+  nurture) quedan fuera de v1.
+* **Canal único:** WhatsApp por el número oficial del negocio.
+* **Invalidación de caché cross-canal:** todo write que toque `clients`
+  (p.ej. `last_reengaged_at`) desde una Edge Function DEBE invalidar el caché del
+  dashboard vía el seam compartido `_shared/cache-invalidation.ts` (ver
+  modulo-voice-agent §8). No repetir el bug de "lo cambio y el dashboard no lo ve".
 
 ---
 
-## 3. Cambios Necesarios en el Modelo de Datos (Esquema SQL)
+## 3. Modelo de Datos (Esquema SQL)
 
-Para soportar la variabilidad de verticales (médicos, barberías, estéticas) de forma dinámica, el esquema soporta los siguientes campos:
+> Verificado 2026-06-13: **ninguna** de estas columnas existe aún. Todas son
+> migración nueva. `clients.last_visit_at`, `clients.phone`, `businesses.timezone`
+> y `services.duration_min` SÍ existen y se reutilizan.
 
-1.  **En la tabla `public.businesses`:**
-    *   `default_attendance_frequency_days`: Entero (por defecto `30`) que define la frecuencia estándar de visita para el negocio, configurable mediante un modal al activar el switch del Agente de Retención en la UI.
-2.  **En la tabla `public.services`:**
-    *   `recommended_return_days`: Entero opcional (ej. `10` para barberos, `21` para pestañas, `30` para médicos) que define el ciclo recomendado para ese servicio en específico.
-3.  **En la tabla `public.clients`:**
-    *   `attendance_frequency_days`: Entero opcional para sobreescribir cualquier cálculo y fijar una frecuencia personalizada para un cliente VIP o especial.
-    *   `last_reengaged_at`: Marca de tiempo (`timestamptz`) que registra cuándo se le envió el último WhatsApp de retención.
+### v1 — migración requerida (mínima)
+
+1. **`public.businesses.default_attendance_frequency_days`** — `int NOT NULL
+   DEFAULT 30`. Frecuencia estándar de visita del negocio, configurable desde la
+   UI al activar el módulo de retención.
+2. **`public.clients.last_reengaged_at`** — `timestamptz NULL`. Marca del último
+   WhatsApp de reenganche enviado (guard anti-spam).
+
+### v2 — diferido (NO en v1)
+
+3. `public.services.recommended_return_days` — `int NULL`. Ciclo recomendado por
+   servicio (10 barbería, 21 pestañas, 30 médico…). Habilita frecuencia
+   por-servicio cuando escale a multi-vertical.
+4. `public.clients.attendance_frequency_days` — `int NULL`. Override por cliente
+   VIP/especial.
+
+La **precedencia de frecuencia** (cliente → servicio → negocio) es de v2. En v1
+la frecuencia es **única por negocio** (`default_attendance_frequency_days`).
 
 ---
 
-## 4. Catálogo de Casos de Uso (Use Cases)
+## 4. Casos de Uso
+
+> Capa: `lib/domain/use-cases/retention/` (orquestación con efectos, dependen de
+> interfaces — constitution §1). Validaciones puras → `lib/use-cases/` si aplica.
 
 ### `GetInactiveClientsUseCase`
-*   **Entrada:** `{ businessId }`
-*   **Salida:** `Result<InactiveClient[]>` donde `InactiveClient = { id, name, phone, lastVisitAt, lastServiceId, targetFrequencyDays }`
-*   **Flujo:**
-    1. Obtener la configuración de frecuencia por defecto del negocio (`businesses.default_attendance_frequency_days`).
-    2. Consultar todos los clientes activos del negocio.
-    3. Para cada cliente:
-       - Obtener su última cita completada, incluyendo el `service_id` asociado.
-       - Calcular la frecuencia objetivo ($N$ días) resolviendo la precedencia: `client.attendance_frequency_days` ?? `service.recommended_return_days` ?? `business.default_attendance_frequency_days`.
-       - Verificar si han transcurrido más de $N$ días desde esa última cita.
-       - Validar que no existan citas futuras activas.
-       - Validar que `last_reengaged_at` sea nulo o mayor a 30 días.
-    4. Retornar la lista resultante.
+* **Entrada:** `{ businessId }`
+* **Salida:** `Result<InactiveClient[]>` con
+  `InactiveClient = { id, name, phone, lastVisitAt, lastCompletedAt }`
+* **Flujo (v1):**
+  1. Leer `businesses.default_attendance_frequency_days` (y `antiSpamDays`=30).
+  2. Delegar a `IClientRepository.findInactiveByFrequency(businessId, freq, antiSpam)`
+     — RPC determinista `get_reengageable_clients_rpc` que aplica: última cita
+     `completed` < hoy − freq; sin cita futura activa; `last_reengaged_at` nulo o
+     > antiSpam; con teléfono; `deleted_at` nulo. Orden por más-antiguo primero.
 
 ### `SendReengagementMessagesUseCase`
-*   **Entrada:** `{ businessId, clientIds[] }`
-*   **Salida:** `Result<{ sentCount: number }>`
-*   **Flujo:**
-    1. Validar que los `clientIds` pertenezcan al `businessId`.
-    2. Por cada cliente, invocar la API del proveedor de WhatsApp con el template del mensaje:
-       *"Hola {{name}}, no te hemos visto en {{businessName}}. Si deseas agendar..."*
-    3. Registrar la fecha actual en `last_reengaged_at` para cada cliente procesado exitosamente.
-    4. Retornar el número de mensajes enviados con éxito.
+* **Entrada:** `{ businessId, clientIds[] }`
+* **Salida:** `Result<{ sentCount: number; failed: ClientId[] }>`
+* **Flujo (v1):**
+  1. Validar que cada `clientId` pertenece a `businessId` Y sigue siendo
+     candidato (re-chequear anti-spam/cita-futura para evitar carreras).
+  2. Por cada cliente, enviar la **plantilla Meta** `client_winback` vía
+     `whatsapp-service` (`type:"template"`).
+  3. En cada envío exitoso, `updateLastReengaged(clientId, businessId)`.
+  4. Invalidar caché del dashboard (seam compartido).
+  5. Devolver enviados + fallidos.
+
+> **Supersede:** `get_inactive_clients_rpc` (60 días fijo, LIMIT 5, sin
+> anti-spam, sin excluir futuras) queda obsoleto. Sin callers en la app
+> (verificado) → no se elimina por ahora, se deja morir; el nuevo RPC lo reemplaza.
 
 ---
 
-## 5. Contrato de Persistencia (Interfaz de Repositorio)
+## 5. Contrato de Persistencia (Repositorio)
 
-La capa de dominio utilizará la siguiente extensión en `IClientRepository`:
+Extensión de `IClientRepository`:
 
 ```typescript
 interface IClientRepository {
   // ... métodos existentes
-  
-  /**
-   * Obtiene la lista de clientes inactivos según la frecuencia configurada.
-   */
+
+  /** Clientes elegibles para reenganche según frecuencia + anti-spam. */
   findInactiveByFrequency(
-    businessId: string,
-    defaultFrequencyDays: number,
-    antiSpamDays: number
+    businessId:   string,
+    frequencyDays: number,
+    antiSpamDays:  number,
   ): Promise<Result<InactiveClientRow[]>>
 
-  /**
-   * Actualiza la fecha del último reenganche para evitar spam.
-   */
+  /** Marca el último reenganche (guard anti-spam). Invalida caché. */
   updateLastReengaged(clientId: string, businessId: string): Promise<Result<void>>
 }
 ```
 
 ---
 
-## 6. Criterios de Aceptación (Acceptance Criteria)
+## 6. Canal WhatsApp — Plantilla Meta
 
-*   **AC-1 — Identificación correcta de inactivo:**
-    *   **DADO** un cliente cuya última cita fue hace 21 días, y el negocio tiene una frecuencia por defecto de 20 días,
-    *   **CUANDO** se ejecuta `GetInactiveClientsUseCase`,
-    *   **ENTONCES** el cliente debe aparecer en la lista de inactivos.
-*   **AC-2 — Exclusión por cita futura:**
-    *   **DADO** un cliente cuya última cita fue hace 25 días, pero tiene una cita en estado `confirmed` para dentro de 3 días,
-    *   **CUANDO** se ejecuta `GetInactiveClientsUseCase`,
-    *   **ENTONCES** el cliente debe ser excluido de la lista.
-*   **AC-3 — Respeto al control de spam:**
-    *   **DADO** un cliente inactivo con `last_reengaged_at` hace 10 días,
-    *   **CUANDO** se ejecuta `GetInactiveClientsUseCase`,
-    *   **ENTONCES** el cliente debe ser excluido para no enviarle mensajes repetitivos.
+* **Nombre sugerido:** `client_winback` · **Categoría Meta:** `MARKETING` ·
+  **Idioma:** `es`.
+* **Body (con parámetros):**
+  `Hola {{1}} 👋, en {{2}} te extrañamos. ¿Te gustaría agendar tu próxima cita?
+  Responde a este mensaje y con gusto te ayudamos.`
+  - `{{1}}` = nombre del cliente · `{{2}}` = nombre del negocio.
+* **Restricción:** hasta que Meta apruebe la plantilla, el feature NO puede
+  enviar (no hay fallback a texto libre fuera de la ventana de 24h). El
+  desarrollo procede en paralelo a la aprobación.
+* **Cumplimiento:** categoría MARKETING implica que el cliente puede recibir
+  límites de frecuencia de Meta; el guard `last_reengaged_at` (30 días) ayuda a
+  no saturar.
+
+---
+
+## 7. Criterios de Aceptación
+
+* **AC-1 — Inactivo detectado:** DADO un cliente con última cita `completed` hace
+  > `default_attendance_frequency_days` y sin cita futura activa, CUANDO corre
+  `GetInactiveClientsUseCase`, ENTONCES aparece en la lista.
+* **AC-2 — Excluido por cita futura:** DADO un cliente inactivo pero con cita
+  `confirmed` futura, ENTONCES NO aparece.
+* **AC-3 — Anti-spam:** DADO un candidato con `last_reengaged_at` hace < 30 días,
+  ENTONCES NO aparece.
+* **AC-4 — Sin teléfono:** DADO un candidato sin `phone`, ENTONCES NO aparece
+  (no se puede contactar).
+* **AC-5 — Envío marca anti-spam:** DADO un envío exitoso, ENTONCES
+  `last_reengaged_at` se setea a `now()` y el cliente deja de ser candidato.
+* **AC-6 — Tenant:** `SendReengagementMessagesUseCase` rechaza `clientIds` que no
+  pertenecen al `businessId`.
+* **AC-7 — Plantilla obligatoria:** el envío usa `type:"template"`; nunca texto
+  libre.
+
+---
+
+## 8. Plan por Fases (cada fase aislada y testeable)
+
+1. **Migración** (v1 columns) + **RPC** `get_reengageable_clients_rpc`. ← foundation
+2. **Repo + interfaz:** `findInactiveByFrequency`, `updateLastReengaged` (+ tests).
+3. **Use-cases** de dominio (+ tests con repos mock).
+4. **Superficie dashboard:** lista de candidatos + acción de envío (server action)
+   + toggle/modal de `default_attendance_frequency_days`.
+5. **Plantilla Meta** `client_winback` (trámite externo, en paralelo desde fase 1).
+6. **v2 (futuro):** frecuencia por-servicio/por-cliente, modo automático (cron +
+   toggle), log de auditoría de envíos.
