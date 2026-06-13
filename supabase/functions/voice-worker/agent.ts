@@ -35,19 +35,20 @@ const reviewer     = createConstitutionalReviewer()
 const tracer       = createTracer()
 
 /**
- * Tools where the reviewer keeps HARD-BLOCK authority: destructive /
- * irreversible writes. `book_appointment` is intentionally excluded — it is
- * additive and reversible, and its real risks (wrong client, double-book,
- * hallucinated slots) are already covered deterministically by the mention
- * guards, the fuzzy confidence threshold and findConflicts. An 8B reviewer
- * produces false positives on the legit "create client → book" flow (it reads
- * the just-created client in recentMemory and wrongly fires DUPLICATE_INTENT /
- * CONTRADICTS_MEMORY), so a veto there is logged + traced but downgraded to a
- * warn instead of breaking the booking. See manifest §8.
+ * Tools where the reviewer keeps HARD-BLOCK authority. Scoped to blast radius:
+ * only `delete_client` — the single write that is genuinely destructive
+ * (removes a client record). Every other write is reversible appointment state
+ * (book / cancel / reschedule set or flip a status) and its real risks (wrong
+ * client, double-book, hallucinated slots) are already covered deterministically
+ * by the mention guards, the fuzzy confidence threshold + confirmation, the
+ * appointment resolution by client, and findConflicts. The 8B reviewer produces
+ * false positives on legit flows ("create client → book", "book → then cancel /
+ * reschedule = change of plans") by reading the recent episode in memory and
+ * firing DUPLICATE_INTENT / CONTRADICTS_MEMORY. For those, a veto is logged +
+ * traced (REVIEWER_BLOCKED errorCode for observability) but downgraded to a warn
+ * so it never breaks a legitimate operation. See manifest §8.
  */
 const REVIEWER_HARD_BLOCK_TOOLS: ReadonlySet<ReviewedToolName> = new Set([
-  'cancel_appointment',
-  'reschedule_appointment',
   'delete_client',
 ])
 

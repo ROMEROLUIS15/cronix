@@ -285,17 +285,23 @@ rama anafórica que salta los guards.
 `ctx.runWriteGuard` (ConstitutionalReviewer, fail-open) antes del SQL.
 
 **Autoridad de veto acotada al radio de daño (voz):** el reviewer corre para
-las 4, pero su **hard-block solo aplica a las destructivas/irreversibles**
-(`cancel`, `reschedule`, `delete_client` — `REVIEWER_HARD_BLOCK_TOOLS` en
-`agent.ts`). En `book_appointment` (aditivo, reversible, y ya cubierto por
-mention guards + umbral fuzzy + `findConflicts`) un veredicto distinto de
-`allow` se **degrada a warn**: se registra en consola y en el trace
+las 4 writes, pero su **hard-block solo aplica a `delete_client`** — el único
+write genuinamente destructivo (borra un cliente). `REVIEWER_HARD_BLOCK_TOOLS`
+en `agent.ts` contiene únicamente `delete_client`. `book_appointment`,
+`cancel_appointment` y `reschedule_appointment` son estado de cita reversible
+(crean o cambian un status) y sus riesgos reales (cliente equivocado,
+doble-booking, slots/nombres alucinados) ya están cubiertos de forma
+determinista por los mention guards, el umbral fuzzy + confirmación, la
+resolución de la cita por cliente y `findConflicts`. Para esas, un veredicto
+distinto de `allow` se **degrada a warn**: se registra en consola y en el trace
 (`REVIEWER_BLOCKED` como errorCode de observabilidad) pero **no rompe la
-reserva**. Motivo: el reviewer (llama-3.1-8b) producía falsos positivos en el
-flujo legítimo "crear cliente → agendarlo" (leía el alta recién hecha en
-`recentMemory` y disparaba `DUPLICATE_INTENT`/`CONTRADICTS_MEMORY`). La
-rúbrica v3 refuerza además que un `create_client` reciente no es evidencia de
-duplicado/contradicción para un booking (regla 7).
+operación**. Motivo: el reviewer (llama-3.1-8b) producía falsos positivos en
+flujos legítimos —"crear cliente → agendarlo" y "agendar → luego cancelar/
+reagendar" (cambio de planes)— al leer el episodio reciente en `recentMemory`
+y disparar `DUPLICATE_INTENT`/`CONTRADICTS_MEMORY`. La rúbrica v4 refuerza
+además que un `create_client` reciente no implica duplicado/contradicción para
+un booking (regla 7) y que rectificar una cita recién creada es legítimo
+(regla 8).
 
 - **Memoria episódica desde voz**: todo write exitoso (fast path y LLM
   path) registra `"<lo que dijo el usuario> → <resultado hablado>"` con
