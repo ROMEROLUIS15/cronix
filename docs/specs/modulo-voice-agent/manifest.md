@@ -158,6 +158,23 @@ Equivalencias fonéticas aplicadas (función `phoneticKey()`):
 - gu+vocal → g    ("Guardiana" = "Gardiana" — STT encaja nombres raros en palabras de diccionario)
 - dobles → simple ("Lisseth" = "Liseth")
 
+**Equivalencia de clase vocal (`vowelClassKey()`)** — segunda capa sobre la
+clave fonética, para la confusión vocal que el STT en español produce más:
+- i ↔ e  ("Marielis" = "Marieles")
+- o ↔ u  ("Yuseli" = "Yoseli", "Yusmary" = "Yosmary")
+- `a` se mantiene distinta (NO se fusiona con o/u)
+- TODAS las consonantes se preservan intactas
+
+Es general para cualquier nombre, no una lista. Resuelve la clase de bug
+"digo Yuseli y me da Joselyn/Yoselin": con la clave de clase vocal, el nombre
+correcto SIEMPRE entra como candidato. Como solo mueve vocales, la precisión
+por consonante se mantiene: Lisbeth≠Lizeth (b), Cardi≠Sardi (c dura),
+Pedro≠Petro (d/t), Marcelo≠Marcela (a≠o). Se aplica con los MISMOS gates de
+longitud (≥4 para prefijo) que la clave fonética, así no introduce colisiones
+cortas. Si DOS clientes reales son variantes vocálicas entre sí (p.ej. existen
+"Yuseli" y "Yoseli" como personas distintas), el resultado es `ambiguous` →
+el agente pregunta, nunca elige en silencio.
+
 Además, los tokens descriptores del lado del query ("cliente", "clienta", "señora", "sr", etc.) se excluyen antes de matchear: nunca otorgan el tier de token exacto (rosters importados contienen apellidos literales "Cliente" y un descriptor suelto daría 0.90 de confianza sobre la persona equivocada).
 
 **Nivel 2 — Prefijo compartido** (fallback):

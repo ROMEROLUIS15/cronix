@@ -26,6 +26,21 @@ describe('get-services fast path — positive cases', () => {
   it('"tienes servicios disponibles" → matches', () => {
     expect(detectGetServices('tienes servicios disponibles')).toEqual({})
   })
+  it('"qué tratamientos tienes" → matches (synonym)', () => {
+    expect(detectGetServices('qué tratamientos tienes')).toEqual({})
+  })
+  it('"qué tratamientos manejan" → matches', () => {
+    expect(detectGetServices('qué tratamientos manejan')).toEqual({})
+  })
+  it('"qué ofreces" → matches (noun elided)', () => {
+    expect(detectGetServices('qué ofreces')).toEqual({})
+  })
+  it('"muéstrame el menú" → matches', () => {
+    expect(detectGetServices('muéstrame el menú')).toEqual({})
+  })
+  it('"enséñame los servicios" → matches', () => {
+    expect(detectGetServices('enséñame los servicios')).toEqual({})
+  })
 })
 
 describe('get-services fast path — rejections', () => {
@@ -40,6 +55,12 @@ describe('get-services fast path — rejections', () => {
   })
   it('"cuánto cuesta la manicure" → null (price question goes to LLM)', () => {
     expect(detectGetServices('cuánto cuesta la manicure')).toBeNull()
+  })
+  it('"qué haces" → null (not a catalog ask)', () => {
+    expect(detectGetServices('qué haces')).toBeNull()
+  })
+  it('"qué precio tiene el corte" → null', () => {
+    expect(detectGetServices('qué precio tiene el corte')).toBeNull()
   })
   it('empty string → null', () => {
     expect(detectGetServices('')).toBeNull()

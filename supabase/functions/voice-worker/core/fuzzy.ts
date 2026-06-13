@@ -82,6 +82,31 @@ export function phoneticKey(token: string): string {
 }
 
 /**
+ * Vowel-class skeleton of a phonetic key. Collapses the vowel pairs that
+ * Spanish STT confuses most under fast/accented speech — i↔e and u↔o — while
+ * keeping `a` distinct and every CONSONANT untouched. This is the general
+ * phonetic principle (group confusable phonemes) the resolver was missing:
+ * it's what made "Yuseli" unreachable when STT heard "Yoseli", and it works
+ * for ANY name, not a hand-listed pair.
+ *
+ *   yuseli → (pk) yuseli → (vc) yosele
+ *   yoseli → (pk) yoseli → (vc) yosele   ← now equal, so Yuseli is a candidate
+ *
+ * Consonant identity is preserved, so the precision pairs the customer DB
+ * depends on stay distinct: Lisbeth≠Lizeth (b), Cardi≠Sardi (hard c),
+ * Pedro≠Petro (d/t). Only vowels move.
+ */
+export function vowelClassKey(token: string): string {
+  let out = ''
+  for (const ch of phoneticKey(token)) {
+    if (ch === 'i' || ch === 'e') out += 'e'
+    else if (ch === 'o' || ch === 'u') out += 'o'
+    else out += ch
+  }
+  return out
+}
+
+/**
  * Descriptor words a user attaches to a name ("la cliente Gardiana", "busca a
  * la señora Ana") that must never count as name tokens on the QUERY side.
  * This roster imports names like "Adriana Cliente" — without the filter, the
@@ -116,6 +141,7 @@ const GENERIC_QUERY_TOKENS = new Set([
 export function shareToken(queryTokens: string[], candidateTokens: string[]): boolean {
   for (const q of queryTokens) {
     const qPhon = phoneticKey(q)
+    const qVow  = vowelClassKey(q)
     for (const c of candidateTokens) {
       if (q === c) return true
       if (q.length >= 4 && c.startsWith(q)) return true
@@ -124,6 +150,12 @@ export function shareToken(queryTokens: string[], candidateTokens: string[]): bo
       if (qPhon === cPhon) return true
       if (qPhon.length >= 4 && cPhon.startsWith(qPhon)) return true
       if (cPhon.length >= 4 && qPhon.startsWith(cPhon)) return true
+      // Vowel-class arm: same length gates, so i↔e / o↔u variants of a token
+      // bridge but short coincidental overlaps still don't.
+      const cVow = vowelClassKey(c)
+      if (qVow === cVow) return true
+      if (qVow.length >= 4 && cVow.startsWith(qVow)) return true
+      if (cVow.length >= 4 && qVow.startsWith(cVow)) return true
     }
   }
   return false
@@ -140,10 +172,14 @@ function hasExactOrPhoneticTokenMatch(
   queryTokens: string[],
   candidateSet: Set<string>,
   candidatePhoneticSet: Set<string>,
+  candidateVowelSet: Set<string>,
 ): boolean {
   for (const q of queryTokens) {
     if (candidateSet.has(q)) return true
     if (candidatePhoneticSet.has(phoneticKey(q))) return true
+    // Vowel-class equality: a token equal modulo i↔e / o↔u (full token, so
+    // it cannot bridge unrelated names — only same-skeleton vowel variants).
+    if (candidateVowelSet.has(vowelClassKey(q))) return true
   }
   return false
 }
@@ -233,11 +269,12 @@ export function fuzzyFind<T extends { name: string }>(items: T[], query: string)
       const cTokens = tokens(item.name)
       const cSet    = new Set(cTokens)
       const cPhonSet = new Set(cTokens.map(phoneticKey))
+      const cVowSet  = new Set(cTokens.map(vowelClassKey))
       return {
         item,
         score:           similarity(normalize(item.name), needle),
         tokens:          cTokens,
-        exactTokenMatch: hasExactOrPhoneticTokenMatch(qTokens, cSet, cPhonSet),
+        exactTokenMatch: hasExactOrPhoneticTokenMatch(qTokens, cSet, cPhonSet, cVowSet),
       }
     })
     .filter(s => {

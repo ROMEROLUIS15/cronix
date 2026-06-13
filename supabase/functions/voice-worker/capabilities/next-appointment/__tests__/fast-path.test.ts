@@ -13,6 +13,13 @@ describe('detectNextAppointment fast-path', () => {
     'qué sigue',
     'cuándo es mi próxima',
     'cuál es la próxima cita',
+    // expanded phrasings
+    'quién sigue',
+    'qué tengo ahora',
+    'a quién atiendo ahora',
+    'qué tengo después',
+    'cuál es el próximo',
+    'quién es mi próximo paciente',
   ])('matches: %s', (text) => {
     expect(detectNextAppointment(text)).toEqual({})
   })
@@ -32,6 +39,10 @@ describe('detectNextAppointment fast-path', () => {
     'hola',
     'qué citas tengo hoy',
     'última cita de María',
+    // now-relative shape but a date keyword wins → list-appointments
+    'a quién atiendo hoy',
+    // no next-in-time marker
+    'qué tengo pendiente',
   ])('rejects: %s', (text) => {
     expect(detectNextAppointment(text)).toBeNull()
   })
