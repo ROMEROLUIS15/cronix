@@ -20,6 +20,7 @@ import {
 } from './capabilities/_shared/registry.ts'
 import { createMemoryEngine }            from '../_shared/memory/index.ts'
 import { createConstitutionalReviewer, reviewWriteOrFailOpen } from '../_shared/supervisor/index.ts'
+import type { ReviewedToolName } from '../_shared/supervisor/contracts.ts'
 import { createTracer, shortHash }       from '../_shared/observability/index.ts'
 import type { TraceOutcome } from '../_shared/observability/contracts.ts'
 import {
@@ -32,6 +33,23 @@ import {
 const memoryEngine = createMemoryEngine()
 const reviewer     = createConstitutionalReviewer()
 const tracer       = createTracer()
+
+/**
+ * Tools where the reviewer keeps HARD-BLOCK authority: destructive /
+ * irreversible writes. `book_appointment` is intentionally excluded — it is
+ * additive and reversible, and its real risks (wrong client, double-book,
+ * hallucinated slots) are already covered deterministically by the mention
+ * guards, the fuzzy confidence threshold and findConflicts. An 8B reviewer
+ * produces false positives on the legit "create client → book" flow (it reads
+ * the just-created client in recentMemory and wrongly fires DUPLICATE_INTENT /
+ * CONTRADICTS_MEMORY), so a veto there is logged + traced but downgraded to a
+ * warn instead of breaking the booking. See manifest §8.
+ */
+const REVIEWER_HARD_BLOCK_TOOLS: ReadonlySet<ReviewedToolName> = new Set([
+  'cancel_appointment',
+  'reschedule_appointment',
+  'delete_client',
+])
 
 /**
  * Records a successful voice write as an episodic memory. Until this
@@ -101,6 +119,13 @@ export async function runAgent(
           conversationWindow: input.history.slice(-6),
         })
         if (outcome.allowed) return null
+        // Scope hard-block authority to the action's blast radius. A veto on an
+        // additive write (book_appointment) only warns — it must not break the
+        // booking — while destructive writes remain vetoable.
+        if (!REVIEWER_HARD_BLOCK_TOOLS.has(toolName)) {
+          console.log(`[VOICE-WORKER-REVIEWER] non-blocking veto on ${toolName} (${outcome.code}): ${outcome.reason} — downgraded to warn, proceeding`)
+          return null
+        }
         return {
           success: false,
           result:  `No puedo ejecutar esa acción: ${outcome.reason}`,

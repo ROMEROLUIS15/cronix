@@ -284,6 +284,19 @@ rama anafórica que salta los guards.
 `schedule`, `cancel`, `reschedule` y `delete-client` invocan
 `ctx.runWriteGuard` (ConstitutionalReviewer, fail-open) antes del SQL.
 
+**Autoridad de veto acotada al radio de daño (voz):** el reviewer corre para
+las 4, pero su **hard-block solo aplica a las destructivas/irreversibles**
+(`cancel`, `reschedule`, `delete_client` — `REVIEWER_HARD_BLOCK_TOOLS` en
+`agent.ts`). En `book_appointment` (aditivo, reversible, y ya cubierto por
+mention guards + umbral fuzzy + `findConflicts`) un veredicto distinto de
+`allow` se **degrada a warn**: se registra en consola y en el trace
+(`REVIEWER_BLOCKED` como errorCode de observabilidad) pero **no rompe la
+reserva**. Motivo: el reviewer (llama-3.1-8b) producía falsos positivos en el
+flujo legítimo "crear cliente → agendarlo" (leía el alta recién hecha en
+`recentMemory` y disparaba `DUPLICATE_INTENT`/`CONTRADICTS_MEMORY`). La
+rúbrica v3 refuerza además que un `create_client` reciente no es evidencia de
+duplicado/contradicción para un booking (regla 7).
+
 - **Memoria episódica desde voz**: todo write exitoso (fast path y LLM
   path) registra `"<lo que dijo el usuario> → <resultado hablado>"` con
   scope `{businessId, user, userId}` y TTL 180 días (`recordWriteEpisode`,
