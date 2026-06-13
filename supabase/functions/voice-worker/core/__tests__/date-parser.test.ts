@@ -26,6 +26,23 @@ describe('parseDateExpression — discrete keywords', () => {
   })
 })
 
+describe('parseDateExpression — prefer nearest (agenda queries)', () => {
+  // Bug repro: "qué citas tuve el 9 de mayo" on May 13 must resolve to THIS
+  // year's May 9 (4 days ago), not roll into next year and return "no hay".
+  it('"el 9 de mayo" prefer=nearest → recent past, same year', () => {
+    expect(parseDateExpression('qué citas tuve el 9 de mayo', TODAY, 'nearest')?.date).toBe('2026-05-09')
+  })
+  it('default (future) still rolls a passed day+month into next year (booking)', () => {
+    expect(parseDateExpression('agenda el 9 de mayo', TODAY)?.date).toBe('2027-05-09')
+  })
+  it('nearest keeps an upcoming day+month in the current year', () => {
+    expect(parseDateExpression('qué citas tengo el 20 de mayo', TODAY, 'nearest')?.date).toBe('2026-05-20')
+  })
+  it('DD/MM prefer=nearest → recent past stays this year', () => {
+    expect(parseDateExpression('citas del 9/5', TODAY, 'nearest')?.date).toBe('2026-05-09')
+  })
+})
+
 describe('parseDateExpression — relative expressions', () => {
   it('"en 3 días" → +3', () => {
     expect(parseDateExpression('en 3 días', TODAY)?.date).toBe('2026-05-16')

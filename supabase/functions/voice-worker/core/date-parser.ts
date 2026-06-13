@@ -71,6 +71,38 @@ function dayOfWeek(iso: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
 
+/** Whole-day signed difference (b - a). */
+function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = ymdFromIso(a)
+  const [by, bm, bd] = ymdFromIso(b)
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000)
+}
+
+/**
+ * Chooses the year for a bare day+month reference (no explicit year spoken).
+ *  - 'future' (default): the next upcoming occurrence — correct for booking,
+ *    since schedule/reschedule/cancel never act on past dates.
+ *  - 'nearest': the occurrence closest to today across prev/this/next year —
+ *    correct for AGENDA QUERIES. "el 9 de junio" said on Jun 13 means the one
+ *    4 days ago, not 361 days ahead. Without this, "qué citas tuve el 9 de
+ *    junio" rolled into next year and always returned "no hay citas".
+ */
+function pickYear(today: string, month: number, day: number, prefer: 'future' | 'nearest'): number {
+  const [ty, tm, td] = ymdFromIso(today)
+  if (prefer === 'nearest') {
+    let best = ty
+    let bestDist = Infinity
+    for (const y of [ty - 1, ty, ty + 1]) {
+      const dist = Math.abs(daysBetween(today, isoFromYMD(y, month, day)))
+      if (dist < bestDist) { bestDist = dist; best = y }
+    }
+    return best
+  }
+  let year = ty
+  if (month < tm || (month === tm && day < td)) year++
+  return year
+}
+
 function parseNumberToken(raw: string): number | null {
   const t = raw.toLowerCase()
   if (/^\d+$/.test(t)) return parseInt(t, 10)
@@ -78,7 +110,11 @@ function parseNumberToken(raw: string): number | null {
   return null
 }
 
-export function parseDateExpression(text: string, today: string): ParsedDate | null {
+export function parseDateExpression(
+  text:   string,
+  today:  string,
+  prefer: 'future' | 'nearest' = 'future',
+): ParsedDate | null {
   const raw = text.toLowerCase()
   const t   = stripAccents(raw)
 
@@ -120,9 +156,7 @@ export function parseDateExpression(text: string, today: string): ParsedDate | n
         year = parseInt(dmM[3], 10)
         if (year < 100) year += 2000
       } else {
-        const [ty, tm, td] = ymdFromIso(today)
-        year = ty
-        if (month < tm || (month === tm && day < td)) year++   // rolls into next year
+        year = pickYear(today, month, day, prefer)
       }
       return { date: isoFromYMD(year, month, day), reason: `${day} de ${dmM[2]}`, confidence: 'exact' }
     }
@@ -140,9 +174,7 @@ export function parseDateExpression(text: string, today: string): ParsedDate | n
         year = parseInt(slashM[3], 10)
         if (year < 100) year += 2000
       } else {
-        const [ty, tm, td] = ymdFromIso(today)
-        year = ty
-        if (month < tm || (month === tm && day < td)) year++
+        year = pickYear(today, month, day, prefer)
       }
       return { date: isoFromYMD(year, month, day), reason: slashM[0]!, confidence: 'exact' }
     }

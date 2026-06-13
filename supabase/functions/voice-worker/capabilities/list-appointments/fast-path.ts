@@ -33,7 +33,10 @@ export function detectListAppointments(text: string, today: string): ListAppoint
   if (SERVICE_INTENT.test(t)) return null
   if (!QUERY.test(t)) return null
 
-  const parsed = parseDateExpression(text, today)
+  // Agenda queries can be past OR future ("qué citas tuve el 9 de junio" vs
+  // "qué citas tengo el 20"). Use 'nearest' so a bare day+month resolves to the
+  // occurrence closest to today instead of always rolling into next year.
+  const parsed = parseDateExpression(text, today, 'nearest')
   if (!parsed) return null
   return { date: parsed.date }
 }
