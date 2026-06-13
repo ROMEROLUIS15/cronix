@@ -59,44 +59,6 @@ export async function redisSet(key: string, value: string, ttlSeconds: number): 
   }
 }
 
-/**
- * Busts the Next.js dashboard's read cache (lib/cache.ts) for a business after a
- * voice write. The dashboard reads clients/appointments/stats from Upstash with
- * a per-type TTL (clients 180s, appointments 120s); a voice insert/update writes
- * straight to Postgres and never went through the Node repo that invalidates, so
- * the dashboard showed stale data for up to one TTL after any voice action.
- *
- * MUST mirror lib/cache.ts key format: `v1:cache:{businessId}:{dataType}:*`
- * (CACHE_VERSION 'v1'). If that version or the dataType names change there, keep
- * this list in sync. Fire-and-forget; silent on failure — a stale cache still
- * self-heals via TTL, so this must never break the voice turn.
- */
-const DASHBOARD_CACHE_DATATYPES = ['clients', 'appointments', 'dashboard'] as const
-
-export async function invalidateDashboardCache(businessId: string): Promise<void> {
-  if (!isRedisAvailable() || !businessId) return
-  try {
-    for (const dataType of DASHBOARD_CACHE_DATATYPES) {
-      const pattern = `v1:cache:${businessId}:${dataType}:*`
-      const keysRes = await fetch(`${REDIS_URL}/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(['KEYS', pattern]),
-      })
-      if (!keysRes.ok) continue
-      const { result } = await keysRes.json() as { result: string[] | null }
-      if (!result || result.length === 0) continue
-      await fetch(`${REDIS_URL}/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(['DEL', ...result]),
-      })
-    }
-  } catch {
-    /* silent — stale cache self-heals via TTL */
-  }
-}
-
 // ── Rate limiting (sliding window via INCR + EX) ───────────────────────────
 
 export async function checkRateLimit(

@@ -6,6 +6,7 @@
 import type { AppointmentPayload, BookingResult } from "./types.ts"
 import { supabase }      from "./db-client.ts"
 import { localTimeToUTC } from "./time-utils.ts"
+import { invalidateDashboardCache } from "../_shared/cache-invalidation.ts"
 
 /**
  * Creates a new appointment via the secure RPC.
@@ -27,7 +28,11 @@ export async function createAppointment(
   })
 
   if (error) throw new Error(`createAppointment RPC error: ${error.message}`)
-  return data as BookingResult
+  const result = data as BookingResult
+  // Bust the dashboard cache so a WhatsApp booking (and any client the RPC
+  // auto-creates) appears immediately instead of after the TTL. Fire-and-forget.
+  if (result.success) void invalidateDashboardCache(businessId)
+  return result
 }
 
 /**
@@ -72,7 +77,9 @@ export async function rescheduleAppointment(
   })
 
   if (error) throw new Error(`rescheduleAppointment RPC error: ${error.message}`)
-  return data as BookingResult
+  const result = data as BookingResult
+  if (result.success) void invalidateDashboardCache(businessId)
+  return result
 }
 
 /**
@@ -90,4 +97,5 @@ export async function cancelAppointmentById(
     .eq('business_id', businessId)
 
   if (error) throw new Error(`cancelAppointmentById failed: ${error.message}`)
+  void invalidateDashboardCache(businessId)
 }

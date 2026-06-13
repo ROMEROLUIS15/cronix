@@ -21,7 +21,7 @@ import {
 import { createMemoryEngine }            from '../_shared/memory/index.ts'
 import { createConstitutionalReviewer, reviewWriteOrFailOpen } from '../_shared/supervisor/index.ts'
 import type { ReviewedToolName } from '../_shared/supervisor/contracts.ts'
-import { invalidateDashboardCache } from './redis.ts'
+import { invalidateDashboardCache } from '../_shared/cache-invalidation.ts'
 import { createTracer, shortHash }       from '../_shared/observability/index.ts'
 import type { TraceOutcome } from '../_shared/observability/contracts.ts'
 import {
