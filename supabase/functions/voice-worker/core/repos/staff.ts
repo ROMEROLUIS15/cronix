@@ -13,6 +13,14 @@ import { fuzzyFind, normalize, tokens, WRITE_CONFIDENCE_THRESHOLD } from '../fuz
 
 export interface StaffRow { id: string; name: string; role: string }
 
+/**
+ * Below this many assignable members, staff assignment is meaningless: a solo
+ * owner has nobody to disambiguate against, so the agent must never offer it
+ * or ask "¿con quién?". Gates BOTH the resolver paths AND (via context) the
+ * prompt, so the LLM doesn't even learn staff exists on a one-person business.
+ */
+export const MIN_ASSIGNABLE_STAFF = 2
+
 export async function getActiveStaff(ctx: ToolContext): Promise<StaffRow[]> {
   const { data, error } = await ctx.supabase
     .from('users')
@@ -39,7 +47,9 @@ export type StaffResolution =
  */
 export async function resolveStaffByName(ctx: ToolContext, name: string): Promise<StaffResolution> {
   const staff = await getActiveStaff(ctx)
-  if (!staff.length) return { status: 'none' }
+  // Fewer than two assignable members → there is nothing to choose. Proceed
+  // unassigned instead of asking; a named staff on a solo business is noise.
+  if (staff.length < MIN_ASSIGNABLE_STAFF) return { status: 'none' }
 
   const found = fuzzyFind(staff, name)
   if (found.status === 'found' && (found.confidence ?? 0) >= WRITE_CONFIDENCE_THRESHOLD) {
@@ -77,7 +87,8 @@ export async function extractStaffFromCorpus(
   if (!wantsSpeaker && rawCandidates.length === 0) return null
 
   const staff = await getActiveStaff(ctx)
-  if (!staff.length) return null
+  // Same gate as resolveStaffByName: no disambiguation below the threshold.
+  if (staff.length < MIN_ASSIGNABLE_STAFF) return null
 
   if (wantsSpeaker) {
     return staff.find(s => s.id === ctx.userId) ?? null

@@ -179,7 +179,7 @@ async function resolveUserAndBusiness(supabase: any, authHeader: string): Promis
 async function loadBusinessContext(supabase: any, businessId: string, timezone: string): Promise<BusinessContext> {
   const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: timezone })
 
-  const [bizRes, servicesRes, apptsRes, clientsRes] = await Promise.all([
+  const [bizRes, servicesRes, apptsRes, clientsRes, staffRes] = await Promise.all([
     supabase.from('businesses').select('name, settings').eq('id', businessId).single(),
     supabase.from('services').select('id, name, duration_min, price').eq('business_id', businessId).eq('is_active', true),
     // Local day converted to UTC — start_at is stored in UTC, so the naive
@@ -200,6 +200,13 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
       .order('last_visit_at', { ascending: false, nullsFirst: false })
       .order('created_at',    { ascending: false })
       .limit(100),
+    // Assignable team members — gates the staff-assignment prompt section.
+    supabase.from('users')
+      .select('id, name')
+      .eq('business_id', businessId)
+      .eq('is_active', true)
+      .in('role', ['owner', 'admin', 'employee'])
+      .order('created_at', { ascending: true }),
   ])
 
   const settings = (bizRes.data?.settings ?? {}) as Record<string, unknown>
@@ -227,6 +234,10 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
       id:    c.id    as string,
       name:  c.name  as string,
       phone: (c.phone as string | null) ?? null,
+    })),
+    activeStaff: (staffRes.data ?? []).map((s: Record<string, unknown>) => ({
+      id:   s.id   as string,
+      name: s.name as string,
     })),
   }
 }

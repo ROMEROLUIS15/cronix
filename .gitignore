@@ -74,6 +74,7 @@ docs/architecture/TECHNICAL_DOCUMENTATION.md
 docs/architecture/TECHNICAL_DOCUMENTATION_ES.md
 
 
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
