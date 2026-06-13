@@ -73,7 +73,7 @@ export async function executeReschedule(
     const corpus = ctx.userTextCorpus ?? ''
     if (corpus && !nameMentionedInCorpus(corpus, args.client_name)) {
       console.log(`[VOICE-WORKER-RESCHEDULE] REJECTED — hallucinated client="${args.client_name}"`)
-      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le reagendo la cita?' }
+      return { success: false, result: 'No te entendí bien el nombre. ¿A quién le reagendo la cita?', error: 'GUARD_REJECTED' }
     }
     const resolution = await resolveClient(ctx, args.client_name)
     if (resolution.status !== 'found') {
@@ -117,7 +117,10 @@ export async function executeReschedule(
   const newStartISO = localToUTC(finalDate, finalTime, ctx.timezone)
   const newEndISO   = buildEndISO(newStartISO, durationMin)
 
-  if (await findConflicts(ctx, newStartISO, newEndISO, apt.id)) {
+  // Conflict scope follows the appointment's assigned staff member: a move
+  // only collides within that member's agenda. Unassigned rows keep the
+  // historical business-level check.
+  if (await findConflicts(ctx, newStartISO, newEndISO, apt.id, apt.assigned_user_id ?? undefined)) {
     return { success: false, result: `El horario ${finalTime} del ${finalDate} ya está ocupado. Elige otra hora.` }
   }
 

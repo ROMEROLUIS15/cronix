@@ -32,12 +32,23 @@ export interface ReviewMemorySnippet {
   readonly createdAt:  string
 }
 
+export interface ReviewConversationTurn {
+  readonly role:    'user' | 'assistant'
+  readonly content: string
+}
+
 export interface ReviewRequest {
   readonly toolName:     ReviewedToolName
   readonly toolArgs:     Readonly<Record<string, unknown>>
   readonly scope:        TenantScope
   readonly userUtterance: string
   readonly recentMemory: ReadonlyArray<ReviewMemorySnippet>
+  /**
+   * Last in-frame conversation turns (oldest→newest). Lets the reviewer
+   * resolve short confirmations ("sí", "dale") against the action the
+   * assistant proposed, instead of judging the bare utterance alone.
+   */
+  readonly conversationWindow?: ReadonlyArray<ReviewConversationTurn>
 }
 
 export type ReviewVerdict =

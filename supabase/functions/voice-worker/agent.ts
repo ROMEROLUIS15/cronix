@@ -33,6 +33,25 @@ const memoryEngine = createMemoryEngine()
 const reviewer     = createConstitutionalReviewer()
 const tracer       = createTracer()
 
+/**
+ * Records a successful voice write as an episodic memory. Until this
+ * existed, NOTHING wrote memories under the voice scope (whatsapp writes
+ * under client_phone, which never matches voice's user-scoped recall), so
+ * the constitutional reviewer always saw recentMemory=[] and rubric rule 5
+ * reduced it to UNSAFE_ARGS-only. Fire-and-forget per constitution §3.
+ */
+function recordWriteEpisode(ctx: ToolContext, userText: string, outcomeText: string): void {
+  void memoryEngine.write(
+    { businessId: ctx.businessId, actorKind: 'user', actorKey: ctx.userId },
+    {
+      kind:     'episodic',
+      content:  `${userText.slice(0, 200)} → ${outcomeText.slice(0, 300)}`,
+      metadata: { channel: 'voice' },
+      ttlDays:  180,
+    },
+  )
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 export async function runAgent(
@@ -77,11 +96,15 @@ export async function runAgent(
           scope:         { businessId: ctx.businessId, channel: 'voice' },
           userUtterance: input.text,
           recentMemory,
+          // Rubric v2: lets the reviewer resolve confirmation turns ("sí",
+          // "dale") against the action proposed in the previous turns.
+          conversationWindow: input.history.slice(-6),
         })
         if (outcome.allowed) return null
         return {
           success: false,
           result:  `No puedo ejecutar esa acción: ${outcome.reason}`,
+          error:   'REVIEWER_BLOCKED',
         }
       },
     }
@@ -108,7 +131,11 @@ export async function runAgent(
       durationMs:      Date.now() - fastStart,
       status:          result.success ? 'success' : 'error',
       argsFingerprint: await shortHash(JSON.stringify(registryHit.args)),
-      errorCode:       result.success ? undefined : 'FAST_PATH_FAILURE',
+      errorCode:       result.success
+        ? undefined
+        : (result.error === 'GUARD_REJECTED' || result.error === 'REVIEWER_BLOCKED'
+            ? result.error
+            : 'FAST_PATH_FAILURE'),
     })
     if (result.fallthroughToLLM) {
       console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}) → falling through to LLM (not_found)`)
@@ -147,6 +174,8 @@ export async function runAgent(
   }
 
   const { finalText, actionPerformed, modelUsed, pendingNotifications, lastRefCandidate } = llmResult
+
+  if (actionPerformed) recordWriteEpisode(ctx, input.text, finalText)
 
   const newHistory: AgentOutput['history'] = [
     ...input.history,
@@ -194,10 +223,13 @@ async function buildFastPathOutput(
   const pendingNotifications: AppointmentNotification[] = []
   let lastRefCandidate: AgentOutput['lastRefCandidate'] = null
 
-  if (hit.capability.isWrite && result.success && result.data) {
-    const { notification, lastRef } = buildNotificationFromWrite(result, ctx.businessId, ctx.userId)
-    if (notification) pendingNotifications.push(notification)
-    if (lastRef !== undefined) lastRefCandidate = lastRef
+  if (hit.capability.isWrite && result.success) {
+    recordWriteEpisode(ctx, input.text, text)
+    if (result.data) {
+      const { notification, lastRef } = buildNotificationFromWrite(result, ctx.businessId, ctx.userId)
+      if (notification) pendingNotifications.push(notification)
+      if (lastRef !== undefined) lastRefCandidate = lastRef
+    }
   }
 
   const fastOutcome: TraceOutcome = result.success

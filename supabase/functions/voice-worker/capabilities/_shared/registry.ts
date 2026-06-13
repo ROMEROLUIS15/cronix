@@ -9,6 +9,7 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 
 import { listAppointmentsCapability } from '../list-appointments/index.ts'
+import { clientAppointmentsCapability } from '../client-appointments/index.ts'
 import { nextAppointmentCapability }  from '../next-appointment/index.ts'
 import { searchClientsCapability }    from '../search-clients/index.ts'
 import { rescheduleCapability }       from '../reschedule/index.ts'
@@ -32,6 +33,11 @@ const CAPABILITIES: ICapability<any>[] = [
   // singular "próxima/siguiente cita" with NO date keyword.
   nextAppointmentCapability,
   listAppointmentsCapability,
+  // clientAppointments AFTER listAppointments — "citas de mañana" must stay
+  // in the day-listing path (the detector rejects date-words as names, but
+  // order keeps the date intent authoritative) and BEFORE the write
+  // capabilities (its WRITE blocklist keeps "reagenda la cita de Ana" out).
+  clientAppointmentsCapability,
   rescheduleCapability,
   cancelCapability,
   deleteClientCapability,

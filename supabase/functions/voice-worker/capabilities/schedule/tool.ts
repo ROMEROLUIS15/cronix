@@ -23,10 +23,11 @@ import {
   dateMentionedInCorpus,
 } from '../../core/conversation/slot-extractor.ts'
 import {
-  type ClientRow, resolveClient, needsConfirmation, formatConfirmationPrompt,
+  type ClientRow, resolveClient, needsConfirmation, formatConfirmationPrompt, normalisePhone,
 } from '../../core/repos/clients.ts'
 import { getActiveServices, resolveService } from '../../core/repos/services.ts'
 import { findConflicts } from '../../core/repos/appointments.ts'
+import { type StaffRow, resolveStaffByName, extractStaffFromCorpus } from '../../core/repos/staff.ts'
 
 export interface ScheduleArgs extends Record<string, unknown> {
   service_name:         string
@@ -34,6 +35,28 @@ export interface ScheduleArgs extends Record<string, unknown> {
   date:                 string
   time:                 string
   register_new_client?: boolean
+  /** Phone for the NEW client when register_new_client=true. Previously the
+   *  tool had no phone arg at all, so a number the user dictated during the
+   *  booking was silently discarded and the client landed phone-less. */
+  phone?:               string
+  /** Team member the owner named ("con Marielys" / "conmigo"). Optional:
+   *  unnamed bookings stay unassigned (assigned_user_id = NULL) — the
+   *  auto-assignment default belongs to the multi-employee sprint. */
+  staff_name?:          string
+}
+
+/**
+ * Returns the phone to store for a newly registered client, or null. The
+ * digits must trace back to the user corpus (same anti-hallucination rule as
+ * names): an LLM-invented number is worse than no number. Empty corpus ⇒
+ * fail-open, mirroring the other guards.
+ */
+function verifiedPhone(rawPhone: unknown, corpus: string): string | null {
+  if (typeof rawPhone !== 'string' || !rawPhone.trim()) return null
+  const digits = normalisePhone(rawPhone)
+  if (digits.length < 7) return null
+  if (!corpus) return rawPhone.trim()
+  return corpus.replace(/\D+/g, '').includes(digits) ? rawPhone.trim() : null
 }
 
 const SCHEDULE_PLACEHOLDER = /^(?:\?+|tbd|pendiente|por\s+definir|n\/a|none|null|undefined|sin\s+(?:especificar|definir)|no\s+especificad[oa])$/i
@@ -84,19 +107,19 @@ export async function executeSchedule(
   if (corpus) {
     if (!nameMentionedInCorpus(corpus, service_name)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated service="${service_name}"`)
-      return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?' }
+      return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?', error: 'GUARD_REJECTED' }
     }
     if (!nameMentionedInCorpus(corpus, client_name)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated client="${client_name}"`)
-      return { success: false, result: 'Para agendar necesito el nombre del cliente. ¿A quién agendo?' }
+      return { success: false, result: 'Para agendar necesito el nombre del cliente. ¿A quién agendo?', error: 'GUARD_REJECTED' }
     }
     if (!timeMentionedInCorpus(corpus)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated time="${time}"`)
-      return { success: false, result: 'Para agendar necesito la hora. ¿A qué hora?' }
+      return { success: false, result: 'Para agendar necesito la hora. ¿A qué hora?', error: 'GUARD_REJECTED' }
     }
     if (!dateMentionedInCorpus(corpus, todayLocal)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated date="${date}"`)
-      return { success: false, result: 'Para agendar necesito la fecha. ¿Para qué día?' }
+      return { success: false, result: 'Para agendar necesito la fecha. ¿Para qué día?', error: 'GUARD_REJECTED' }
     }
   }
 
@@ -114,7 +137,7 @@ export async function executeSchedule(
   } else if (args.register_new_client) {
     const { data: created, error } = await ctx.supabase
       .from('clients')
-      .insert({ business_id: ctx.businessId, name: client_name })
+      .insert({ business_id: ctx.businessId, name: client_name, phone: verifiedPhone(args.phone, corpus) })
       .select('id, name, phone')
       .single()
     if (error || !created) {
@@ -135,10 +158,29 @@ export async function executeSchedule(
     return { success: false, result: `No encontré el servicio "${service_name}". Disponibles: ${catalog}.` }
   }
 
+  // Staff assignment — only when the owner NAMED someone. Explicit arg first
+  // (guarded like every other LLM-supplied name); deterministic corpus
+  // extraction ("con Marielys" / "conmigo") as fallback for the fast path
+  // and for turns where the LLM dropped the arg. Unnamed → NULL.
+  let staff: StaffRow | null = null
+  if (typeof args.staff_name === 'string' && args.staff_name.trim()) {
+    if (corpus && !nameMentionedInCorpus(corpus, args.staff_name)) {
+      console.log(`[VOICE-WORKER-SCHEDULE] staff_name dropped — not in corpus: "${args.staff_name}"`)
+    } else {
+      const sr = await resolveStaffByName(ctx, args.staff_name)
+      if (sr.status === 'ask') return { success: false, result: sr.question }
+      if (sr.status === 'assigned') staff = sr.staff
+    }
+  }
+  if (!staff) {
+    staff = await extractStaffFromCorpus(ctx, corpus, client.name)
+  }
+
   const startISO = localToUTC(date, time, ctx.timezone)
   const endISO   = buildEndISO(startISO, service.duration_min)
-  if (await findConflicts(ctx, startISO, endISO)) {
-    return { success: false, result: `El horario ${time} del ${date} ya está ocupado. Elige otra hora.` }
+  if (await findConflicts(ctx, startISO, endISO, undefined, staff?.id)) {
+    const who = staff ? ` para ${staff.name}` : ''
+    return { success: false, result: `El horario ${time} del ${date} ya está ocupado${who}. Elige otra hora.` }
   }
 
   if (ctx.runWriteGuard) {
@@ -147,6 +189,8 @@ export async function executeSchedule(
       clientName:  client.name,
       serviceId:   service.id,
       serviceName: service.name,
+      staffId:     staff?.id ?? null,
+      staffName:   staff?.name ?? null,
       date,
       time,
     })
@@ -156,12 +200,13 @@ export async function executeSchedule(
   const { data: created, error } = await ctx.supabase
     .from('appointments')
     .insert({
-      business_id: ctx.businessId,
-      client_id:   client.id,
-      service_id:  service.id,
-      start_at:    startISO,
-      end_at:      endISO,
-      status:      'pending',
+      business_id:      ctx.businessId,
+      client_id:        client.id,
+      service_id:       service.id,
+      assigned_user_id: staff?.id ?? null,
+      start_at:         startISO,
+      end_at:           endISO,
+      status:           'pending',
     })
     .select('id')
     .single()
@@ -178,9 +223,10 @@ export async function executeSchedule(
     time,
     action:        'created',
   }
+  const staffSuffix = staff ? ` con ${staff.name}` : ''
   return {
     success: true,
-    result:  `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}.`,
+    result:  `Listo. Agendé a ${client.name} para ${service.name} el ${date} a las ${time}${staffSuffix}.`,
     data,
   }
 }

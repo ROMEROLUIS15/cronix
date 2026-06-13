@@ -199,6 +199,10 @@ export function VoiceAssistantFab() {
         startedPlaying,
         srcKind: src.startsWith('data:') ? 'data-url' : 'http',
       })
+      // On any non-natural finish, stop the element. Without this a playback
+      // declared dead (never-started/timeout) can still buffer in the
+      // background and burst out seconds later over the next interaction.
+      if (kind !== 'end') { try { el.pause() } catch { /* ignore */ } }
       if (kind === 'end') opts.onEnd?.()
       else                opts.onError?.(kind)
     }
@@ -248,48 +252,71 @@ export function VoiceAssistantFab() {
     } catch { /* ignore */ }
   }
 
-  // Best-effort probe of the TTS endpoint's HTTP status when playback fails.
-  // This is what separates the failure causes that the generic beacon cannot:
-  //   never-started/timeout + http=200 → browser autoplay/decode block (client)
-  //   error + http=401/502/503         → endpoint problem (auth / Deepgram / key)
-  // Fire-and-forget; never affects UX. Returns 0 on a network error.
-  const probeTtsStatus = async (url: string): Promise<number> => {
+  // ── Fetch the synthesized speech BEFORE playing it ───────────────────────
+  // /api/assistant/tts does a full Deepgram synthesis round trip, so its
+  // time-to-first-byte regularly exceeded playOnUnlockedElement's 1.5s
+  // "did playback start" watchdog — every turn was declared `never-started`
+  // while the audio was still being synthesized (the CLIENT_TTS_FAILED
+  // `never-started|http=200` epidemic in /dashboard/observability).
+  // Downloading to a blob first separates synthesis/network latency (owned by
+  // this fetch, with its own timeout) from playback start (owned by the
+  // watchdog, now legitimate on a local blob), and yields the real HTTP
+  // status without a second synthesis call.
+  const fetchTtsObjectUrl = async (
+    text: string,
+  ): Promise<{ ok: true; url: string } | { ok: false; status: number }> => {
     try {
-      const r = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' })
-      return r.status
-    } catch { return 0 }
+      const res = await fetch(`/api/assistant/tts?t=${encodeURIComponent(text.slice(0, 500))}`, {
+        credentials: 'same-origin',
+        cache:       'no-store',
+        signal:      AbortSignal.timeout(15_000),
+      })
+      if (!res.ok) return { ok: false, status: res.status }
+      const blob = await res.blob()
+      return { ok: true, url: URL.createObjectURL(blob) }
+    } catch { return { ok: false, status: 0 } }
   }
 
-  // ── Vocalize via Deepgram TTS endpoint — silent if that also fails ───────
-  // This is the last-resort speech path; if it errors the user hears nothing,
-  // so report it as a terminal "no voice" turn.
-  const vocalizeSilentFailsafe = (msg: string) => {
+  // ── Speak text via the TTS endpoint — last-resort path, reports silence ──
+  // Resolves when playback finishes (or the failure is reported) so callers
+  // can await the full turn. Any failure here means the user heard nothing:
+  //   fetch-failed|http=<status> → endpoint problem (auth / Deepgram / key)
+  //   never-started|http=200     → autoplay/decode block on a local blob
+  const speakTtsText = (msg: string): Promise<void> => new Promise((resolve) => {
     setState('speaking')
-    const url = `/api/assistant/tts?t=${encodeURIComponent(msg.slice(0, 500))}`
-    playOnUnlockedElement(url, {
-      onEnd:   () => setState('idle'),
-      onError: (kind) => {
+    void fetchTtsObjectUrl(msg).then((fetched) => {
+      if (!fetched.ok) {
         setState('idle')
-        // Probe the endpoint so the beacon carries the real cause, e.g.
-        // "never-started|http=200" (autoplay) vs "error|http=503" (no key).
-        void probeTtsStatus(url).then(status => reportTtsFailure(msg, `${kind}|http=${status}`))
-      },
+        reportTtsFailure(msg, `fetch-failed|http=${fetched.status}`)
+        resolve()
+        return
+      }
+      playOnUnlockedElement(fetched.url, {
+        onEnd: () => {
+          URL.revokeObjectURL(fetched.url)
+          setState('idle')
+          resolve()
+        },
+        onError: (kind) => {
+          URL.revokeObjectURL(fetched.url)
+          setState('idle')
+          reportTtsFailure(msg, `${kind}|http=200`)
+          resolve()
+        },
+      })
     })
-  }
+  })
 
-  // ── Play audio URL — on any failure, fall back to 'No te entendí bien' via TTS ─
+  const vocalizeSilentFailsafe = (msg: string) => { void speakTtsText(msg) }
+
+  // ── Play a data: audio URL — on failure, re-speak the text via TTS ───────
   const playAudio = async (src: string, fallbackText?: string) => {
     return new Promise<void>((resolve) => {
-      let fallbackFired = false
-      const fireFallback = () => {
-        if (fallbackFired) return
-        fallbackFired = true
-        vocalizeSilentFailsafe(fallbackText ?? 'No te entendí bien, ¿puedes repetir?')
-        resolve()
-      }
       playOnUnlockedElement(src, {
         onEnd:   () => { setState('idle'); resolve() },
-        onError: () => { fireFallback() },
+        onError: () => {
+          void speakTtsText(fallbackText ?? 'No te entendí bien, ¿puedes repetir?').then(resolve)
+        },
       })
     })
   }
@@ -389,7 +416,7 @@ export function VoiceAssistantFab() {
       if (data.audioUrl) {
         await playAudio(data.audioUrl, data.text || fallback)
       } else if (data.text.trim()) {
-        await playAudio(`/api/assistant/tts?t=${encodeURIComponent(data.text.slice(0, 500))}`, data.text)
+        await speakTtsText(data.text)
       } else {
         vocalizeSilentFailsafe(fallback)
       }

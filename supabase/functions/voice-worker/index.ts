@@ -28,6 +28,7 @@ import { dispatchBellNotification } from './notifications.ts'
 import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
 import { buildUserCorpus }       from './core/conversation/frame.ts'
+import { localToUTC }            from './core/time-format.ts'
 import { createTracer, shortHash } from '../_shared/observability/index.ts'
 import type { TraceOutcome }     from '../_shared/observability/contracts.ts'
 import type { ToolContext }      from './core/tool-context.ts'
@@ -181,12 +182,16 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
   const [bizRes, servicesRes, apptsRes, clientsRes] = await Promise.all([
     supabase.from('businesses').select('name, settings').eq('id', businessId).single(),
     supabase.from('services').select('id, name, duration_min, price').eq('business_id', businessId).eq('is_active', true),
+    // Local day converted to UTC — start_at is stored in UTC, so the naive
+    // `${todayLocal}T00:00:00` strings queried a UTC day offset from the
+    // business's local day and the prompt's "CITAS DE HOY" reference list
+    // was wrong in any tz ≠ UTC (same bug class available-slots already fixed).
     supabase.from('appointments')
       .select('start_at, client:clients(name), service:services(name)')
       .eq('business_id', businessId)
       .neq('status', 'cancelled')
-      .gte('start_at', `${todayLocal}T00:00:00`)
-      .lte('start_at', `${todayLocal}T23:59:59`)
+      .gte('start_at', localToUTC(todayLocal, '00:00', timezone))
+      .lte('start_at', localToUTC(todayLocal, '23:59', timezone))
       .order('start_at'),
     supabase.from('clients')
       .select('id, name, phone')

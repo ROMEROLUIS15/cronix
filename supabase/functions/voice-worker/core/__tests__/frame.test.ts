@@ -38,6 +38,25 @@ describe('isTerminalAssistantMessage', () => {
   it('does NOT treat a plain narrative line as terminal', () => {
     expect(isTerminalAssistantMessage('Tengo varios servicios disponibles')).toBe(false)
   })
+
+  it('treats delete-client success as terminal (dangling-name regression)', () => {
+    expect(isTerminalAssistantMessage('Cliente Carmen Soto (teléfono 04141234567) eliminado.')).toBe(true)
+    expect(isTerminalAssistantMessage('Cliente Pedro eliminado.')).toBe(true)
+  })
+
+  it('does NOT close on create-client success (feeds "ahora agéndalo")', () => {
+    expect(isTerminalAssistantMessage('Cliente "Pedro Pérez" registrado.')).toBe(false)
+  })
+
+  it('does NOT close on delete refusal (feeds "cancélalas primero")', () => {
+    expect(isTerminalAssistantMessage('No se puede eliminar: Ana tiene 2 cita(s) futura(s). Cancélalas primero.')).toBe(false)
+  })
+
+  it('does NOT close on READ listings (feed the next write\'s anaphora)', () => {
+    expect(isTerminalAssistantMessage('Tienes 3 citas el lunes 15 de junio. Ana a las 9 para Corte.')).toBe(false)
+    expect(isTerminalAssistantMessage('Horarios libres el lunes: 9 de la mañana, 9 y media.')).toBe(false)
+    expect(isTerminalAssistantMessage('Sí, Ana Torres está entre tus clientes, su teléfono es 04141234567.')).toBe(false)
+  })
 })
 
 describe('findLastFrameBoundary', () => {

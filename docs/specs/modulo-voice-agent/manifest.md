@@ -40,7 +40,7 @@ El agente recibe audio o texto, transcribe, ejecuta intenciones vía LLM o fast 
 
 ### Agent Loop (máximo 3 pasos)
 
-1. **Fast Path detection**: recorre las 11 capabilities en orden de prioridad. Si una matchea el texto del usuario, ejecuta la tool directamente sin LLM.
+1. **Fast Path detection**: recorre las 12 capabilities en orden de prioridad. Si una matchea el texto del usuario, ejecuta la tool directamente sin LLM.
 2. **Date Override**: `detectTemporalIntent()` analiza el texto del usuario buscando "hoy", "mañana", "pasado mañana". Si encuentra uno, calcula la fecha ISO real y la fuerza en cualquier tool call del LLM que tenga parámetro `date`. Esto protege contra alucinaciones de fecha del LLM.
 3. **LLM Loop** (stepLlmLoop, máx 3 iteraciones):
    - Envía historial + tool definitions al proveedor LLM
@@ -60,12 +60,13 @@ El agente recibe audio o texto, transcribe, ejecuta intenciones vía LLM o fast 
 
 ### Registro central (`_shared/registry.ts`)
 
-Las 11 capabilities se registran en orden de prioridad en el array `CAPABILITIES`:
+Las 12 capabilities se registran en orden de prioridad en el array `CAPABILITIES`:
 
 | Capability | Directorio | WRITE / READ | bypassLLM |
 |---|---|---|---|
 | `nextAppointment` | `next-appointment/` | READ | Sí |
 | `listAppointments` | `list-appointments/` | READ | Sí |
+| `clientAppointments` | `client-appointments/` | READ | Sí |
 | `reschedule` | `reschedule/` | WRITE | Sí |
 | `cancel` | `cancel/` | WRITE | Sí |
 | `deleteClient` | `delete-client/` | WRITE | Sí |
@@ -78,7 +79,15 @@ Las 11 capabilities se registran en orden de prioridad en el array `CAPABILITIES
 
 **Clasificación:**
 - **WRITE (5)**: schedule, cancel, reschedule, create-client, delete-client
-- **READ (6)**: list-appointments, next-appointment, search-clients, last-visit, get-services, available-slots
+- **READ (7)**: list-appointments, next-appointment, client-appointments, search-clients, last-visit, get-services, available-slots
+
+`clientAppointments` (`get_client_appointments`) lista las citas futuras
+activas (pending/confirmed, máx. 5) de UN cliente — "¿qué citas tiene Ana?",
+"¿cuándo viene Lisset?". Antes de existir, el LLM respondía esa pregunta
+desde el extracto "CITAS DE HOY" del prompt o inventaba. Su detector cede
+ante fechas ("citas de mañana" → list-appointments), intención pasada
+("última cita de Ana" → last-visit), nombres de servicio del catálogo y
+cualquier verbo de escritura.
 
 **Shared infra** en `_shared/`: `Capability.ts` (interface `ICapability`) y `registry.ts` (registro, dispatch, fast path detection).
 
@@ -146,7 +155,10 @@ Equivalencias fonéticas aplicadas (función `phoneticKey()`):
 - v → b           ("Vázquez" = "Bázquez")
 - ll → y          ("Yolanda" = "Llolanda")
 - qu → k          ("Vázquez" → "Bázquez" → "baskes")
+- gu+vocal → g    ("Guardiana" = "Gardiana" — STT encaja nombres raros en palabras de diccionario)
 - dobles → simple ("Lisseth" = "Liseth")
+
+Además, los tokens descriptores del lado del query ("cliente", "clienta", "señora", "sr", etc.) se excluyen antes de matchear: nunca otorgan el tier de token exacto (rosters importados contienen apellidos literales "Cliente" y un descriptor suelto daría 0.90 de confianza sobre la persona equivocada).
 
 **Nivel 2 — Prefijo compartido** (fallback):
 Si no hay token exacto, se acepta un candidato si comparte un
@@ -191,3 +203,125 @@ pueden operar con confianza baja — son inofensivas.
 - ENTONCES `fuzzyFind()` retorna `status: 'ambiguous'`
   y el agente pregunta "¿Cuál María: Torres o Ruiz?"
   sin ejecutar ninguna escritura.
+
+## 8. Capa Antialucinación: Corpus de Frame + Mention Guards
+
+Complementa el Date Override y el dedup del §3. Vive en
+`core/conversation/frame.ts` y `core/conversation/slot-extractor.ts`.
+
+### Corpus de usuario por frame
+
+`buildUserCorpus()` concatena el input actual + los turnos de usuario desde
+el último **frame boundary** (máx. 4000 chars). Un frame cierra en mensajes
+asistente terminales: `Listo…`, `Cancelado…`, `Reagendado…`, `Agendado…`,
+`No encontré…`, `No pude…`, `No hay…`, `…ya está ocupado`, y
+`Cliente … eliminado` (un cliente borrado no tiene anáfora legítima).
+
+**Invariante de apertura:** los listados READ ("Tienes 3 citas…",
+"Horarios libres…", "Sí, X está entre tus clientes…"), el alta
+("Cliente X registrado.") y el rechazo de borrado ("No se puede eliminar…")
+NO cierran el frame — su turno de usuario alimenta el write siguiente
+("busca el teléfono de Ana" → "agéndala mañana"). Cerrar ahí evicta el
+nombre del corpus y los guards rechazarían el follow-up legítimo.
+
+### Mention guards (anti-sustitución)
+
+Toda capability que reciba un nombre del LLM verifica que ese nombre
+provenga del corpus mediante `nameMentionedInCorpus()`:
+
+- Matching por **fronteras de token** (nunca substring): igualdad literal,
+  igualdad fonética (`phoneticKey`), o prefijo ≥4 chars (`shareToken`,
+  el mismo puente del resolver fuzzy).
+- Los conectores ("de", "la", "del"…) del lado del nombre nunca otorgan
+  match — "Corte de cabello" no pasa por el "de" de cualquier frase.
+- Corpus vacío ⇒ fail-open (sin contexto no se puede verificar).
+- `smart_schedule` verifica además hora y fecha (`timeMentionedInCorpus`,
+  `dateMentionedInCorpus`) y, si registra cliente nuevo con `phone`, los
+  dígitos deben aparecer en el corpus (número inventado ⇒ se descarta).
+
+### Frontera LLM→tool: solo args declarados
+
+`stepLlmLoop` filtra los args de cada tool call contra las `properties` del
+JSON Schema declarado (`stripUndeclaredArgs`). Args internos del fast path
+(`appointment_id` resuelto desde `lastRef`) son **inalcanzables desde el
+LLM** — un `appointment_id` fabricado ya no rutea cancel/reschedule a la
+rama anafórica que salta los guards.
+
+### Write-guard constitucional
+
+`schedule`, `cancel`, `reschedule` y `delete-client` invocan
+`ctx.runWriteGuard` (ConstitutionalReviewer, fail-open) antes del SQL.
+
+- **Memoria episódica desde voz**: todo write exitoso (fast path y LLM
+  path) registra `"<lo que dijo el usuario> → <resultado hablado>"` con
+  scope `{businessId, user, userId}` y TTL 180 días (`recordWriteEpisode`,
+  fire-and-forget per constitución §3). Sin esto, `recentMemory` llegaba
+  siempre vacía en voz y la regla 5 de la rúbrica reducía al reviewer a
+  `UNSAFE_ARGS`.
+- **Rúbrica v2 + `conversationWindow`**: el `ReviewRequest` lleva los
+  últimos 6 turnos del historial (300 chars c/u), y la rúbrica instruye
+  resolver confirmaciones cortas ("sí", "dale") contra la acción que el
+  asistente propuso. Los espejos Node/Deno del supervisor se mantienen en
+  paridad byte-a-byte (test `contracts-parity`).
+- Pendiente: el call-site de WhatsApp aún no pasa `conversationWindow`
+  (campo opcional; requiere gate de `modulo-whatsapp-citas`).
+
+### Observabilidad de guards
+
+Toda denegación de guard retorna `error: 'GUARD_REJECTED'` (y las del
+reviewer `REVIEWER_BLOCKED`); el trace las registra con ese `errorCode`,
+distinguible de `TOOL_FAILURE`, para medir tasa de captura y falsos
+positivos en `/dashboard/observability`.
+
+### Invariantes adicionales de capabilities
+
+- `available-slots`: un slot solo se ofrece si `inicio + duración ≤ cierre`
+  (recorrido por minutos; cierres fraccionarios como 18:30 ofrecen el
+  último slot completo).
+- `delete_client`: con match único, `any_duplicate` NUNCA salta la
+  confirmación de baja confianza; solo un `phone` que coincida con el del
+  candidato cuenta como pick deliberado. `getActiveClients` ordena por
+  `created_at` para que los picks ordinales ("el primero") sean
+  deterministas entre turnos.
+- `smart_schedule` acepta `phone` opcional para el cliente nuevo
+  (`register_new_client=true`); sin él, el cliente queda sin teléfono.
+
+## 9. Dimensión de Staff (terreno para el sprint multi-empleado)
+
+Decisión de producto tomada (2026-06-12): **una cita por voz se asigna al
+miembro del equipo que el dueño NOMBRE** ("con Marielys", "conmigo"). Si no
+nombra a nadie, la cita queda **sin asignar** (`assigned_user_id = NULL`) —
+la política de auto-asignación para negocios multi-staff se decidirá en el
+sprint multi-empleado, no aquí.
+
+### Implementado (groundwork)
+
+- `core/repos/staff.ts`: roster activo (`users` con `business_id`,
+  `is_active=true`, roles owner/admin/employee), `resolveStaffByName()` con
+  la misma barra de confianza de writes (≥0.80; débil/ambiguo → pregunta,
+  nunca adivina) y `extractStaffFromCorpus()` ("con <nombre>" / "conmigo"),
+  que ignora candidatos que solapen tokens con el CLIENTE agendado
+  ("agenda una cita con Ana" nombra al cliente, no al staff).
+- `smart_schedule`: arg opcional `staff_name` (mention guard incluido; si
+  no se puede trazar al corpus se descarta, no bloquea el booking), insert
+  con `assigned_user_id`, y confirmación hablada "… con Marielys".
+- `findConflicts(…, staffId?)`: cuando la cita tiene staff, el conflicto se
+  evalúa SOLO contra la agenda de ese miembro; sin staff se mantiene el
+  chequeo a nivel negocio (comportamiento histórico, correcto para negocios
+  single-staff, que son los que no nombran a nadie). `reschedule` hereda el
+  scope del `assigned_user_id` de la fila.
+
+### Contexto de datos (verificado en prod 2026-06-12)
+
+`appointments` tiene `assigned_user_id` e `is_dual_booking`; existen miles
+de solapes activos legítimos a nivel negocio (multi-staff). Por eso
+cualquier exclusion constraint anti double-booking debe ser **por
+`assigned_user_id`** y respetar `is_dual_booking` — nunca por negocio.
+
+### Pendiente para el sprint multi-empleado
+
+- Política de asignación por defecto cuando no se nombra staff.
+- RPC transaccional de booking + exclusion constraint per-staff (decidir
+  semántica de `is_dual_booking` y de filas con staff NULL).
+- `available-slots` por staff (requiere horarios laborales por empleado).
+- Semántica de `is_dual_booking` en `findConflicts`.

@@ -123,6 +123,12 @@ function buildUserPayload(request: ReviewRequest): string {
       similarity: Number(m.similarity.toFixed(3)),
       createdAt:  m.createdAt,
     })),
+    // Cap the window so a verbose conversation can't blow the reviewer's
+    // token budget: last 6 turns, 300 chars each.
+    conversationWindow: (request.conversationWindow ?? []).slice(-6).map((t) => ({
+      role:    t.role,
+      content: t.content.slice(0, 300),
+    })),
   })
 }
 

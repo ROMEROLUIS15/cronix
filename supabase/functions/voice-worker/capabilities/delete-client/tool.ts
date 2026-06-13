@@ -46,7 +46,7 @@ export async function executeDeleteClient(
   const corpus = ctx.userTextCorpus ?? ''
   if (corpus && !args.any_duplicate && !args.phone && !nameMentionedInCorpus(corpus, args.client_name)) {
     console.log(`[VOICE-WORKER-DELETE-CLIENT] REJECTED — hallucinated client="${args.client_name}"`)
-    return { success: false, result: 'No te entendí bien el nombre. ¿A qué cliente elimino?' }
+    return { success: false, result: 'No te entendí bien el nombre. ¿A qué cliente elimino?', error: 'GUARD_REJECTED' }
   }
 
   const resolution = await resolveClient(ctx, args.client_name)
@@ -60,10 +60,15 @@ export async function executeDeleteClient(
 
   let target: ClientRow
   if (resolution.status === 'found') {
-    // Low-confidence match on a destructive op: confirm before deleting,
-    // UNLESS the user already consented via any_duplicate / phone (those
-    // paths went through the deliberate disambiguation UX).
-    if (needsConfirmation(resolution) && !args.any_duplicate && !args.phone) {
+    // Low-confidence match on a destructive op: confirm before deleting.
+    // A phone that matches the resolved client counts as the user's
+    // deliberate pick; any_duplicate does NOT skip confirmation here — it
+    // only consents within an ambiguous duplicate list (branch below), and
+    // honoring it on a single fuzzy match let the LLM delete on first
+    // mention by emitting any_duplicate=true unprompted.
+    const phoneMatchesTarget =
+      !!args.phone && normalisePhone(args.phone) === normalisePhone(resolution.client.phone)
+    if (needsConfirmation(resolution) && !phoneMatchesTarget) {
       return { success: false, result: formatConfirmationPrompt(resolution, args.client_name) }
     }
     target = resolution.client
@@ -114,6 +119,17 @@ export async function executeDeleteClient(
 
   if ((count ?? 0) > 0) {
     return { success: false, result: `No se puede eliminar: ${target.name} tiene ${count} cita(s) futura(s). Cancélalas primero.` }
+  }
+
+  // delete_client is a ReviewedToolName — the constitutional guard contract
+  // covers it (rubric hard-rule 4), but this call was missing entirely.
+  if (ctx.runWriteGuard) {
+    const denied = await ctx.runWriteGuard('delete_client', {
+      clientId:   target.id,
+      clientName: target.name,
+      phone:      target.phone,
+    })
+    if (denied) return denied
   }
 
   const { error } = await ctx.supabase

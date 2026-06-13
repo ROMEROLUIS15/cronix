@@ -26,10 +26,15 @@ const NEXT_INTENT_LOOSE = /\bqu[eé]\s+(?:viene|sigue)\b/
 // Block if the user mentioned a specific date keyword — let list-appointments handle it.
 const HAS_DATE_KEYWORD = /\b(hoy|ma[ñn]ana|ayer|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2}\s*(?:de|\/))/
 
+// "próxima cita de Ana" targets a CLIENT, not the global next-in-time —
+// defer to client-appointments (registered right after this capability).
+const HAS_CLIENT_TARGET = /\b(?:cita|turno)\s+(?:de|con|para)\s+[a-záéíóúüñ]/
+
 export function detectNextAppointment(text: string): NextAppointmentFastPathArgs | null {
   const t = text.toLowerCase().trim()
   if (WRITE.test(t)) return null
   if (HAS_DATE_KEYWORD.test(t)) return null
+  if (HAS_CLIENT_TARGET.test(t)) return null
 
   if (NEXT_INTENT.test(t) || NEXT_INTENT_VERB.test(t) || NEXT_INTENT_LOOSE.test(t)) {
     return {}

@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { coerceToolArgs } from '../core/tool-args.ts'
+import { coerceToolArgs, stripUndeclaredArgs } from '../core/tool-args.ts'
 
 describe('coerceToolArgs — malformed tool-call args never crash the turn', () => {
   it('null → {} (the get_services HTTP 500 trigger)', () => {
@@ -37,5 +37,34 @@ describe('coerceToolArgs — malformed tool-call args never crash the turn', () 
     for (const raw of [null, undefined, [], 1, 'x', { a: 1 }]) {
       expect(() => Object.keys(coerceToolArgs(raw))).not.toThrow()
     }
+  })
+})
+
+describe('stripUndeclaredArgs — LLM cannot smuggle internal-only args', () => {
+  const CANCEL_DECLARED = new Set(['client_name', 'date', 'time'])
+
+  it('drops a hallucinated appointment_id (the anaphoric-branch bypass)', () => {
+    const { args, dropped } = stripUndeclaredArgs(
+      { client_name: 'Ana', appointment_id: '11111111-2222-3333-4444-555555555555' },
+      CANCEL_DECLARED,
+    )
+    expect(args).toEqual({ client_name: 'Ana' })
+    expect(dropped).toEqual(['appointment_id'])
+  })
+
+  it('passes declared args through untouched (same reference, no copy)', () => {
+    const input = { client_name: 'Ana', date: '2026-06-15' }
+    const { args, dropped } = stripUndeclaredArgs(input, CANCEL_DECLARED)
+    expect(args).toBe(input)
+    expect(dropped).toEqual([])
+  })
+
+  it('drops every undeclared key, keeps every declared one', () => {
+    const { args, dropped } = stripUndeclaredArgs(
+      { client_name: 'Ana', time: '15:00', any_duplicate: true, foo: 1 },
+      CANCEL_DECLARED,
+    )
+    expect(args).toEqual({ client_name: 'Ana', time: '15:00' })
+    expect(dropped.sort()).toEqual(['any_duplicate', 'foo'])
   })
 })

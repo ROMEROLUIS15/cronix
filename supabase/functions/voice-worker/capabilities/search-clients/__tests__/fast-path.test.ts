@@ -77,6 +77,20 @@ describe('search-clients fast path — noise rejections', () => {
   it('plain greeting → null', () => {
     expect(detectSearchClients('hola luis')).toBeNull()
   })
+  // Catalog questions must never be treated as a client lookup (regression
+  // from the "no encontré a 'servicios disponibles' entre tus clientes" answer).
+  it('"hay servicios disponibles" → null (catalog question)', () => {
+    expect(detectSearchClients('hay servicios disponibles')).toBeNull()
+  })
+  it('"qué servicios tienes disponibles" → null (catalog question)', () => {
+    expect(detectSearchClients('qué servicios tienes disponibles')).toBeNull()
+  })
+  it('"búscame los servicios disponibles" → null (catalog question)', () => {
+    expect(detectSearchClients('búscame los servicios disponibles')).toBeNull()
+  })
+  it('"tienes el servicio de manicure" → null (catalog question)', () => {
+    expect(detectSearchClients('tienes el servicio de manicure')).toBeNull()
+  })
   it('empty string → null', () => {
     expect(detectSearchClients('')).toBeNull()
   })

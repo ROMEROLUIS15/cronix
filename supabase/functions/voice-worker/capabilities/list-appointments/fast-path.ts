@@ -18,6 +18,10 @@ export interface ListAppointmentsArgs extends Record<string, unknown> {
 const WRITE_AGENDAR = /\bag[eé]nd(?:a(?:r|me|lo|la|los|las|nos|ste|mos|ron)|[oé]|aremos|amos|emos|ar[ée]|ad[oa])\b/
 const WRITE_OTHERS  = /\b(reagend|reprogram[aoeé]|cancel[aoeé]|borr[aoeé]|elimin[aoeé]|cre[aoeé]\s+un|nuev[ao]\s+cliente|registr[aoeé]|añad[aoeé]|agreg[aoeé])\b/
 
+// "muéstrame los servicios de hoy" carries both a QUERY verb and a date, but
+// it's a catalog question, not an agenda one — defer to get-services / LLM.
+const SERVICE_INTENT = /\bservicios?\b/
+
 // Includes "qué/cuántos clientes (tengo|hay|atiendo)" because in colloquial
 // Spanish the owner uses "clientes" as a synonym for "citas" when asking
 // the agenda ("qué clientes tengo mañana" = "what bookings tomorrow").
@@ -26,6 +30,7 @@ const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|den
 export function detectListAppointments(text: string, today: string): ListAppointmentsArgs | null {
   const t = text.toLowerCase()
   if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
+  if (SERVICE_INTENT.test(t)) return null
   if (!QUERY.test(t)) return null
 
   const parsed = parseDateExpression(text, today)

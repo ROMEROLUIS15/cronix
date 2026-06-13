@@ -20,7 +20,7 @@ export async function executeSearchClients(
   const corpus = ctx.userTextCorpus ?? ''
   if (corpus && !nameMentionedInCorpus(corpus, args.query)) {
     console.log(`[VOICE-WORKER-SEARCH-CLIENTS] REJECTED — hallucinated query="${args.query}"`)
-    return { success: false, result: 'No te entendí bien el nombre. ¿A quién busco?' }
+    return { success: false, result: 'No te entendí bien el nombre. ¿A quién busco?', error: 'GUARD_REJECTED' }
   }
 
   const all = await getActiveClients(ctx)
