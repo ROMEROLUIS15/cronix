@@ -317,6 +317,18 @@ un booking (regla 7) y que rectificar una cita recién creada es legítimo
 - Pendiente: el call-site de WhatsApp aún no pasa `conversationWindow`
   (campo opcional; requiere gate de `modulo-whatsapp-citas`).
 
+### Invalidación de caché del dashboard (escritura cross-canal)
+
+El dashboard (Next.js) lee `clients`/`appointments`/`dashboard` desde un caché
+Upstash (`lib/cache.ts`, TTL 120–180s). El agente de voz (Edge Function Deno)
+escribe directo a Postgres y **no** pasa por el repositorio Node que invalida
+ese caché, así que toda escritura por voz quedaba invisible en el dashboard
+hasta que expiraba el TTL. Por eso, tras CUALQUIER write de voz exitoso
+(fast path y LLM path), `agent.ts` dispara `invalidateDashboardCache(businessId)`
+(`redis.ts`, fire-and-forget per §3) que borra las claves
+`v1:cache:{businessId}:{clients|appointments|dashboard}:*` del MISMO Upstash.
+Debe mantener en sync el formato de clave y `CACHE_VERSION` con `lib/cache.ts`.
+
 ### Observabilidad de guards
 
 Toda denegación de guard retorna `error: 'GUARD_REJECTED'` (y las del

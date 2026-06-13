@@ -21,6 +21,7 @@ import {
 import { createMemoryEngine }            from '../_shared/memory/index.ts'
 import { createConstitutionalReviewer, reviewWriteOrFailOpen } from '../_shared/supervisor/index.ts'
 import type { ReviewedToolName } from '../_shared/supervisor/contracts.ts'
+import { invalidateDashboardCache } from './redis.ts'
 import { createTracer, shortHash }       from '../_shared/observability/index.ts'
 import type { TraceOutcome } from '../_shared/observability/contracts.ts'
 import {
@@ -201,7 +202,12 @@ export async function runAgent(
 
   const { finalText, actionPerformed, modelUsed, pendingNotifications, lastRefCandidate } = llmResult
 
-  if (actionPerformed) recordWriteEpisode(ctx, input.text, finalText)
+  if (actionPerformed) {
+    recordWriteEpisode(ctx, input.text, finalText)
+    // Bust the dashboard's read cache so voice-created/changed data shows up
+    // immediately instead of after the TTL. Fire-and-forget (constitution §3).
+    void invalidateDashboardCache(ctx.businessId)
+  }
 
   const newHistory: AgentOutput['history'] = [
     ...input.history,
@@ -251,6 +257,7 @@ async function buildFastPathOutput(
 
   if (hit.capability.isWrite && result.success) {
     recordWriteEpisode(ctx, input.text, text)
+    void invalidateDashboardCache(ctx.businessId)
     if (result.data) {
       const { notification, lastRef } = buildNotificationFromWrite(result, ctx.businessId, ctx.userId)
       if (notification) pendingNotifications.push(notification)
