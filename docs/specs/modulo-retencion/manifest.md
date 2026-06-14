@@ -28,6 +28,13 @@ es determinista (SQL), no un juicio de LLM.
   módulo una vez** (`settings.retention.enabled`, default **OFF**). Encendido ⇒
   manos fuera: el agente reengancha solo. El toggle es consentimiento + el
   interruptor de pánico, no trabajo recurrente.
+* **Solo planes Pro+ (`pro` / `enterprise`):** el módulo NO está disponible en
+  `free`. Doble propósito: monetización (feature premium de alto valor) y
+  **anti-spam/reputación** — restringir a cuentas de pago reduce el riesgo de que
+  Meta degrade el número compartido por envíos de baja calidad. Se aplica en DOS
+  puntos: el cron/`ProcessRetentionUseCase` salta negocios no-Pro+, y el dashboard
+  muestra el toggle bloqueado con upsell. Helper `canAccessRetention(plan)` en
+  `lib/plans/plan-limits.ts` (espejo de `canAccessReports`).
 * **Plantilla Meta obligatoria fuera de la ventana de 24h (CRÍTICO):** el cliente
   inactivo está fuera de la sesión de 24h de WhatsApp ⇒ el mensaje DEBE ir con
   **plantilla Meta aprobada (HSM)**, nunca texto libre. Infra ya existe
@@ -76,6 +83,15 @@ es determinista (SQL), no un juicio de LLM.
 - `settings.retention.enabled` (bool, default false) — el toggle.
 - `settings.retention.dailyCap` (int, default 50) — tope por corrida.
 - La frecuencia vive en la columna `default_attendance_frequency_days`.
+
+### UX de activación (v1 — modal al encender el switch)
+Al poner el toggle en ON, se abre un **modal** que pide **un número de días**
+("¿Cada cuántos días reenganchamos a un cliente que no vuelve?", default 30) →
+escribe en `default_attendance_frequency_days`. Confirmar el modal persiste
+`settings.retention.enabled = true` + la frecuencia; cancelar deja el switch OFF.
+Un solo número, a nivel negocio. El **ajuste por servicio** (cada servicio con su
+propio ciclo, que sobrescribe este global) es **v2** — este número queda como el
+piso por defecto, no se descarta.
 
 ### v2 — diferido
 - `services.recommended_return_days` y `clients.attendance_frequency_days`
@@ -182,6 +198,8 @@ deterministas, sin LLM en el camino crítico.
 * **AC-8 — Opt-out:** cliente que pidió baja → nunca elegible.
 * **AC-9 — Plantilla obligatoria:** envío con `type:"template"`, nunca texto libre.
 * **AC-10 — Tenant:** todo opera scoped por `business_id`.
+* **AC-11 — Plan gating:** negocio `free` → `ProcessRetentionUseCase` no-op y el
+  toggle del dashboard aparece bloqueado; solo `pro`/`enterprise` ejecutan.
 
 ---
 
