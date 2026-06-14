@@ -42,6 +42,9 @@ El agente recibe audio o texto, transcribe, ejecuta intenciones vía LLM o fast 
 
 1. **Fast Path detection**: recorre las 12 capabilities en orden de prioridad. Si una matchea el texto del usuario, ejecuta la tool directamente sin LLM.
 2. **Date Override**: `detectTemporalIntent()` analiza el texto del usuario buscando "hoy", "mañana", "pasado mañana". Si encuentra uno, calcula la fecha ISO real y la fuerza en cualquier tool call del LLM que tenga parámetro `date`. Esto protege contra alucinaciones de fecha del LLM.
+   - **Resolución de año en fechas sin año (`core/date-parser.ts`, `parseDateExpression`)**: para referencias como "el 9 de mayo" sin año explícito, el parámetro `prefer` decide cuál año se asume:
+     - `'future'` (default): la próxima ocurrencia futura — usado por `schedule`, `reschedule`, `cancel`, que nunca operan sobre fechas pasadas.
+     - `'nearest'`: la ocurrencia más cercana a hoy (año previo/actual/siguiente) — usado por `listAppointments` para consultas de agenda ("qué citas tuve el 9 de junio"), donde una fecha pasada debe resolver al pasado más cercano y no rodar al año siguiente.
 3. **LLM Loop** (stepLlmLoop, máx 3 iteraciones):
    - Envía historial + tool definitions al proveedor LLM
    - Ejecuta tool calls secuencialmente con **dedup por fingerprint**: `buildToolFingerprint()` produce un hash determinista de los argumentos; si el mismo fingerprint aparece dos veces en el mismo turno, el segundo se bloquea con mensaje `"Esta acción ya fue ejecutada en este turno con los mismos datos."`
@@ -88,6 +91,14 @@ desde el extracto "CITAS DE HOY" del prompt o inventaba. Su detector cede
 ante fechas ("citas de mañana" → list-appointments), intención pasada
 ("última cita de Ana" → last-visit), nombres de servicio del catálogo y
 cualquier verbo de escritura.
+
+`getServices` (`detectGetServices` en `get-services/fast-path.ts`) intercepta
+preguntas de catálogo ("qué servicios tienes", "servicios disponibles", "qué
+ofreces", "menú"/"catálogo") de forma determinista y read-only. Antes de
+existir, estas frases se filtraban al LLM como nombre de cliente hacia
+`search_clients`, y el agente respondía "no encontré a 'servicios
+disponibles' entre tus clientes". El detector es conservador: frases con
+verbo de escritura ("agéndale el servicio de manicure a Ana") nunca matchean.
 
 **Shared infra** en `_shared/`: `Capability.ts` (interface `ICapability`) y `registry.ts` (registro, dispatch, fast path detection).
 
@@ -136,6 +147,12 @@ lastRef?: {
 - DADO un LLM loop que no ejecuta tool calls y no produce `finalText` (content vacío o nulo),
 - CUANDO `actionPerformed=false` y `finalText.trim()` está vacío,
 - ENTONCES el pipeline retorna `finalText = "No te entendí bien, ¿puedes repetir?"`.
+
+### AC-6 — `listAppointments` resuelve fechas pasadas sin año al año más cercano
+- DADO un dueño que dice "¿qué citas tuve el 9 de junio?" en una fecha posterior (ej. 13 de junio del mismo año),
+- CUANDO `listAppointments` invoca `parseDateExpression(text, today, 'nearest')`,
+- ENTONCES la fecha resuelve al 9 de junio del año actual (el pasado más cercano), no al 9 de junio del año siguiente.
+- Contraste: `schedule`/`reschedule`/`cancel` llaman `parseDateExpression(text, today)` (default `'future'`), por lo que la misma frase en un flujo de agendamiento resuelve a la próxima ocurrencia futura.
 
 ## 7. Motor de Resolución de Clientes por Similitud (Fuzzy Matching)
 
@@ -278,6 +295,15 @@ JSON Schema declarado (`stripUndeclaredArgs`). Args internos del fast path
 (`appointment_id` resuelto desde `lastRef`) son **inalcanzables desde el
 LLM** — un `appointment_id` fabricado ya no rutea cancel/reschedule a la
 rama anafórica que salta los guards.
+
+Antes de `stripUndeclaredArgs`, `coerceToolArgs` (`core/tool-args.ts`)
+normaliza el `arguments` parseado del tool call a un objeto plano: Llama 3.3
+emite `arguments: "null"` (y a veces `"[]"`) para tools sin parámetros como
+`get_services`, y un `null`/array/primitivo hacía crashear
+`buildToolFingerprint`'s `Object.keys()` con un `TypeError` no capturado —
+esto tumbaba el turno completo (`HTTP 500` / `LLM_EXCEPTION`). Cualquier valor
+que no sea un objeto plano se convierte en `{}`, y la tool corre con args
+vacíos.
 
 ### Write-guard constitucional
 

@@ -38,5 +38,53 @@
     "context": [
       "Última cita referida (lastRef): cliente María González, fecha 2026-06-10, hora 15:00; acción solicitada: cancelar; resultado: cancelada."
     ]
+  },
+  {
+    "name": "last_visit_weak_match_confirms",
+    "input": "¿Cuándo vino Gardi?",
+    "actual_output": "¿Te refieres a Guardiana López? Confírmame para revisar su última visita.",
+    "context": [
+      "El dueño preguntó por 'Gardi'. El único cliente parecido en el roster es Guardiana López, pero la coincidencia es débil. Antes de revelar el historial de una persona, el agente confirma de quién se trata."
+    ]
+  },
+  {
+    "name": "last_visit_phonetic_match_answers_directly",
+    "input": "¿Cuándo vino la guardiana?",
+    "actual_output": "Guardiana López vino por última vez el 28 de mayo.",
+    "context": [
+      "El dueño preguntó por 'la guardiana', que coincide con claridad con la clienta Guardiana López. Su última visita fue el 28 de mayo de 2026."
+    ]
+  },
+  {
+    "name": "get_services_catalog_not_client_search",
+    "input": "¿Qué servicios tienen disponibles?",
+    "actual_output": "Tienes disponibles: corte de cabello, manicure, pedicure y tinte.",
+    "context": [
+      "El catálogo de servicios del negocio incluye: corte de cabello, manicure, pedicure y tinte. La frase 'servicios disponibles' es una pregunta de catálogo, no el nombre de un cliente."
+    ]
+  },
+  {
+    "name": "list_appointments_past_date_nearest_year",
+    "input": "¿Qué citas tuve el 9 de junio?",
+    "actual_output": "El 9 de junio tuviste una cita con Pedro Ramírez a las 2 de la tarde para un corte de cabello.",
+    "context": [
+      "Hoy es 13 de junio de 2026. El 9 de junio de 2026 el dueño tuvo una cita con el cliente Pedro Ramírez a las 2 de la tarde (14:00) para un corte de cabello."
+    ]
+  },
+  {
+    "name": "cancel_after_schedule_is_change_of_plans",
+    "input": "Mejor cancélala.",
+    "actual_output": "Listo, cancelé la cita de Laura Méndez del 15 de junio a las 11:00.",
+    "context": [
+      "En el turno anterior se agendó una cita para la clienta Laura Méndez el 15 de junio de 2026 a las 11:00. Ahora el dueño pide cancelarla y la cita queda cancelada. Cancelar una cita recién agendada es un cambio de planes normal."
+    ]
+  },
+  {
+    "name": "schedule_assigns_staff_by_name",
+    "input": "Agéndame a Carlos con Marielys mañana a las 10 para un corte.",
+    "actual_output": "Listo, agendé a Carlos Pérez mañana a las 10:00 con Marielys para un corte de cabello.",
+    "context": [
+      "Hoy es 13 de junio de 2026. Se creó una cita para el cliente Carlos Pérez el 14 de junio (mañana) a las 10:00 para un corte de cabello, atendida por la integrante del equipo Marielys. El cliente es Carlos Pérez; la persona del equipo que lo atiende es Marielys."
+    ]
   }
 ]
