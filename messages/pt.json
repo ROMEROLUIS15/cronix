@@ -869,6 +869,20 @@
       "btnEnable": "Ativar"
     },
     "saveReminders": "Salvar lembretes",
+    "retention": {
+      "title": "Reengajamento automático",
+      "sub": "Recupere clientes que pararam de vir, sem esforço.",
+      "toggleTitle": "Reengajamento via WhatsApp",
+      "toggleSub": "O assistente contata apenas quem passou da frequência de visita.",
+      "proOnly": "Plano Pro",
+      "modalTitle": "Ativar reengajamento automático",
+      "modalDesc": "A cada quantos dias reengajamos um cliente que não volta?",
+      "daysLabel": "Dias sem voltar",
+      "daysHint": "Padrão de 30 dias. Você pode alterar quando quiser.",
+      "confirm": "Ativar",
+      "cancel": "Cancelar",
+      "activeNote": "Ativo · a cada {days} dias"
+    },
     "plan": {
       "fullAccess": "Acesso completo incluído",
       "managePlan": "Gerenciar plano",

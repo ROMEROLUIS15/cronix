@@ -17,10 +17,14 @@ import {
   Sparkles,
   Gem,
   ArrowRight,
+  HeartHandshake,
+  Lock,
 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+import { canAccessRetention } from "@/lib/plans/plan-limits";
 import type { Business, BusinessSettingsJson } from "@/types";
 import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
@@ -45,6 +49,11 @@ export default function SettingsPage() {
     setHours,
     notifSettings,
     setNotifSettings,
+    retentionEnabled,
+    retentionFrequency,
+    savingRetention,
+    handleEnableRetention,
+    handleDisableRetention,
     showLuisFab,
     copiedLink,
     msg,
@@ -62,6 +71,10 @@ export default function SettingsPage() {
   } = useSettingsForm();
 
   const [localCopiedLink, setLocalCopiedLink] = useState(false);
+  const [showRetentionModal, setShowRetentionModal] = useState(false);
+  const [freqInput, setFreqInput] = useState(30);
+
+  const canRetention = canAccessRetention(biz?.plan ?? "free");
 
   const WA_NUMBER = '584147531158';
 
@@ -652,6 +665,121 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Retention / Win-back */}
+      <Card>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(236,72,153,0.1)" }}
+          >
+            <HeartHandshake size={18} style={{ color: "#EC4899" }} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: "#F2F2F2" }}>
+              {t("retention.title")}
+            </h2>
+            <p className="text-xs" style={{ color: "#909098" }}>
+              {t("retention.sub")}
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="flex items-center justify-between p-4 rounded-xl gap-4"
+          style={{ background: "#212125", border: "1px solid #2E2E33" }}
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium" style={{ color: "#F2F2F2" }}>
+              {t("retention.toggleTitle")}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "#909098" }}>
+              {retentionEnabled && canRetention
+                ? t("retention.activeNote", { days: retentionFrequency })
+                : t("retention.toggleSub")}
+            </p>
+          </div>
+
+          {canRetention ? (
+            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={retentionEnabled}
+                disabled={savingRetention}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setFreqInput(retentionFrequency || 30);
+                    setShowRetentionModal(true);
+                  } else {
+                    handleDisableRetention();
+                  }
+                }}
+                className="sr-only peer"
+              />
+              <div
+                className="w-10 h-5 rounded-full transition-colors"
+                style={{ background: retentionEnabled ? "#EC4899" : "#3A3A3F" }}
+              />
+              <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+            </label>
+          ) : (
+            <Link
+              href="/dashboard/plans"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg flex-shrink-0 whitespace-nowrap"
+              style={{ background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.25)" }}
+            >
+              <Lock size={14} style={{ color: "#A855F7" }} />
+              <span className="text-xs font-semibold" style={{ color: "#A855F7" }}>
+                {t("retention.proOnly")}
+              </span>
+            </Link>
+          )}
+        </div>
+      </Card>
+
+      <Modal
+        open={showRetentionModal}
+        onClose={() => setShowRetentionModal(false)}
+        title={t("retention.modalTitle")}
+        description={t("retention.modalDesc")}
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => setShowRetentionModal(false)}
+              disabled={savingRetention}
+            >
+              {t("retention.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              loading={savingRetention}
+              onClick={async () => {
+                await handleEnableRetention(freqInput);
+                setShowRetentionModal(false);
+              }}
+            >
+              {t("retention.confirm")}
+            </Button>
+          </div>
+        }
+      >
+        <label className="block text-sm font-medium mb-1.5" style={{ color: "#F2F2F2" }}>
+          {t("retention.daysLabel")}
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={freqInput}
+          onChange={(e) => setFreqInput(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
+          className="input-base"
+        />
+        <p className="text-xs mt-2" style={{ color: "#909098" }}>
+          {t("retention.daysHint")}
+        </p>
+      </Modal>
 
       {/* Plan & Recompensas CTA */}
       <Link href="/dashboard/plans" className="block">

@@ -869,6 +869,20 @@
       "btnEnable": "Aktivieren"
     },
     "saveReminders": "Erinnerungen speichern",
+    "retention": {
+      "title": "Automatische Rückgewinnung",
+      "sub": "Hol Kunden zurück, die nicht mehr kommen — ganz automatisch.",
+      "toggleTitle": "Rückgewinnung per WhatsApp",
+      "toggleSub": "Der Assistent kontaktiert nur Kunden, die ihre Besuchsfrequenz überschritten haben.",
+      "proOnly": "Pro-Tarif",
+      "modalTitle": "Automatische Rückgewinnung aktivieren",
+      "modalDesc": "Nach wie vielen Tagen sprechen wir einen Kunden an, der nicht zurückkehrt?",
+      "daysLabel": "Tage ohne Rückkehr",
+      "daysHint": "Standard sind 30 Tage. Jederzeit änderbar.",
+      "confirm": "Aktivieren",
+      "cancel": "Abbrechen",
+      "activeNote": "Aktiv · alle {days} Tage"
+    },
     "plan": {
       "current": "Plan {plan, select, free {Kostenlos} pro {Pro} enterprise {Unternehmen} other {Kostenlos}}",
       "fullAccess": "Vollzugriff inklusive",

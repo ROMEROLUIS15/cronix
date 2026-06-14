@@ -480,6 +480,7 @@ export type Database = {
           bonus_appointments_limit: number | null
           category: string
           created_at: string | null
+          default_attendance_frequency_days: number
           id: string
           locale: string | null
           logo_url: string | null
@@ -501,6 +502,7 @@ export type Database = {
           bonus_appointments_limit?: number | null
           category: string
           created_at?: string | null
+          default_attendance_frequency_days?: number
           id?: string
           locale?: string | null
           logo_url?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           bonus_appointments_limit?: number | null
           category?: string
           created_at?: string | null
+          default_attendance_frequency_days?: number
           id?: string
           locale?: string | null
           logo_url?: string | null
@@ -558,11 +561,13 @@ export type Database = {
           email: string | null
           email_norm: string | null
           id: string
+          last_reengaged_at: string | null
           last_visit_at: string | null
           name: string
           notes: string | null
           phone: string | null
           phone_digits: string | null
+          retention_opted_out: boolean
           tags: string[] | null
           total_appointments: number | null
           total_spent: number | null
@@ -577,11 +582,13 @@ export type Database = {
           email?: string | null
           email_norm?: string | null
           id?: string
+          last_reengaged_at?: string | null
           last_visit_at?: string | null
           name: string
           notes?: string | null
           phone?: string | null
           phone_digits?: string | null
+          retention_opted_out?: boolean
           tags?: string[] | null
           total_appointments?: number | null
           total_spent?: number | null
@@ -596,11 +603,13 @@ export type Database = {
           email?: string | null
           email_norm?: string | null
           id?: string
+          last_reengaged_at?: string | null
           last_visit_at?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
           phone_digits?: string | null
+          retention_opted_out?: boolean
           tags?: string[] | null
           total_appointments?: number | null
           total_spent?: number | null
@@ -1848,6 +1857,16 @@ export type Database = {
           id: string
           last_appt: string
           name: string
+        }[]
+      }
+      get_reengageable_clients_rpc: {
+        Args: { antispam_days: number; biz_id: string; frequency_days: number }
+        Returns: {
+          id: string
+          last_completed_at: string
+          last_visit_at: string
+          name: string
+          phone: string
         }[]
       }
       get_my_business_id: { Args: never; Returns: string }

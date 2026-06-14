@@ -44,6 +44,15 @@ export function canAccessReports(plan: string): boolean {
   return plan === 'pro' || plan === 'enterprise'
 }
 
+/**
+ * Retention / win-back is a Pro+ feature (modulo-retencion §2): monetization +
+ * anti-spam/reputation guard on the shared WhatsApp number. Enforced in both the
+ * cron (ProcessRetentionUseCase) and the dashboard toggle.
+ */
+export function canAccessRetention(plan: string): boolean {
+  return plan === 'pro' || plan === 'enterprise'
+}
+
 export function isFreePlan(plan: string): boolean {
   return plan === 'free'
 }

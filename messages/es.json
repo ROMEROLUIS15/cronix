@@ -905,6 +905,20 @@
       "btnEnable": "Activar notificaciones"
     },
     "saveReminders": "Guardar recordatorios",
+    "retention": {
+      "title": "Reenganche automático",
+      "sub": "Recupera clientes que dejaron de venir, sin mover un dedo.",
+      "toggleTitle": "Reenganche por WhatsApp",
+      "toggleSub": "El asistente contacta solo a quienes superan su frecuencia de visita.",
+      "proOnly": "Plan Pro",
+      "modalTitle": "Activar reenganche automático",
+      "modalDesc": "¿Cada cuántos días reenganchamos a un cliente que no vuelve?",
+      "daysLabel": "Días sin volver",
+      "daysHint": "Por defecto 30 días. Puedes cambiarlo cuando quieras.",
+      "confirm": "Activar",
+      "cancel": "Cancelar",
+      "activeNote": "Activo · cada {days} días"
+    },
     "plan": {
       "current": "Plan {plan, select, free {Gratuito} pro {Pro} enterprise {Empresa} other {Gratuito}}",
       "fullAccess": "Acceso completo incluido",

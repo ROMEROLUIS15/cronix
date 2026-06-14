@@ -869,6 +869,20 @@
       "btnEnable": "Activer"
     },
     "saveReminders": "Enregistrer rappels",
+    "retention": {
+      "title": "Relance automatique",
+      "sub": "Récupérez les clients qui ne viennent plus, sans effort.",
+      "toggleTitle": "Relance via WhatsApp",
+      "toggleSub": "L’assistant ne contacte que les clients ayant dépassé leur fréquence de visite.",
+      "proOnly": "Offre Pro",
+      "modalTitle": "Activer la relance automatique",
+      "modalDesc": "Au bout de combien de jours relançons-nous un client qui ne revient pas ?",
+      "daysLabel": "Jours sans revenir",
+      "daysHint": "30 jours par défaut. Modifiable à tout moment.",
+      "confirm": "Activer",
+      "cancel": "Annuler",
+      "activeNote": "Actif · tous les {days} jours"
+    },
     "plan": {
       "fullAccess": "Accès complet inclus",
       "managePlan": "Gérer le forfait",

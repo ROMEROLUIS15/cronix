@@ -105,6 +105,17 @@ export class SupabaseBusinessRepository implements IBusinessRepository {
     return ok(undefined)
   }
 
+  async findRetentionEnabledIds(): Promise<Result<string[]>> {
+    const { data, error } = await this.supabase
+      .from('businesses')
+      .select('id')
+      .in('plan', ['pro', 'enterprise'])
+      .eq('settings->retention->>enabled', 'true')
+
+    if (error) return fail(`findRetentionEnabledIds: ${error.message}`)
+    return ok((data ?? []).map((b) => b.id))
+  }
+
   async createWithOwnerLink(params: CreateBusinessWithOwnerParams): Promise<Result<BusinessRow>> {
     const { data, error } = await this.supabase.rpc('fn_create_business_and_link_owner', {
       p_owner_id:    params.ownerId,

@@ -20,7 +20,9 @@
     "@typescript-eslint/eslint-plugin",
     "@vitejs/plugin-react",
     "supabase",
-    "jimp"
+    "jimp",
+    "@modelcontextprotocol/sdk",
+    "@supabase/mcp-server-supabase"
   ],
   "ignoreExportsUsedInFile": true,
   "rules": {

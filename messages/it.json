@@ -870,6 +870,20 @@
       "btnEnable": "Attiva"
     },
     "saveReminders": "Salva promemoria",
+    "retention": {
+      "title": "Riaggancio automatico",
+      "sub": "Recupera i clienti che non tornano, senza muovere un dito.",
+      "toggleTitle": "Riaggancio via WhatsApp",
+      "toggleSub": "L’assistente contatta solo chi supera la propria frequenza di visita.",
+      "proOnly": "Piano Pro",
+      "modalTitle": "Attiva il riaggancio automatico",
+      "modalDesc": "Dopo quanti giorni ricontattiamo un cliente che non torna?",
+      "daysLabel": "Giorni senza tornare",
+      "daysHint": "Predefinito 30 giorni. Puoi cambiarlo quando vuoi.",
+      "confirm": "Attiva",
+      "cancel": "Annulla",
+      "activeNote": "Attivo · ogni {days} giorni"
+    },
     "plan": {
       "fullAccess": "Accesso completo incluso",
       "managePlan": "Gestisci piano",

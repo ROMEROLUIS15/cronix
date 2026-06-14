@@ -60,6 +60,12 @@ export interface IBusinessRepository {
   updateSettings(businessId: string, settings: Record<string, unknown>): Promise<Result<void>>
 
   /**
+   * Returns the IDs of Pro+ businesses with the retention toggle enabled.
+   * Used by the cron to fan out re-engagement runs (modulo-retencion §6).
+   */
+  findRetentionEnabledIds(): Promise<Result<string[]>>
+
+  /**
    * Atomically creates a business AND links the owner user in one transaction.
    * Prevents the orphaned-business state that occurs when the two-step pattern
    * (create → link) fails between steps.

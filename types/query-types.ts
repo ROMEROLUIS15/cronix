@@ -135,4 +135,8 @@ export interface BusinessSettingsJson {
   }
   wa_verified?: boolean
   maxDailyBookingsPerClient?: number
+  retention?: {
+    enabled?: boolean
+    dailyCap?: number
+  }
 }

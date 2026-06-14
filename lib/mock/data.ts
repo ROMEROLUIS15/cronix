@@ -27,6 +27,7 @@ export const mockBusiness: Business = {
   referral_code: 'MOCK-REF',
   referred_by_id: null,
   bonus_appointments_limit: 0,
+  default_attendance_frequency_days: 30,
   settings: {
     notifications: {
       whatsapp: true,
@@ -136,6 +137,8 @@ export const mockClients: Client[] = [
     notes: 'Cliente frecuente, prefiere corte bajo.',
     birthday: '1990-05-15',
     last_visit_at: yesterday,
+    last_reengaged_at: null,
+    retention_opted_out: false,
     total_appointments: 12,
     total_spent: 420000,
     tags: ['VIP', 'Fiel'],
@@ -155,6 +158,8 @@ export const mockClients: Client[] = [
     notes: null,
     birthday: null,
     last_visit_at: yesterday,
+    last_reengaged_at: null,
+    retention_opted_out: false,
     total_appointments: 3,
     total_spent: 105000,
     tags: ['Nuevo'],

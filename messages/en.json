@@ -905,6 +905,20 @@
       "btnEnable": "Enable notifications"
     },
     "saveReminders": "Save reminders",
+    "retention": {
+      "title": "Automatic win-back",
+      "sub": "Bring back clients who stopped coming — hands off.",
+      "toggleTitle": "Win-back via WhatsApp",
+      "toggleSub": "The assistant only contacts clients past their visit frequency.",
+      "proOnly": "Pro plan",
+      "modalTitle": "Enable automatic win-back",
+      "modalDesc": "After how many days should we re-engage a client who hasn’t returned?",
+      "daysLabel": "Days without returning",
+      "daysHint": "Defaults to 30 days. You can change it anytime.",
+      "confirm": "Enable",
+      "cancel": "Cancel",
+      "activeNote": "Active · every {days} days"
+    },
     "plan": {
       "fullAccess": "Full access included",
       "managePlan": "Manage plan",

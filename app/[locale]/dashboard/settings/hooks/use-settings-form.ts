@@ -57,6 +57,11 @@ export interface SettingsFormReturn {
   setHours: React.Dispatch<React.SetStateAction<Record<string, DayHours>>>;
   notifSettings: { whatsapp: boolean };
   setNotifSettings: React.Dispatch<React.SetStateAction<{ whatsapp: boolean }>>;
+  retentionEnabled: boolean;
+  retentionFrequency: number;
+  savingRetention: boolean;
+  handleEnableRetention: (freqDays: number) => Promise<void>;
+  handleDisableRetention: () => Promise<void>;
   showLuisFab: boolean;
   setShowLuisFab: React.Dispatch<React.SetStateAction<boolean>>;
   copiedLink: boolean;
@@ -96,6 +101,9 @@ export function useSettingsForm(): SettingsFormReturn {
   const [showLuisFab, setShowLuisFab] = useState(true);
   const [savingFab, setSavingFab] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
+  const [retentionEnabled, setRetentionEnabled] = useState(false);
+  const [retentionFrequency, setRetentionFrequency] = useState(30);
+  const [savingRetention, setSavingRetention] = useState(false);
   const notif = useNotifications(bizId);
   const [copiedLink, setCopiedLink] = useState(false);
   const [generatingSlug, setGeneratingSlug] = useState(false);
@@ -155,6 +163,10 @@ export function useSettingsForm(): SettingsFormReturn {
         if (uiData && typeof uiData.showLuisFab === 'boolean') {
           setShowLuisFab(uiData.showLuisFab);
         }
+
+        const retentionData = (business.settings as unknown as BusinessSettingsJson)?.retention;
+        setRetentionEnabled(retentionData?.enabled === true);
+        setRetentionFrequency(business.default_attendance_frequency_days ?? 30);
 
       }
       setLoading(false);
@@ -280,6 +292,69 @@ export function useSettingsForm(): SettingsFormReturn {
     [bizId, biz, showMsg],
   );
 
+  const handleEnableRetention = useCallback(
+    async (freqDays: number) => {
+      if (!bizId || !biz) return;
+      setSavingRetention(true);
+      const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
+      const newSettings: BusinessSettingsJson = {
+        ...currentSettings,
+        retention: { enabled: true, dailyCap: currentSettings.retention?.dailyCap ?? 50 },
+      };
+      const container = getBrowserContainer();
+
+      const [freqRes, settingsRes] = await Promise.all([
+        container.businesses.update(bizId, { default_attendance_frequency_days: freqDays }),
+        container.businesses.updateSettings(bizId, newSettings as Record<string, unknown>),
+      ]);
+
+      setSavingRetention(false);
+      if (freqRes.error || settingsRes.error) {
+        showMsg('error', 'saveRetentionError');
+        return;
+      }
+      setRetentionEnabled(true);
+      setRetentionFrequency(freqDays);
+      setBiz((prev) =>
+        prev
+          ? ({
+              ...prev,
+              default_attendance_frequency_days: freqDays,
+              settings: newSettings as unknown as Business['settings'],
+            } as any)
+          : prev,
+      );
+      showMsg('success', 'saveRetentionSuccess');
+    },
+    [bizId, biz, showMsg],
+  );
+
+  const handleDisableRetention = useCallback(async () => {
+    if (!bizId || !biz) return;
+    setSavingRetention(true);
+    const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
+    const newSettings: BusinessSettingsJson = {
+      ...currentSettings,
+      retention: { ...currentSettings.retention, enabled: false },
+    };
+    const container = getBrowserContainer();
+
+    const result = await container.businesses.updateSettings(bizId, newSettings as Record<string, unknown>);
+
+    setSavingRetention(false);
+    if (result.error) {
+      showMsg('error', 'saveRetentionError');
+      return;
+    }
+    setRetentionEnabled(false);
+    setBiz((prev) =>
+      prev
+        ? ({ ...prev, settings: newSettings as unknown as Business['settings'] } as any)
+        : prev,
+    );
+    showMsg('success', 'disableRetentionSuccess');
+  }, [bizId, biz, showMsg]);
+
   const handleGenerateSlug = useCallback(async () => {
     if (!bizId || !biz) return;
     setGeneratingSlug(true);
@@ -336,6 +411,11 @@ export function useSettingsForm(): SettingsFormReturn {
     setHours,
     notifSettings,
     setNotifSettings,
+    retentionEnabled,
+    retentionFrequency,
+    savingRetention,
+    handleEnableRetention,
+    handleDisableRetention,
     showLuisFab,
     setShowLuisFab,
     copiedLink,

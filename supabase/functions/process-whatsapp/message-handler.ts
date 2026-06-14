@@ -16,6 +16,7 @@ import type { MetaWebhookPayload, WaBusinessSettings }              from "./type
 import { checkMessageRateLimit, checkBusinessUsageLimit, checkTokenQuota, trackTokenUsage } from "./guards.ts"
 import { getBusinessBySlug, verifyBusinessPhone, getSessionBusiness, upsertSession }        from "./business-router.ts"
 import { verifyQStash, sanitizeMessage } from "./security.ts"
+import { isOptOutRequest, markRetentionOptOut } from "./retention-optout.ts"
 import { captureException, addBreadcrumb, setSentryTag, flushSentry } from "../_shared/sentry.ts"
 import { logToDLQ }          from "../_shared/supabase.ts"
 import { buildWhatsAppPipeline, AgentRetryError, AgentCircuitBreakerError, AgentTransientError } from "./message-pipeline.ts"
@@ -225,6 +226,20 @@ export async function handleMessage(req: Request): Promise<Response> {
     addBreadcrumb('Business resolved', 'tenant', 'info', { business_id: business.id, slug: business.slug })
 
     if (sttTokens > 0) await trackTokenUsage(business.id, sttTokens)
+
+    // Retention opt-out intercept (modulo-retencion §8) — honor STOP before the
+    // agent runs, even under token quota. Deterministic keyword match, no LLM.
+    if (isOptOutRequest(text)) {
+      try {
+        await markRetentionOptOut(business.id, sender)
+        addBreadcrumb('Retention opt-out honored', 'retention', 'info', { business_id: business.id })
+      } catch (err) {
+        captureException(err, { stage: 'retention_opt_out', business_id: business.id })
+      }
+      await sendWhatsAppMessage(sender, 'Listo ✅. No volveremos a enviarte mensajes de seguimiento. Si más adelante quieres agendar una cita, escríbenos cuando gustes. 🙌')
+      await flushSentry()
+      return json({ success: true, message: 'Retention opt-out processed' })
+    }
 
     const dailyTokenLimit = (business.settings as WaBusinessSettings)?.wa_daily_token_limit ?? 300000
     const [withinBusinessQuota, withinTokenQuota] = await Promise.all([

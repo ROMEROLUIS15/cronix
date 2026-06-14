@@ -9,7 +9,8 @@ import {
   IClientRepository,
   ClientForSelect,
   ClientForAI,
-  InsertClientPayload
+  InsertClientPayload,
+  EligibleClientRow
 } from '@/lib/domain/repositories/IClientRepository'
 import type { Client, ClientAppointmentWithDetails } from '@/types'
 import cache, { TTL, TTL_SEC } from '@/lib/cache'
@@ -123,6 +124,61 @@ export class SupabaseClientRepository implements IClientRepository {
 
     if (error) return fail(`callInactiveClientsRpc: ${error.message}`)
     return ok((data ?? []) as { name: string }[])
+  }
+
+  async findInactiveByFrequency(
+    businessId: string,
+    frequencyDays: number,
+    antiSpamDays: number
+  ): Promise<Result<EligibleClientRow[]>> {
+    const { data, error } = await this.supabase.rpc('get_reengageable_clients_rpc', {
+      biz_id: businessId,
+      frequency_days: frequencyDays,
+      antispam_days: antiSpamDays,
+    })
+
+    if (error) return fail(`findInactiveByFrequency: ${error.message}`)
+
+    const rows: EligibleClientRow[] = (data ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone,
+      lastVisitAt: r.last_visit_at ?? null,
+      lastCompletedAt: r.last_completed_at ?? null,
+    }))
+    return ok(rows)
+  }
+
+  async updateLastReengaged(
+    clientId: string,
+    businessId: string
+  ): Promise<Result<void>> {
+    const { error } = await this.supabase
+      .from('clients')
+      .update({ last_reengaged_at: new Date().toISOString() })
+      .eq('id', clientId)
+      .eq('business_id', businessId)
+
+    if (error) return fail(`updateLastReengaged: ${error.message}`)
+    void cache.invalidate(businessId, 'clients')
+    return ok(undefined)
+  }
+
+  async setRetentionOptOut(
+    clientPhone: string,
+    businessId: string
+  ): Promise<Result<void>> {
+    const digits = clientPhone.replace(/\D/g, '')
+
+    const { error } = await this.supabase
+      .from('clients')
+      .update({ retention_opted_out: true })
+      .eq('business_id', businessId)
+      .eq('phone_digits', digits)
+
+    if (error) return fail(`setRetentionOptOut: ${error.message}`)
+    void cache.invalidate(businessId, 'clients')
+    return ok(undefined)
   }
 
   async softDelete(clientId: string, businessId: string): Promise<Result<void>> {

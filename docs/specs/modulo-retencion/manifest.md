@@ -75,9 +75,9 @@ es determinista (SQL), no un juicio de LLM.
    candidatos deterministas (completada pasada > freq, sin cita futura activa,
    fuera de anti-spam, con teléfono, no borrado). Validado en prod.
 
-### Pendiente de migración (fase opt-out)
-4. **`clients.retention_opted_out`** `boolean NOT NULL DEFAULT false`. El RPC
-   sumará `and not c.retention_opted_out` cuando exista.
+### Aplicado (migración `20260614_retention_optout`)
+4. ✅ **`clients.retention_opted_out`** `boolean NOT NULL DEFAULT false`. El RPC
+   `get_reengageable_clients_rpc` ya incluye `and not c.retention_opted_out`.
 
 ### Config en `businesses.settings` (jsonb — sin columna nueva)
 - `settings.retention.enabled` (bool, default false) — el toggle.
@@ -143,10 +143,15 @@ interface IClientRepository {
   /** Marca el último reenganche (anti-spam). Invalida caché. */
   updateLastReengaged(clientId: string, businessId: string): Promise<Result<void>>
 
-  /** Marca opt-out permanente (desde el handler de WhatsApp entrante). */
+  /** Marca opt-out permanente (desde el handler de WhatsApp entrante). [Fase 5] */
   setRetentionOptOut(clientPhone: string, businessId: string): Promise<Result<void>>
 }
 ```
+
+> **Estado de implementación:** `findInactiveByFrequency`, `updateLastReengaged`
+> (Fase 2) y `setRetentionOptOut` (Fase 5) implementados y testeados en
+> `IClientRepository` / `SupabaseClientRepository`. `setRetentionOptOut` matchea
+> por `phone_digits` normalizado dentro del negocio e invalida caché.
 
 ---
 
@@ -206,14 +211,44 @@ deterministas, sin LLM en el camino crítico.
 ## 10. Plan por Fases (cada fase aislada y testeable)
 
 1. ✅ **Migración v1** (columnas + RPC) — aplicada y validada en prod.
-2. **Repo + interfaz:** `findInactiveByFrequency`, `updateLastReengaged`,
-   `setRetentionOptOut` (+ tests).
-3. **Use-cases:** `GetEligibleClientsUseCase`, `ProcessRetentionUseCase` (+ tests
-   con repos mock; cubrir toggle OFF, cap, anti-spam).
-4. **Cron `cron-retention`** + registro pg_cron (espejo de `cron-reminders`).
-5. **Opt-out:** migración `clients.retention_opted_out` + actualización del RPC +
-   detección en `process-whatsapp`.
-6. **Dashboard:** toggle de retención + frecuencia + tope (Settings) y, opcional,
-   panel de "clientes reenganchados".
+2. ✅ **Repo + interfaz:** `findInactiveByFrequency` + `updateLastReengaged`
+   implementados en `IClientRepository` / `SupabaseClientRepository` (+ tests
+   unitarios: mapeo RPC snake→camel, args, invalidación de caché, error paths).
+   `setRetentionOptOut` se mueve a la Fase 5 (depende de `retention_opted_out`).
+   Nota: la regeneración completa de `types/database.types.ts` se descartó —
+   el archivo tiene entradas mantenidas a mano (p.ej. `fn_get_dashboard_stats`,
+   inexistente en prod); se añadieron a mano solo el RPC + las 2 columnas v1.
+3. ✅ **Use-cases:** `GetEligibleClientsUseCase` + `ProcessRetentionUseCase` en
+   `lib/domain/use-cases/retention/` (puro dominio; puerto `IRetentionMessenger`
+   para el envío, sin acoplar al Edge Function). Helper `canAccessRetention` en
+   `lib/plans/plan-limits.ts`. Tests con repos/puerto mock cubren AC-5 (toggle
+   OFF), AC-6 (cap + default 50), AC-7 (stamp anti-spam solo en envío OK), AC-11
+   (free / plan null = no-op). El adapter concreto del puerto (envuelve
+   `sendReactivationMessage` con `template:'client_winback'`) + el wiring se
+   hacen en la Fase 4 junto al cron.
+4. ✅ **Cron (enfoque A — decidido con el dueño):** como el use-case vive en Node,
+   pg_cron dispara la **route Next** `POST /api/cron/retention` (no un edge
+   function). La route (auth `CRON_SECRET`, cliente service-role) lista los
+   negocios vía `findRetentionEnabledIds()` y corre `ProcessRetentionUseCase` por
+   cada uno; el use-case re-valida plan+toggle (defensa en profundidad). Adapter
+   `WinbackMessenger` (`lib/services/winback-messenger.ts`) envuelve
+   `sendReactivationMessage` con `template:'client_winback'`. Migración pg_cron
+   `20260614130000_schedule_cron_retention.sql` (1×/día 14:00 UTC ≈ 9 AM Bogota,
+   secret desde Vault) **escrita pero NO aplicada** — el scheduling en vivo es
+   paso ops (requiere Vault `cron_secret`, `CRON_SECRET` en Vercel y confirmar el
+   dominio `cronix-app.vercel.app`). Gating per-negocio por hora local = v2.
+5. ✅ **Opt-out:** migración `retention_opted_out` + RPC con
+   `and not retention_opted_out` (ambos aplicados en prod). Node:
+   `setRetentionOptOut` en el repo. Deno: `process-whatsapp/retention-optout.ts`
+   (`isOptOutRequest` determinista — no colisiona con "cancelar cita" — +
+   `markRetentionOptOut` por `phone_digits`/business, invalida caché), conectado
+   en `message-handler` como intercept antes del agente. Tests Node + Deno.
+   ⚠️ Requiere **deploy de `process-whatsapp`** para activarse en vivo.
+6. ✅ **Dashboard:** Card de retención en Settings (`app/[locale]/dashboard/settings`)
+   con toggle + modal de frecuencia (default 30, persiste en
+   `default_attendance_frequency_days`; el toggle escribe `settings.retention`).
+   **Plan-gated:** en `free` el toggle se reemplaza por un botón bloqueado (`Lock`
+   + upsell a `/dashboard/plans`) vía `canAccessRetention(plan)`. i18n en los 6
+   locales (`settings.retention.*`). Panel de "reenganchados" = opcional, v2.
 7. **Plantilla Meta** `client_winback` (trámite externo, en paralelo desde ya).
 8. **v2:** frecuencia por-servicio/por-cliente, log de auditoría, métricas.
