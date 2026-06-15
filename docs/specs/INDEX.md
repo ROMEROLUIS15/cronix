@@ -40,6 +40,7 @@ Todo agente de IA o desarrollador que vaya a tocar código DEBE leer este índic
 | **Autenticación** | [modulo-auth/manifest.md](./modulo-auth/manifest.md) | 🟢 85% | `lib/auth/`, `middleware.ts` |
 | **Dashboard UI** | [modulo-dashboard/manifest.md](./modulo-dashboard/manifest.md) | 🟢 90% | `app/[locale]/dashboard/`, `components/layout/`, `components/dashboard/` |
 | **Agente de Voz** | [modulo-voice-agent/manifest.md](./modulo-voice-agent/manifest.md) | 🟢 92% | `supabase/functions/voice-worker/` |
+| **Observabilidad de Agentes** | [modulo-observability/manifest.md](./modulo-observability/manifest.md) | 🟡 70% | `supabase/functions/_shared/observability/`, `_shared/sentry.ts`, `app/[locale]/dashboard/observability/` |
 
 ---
 
@@ -61,7 +62,9 @@ docs/specs/
 │   └── manifest.md
 ├── modulo-voice-agent/
 │   └── manifest.md
-└── modulo-dashboard/
+├── modulo-dashboard/
+│   └── manifest.md
+└── modulo-observability/
     └── manifest.md
 ```
 
@@ -78,6 +81,7 @@ docs/specs/
 | Autenticación o middleware | `constitution.md` §4 + `modulo-auth` |
 | El Voice Agent (`voice-worker/`) | `constitution.md` §3 + `modulo-voice-agent` |
 | El Dashboard (`app/[locale]/dashboard/`) | `constitution.md` §4 + `modulo-dashboard` |
+| Trazas, captura de errores o alertas de agentes IA | `constitution.md` §3, §6 + `modulo-observability` |
 | Cualquier Edge Function | `constitution.md` §3 (void/waitUntil), §5 (QStash), §6 (DLQ) |
 | Cualquier query a DB | `constitution.md` §4 (business_id obligatorio) |
 
@@ -97,6 +101,7 @@ docs/specs/
 
 | Fecha | Cambio |
 |---|---|
+| 2026-06-15 | Nuevo spec: **modulo-observability** (trazas dual-sink, captura Sentry en voice-worker desplegada, dashboard pasivo, y contrato 🔴 del Paso 2: alerta de umbral sobre `ai_traces`). modulo-voice-agent: documentadas como normativas §3 (parseDateExpression prefer), §4 (getServices fast path), AC-6 (nearest), §8 (coerceToolArgs). |
 | 2026-06-09 | Creación del INDEX.md. Constitution v3 + Manifest WhatsApp v3. Nuevos specs: notificaciones, citas-core, pagos, auth. |
 | 2026-06-09 | Nuevos specs: modulo-voice-agent (Voice Worker) y modulo-dashboard (Dashboard UI). Actualización de cobertura al 🟢. |
 | 2026-06-12 | modulo-voice-agent §8: capa antialucinación (frame corpus, mention guards por token, filtro de args declarados, write-guard en delete_client, invariantes de available-slots/delete_client/smart_schedule, códigos GUARD_REJECTED). |
