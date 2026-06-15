@@ -299,7 +299,7 @@ Each layer has its file, verifiable lines and associated test:
 
 ### 7.2 Total fast-paths without LLM
 
-`supabase/functions/voice-worker/capabilities/_shared/registry.ts`. Every capability has a regex/heuristic detector. If it fires, the tool runs directly bypassing the LLM. 9 capabilities documented in `docs/architecture/internals/VOICE_CAPABILITY_REGISTRY.md`.
+`supabase/functions/voice-worker/capabilities/_shared/registry.ts`. Every capability has a regex/heuristic detector. If it fires, the tool runs directly bypassing the LLM. 12 capabilities registered, all with `bypassLLM: true` (see `docs/architecture/internals/VOICE_CAPABILITY_REGISTRY.md`).
 
 Example (`capabilities/list-appointments/fast-path.ts`): detects "qué tengo mañana", "agenda de hoy", "qué citas tengo el sábado" → runs `get_appointments_by_date` directly with the date resolved deterministically.
 

@@ -64,7 +64,7 @@ Cronix ataca los 5 simultáneamente.
 | PWA | `@ducanh2912/next-pwa` (custom SW) | Instalable + offline |
 | Push | Web Push + VAPID | Notificaciones nativas |
 | Observabilidad | Sentry · Axiom · Vercel Logs · `ai_traces` propio | Errores + métricas + trazas LLM |
-| Testing | Vitest · Playwright · React Testing Library · MSW · **pgTAP** | **1,127 tests unitarios** (94 files) · **16 specs E2E** (Playwright) · **127 asserts pgTAP** (9+32+86) · integración Supabase local · + tests Deno de Edge Functions |
+| Testing | Vitest · Playwright · React Testing Library · MSW · **pgTAP** | **1.410 tests unitarios** (118 files) · **16 specs E2E** (Playwright) · **138 asserts pgTAP** (9+43+86) · integración Supabase local (7 archivos) · + tests Deno de Edge Functions |
 | Quality gates | ESLint · Husky · lint-staged · pre-push (lint+tsc+test+audit) | No bypass |
 
 ---
@@ -141,8 +141,9 @@ Cronix ataca los 5 simultáneamente.
 | Training exporter | `lib/ai/training/` + `_shared/training/` + `supabase/functions/export-ai-traces/` | `__tests__/ai/training/` |
 | PayPal | `lib/payments/paypal.ts` + `app/api/webhooks/paypal/` + RPC `fn_finalize_paypal_payment` | `__tests__/actions/` + `tests/e2e/payment-flow.spec.ts` |
 | NOWPayments | `lib/payments/nowpayments.ts` + `app/api/webhooks/nowpayments/` + `app/api/queue/process-saas-payment/` | `lib/payments/nowpayments.test.ts` |
-| Referidos | `lib/referrals/rewards.ts` + `applyReferralBonus()` | `__tests__/components/referral-client.test.tsx` |
+| Referidos | RPC `fn_apply_referral_bonus` (llamada desde `fn_finalize_paypal_payment`) + `lib/referrals/rewards.ts` (UI) | `__tests__/components/referral-client.test.tsx` |
 | Notificaciones | `lib/hooks/use-in-app-notifications.ts` + tabla `notifications` | components tests |
+| Reenganche de clientes (win-back) | `lib/domain/use-cases/retention/` (`GetEligibleClientsUseCase`, `ProcessRetentionUseCase`) + `app/api/cron/retention/` + opt-out en `process-whatsapp/retention-optout.ts` | tests de use-cases + `__tests__/retention-optout.test.ts` |
 | Repositorios | `lib/repositories/Supabase*Repository.ts` | `lib/repositories/__tests__/` |
 | Use cases | `lib/domain/use-cases/` | `__tests__/domain/use-cases/` |
 
@@ -217,9 +218,9 @@ cronix/
 │   │   ├── push-notify/               ← Web Push VAPID
 │   │   ├── embed-text/                ← Supabase.ai.Session('gte-small')
 │   │   └── export-ai-traces/          ← cron 03:00 UTC
-│   └── migrations/                    ← 77 migraciones
+│   └── migrations/                    ← 85 migraciones
 │
-├── __tests__/                         ← 94 unit test files (components, auth, api, ai, actions, validations, use-cases, …)
+├── __tests__/                         ← 118 unit test files (components, auth, api, ai, actions, validations, use-cases, …)
 ├── tests/
 │   ├── e2e/                           ← 16 Playwright specs (auth, dashboard, business flows)
 │   └── integration/                   ← 7 Vitest files (Supabase local)
@@ -236,7 +237,7 @@ cronix/
 │   │   ├── PASSKEY_WEBAUTHN_IMPLEMENTATION.md
 │   │   ├── WEB_PUSH_STANDARDS_DEEP_DIVE.md
 │   │   ├── UX_ENGINEERING.md
-│   │   └── adr/                       ← 0001..0004 ADRs
+│   │   └── adr/                       ← 0001..0008 ADRs
 │   ├── operations/
 │   │   ├── CI_CD_GATEKEEPER.md
 │   │   ├── DEPRECATED_APIS.md
@@ -244,7 +245,8 @@ cronix/
 │   ├── api/ASSISTANT_TOOLS.md
 │   ├── requirements/REQUIREMENTS_SPECIFICATION.md
 │   ├── security/{SECURITY_AND_RATE_LIMITS,dependency-policy}.md
-│   └── TESTING.md
+│   ├── internal/TESTING.md
+│   └── specs/                         ← Spec-Driven Development: constitution.md + manifest.md por módulo
 │
 ├── CHANGELOG.md
 └── README.md
@@ -286,24 +288,24 @@ npm run dev                # Next.js + Turbopack
 npm run build              # Build producción
 npm run lint               # ESLint
 npm run typecheck          # tsc --noEmit
-npm test                   # Vitest unit (1,127 tests, 94 files)
+npm test                   # Vitest unit (1.410 tests, 118 files)
 npm run test:integration   # Integration vs Supabase local (7 archivos)
 npm run test:e2e           # Playwright (16 specs)
 npm run test:e2e:smoke     # Suite reducida
 npm run test:coverage      # Coverage v8
-npx supabase test db       # pgTAP: database tests (127 asserts: RLS + funciones + alertas)
+npx supabase test db       # pgTAP: database tests (138 asserts: RLS + funciones + alertas)
 npm run seed:intents       # Regenerar embeddings de intents
 ```
 
-### Testing — 1,127 unit (Vitest) + 16 E2E (Playwright) + 127 pgTAP
+### Testing — 1.410 unit (Vitest) + 16 E2E (Playwright) + 138 pgTAP
 
-Vea [`docs/TESTING.md`](./docs/TESTING.md) para descripción completa.
+Vea [`docs/internal/TESTING.md`](./docs/internal/TESTING.md) para descripción completa.
 
-**pgTAP (PostgreSQL Testing) — 127 asserts:**
+**pgTAP (PostgreSQL Testing) — 138 asserts:**
 - `docs/testing/PGTAP.md` — Qué es pgTAP, por qué y cuándo usarlo
 - `docs/testing/PGTAP_EXAMPLES.md` — ejemplos concretos (RLS, pagos, rate-limiting)
 - `supabase/tests/rls_policies.test.sql` — 86 asserts de Row-Level Security
-- `supabase/tests/critical_functions.test.sql` — 32 asserts de funciones RPC críticas
+- `supabase/tests/critical_functions.test.sql` — 43 asserts de funciones RPC críticas
 - `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente
 
 Ejecutar: `npx supabase test db`
@@ -413,10 +415,10 @@ Pipeline<T>
   .run(initial) → { context, results }  ← ejecuta
 ```
 
-**WhatsApp** (message-handler.ts: 337→281 líneas):
+**WhatsApp** (message-handler.ts: refactor original 337→281 líneas; hoy 296 tras nuevas capacidades):
   fetch-context → run-agent → send-response → log-interaction
 
-**Voice** (agent.ts: 506→226 líneas):
+**Voice** (agent.ts: refactor original 506→226 líneas; hoy 284 tras nuevas capacidades):
   llm-loop → build-output
 
 Propiedades: tipado genérico, merge monotónico de contexto, parada en error, 21 tests (unit + property-based con fast-check + load).
@@ -426,7 +428,7 @@ Propiedades: tipado genérico, merge monotónico de contexto, parada en error, 2
 ## Patrones anti-alucinación — 10 mecanismos verificables
 
 1. Corpus mention guards (servicio/cliente/fecha/hora deben rastrearse a algo que el usuario dijo).
-2. Fast-paths sin LLM (9 capabilities en `voice-worker/capabilities/`).
+2. Fast-paths sin LLM (12 capabilities en `voice-worker/capabilities/`, todas con `bypassLLM: true`).
 3. Date guard determinista (`detectTemporalIntent` en `voice-pipeline.ts`).
 4. Frame-cutoff del corpus (`voice-worker/capabilities/schedule/tool.ts`).
 5. Per-turn fingerprint dedup `(tool + sorted args)`.
@@ -434,7 +436,7 @@ Propiedades: tipado genérico, merge monotónico de contexto, parada en error, 2
 7. Confirmation gate 2-turn (`confirmation-gate.ts`).
 8. Embedded `<function>` recovery (`process-whatsapp/ai-agent.ts`).
 9. Router semántico (9 intents, threshold 0.78).
-10. Constitutional reviewer (Groq 8B, rubric v1, fail-open).
+10. Constitutional reviewer (Groq 8B, rubric v4, fail-open salvo `delete_client` que escala a hard-block).
 
 Detalle: [`docs/architecture/AI_SYSTEM.md`](./docs/architecture/AI_SYSTEM.md).
 
@@ -448,7 +450,7 @@ Detalle: [`docs/architecture/AI_SYSTEM.md`](./docs/architecture/AI_SYSTEM.md).
 | **NOWPayments (cripto)** | `/api/webhooks/nowpayments` → QStash → `/api/queue/process-saas-payment` | Status-based + `np_invoice_id` único |
 | **Manual (Pago Móvil VE + Binance)** | n/a | Aprobación admin |
 
-`applyReferralBonus` dispara solo al primer pago `finished` del referido → +30 días al referrer.
+`fn_apply_referral_bonus` (RPC, invocada desde `fn_finalize_paypal_payment`) dispara solo al primer pago `finished` del referido → +30 días al referrer.
 
 Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
 
@@ -492,7 +494,7 @@ Detalle: [`docs/architecture/PAYMENTS.md`](./docs/architecture/PAYMENTS.md).
   - **0008: Import maps sobre Turborepo**
 - [`docs/operations/CI_CD_GATEKEEPER.md`](./docs/operations/CI_CD_GATEKEEPER.md) — gates pre-commit/pre-push.
 - [`docs/security/SECURITY_AND_RATE_LIMITS.md`](./docs/security/SECURITY_AND_RATE_LIMITS.md) + [`dependency-policy.md`](./docs/security/dependency-policy.md).
-- [`docs/TESTING.md`](./docs/TESTING.md) — suite, scripts, tests críticos.
+- [`docs/internal/TESTING.md`](./docs/internal/TESTING.md) — suite, scripts, tests críticos.
 
 ---
 

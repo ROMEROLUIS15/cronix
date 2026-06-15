@@ -38,7 +38,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 ## 3. Las 10 capas anti-alucinación
 
 1. **Corpus mention guards** — antes de cualquier escritura, cada slot (servicio/cliente/fecha/hora) debe rastrearse a algo que el usuario dijo este turno (`nameMentionedInCorpus`/`timeMentionedInCorpus`/`dateMentionedInCorpus`). Si el modelo inventó un nombre o servicio, la capability se niega (`voice-worker/capabilities/schedule/tool.ts`).
-2. **Fast-paths totales sin LLM** — `voice-worker/capabilities/_shared/registry.ts`. 9 capabilities con detector + tool + (opcional) bypass de síntesis.
+2. **Fast-paths totales sin LLM** — `voice-worker/capabilities/_shared/registry.ts`. 12 capabilities con detector + tool + (opcional) bypass de síntesis, todas con `bypassLLM: true`.
 3. **Date guard determinista** — si el usuario dijo "hoy / mañana / pasado mañana", la fecha se sobrescribe antes de ejecutar el tool. `detectTemporalIntent()` se llama en `voice-worker/agent.ts` y el override se aplica en `voice-pipeline.ts:applyDateOverride()` por cada `DATE_TOOLS` call.
 4. **Frame-cutoff corpus** — corta el historial en el último turno asistencial **terminal** (éxito `Listo.…`, error definitivo `No encontré…`, etc.) para que tokens de intentos viejos no contaminen los guards, sin truncar la recolección multi-turno (`voice-worker/core/conversation/frame.ts`).
 5. **Per-turn fingerprint dedup** — `Set<toolName::sortedArgsJSON>`. Si el modelo repite la misma llamada, se rechaza con un mensaje al modelo y se rompe el loop.
@@ -46,7 +46,7 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 7. **Confirmation gate 2-turn (WA)** — el array de tools llega vacío al LLM hasta que el cliente afirma una pregunta de confirmación.
 8. **Embedded `<function>` recovery (WA)** — texto fugado `<function=name>{...}</function>` se promueve a `tool_calls[]` real con validación estricta.
 9. **Router semántico** — 9 intents con embeddings precalculados, threshold 0.78. Sirve para enriquecer prompts y para la afirmación del gate.
-10. **Constitutional reviewer (semántico)** — Groq 8B emite veredicto `allow|block|warn` con códigos `TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`. Fail-open con timeout 1500ms.
+10. **Constitutional reviewer (semántico, rubric v4)** — Groq 8B emite veredicto `allow|block|warn` con códigos `TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`. Fail-open con timeout 1500ms; el hard-block está acotado a `delete_client`.
 
 ## 4. Booking — 2 canales IA + dashboard manual
 

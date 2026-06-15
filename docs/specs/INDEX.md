@@ -101,6 +101,7 @@ docs/specs/
 
 | Fecha | Cambio |
 |---|---|
+| 2026-06-15 | constitution.md §7 (nuevo): "Documentación y Trazabilidad" — toda tarea de código cierra actualizando el manifest/spec afectado (y este Historial si es relevante para el sistema). Auditoría de honestidad doc↔código en README, AI_SYSTEM.md, TESTING.md, TECHNICAL_DOCUMENTATION(.md/_ES.md) y `.env.local.example` (tests 1.410/118 archivos, pgTAP 138 asserts, 85 migraciones, referidos vía RPC `fn_apply_referral_bonus`, fila Retención/win-back, capabilities 9→12, reviewer rubric v4 + hard-block en `delete_client`). |
 | 2026-06-15 | Nuevo spec: **modulo-observability** (trazas dual-sink, captura Sentry en voice-worker desplegada, dashboard pasivo, y contrato 🔴 del Paso 2: alerta de umbral sobre `ai_traces`). modulo-voice-agent: documentadas como normativas §3 (parseDateExpression prefer), §4 (getServices fast path), AC-6 (nearest), §8 (coerceToolArgs). |
 | 2026-06-09 | Creación del INDEX.md. Constitution v3 + Manifest WhatsApp v3. Nuevos specs: notificaciones, citas-core, pagos, auth. |
 | 2026-06-09 | Nuevos specs: modulo-voice-agent (Voice Worker) y modulo-dashboard (Dashboard UI). Actualización de cobertura al 🟢. |

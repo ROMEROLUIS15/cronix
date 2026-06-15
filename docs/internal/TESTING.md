@@ -1,18 +1,18 @@
 # Testing — Cronix
 
-> **Suite verificada: 1,127 unit (Vitest, 94 files) + 16 specs E2E (Playwright) + 127 asserts pgTAP, mas integración Supabase local y tests Deno de Edge Functions**
+> **Suite verificada: 1.410 unit (Vitest, 118 files) + 16 specs E2E (Playwright) + 138 asserts pgTAP, mas integración Supabase local y tests Deno de Edge Functions**
 
 ## 1. Suite Overview
 
 | Tipo | Framework | Ubicación | Tests | Archivos | Propósito |
 |---|---|---|---|---|---|
-| **Unit Tests** | Vitest + jsdom + RTL | `__tests__/`, `lib/**/__tests__/` | 1,127 | 94 | Lógica, componentes, utilidades, AI |
+| **Unit Tests** | Vitest + jsdom + RTL | `__tests__/`, `lib/**/__tests__/` | 1.410 | 118 | Lógica, componentes, utilidades, AI |
 | **E2E Tests** | Playwright | `tests/e2e/` | — | 16 specs | Flujos de usuario end-to-end |
 | **Integration Tests** | Vitest + Supabase local | `tests/integration/` | — | 7 | Flujos con datos reales (RLS, multi-tenant) |
-| **pgTAP Tests** | SQL + TAP | `supabase/tests/` | 127 | 3 | RLS policies, funciones RPC, alertas de IA |
+| **pgTAP Tests** | SQL + TAP | `supabase/tests/` | 138 | 3 | RLS policies, funciones RPC, alertas de IA |
 | **Voice-worker unit** | Vitest (Deno-style) | `supabase/functions/voice-worker/**/__tests__/` | 50+ | 5 | Capacidades de asistente de voz |
 
-**Reproducible**: 1,127 unit (Vitest) + 16 specs E2E (Playwright) + 127 asserts pgTAP. (+ integración Supabase local y tests Deno de Edge Functions.)
+**Reproducible**: 1.410 unit (Vitest) + 16 specs E2E (Playwright) + 138 asserts pgTAP. (+ integración Supabase local y tests Deno de Edge Functions.)
 
 ## 1.1 Desglose por dominio
 
@@ -27,14 +27,14 @@
 | **Validaciones (Zod)** | 5 | — | — | 40+ | 5 |
 | **API Routes** | 13 | — | — | 97 | 13 |
 | **Otros (utils, middleware, etc.)** | 20+ | 8 | 3 | 30+ | 30 |
-| **Database (pgTAP)** | — | — | — | 127 | 3 |
-| **TOTAL** | 1,127 | 16 specs | 7 files | 127 pgTAP | **94** |
+| **Database (pgTAP)** | — | — | — | 138 | 3 |
+| **TOTAL** | 1.410 | 16 specs | 7 files | 138 pgTAP | **118** |
 
 ## 2. Scripts
 
 ```bash
 # Unit Tests (Vitest)
-npm test                  # vitest run (1,127 unit tests, 94 files)
+npm test                  # vitest run (1.410 unit tests, 118 files)
 npm run test:watch        # vitest watch (modo desarrollo)
 npm run test:ui           # vitest UI (interfaz visual)
 npm run test:coverage     # v8 coverage report
@@ -48,7 +48,7 @@ npm run test:e2e:smoke    # playwright project=smoke (suite rápida)
 npm run e2e:setup         # tsx scripts/setup-e2e-data.ts (seed datos E2E)
 
 # pgTAP Tests (PostgreSQL native, requiere Supabase local)
-npx supabase test db      # Ejecuta todos los pgTAP (127 asserts, ~0.07s)
+npx supabase test db      # Ejecuta todos los pgTAP (138 asserts, ~0.07s)
 npx supabase test db --debug  # Debug mode con salida detallada
 
 # Workflows completos
@@ -168,7 +168,7 @@ npm test && npm run test:integration && npm run test:e2e && npx supabase test db
 
 **Archivos:**
 - `supabase/tests/rls_policies.test.sql` — 86 asserts validando Row-Level Security
-- `supabase/tests/critical_functions.test.sql` — 32 asserts validando funciones RPC críticas
+- `supabase/tests/critical_functions.test.sql` — 43 asserts validando funciones RPC críticas
 - `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente de IA
 
 ### 4.1 RLS Policies (86 asserts)
@@ -191,7 +191,7 @@ Valida que **multi-tenant isolation** funcione a nivel de base de datos:
 - INSERT/UPDATE policies en `notification_subscriptions` validan `business_id` directamente desde `users` table (no confía en contexto enviado)
 - Todas las políticas SELECT usan `business_id = (SELECT business_id FROM users WHERE id = auth.uid())`
 
-### 4.2 Critical Business Functions (32 asserts)
+### 4.2 Critical Business Functions (43 asserts)
 
 Valida lógica de negocio que **debe ser exacta y confiable**:
 
@@ -224,8 +224,9 @@ npx supabase test db
 # Esperado:
 # /Users/.../rls_policies.test.sql ........ ok
 # /Users/.../critical_functions.test.sql .. ok
+# /Users/.../ai_agent_alerts.test.sql ..... ok
 # All tests successful.
-# Files=2, Tests=73, Result: PASS
+# Files=3, Tests=138, Result: PASS
 ```
 
 ---
@@ -274,9 +275,9 @@ npm run test:coverage
 | `lib/ai/supervisor/` (parity) | 100% | 100% | ✅ |
 
 ### Métricas de ejecución
-- **Total reproducible**: 1,127 unit (Vitest) + 16 specs E2E + 127 asserts pgTAP
-- **Execution time**: ~36 segundos (Vitest) + ~0.07s (pgTAP)
-- **Test files**: 94 unit (Vitest) + 3 pgTAP + tests Deno (voice-worker)
+- **Total reproducible**: 1.410 unit (Vitest) + 16 specs E2E + 138 asserts pgTAP
+- **Execution time**: ~35 segundos (Vitest) + ~0.07s (pgTAP)
+- **Test files**: 118 unit (Vitest) + 3 pgTAP + tests Deno (voice-worker)
 - **Passing rate**: 100%
 - **Flakes**: 0
 - **Average per test**: ~31ms (Node.js), ~1ms (pgTAP)
@@ -284,12 +285,12 @@ npm run test:coverage
 ### Desglose por tipo
 | Tipo | Tests | Archivos | Tiempo |
 |---|---|---|---|
-| Unit (Vitest) | 1,127 | 94 | ~36s |
+| Unit (Vitest) | 1.410 | 118 | ~35s |
 | E2E (Playwright) | 16 specs | 16 | ~20-30s |
 | Integration (Vitest) | (Supabase local) | 7 | ~8-10s |
-| pgTAP (SQL) | 127 asserts | 3 | ~0.07s |
+| pgTAP (SQL) | 138 asserts | 3 | ~0.07s |
 | Voice-worker (Deno) | tests Deno | — | — |
-| **TOTAL reproducible** | **1,127 unit + 127 pgTAP** | **94** | **~60-70s** |
+| **TOTAL reproducible** | **1.410 unit + 138 pgTAP** | **118** | **~60-70s** |
 
 ## 8. Mantenimiento & Próximos pasos
 
