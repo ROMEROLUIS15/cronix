@@ -30,11 +30,16 @@ import { loadSession, saveSession } from './core/session.ts'
 import { buildUserCorpus }       from './core/conversation/frame.ts'
 import { localToUTC }            from './core/time-format.ts'
 import { createTracer, shortHash } from '../_shared/observability/index.ts'
+import { initSentry, captureException, setSentryTag, flushSentry } from '../_shared/sentry.ts'
 import type { TraceOutcome }     from '../_shared/observability/contracts.ts'
 import type { ToolContext }      from './core/tool-context.ts'
 import type {
   AgentInput, BusinessContext, UserRole, VoiceWorkerResponse,
 } from './types.ts'
+
+// Edge-function-wide Sentry init (no-op if SENTRY_DSN is unset). Cached per
+// cold start by Deno's module cache — runs once, not per request.
+initSentry('voice-worker')
 
 // ── CORS ───────────────────────────────────────────────────────────────────
 
@@ -261,6 +266,8 @@ async function handleRequest(req: Request): Promise<Response> {
   let supabase
   try { supabase = getAdminClient() } catch (err) {
     console.error('[VOICE-WORKER] Supabase client init failed', err)
+    captureException(err, { stage: 'supabase_init' })
+    await flushSentry()
     return jsonResponse({ error: 'Servidor no configurado' }, 500)
   }
 
@@ -372,6 +379,8 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   } catch (err) {
     console.error('[VOICE-WORKER] Payload parse or context load failed', err)
+    captureException(err, { stage: 'payload_or_context', businessId: userCtx.businessId })
+    await flushSentry()
     return jsonResponse({ error: 'Payload inválido o error de contexto' }, 400)
   }
 
@@ -411,7 +420,13 @@ async function handleRequest(req: Request): Promise<Response> {
   try {
     agentResult = await runAgent(toolCtx, agentInput)
   } catch (err) {
+    // This 500 is otherwise silent — the voice agent goes mute and nobody is
+    // notified (the only trace lands in ai_traces as LLM_EXCEPTION). Push it to
+    // Sentry so a sustained outage (Groq down, expired key) surfaces actively.
     console.error('[VOICE-WORKER] Agent loop failed', err)
+    setSentryTag('business_id', userCtx.businessId)
+    captureException(err, { stage: 'agent_loop', businessId: userCtx.businessId, userId: userCtx.userId })
+    await flushSentry()
     return jsonResponse({ error: 'El asistente falló al procesar tu solicitud. Intenta de nuevo.' }, 500)
   }
 
