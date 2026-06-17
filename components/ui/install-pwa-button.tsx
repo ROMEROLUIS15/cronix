@@ -74,7 +74,7 @@ export function InstallPwaButton() {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold" style={{ color: '#F2F2F2' }}>
-                Instalar en iOS
+                {t('iosTitle')}
               </span>
               <button onClick={() => setShowIosGuide(false)}>
                 <X size={14} style={{ color: '#909098' }} />
@@ -83,15 +83,15 @@ export function InstallPwaButton() {
             <ol className="space-y-1.5 list-none">
               <li className="flex items-start gap-2">
                 <span style={{ color: '#0062FF', fontWeight: 700 }}>1.</span>
-                Toca el ícono de compartir <span style={{ color: '#4D83FF' }}>⬆</span> en Safari
+                {t.rich('iosShareStep', { icon: () => <span style={{ color: '#4D83FF' }}>⬆</span> })}
               </li>
               <li className="flex items-start gap-2">
                 <span style={{ color: '#0062FF', fontWeight: 700 }}>2.</span>
-                Desplázate y toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong>
+                {t.rich('iosScrollStep', { b: (c) => <strong style={{ color: '#F2F2F2' }}>{c}</strong> })}
               </li>
               <li className="flex items-start gap-2">
                 <span style={{ color: '#0062FF', fontWeight: 700 }}>3.</span>
-                Toca <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir&rdquo;</strong> para confirmar
+                {t.rich('iosAddStep', { b: (c) => <strong style={{ color: '#F2F2F2' }}>{c}</strong> })}
               </li>
             </ol>
           </div>

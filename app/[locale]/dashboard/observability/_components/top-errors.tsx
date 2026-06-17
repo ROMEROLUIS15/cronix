@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import type { ErrorBucket } from '../_data/observability-repo'
 
@@ -5,13 +6,15 @@ interface Props {
   errors: ReadonlyArray<ErrorBucket>
 }
 
-export function TopErrors({ errors }: Props) {
+export async function TopErrors({ errors }: Props) {
+  const t = await getTranslations('observability')
+
   if (errors.length === 0) {
     return (
       <Card className="p-6">
-        <CardHeader><CardTitle>Errores más frecuentes</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('topErrorsTitle')}</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Sin errores en las últimas 24 horas.</p>
+          <p className="text-sm text-muted-foreground">{t('topErrorsEmpty')}</p>
         </CardContent>
       </Card>
     )
@@ -21,7 +24,7 @@ export function TopErrors({ errors }: Props) {
 
   return (
     <Card className="p-6">
-      <CardHeader><CardTitle>Errores más frecuentes (24h)</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{t('topErrorsTitlePeriod')}</CardTitle></CardHeader>
       <CardContent>
         <ul className="space-y-3">
           {errors.map((e) => (

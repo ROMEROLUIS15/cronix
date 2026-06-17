@@ -77,7 +77,7 @@ export default async function ClientDetailPage({ params }: Props) {
                 {client.name}
               </h1>
               {isVIP && (
-                <span className="text-brand-600" title="Cliente VIP">
+                <span className="text-brand-600" title={t('vipTitle')}>
                   <Star size={18} fill="currentColor" />
                 </span>
               )}

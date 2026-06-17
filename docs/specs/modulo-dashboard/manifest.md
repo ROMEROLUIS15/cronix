@@ -96,3 +96,17 @@ El dashboard monta un **Floating Action Button (FAB)** de voz (`components/dashb
   - **Loading**: indicador visual mientras se resuelve la data
   - **Empty**: mensaje informativo cuando la lista está vacía
   - **Error**: mensaje de error con opción de reintento cuando falla la fuente de datos
+
+## 7. Internacionalización (i18n) — NORMATIVO
+
+El dashboard es multi-idioma vía `next-intl`. Locales: `es` (fuente/default), `en`, `pt`, `fr`, `de`, `it` (única fuente de verdad: `i18n/routing.ts`). Los mensajes viven en `messages/<locale>.json` (CRLF + 2 espacios).
+
+Reglas (innegociables):
+
+1. **Cero texto hardcoded visible al usuario.** Todo string que ve el dueño/staff (JSX, `title`, `aria-label`, `placeholder`, `alt` no-marca) DEBE resolverse vía `t()` / `t.rich()` / `getTranslations()`. Excepciones permitidas y documentadas: nombres de marca (`Cronix`, `WhatsApp Business`, `Binance Pay ID`, `Pago Móvil`), nombres de plan (`Free`/`Pro`/`Enterprise`), y herramientas internas solo-`platform_admin` (`/dashboard/admin/*`, `components/admin/*`) que se mantienen en inglés a propósito.
+2. **Server components** usan `getTranslations`/`getLocale` (async, `next-intl/server`); **client components** usan `useTranslations` (`next-intl`). El `t` debe declararse en el MISMO componente donde se renderiza (cuidado con sub-componentes y fallbacks de `<Suspense>`).
+3. **Formato locale-aware.** `toLocaleString`/fechas usan el locale activo (`getLocale()`), nunca un locale fijo (`'es-CO'`).
+4. **Paridad de claves obligatoria.** Cada locale expone EXACTAMENTE el mismo set de claves que `es`. Garantizado por `__tests__/i18n/parity.test.ts` (falla en CI ante claves faltantes/sobrantes). Una clave faltante = pantalla en idioma equivocado.
+5. **Sin errores ortográficos** en ningún idioma (revisión nativa por locale).
+
+> Estado: dashboard + auth/público + componentes UI/PWA + páginas legales (`privacy`, `terms`) migrados y verificados (`tsc` limpio, parity test verde, 44 namespaces ×6 locales). Toda la superficie de cara al usuario está internacionalizada; lo único hardcoded restante es marca (`Cronix`, `Free`/`Pro`/`Enterprise`), herramientas internas `platform_admin` (inglés a propósito) y la herramienta de debug `pwa-debug`. Las traducciones legales (privacy/terms) son boilerplate SaaS y conviene una revisión legal por jurisdicción. Revisión nativa de calidad por idioma COMPLETADA (DE→registro `du` unificado; FR→meses Juin/Juil; IT→concordancia de género; PT/EN limpios). Único polish opcional restante: consistencia cosmética `email`/`e-mail` (todos los locales).

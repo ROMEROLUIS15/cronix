@@ -120,7 +120,7 @@ export function ResumenTab({ stats, monthApts = [] }: ResumenTabProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Gráfico 1: Rendimiento por Staff */}
         <div className="card-base">
-          <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>Ingresos por Especialista</h2>
+          <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>{t('revenueBySpecialist')}</h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={staffData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -139,7 +139,7 @@ export function ResumenTab({ stats, monthApts = [] }: ResumenTabProps) {
 
         {/* Gráfico 2: Desglose de Status */}
         <div className="card-base flex flex-col">
-          <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>Tasa de Asistencia (No-Shows)</h2>
+          <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>{t('attendanceRate')}</h2>
           <div className="flex-1 min-h-[256px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -182,7 +182,7 @@ export function ResumenTab({ stats, monthApts = [] }: ResumenTabProps) {
       </div>
 
       <div className="card-base">
-        <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>Acciones rápidas</h2>
+        <h2 className="text-base font-bold mb-4" style={{ color: "#F5F5F5" }}>{t('quickActionsTitle')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {quickActions.map(action => {
             const Icon = action.icon

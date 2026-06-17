@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { Wrench, X, ArrowRight, Sparkles } from 'lucide-react'
 
@@ -15,6 +16,7 @@ interface Props {
  * Falls back to showing the banner if `hasServices` is undefined (backward compat).
  */
 export function ServicesOnboardingBanner({ businessId, hasServices }: Props) {
+  const t = useTranslations('services.onboarding')
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === 'undefined') return true
     return !!localStorage.getItem(`services-banner-${businessId}`)
@@ -36,21 +38,21 @@ export function ServicesOnboardingBanner({ businessId, hasServices }: Props) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-bold text-foreground">Configura tus servicios</h3>
+            <h3 className="text-sm font-bold text-foreground">{t('title')}</h3>
             <span className="flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-100 px-2 py-0.5 rounded-full">
-              <Sparkles size={10} /> Recomendado
+              <Sparkles size={10} /> {t('badge')}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Aún no tienes servicios configurados. Agrégalos para poder crear citas más rápido y llevar un control de precios y tiempos.
+            {t('desc')}
           </p>
           <div className="flex items-center gap-3">
             <Link href="/dashboard/services"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-xl transition-colors">
-              Agregar servicios <ArrowRight size={13} />
+              {t('cta')} <ArrowRight size={13} />
             </Link>
             <button onClick={dismiss} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Lo haré después
+              {t('later')}
             </button>
           </div>
         </div>

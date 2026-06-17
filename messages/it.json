@@ -16,7 +16,7 @@
     "reports": "Report",
     "observability": "IA · Osservabilità",
     "settings": "Impostazioni",
-    "referrals": "Referral",
+    "plans": "Piano & Premi",
     "activeBusiness": "Azienda attiva",
     "defaultCategory": "Servizi",
     "closeMenu": "Chiudi menu",
@@ -111,13 +111,13 @@
       },
       "sessionInactive": "La tua sessione è stata chiusa dopo 30 minuti di inattività. Accedi di nuovo.",
       "sessionExpired": "La tua sessione di 12 ore è scaduta. Accedi di nuovo.",
-      "invalidCredentials": "Email o password errati.",
+      "invalidCredentials": "E-mail o password errati.",
       "lockedOut": "Troppi tentativi falliti. Riprova tra {minutes} min {seconds} sec.",
       "lockedOutExtended": "Account bloccato. Attendi {minutes} min {seconds} sec o recupera la password.",
       "attemptsWarning": "Tentativo {current} di {max}. L'accesso sarà temporaneamente bloccato dopo questo.",
       "tryAgainIn": "Puoi riprovare tra",
       "recoverNow": "Recupera la password ora",
-      "email": "Email",
+      "email": "E-mail",
       "password": "Password",
       "emailPlaceholder": "ciao@tuaattivita.it",
       "passwordPlaceholder": "••••••••",
@@ -141,7 +141,7 @@
       "bizName": "Nome dell'attività",
       "bizCategory": "Tipo di attività",
       "selectCategory": "Seleziona il tuo settore",
-      "email": "Email",
+      "email": "E-mail",
       "password": "Password",
       "confirmPassword": "Conferma password",
       "submit": "Crea account gratuito",
@@ -154,9 +154,9 @@
       "successSubtitle": "Manca solo un passaggio",
       "successStepsTitle": "Cosa fare ora?",
       "successStep1": "Controlla la tua casella di posta",
-      "successStep2": "Apri l'email di conferma di Cronix",
+      "successStep2": "Apri l'e-mail di conferma di Cronix",
       "successStep3": "Clicca sul link per attivare il tuo account",
-      "successSpamNote": "Non vedi l'email? Controlla la cartella spam.",
+      "successSpamNote": "Non vedi l'e-mail? Controlla la cartella spam.",
       "successLoginLink": "Vai all'accesso",
       "benefits": {
         "grow": {
@@ -190,13 +190,13 @@
     },
     "forgotPassword": {
       "title": "Password dimenticata?",
-      "desc": "Inserisci la tua email e ti invieremo un link per reimpostarla.",
-      "email": "Email",
+      "desc": "Inserisci la tua e-mail e ti invieremo un link per reimpostarla.",
+      "email": "E-mail",
       "emailPlaceholder": "ciao@tuaattivita.it",
       "submit": "Invia link",
       "submitting": "Invio...",
       "back": "Torna all'accesso",
-      "successTitle": "Email inviata",
+      "successTitle": "E-mail inviata",
       "successDesc": "Controlla la tua casella di posta e segui le istruzioni.",
       "logoAlt": "Logo Cronix"
     },
@@ -213,8 +213,8 @@
     }
   },
   "validation": {
-    "emailInvalid": "Email non valida",
-    "emailRequired": "L'email è obbligatoria",
+    "emailInvalid": "E-mail non valida",
+    "emailRequired": "L'e-mail è obbligatoria",
     "passwordRequired": "La password è obbligatoria",
     "passwordMin": "La password deve avere almeno 8 caratteri",
     "passwordUppercase": "Deve contenere almeno una lettera maiuscola",
@@ -328,9 +328,18 @@
       "markCompleted": "Segna come completato",
       "cancelApt": "Annulla",
       "editFullApt": "Modifica",
-      "backToDay": "Torna al giorno"
+      "backToDay": "Torna al giorno",
+      "downloadReceipt": "Scarica ricevuta PDF"
     },
-    "moreAppts": "+{count} altri"
+    "moreAppts": "+{count} altri",
+    "actionBar": {
+      "payments": "Pagamenti",
+      "client": "Cliente",
+      "appointment": "Appuntamento"
+    },
+    "revenueBySpecialist": "Ricavi per specialista",
+    "attendanceRate": "Tasso di presenza (no-show)",
+    "quickActionsTitle": "Azioni rapide"
   },
   "appointments": {
     "title": "Nuovo Appuntamento",
@@ -408,7 +417,12 @@
       "connError": {
         "title": "Errore di connessione",
         "retry": "Riprova"
-      }
+      },
+      "newClientBtn": "Nuovo cliente",
+      "voiceAssistantTitle": "Assistente vocale IA",
+      "referralPromo": "Guadagna +10 appuntamenti extra invitando un amico",
+      "loading": "Caricamento...",
+      "needMoreAppointments": "Ti servono più appuntamenti?"
     }
   },
   "clients": {
@@ -418,7 +432,7 @@
     "search": "Cerca cliente...",
     "name": "Nome",
     "phone": "Telefono",
-    "email": "Email",
+    "email": "E-mail",
     "notes": "Note",
     "submit": "Salva cliente",
     "submitting": "Salvataggio...",
@@ -487,14 +501,14 @@
       "personalInfo": "Informazioni personali",
       "fullname": "Nome completo",
       "phone": "Telefono",
-      "email": "Email",
+      "email": "E-mail",
       "tags": "Etichette",
       "selectedTags": "Selezionate:",
       "internalNotes": "Note interne",
       "notesPlaceholder": "Es. Preferisce orario mattutino...",
       "saveClient": "Salva cliente",
       "legacyPhoneTitle": "Numero di telefono legacy",
-      "legacyPhoneDesc": "Questo cliente ha un telefono nel vecchio formato. Sarà aggiornato al formato E.164 alla prossima salvataggio.",
+      "legacyPhoneDesc": "Questo cliente ha un telefono nel vecchio formato. Sarà aggiornato al formato E.164 al prossimo salvataggio.",
       "deleteClient": "Elimina cliente",
       "confirmDelete": "Eliminare questo cliente?",
       "deleting": "Eliminazione...",
@@ -511,14 +525,18 @@
       "noHistory": "Questo cliente non ha ancora appuntamenti registrati.",
       "payment": "Pagato:",
       "owes": "Deve:",
-      "paid": "Pagato"
+      "paid": "Pagato",
+      "vipTitle": "Cliente VIP"
     },
     "select": {
-      "searchPlaceholder": "Cerca per nome o telefono..."
+      "searchPlaceholder": "Cerca per nome o telefono...",
+      "placeholder": "Seleziona un cliente...",
+      "title": "Seleziona un cliente",
+      "noResults": "Nessun cliente trovato"
     },
     "validations": {
       "namePlaceholder": "Es. Mario Rossi",
-      "emailPlaceholder": "email@esempio.com",
+      "emailPlaceholder": "e-mail@esempio.com",
       "tags": {
         "vip": "VIP",
         "frequent": "Frequente",
@@ -597,8 +615,7 @@
       "Tratamiento": "Trattamento",
       "Estética": "Estetica",
       "Salud": "Salute",
-      "Consulta": "Consulta",
-      "Consulenza": "Consulenza",
+      "Consulta": "Consulenza",
       "Entrenamiento": "Allenamento",
       "Otro": "Altro"
     },
@@ -608,6 +625,13 @@
     "actions": {
       "deactivate": "Disattiva",
       "activate": "Attiva"
+    },
+    "onboarding": {
+      "title": "Configura i tuoi servizi",
+      "badge": "Consigliato",
+      "desc": "Non hai ancora servizi configurati. Aggiungili per creare appuntamenti più velocemente e tenere sotto controllo prezzi e tempi.",
+      "cta": "Aggiungi servizi",
+      "later": "Lo farò dopo"
     }
   },
   "finances": {
@@ -690,11 +714,20 @@
       "save": "Salva pagamento"
     },
     "expensesPage": {
-      "searchPlaceholder": "Cerca spesa..."
+      "searchPlaceholder": "Cerca spesa...",
+      "title": "Cronologia spese",
+      "addBtn": "Registra spesa",
+      "loadError": "Impossibile caricare le spese",
+      "countLabel": "{count} spese registrate"
     },
     "transactionsPage": {
-      "searchPlaceholder": "Cerca transazione..."
-    }
+      "searchPlaceholder": "Cerca transazione...",
+      "title": "Cronologia incassi",
+      "addBtn": "Registra incasso",
+      "loadError": "Impossibile caricare gli incassi",
+      "countLabel": "{count} incassi registrati"
+    },
+    "exportPdf": "Esporta PDF"
   },
   "reports": {
     "title": "Report",
@@ -936,32 +969,54 @@
         "successBtn": "Capito",
         "openBinance": "Apri Binance Pay",
         "methods": {
-          "nowpayments": { "label": "Criptovaluta (Automatico)", "subtitle": "USDT sulla rete BSC. Si attiva automaticamente dopo la conferma blockchain (1–3 min).", "badge": "Automatico" },
-          "paypal": { "label": "PayPal", "subtitle": "Paga in modo sicuro con il tuo conto PayPal o carta di credito.", "badge": "" },
-          "pago_movil":     { "label": "Pago Móvil (Venezuela)", "subtitle": "Trasferisci in Bs. al numero registrato. Attivazione manuale entro 24 ore lavorative." },
-          "binance_manual": { "label": "Binance Pay (Manuale)", "subtitle": "Invia USDT con il tuo Pay ID Binance. Attivazione manuale entro 24 ore lavorative." }
+          "nowpayments": {
+            "label": "Criptovaluta (Automatico)",
+            "subtitle": "USDT sulla rete BSC. Si attiva automaticamente dopo la conferma blockchain (1–3 min).",
+            "badge": "Automatico"
+          },
+          "paypal": {
+            "label": "PayPal",
+            "subtitle": "Paga in modo sicuro con il tuo conto PayPal o carta di credito.",
+            "badge": ""
+          },
+          "pago_movil": {
+            "label": "Pago Móvil (Venezuela)",
+            "subtitle": "Trasferisci in Bs. al numero registrato. Attivazione manuale entro 24 ore lavorative."
+          },
+          "binance_manual": {
+            "label": "Binance Pay (Manuale)",
+            "subtitle": "Invia USDT con il tuo Pay ID Binance. Attivazione manuale entro 24 ore lavorative."
+          }
         },
         "pagoMovil": {
           "title": "Dati per Pago Móvil",
-          "bank": "Banca", "phone": "Telefono", "cedula": "Documento", "concept": "Causale",
+          "bank": "Banca",
+          "phone": "Telefono",
+          "cedula": "Documento",
+          "concept": "Causale",
           "refLabel": "Il tuo numero di riferimento Pago Móvil",
-          "refHint": "Il numero di riferimento appare nell'app bancaria dopo l'invio."
+          "refHint": "Il numero di riferimento appare nell'app bancaria dopo l'invio.",
+          "amountToTransfer": "Importo da trasferire",
+          "rateError": "⚠ Impossibile ottenere il tasso BCV. Consulta bcv.org.ve e aggiungi un 30% in più."
         },
         "binance": {
           "title": "Dati per Binance Pay",
-          "payId": "Binance Pay ID", "currency": "Valuta", "currencyValue": "USDT (BEP-20 / BSC)", "exactAmount": "Importo esatto",
+          "payId": "Binance Pay ID",
+          "currency": "Valuta",
+          "currencyValue": "USDT (BEP-20 / BSC)",
+          "exactAmount": "Importo esatto",
           "refLabel": "ID Transazione o le ultime 6 cifre del riferimento",
           "refHint": "Trovalo nella cronologia transazioni di Binance Pay."
-        }
+        },
+        "referencePlaceholder": "es. 93847261"
       }
     }
-
   },
   "profile": {
     "title": "Il Mio Profilo",
     "name": "Nome",
     "lastName": "Cognome",
-    "email": "Email",
+    "email": "E-mail",
     "role": "Ruolo",
     "avatar": "Foto profilo",
     "save": "Salva modifiche",
@@ -1021,7 +1076,7 @@
     "title": "Team",
     "newMember": "Aggiungi membro",
     "name": "Nome",
-    "email": "Email",
+    "email": "E-mail",
     "role": "Ruolo",
     "empty": "Nessun membro del team ancora.",
     "errors": {
@@ -1079,7 +1134,14 @@
     "close": "Chiudi",
     "toastTitle": "Nuova versione",
     "toastDesc": "Un aggiornamento è pronto.",
-    "toastBtn": "Aggiorna"
+    "toastBtn": "Aggiorna",
+    "installTitle": "Installa Cronix",
+    "understood": "Ho capito",
+    "iosTitle": "Installa su iOS",
+    "iosShareStep": "Tocca l'icona di condivisione <icon></icon> in Safari",
+    "iosScrollStep": "Scorri e tocca <b>\"Aggiungi a Home\"</b>",
+    "iosAddStep": "Tocca <b>\"Aggiungi\"</b> per confermare",
+    "androidGuide": "1. Tocca il menu <b>⋮</b> (tre puntini, in alto a destra)<br></br>2. Seleziona <b>\"Installa app\"</b> o <b>\"Aggiungi a Home\"</b><br></br>3. Conferma toccando <b>\"Installa\"</b>"
   },
   "setup": {
     "title": "Configurazione Iniziale",
@@ -1141,7 +1203,12 @@
     "no": "No",
     "savedAs": "Salvato come",
     "selectCountry": "Seleziona paese",
-    "country": "Paese"
+    "country": "Paese",
+    "somethingWrong": "Qualcosa è andato storto",
+    "unexpectedError": "Errore imprevisto. Riprova.",
+    "retry": "Riprova",
+    "selectFromContacts": "Seleziona dai contatti",
+    "importFromContacts": "Importa dalla rubrica"
   },
   "adminPulse": {
     "title": "Pulse",
@@ -1191,7 +1258,8 @@
     "stillThereDesc": "La tua sessione verra chiusa per inattivita. Vuoi mantenerla attiva?",
     "expiringTitle": "Sessione in scadenza",
     "expiringDesc": "La tua sessione raggiungera il limite di 12 ore. Salva il tuo lavoro e accedi di nuovo.",
-    "keepSession": "Mantieni sessione"
+    "keepSession": "Mantieni sessione",
+    "signOut": "Esci"
   },
   "voiceAssistant": {
     "fabTitle": "Assistente Esecutivo IA — Tieni premuto o clicca per parlare",
@@ -1209,7 +1277,9 @@
     "maintenanceMode": "Mi dispiace, il mio sistema vocale è in breve manutenzione. Potresti scrivermi, per favore?",
     "aiMaintenance": "Mi dispiace, il mio cervello IA è in breve manutenzione. Per favore, riprova tra un minuto.",
     "dailyLimitReached": "Mi dispiace, questa attività ha raggiunto il suo limite di elaborazione giornaliero. Per favore, riprova domani o contatta l'amministratore.",
-    "technicalError": "Mi dispiace, ho avuto un problema tecnico nell'elaborazione del tuo messaggio. Per favore, riprova tra un momento."
+    "technicalError": "Mi dispiace, ho avuto un problema tecnico nell'elaborazione del tuo messaggio. Per favore, riprova tra un momento.",
+    "openAria": "Apri l'assistente vocale Luis IA",
+    "dragTitle": "Luis IA — Trascina per spostare"
   },
   "errors": {
     "notFound": "Pagina non trovata",
@@ -1228,7 +1298,7 @@
     "connectionError": "Errore di connessione",
     "duplicatePhone": "Questo numero è già registrato per il cliente \"{name}\". Ogni telefono deve essere unico per attività.",
     "invalidPhone": "Numero di telefono non valido.",
-    "invalidEmail": "Email non valida",
+    "invalidEmail": "E-mail non valida",
     "passwordError": "Errore della password",
     "passwordMismatch": "La nuova password deve essere diversa da quella attuale.",
     "linkGenerationError": "Impossibile generare il link.",
@@ -1265,7 +1335,7 @@
     "errorVerifyingRole": "Impossibile verificare il ruolo dell'utente.",
     "errorCreatingEmployee": "Impossibile creare il dipendente.",
     "errorRegisteringUser": "Impossibile creare l'utente.",
-    "errorUnableChangeEmail": "Errore durante il cambio dell'email: {error}",
+    "errorUnableChangeEmail": "Errore durante il cambio dell'e-mail: {error}",
     "errorUnableChangePassword": "Errore durante il cambio della password: {error}",
     "errorLinkingAccount": "Errore nel collegare il tuo account con l'attività. Prova a accedere di nuovo."
   },
@@ -1335,7 +1405,16 @@
     "newClientsLabel": "Nuovo cliente"
   },
   "passkey": {
-    "verifyError": "Impossibile verificare la biometria. Usa la tua password."
+    "verifyError": "Impossibile verificare la biometria. Usa la tua password.",
+    "setupTitle": "Come attivare l'accesso biometrico",
+    "step1": "Accedi con la tua password o Google",
+    "step2": "Vai al tuo Profilo (menu laterale, in basso a sinistra)",
+    "step3": "Tocca \"Registra impronta / Face ID\"",
+    "waiting": "In attesa della biometria...",
+    "loginBtn": "Accedi con la biometria",
+    "noPasskeyHere": "Non hai la biometria configurata qui.",
+    "howToConfigure": "Come configurarla?",
+    "firstTime": "Prima volta con la biometria?"
   },
   "toasts": {
     "clientAdded": "Cliente aggiunto con successo",
@@ -1397,5 +1476,251 @@
     "planSectionSub": "Confronta i piani e gestisci il tuo abbonamento.",
     "referralSectionTitle": "Programma Referral",
     "referralSectionSub": "Invita altre aziende e sblocca premi esclusivi."
+  },
+  "observability": {
+    "title": "Osservabilità dell'agente IA",
+    "subtitle": "Metriche delle conversazioni dell'agente nelle ultime 24 ore. Dati in tempo reale, anonimizzati tramite hash.",
+    "turns": "Turni (24h)",
+    "turnsSubtitle": "{count} riusciti",
+    "successRate": "Tasso di successo",
+    "successRateSubtitle": "{count} falliti",
+    "tokens": "Tokens (24h)",
+    "tokensSubtitle": "quota giornaliera Groq",
+    "latencyP95": "Latenza p95",
+    "latencyP50Subtitle": "p50 {value}s",
+    "topErrorsTitle": "Errori più frequenti",
+    "topErrorsTitlePeriod": "Errori più frequenti (24h)",
+    "topErrorsEmpty": "Nessun errore nelle ultime 24 ore.",
+    "recentTitle": "Ultimi turni dell'agente",
+    "recentEmpty": "Ancora nessuna conversazione registrata. Quando un cliente parlerà con l'agente, i turni appariranno qui.",
+    "tools": "{count, plural, one {# strumento} other {# strumenti}}",
+    "channelVoice": "Voce",
+    "outcomeSuccess": "successo",
+    "outcomeFailure": "fallito",
+    "outcomeError": "errore",
+    "outcomeRateLimited": "rate limit",
+    "outcomeNoAction": "nessuna azione",
+    "relativeJustNow": "proprio ora",
+    "relativeMinutes": "{mins} min fa",
+    "relativeHours": "{hours} h fa"
+  },
+  "invite": {
+    "badge": "Invito speciale",
+    "invitesYou": "{name} ti invita su",
+    "subtitle": "La piattaforma intelligente per gestire la tua attività. Agenda, clienti e finanze in un unico posto.",
+    "feature1": "Agenda appuntamenti intelligente",
+    "feature2": "Gestione di clienti e servizi",
+    "feature3": "Controllo finanziario in tempo reale",
+    "cta": "Crea un account gratuito",
+    "disclaimer": "Senza carta di credito · Configurazione in 2 minuti"
+  },
+  "privacy": {
+    "title": "Informativa sulla privacy",
+    "lastUpdate": "Ultimo aggiornamento: 25 marzo 2026",
+    "s1Title": "1. Introduzione",
+    "s1Body": "Cronix (\"noi\", \"nostro\" o \"la Piattaforma\") si impegna a proteggere la tua privacy. La presente Informativa sulla privacy spiega come raccogliamo, utilizziamo, divulghiamo e proteggiamo le tue informazioni quando utilizzi la nostra piattaforma di gestione di appuntamenti e servizi.",
+    "s2Title": "2. Informazioni che raccogliamo",
+    "s2Intro": "Raccogliamo informazioni in vari modi:",
+    "s2Items": [
+      {
+        "label": "Informazioni di registrazione:",
+        "text": "Nome, e-mail, numero di telefono, azienda e dati aziendali."
+      },
+      {
+        "label": "Informazioni sugli appuntamenti:",
+        "text": "Dettagli dei clienti, date, orari e servizi prenotati."
+      },
+      {
+        "label": "Informazioni di comunicazione:",
+        "text": "Numeri di telefono per le notifiche WhatsApp."
+      },
+      {
+        "label": "Informazioni di pagamento:",
+        "text": "Dati delle transazioni (elaborati da fornitori di pagamento sicuri)."
+      },
+      {
+        "label": "Dati di utilizzo:",
+        "text": "Azioni sulla piattaforma, pagine visitate, browser, IP e dati del dispositivo."
+      }
+    ],
+    "s3Title": "3. Come utilizziamo le tue informazioni",
+    "s3Intro": "Utilizziamo le informazioni raccolte per:",
+    "s3Items": [
+      "Fornire, mantenere e migliorare la Piattaforma.",
+      "Inviare promemoria degli appuntamenti tramite WhatsApp e altre notifiche.",
+      "Elaborare pagamenti e transazioni.",
+      "Comunicare con te in merito a modifiche, aggiornamenti o incidenti di sicurezza.",
+      "Adempiere a obblighi legali e normativi.",
+      "Analizzare l'utilizzo della Piattaforma per migliorare i servizi."
+    ],
+    "s4Title": "4. Notifiche WhatsApp",
+    "s4Body1": "Cronix utilizza il servizio WhatsApp Cloud API di Meta per inviare promemoria degli appuntamenti e notifiche. Utilizzando la Piattaforma, autorizzi l'invio di questi messaggi al tuo numero di telefono registrato. Puoi rifiutare le notifiche in qualsiasi momento dal tuo profilo.",
+    "s4Body2": "Meta elabora dati come il numero di telefono e i timestamp di consegna. Consulta l'<link>Informativa sulla privacy di WhatsApp</link> per maggiori dettagli.",
+    "s5Title": "5. Archiviazione e sicurezza dei dati",
+    "s5Intro": "Le tue informazioni sono archiviate su server sicuri forniti da Supabase, che soddisfa standard di sicurezza di livello aziendale. Implementiamo:",
+    "s5Items": [
+      "Crittografia dei dati in transito (TLS/SSL).",
+      "Crittografia a riposo per i dati sensibili.",
+      "Autenticazione a due fattori (2FA).",
+      "Controllo degli accessi basato sui ruoli (RBAC).",
+      "Audit dell'accesso ai dati sensibili."
+    ],
+    "s5Outro": "Tuttavia, nessun sistema è sicuro al 100%. Sebbene compiamo sforzi ragionevoli per proteggere le tue informazioni, non possiamo garantire una sicurezza assoluta.",
+    "s6Title": "6. Conservazione dei dati",
+    "s6Body": "Conserviamo le tue informazioni finché il tuo account è attivo. Se richiedi l'eliminazione del tuo account, i dati saranno eliminati entro 30 giorni, salvo che la legge richieda di conservarli più a lungo (es. registri delle transazioni per motivi fiscali).",
+    "s7Title": "7. Condivisione delle informazioni",
+    "s7Intro": "Cronix non vende né noleggia le tue informazioni personali. Condividiamo i dati solo quando necessario per:",
+    "s7Items": [
+      "Fornitori di servizi affidabili (hosting, pagamenti, WhatsApp).",
+      "Adempiere alla legge o difendere diritti legali.",
+      "Altre parti con il tuo consenso esplicito."
+    ],
+    "s8Title": "8. I tuoi diritti sulla privacy",
+    "s8Intro": "Hai il diritto di:",
+    "s8Items": [
+      "Accedere alle tue informazioni personali.",
+      "Rettificare informazioni inesatte.",
+      "Richiedere l'eliminazione dei dati (diritto all'oblio).",
+      "Opporti al trattamento dei tuoi dati.",
+      "Richiedere la portabilità dei dati.",
+      "Revocare il consenso in qualsiasi momento."
+    ],
+    "s8Contact": "Per esercitare questi diritti, contatta: tiendaigmimport@gmail.com",
+    "s9Title": "9. Cookie e tecnologie di tracciamento",
+    "s9Body": "Cronix utilizza i cookie per migliorare l'esperienza dell'utente, mantenere le sessioni autenticate e analizzare l'utilizzo. Puoi disattivare i cookie nel tuo browser, anche se ciò potrebbe influire sulla funzionalità della Piattaforma.",
+    "s10Title": "10. Minori",
+    "s10Body": "Cronix non è rivolta a persone di età inferiore ai 13 anni. Non raccogliamo informazioni dai minori. Se scopriamo di aver raccolto dati di un minore, elimineremo immediatamente tali informazioni.",
+    "s11Title": "11. Modifiche alla presente informativa",
+    "s11Body": "Possiamo aggiornare la presente Informativa sulla privacy in qualsiasi momento. Le modifiche significative saranno notificate via e-mail. L'uso continuato della Piattaforma dopo le modifiche costituisce accettazione della nuova informativa.",
+    "s12Title": "12. Conformità legale",
+    "s12Intro": "Cronix rispetta le normative sulla privacy, tra cui:",
+    "s12Items": [
+      "GDPR (Regolamento generale sulla protezione dei dati)",
+      "CCPA (California Consumer Privacy Act)",
+      "Normative locali applicabili in materia di privacy"
+    ],
+    "s13Title": "13. Contatto",
+    "s13Body": "Se hai domande su questa Informativa sulla privacy o sui tuoi dati personali, contatta:",
+    "s13EmailLabel": "E-mail:",
+    "s13PlatformLabel": "Piattaforma:"
+  },
+  "terms": {
+    "title": "Termini e Condizioni di Servizio",
+    "lastUpdate": "Ultimo aggiornamento: 25 marzo 2026",
+    "s1Title": "1. Accettazione dei termini",
+    "s1Body": "Accedendo e utilizzando Cronix, accetti di rispettare i presenti Termini e Condizioni. Se non sei d'accordo con una qualsiasi parte, non puoi utilizzare la Piattaforma. Ci riserviamo il diritto di aggiornare questi termini in qualsiasi momento.",
+    "s2Title": "2. Descrizione del servizio",
+    "s2Body": "Cronix è una piattaforma SaaS di gestione di appuntamenti e servizi che consente alle aziende di pianificare, confermare e ricordare gli appuntamenti ai clienti tramite notifiche WhatsApp. La Piattaforma include:",
+    "s2Items": [
+      "Gestione del calendario degli appuntamenti.",
+      "Notifiche automatiche tramite WhatsApp.",
+      "Gestione di clienti e servizi.",
+      "Report aziendali e finanziari.",
+      "Autenticazione sicura con biometria (passkey)."
+    ],
+    "s3Title": "3. Idoneità",
+    "s3Intro": "Per utilizzare Cronix devi:",
+    "s3Items": [
+      "Avere almeno 18 anni o essere un'entità legale autorizzata.",
+      "Avere l'autorità di stipulare contratti vincolanti.",
+      "Non essere in un elenco di sanzioni né soggetto a restrizioni di legge.",
+      "Rispettare le leggi sulla privacy nel trattamento dei dati dei clienti."
+    ],
+    "s4Title": "4. Creazione dell'account e responsabilità",
+    "s4Intro": "Creando un account, sei responsabile di:",
+    "s4Items": [
+      "Fornire informazioni accurate e aggiornate.",
+      "Mantenere riservate le credenziali di accesso.",
+      "Comunicarci immediatamente eventuali accessi non autorizzati.",
+      "Rispettare tutte le leggi applicabili durante l'uso della Piattaforma."
+    ],
+    "s4Outro": "Ci riserviamo il diritto di sospendere o eliminare gli account che violano questi termini.",
+    "s5Title": "5. Uso accettabile",
+    "s5Intro": "Non puoi utilizzare Cronix per:",
+    "s5Items": [
+      "Attività illegali o che violano i diritti di terzi.",
+      "Spam, phishing, malware o attacchi informatici.",
+      "Molestie, intimidazioni o furto d'identità.",
+      "Invio di contenuti osceni, diffamatori o discriminatori.",
+      "Violazione dei diritti di proprietà intellettuale.",
+      "Reverse engineering o accesso non autorizzato ai sistemi.",
+      "Violazione della privacy di terzi senza consenso."
+    ],
+    "s6Title": "6. Dati dei clienti",
+    "s6Intro": "Sei il titolare del trattamento dei dati dei tuoi clienti. Sei responsabile di:",
+    "s6Items": [
+      "Ottenere un consenso valido prima di raccogliere i dati dei clienti.",
+      "Informare i clienti sull'uso di WhatsApp per le notifiche.",
+      "Rispettare GDPR, CCPA e le normative locali sulla privacy.",
+      "Mantenere la riservatezza dei dati sensibili.",
+      "Gestire le richieste relative ai diritti sulla privacy dei clienti."
+    ],
+    "s6Outro": "Cronix agisce come responsabile del trattamento dei dati sotto la tua direzione e non è responsabile di come utilizzi o gestisci i dati dei clienti.",
+    "s7Title": "7. Integrazioni di terze parti",
+    "s7Intro": "Cronix integra servizi di terze parti come:",
+    "s7Items": [
+      {
+        "label": "Supabase:",
+        "text": "Archiviazione e autenticazione dei dati."
+      },
+      {
+        "label": "Meta WhatsApp Cloud API:",
+        "text": "Invio di messaggi di notifica."
+      },
+      {
+        "label": "Stripe/Mercado Pago:",
+        "text": "Elaborazione dei pagamenti."
+      }
+    ],
+    "s7Outro": "Non siamo responsabili di questi servizi. Consulta i loro termini e le loro informative sulla privacy prima di utilizzare Cronix.",
+    "s8Title": "8. Limitazione di responsabilità",
+    "s8Intro": "NELLA MISURA MASSIMA CONSENTITA DALLA LEGGE:",
+    "s8Items": [
+      "Cronix è fornito \"così com'è\", senza garanzie di alcun tipo.",
+      "Non siamo responsabili per perdita di dati, interruzione del servizio o danni incidentali.",
+      "La nostra responsabilità massima è pari all'importo pagato nell'ultimo mese.",
+      "Non siamo responsabili per le mancate notifiche dovute a guasti dell'API di WhatsApp o di Meta."
+    ],
+    "s9Title": "9. Proprietà intellettuale",
+    "s9Body1": "Cronix è proprietaria di tutta la tecnologia, il codice, i design, i loghi e i contenuti della Piattaforma. Utilizzando Cronix, ti concediamo una licenza di accesso limitata e non esclusiva.",
+    "s9Body2": "Non puoi copiare, modificare, distribuire o vendere alcun contenuto di Cronix senza autorizzazione scritta.",
+    "s10Title": "10. Prezzi e fatturazione",
+    "s10Intro": "I prezzi sono disponibili nella nostra pagina di abbonamento. Accetti che:",
+    "s10Items": [
+      "I prezzi sono in USD e possono cambiare con un preavviso di 30 giorni.",
+      "La fatturazione avviene mensilmente o annualmente in base al tuo piano.",
+      "Non offriamo rimborsi (salvo che Cronix venga meno a un servizio critico).",
+      "Puoi annullare in qualsiasi momento e perderai l'accesso al termine del periodo."
+    ],
+    "s11Title": "11. Sospensione e cessazione",
+    "s11Intro": "Ci riserviamo il diritto di:",
+    "s11Items": [
+      "Sospendere il tuo account se violi questi termini.",
+      "Cessare i servizi con un preavviso di 30 giorni per qualsiasi motivo.",
+      "Eliminare i dati del tuo account 90 giorni dopo la chiusura."
+    ],
+    "s12Title": "12. Indennizzo",
+    "s12Body": "Accetti di indennizzare e difendere Cronix da qualsiasi reclamo, danno o costo derivante dal tuo uso della Piattaforma, dalla violazione di questi termini o dal mancato rispetto delle leggi applicabili.",
+    "s13Title": "13. Conformità legale",
+    "s13Intro": "Cronix rispetta:",
+    "s13Items": [
+      "GDPR (Regolamento generale sulla protezione dei dati)",
+      "CCPA (California Consumer Privacy Act)",
+      "LGPD (Legge generale sulla protezione dei dati del Brasile)",
+      "Normative sulle telecomunicazioni applicabili a WhatsApp"
+    ],
+    "s14Title": "14. Risoluzione delle controversie",
+    "s14Intro": "Qualsiasi controversia sarà risolta mediante:",
+    "s14Items": [
+      "Negoziazione in buona fede entro 30 giorni.",
+      "Arbitrato vincolante secondo le regole della camera di commercio."
+    ],
+    "s14Outro": "Entrambe le parti rinunciano al diritto al contenzioso giudiziario e al processo con giuria.",
+    "s15Title": "15. Legge applicabile",
+    "s15Body": "I presenti termini sono regolati dalle leggi del paese/stato in cui viene fornito il servizio, senza tenere conto delle norme sui conflitti di legge.",
+    "s16Title": "16. Contatto",
+    "s16Body": "Per domande su questi Termini, contatta:",
+    "s16EmailLabel": "E-mail:",
+    "s16PlatformLabel": "Piattaforma:"
   }
 }

@@ -62,7 +62,7 @@ export function ClientSelect({ clients, value, onChange, required }: ClientSelec
         className="input-base bg-card flex items-center justify-between text-left w-full h-11"
       >
         <span className="truncate" style={{ color: selectedClient ? '#F2F2F2' : '#909098' }}>
-          {selectedClient ? selectedClient.name : 'Selecciona un cliente...'}
+          {selectedClient ? selectedClient.name : t('placeholder')}
         </span>
         <ChevronDown size={16} className="text-muted-foreground flex-shrink-0 ml-2" />
       </button>
@@ -71,7 +71,7 @@ export function ClientSelect({ clients, value, onChange, required }: ClientSelec
       <Modal
         open={isOpen}
         onClose={() => setIsOpen(false)}
-        title="Selecciona un cliente"
+        title={t('title')}
       >
         <div className="flex flex-col h-[60vh] sm:h-[50vh]">
           {/* Search Box */}
@@ -107,7 +107,7 @@ export function ClientSelect({ clients, value, onChange, required }: ClientSelec
           <div className="flex-1 overflow-y-auto pr-2 space-y-2 pb-4">
             {filteredClients.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-sm text-muted-foreground">No se encontraron clientes</p>
+                <p className="text-sm text-muted-foreground">{t('noResults')}</p>
               </div>
             ) : (
               filteredClients.map(client => (

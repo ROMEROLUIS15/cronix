@@ -23,7 +23,7 @@ export default function TransactionsPage() {
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[300px] gap-2">
-        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>No se pudieron cargar los cobros</p>
+        <p className="text-sm font-medium" style={{ color: '#FF3B30' }}>{t('loadError')}</p>
         <p className="text-xs" style={{ color: '#8A8A90' }}>{fetchError}</p>
       </div>
     )
@@ -37,12 +37,12 @@ export default function TransactionsPage() {
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Historial de Cobros</h1>
-            <p className="text-muted-foreground text-sm">{filtered.length} ingresos registrados</p>
+            <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+            <p className="text-muted-foreground text-sm">{t('countLabel', { count: filtered.length })}</p>
           </div>
         </div>
         <Link href="/dashboard/finances/new">
-          <Button leftIcon={<Plus size={16} />}>Registrar Cobro</Button>
+          <Button leftIcon={<Plus size={16} />}>{t('addBtn')}</Button>
         </Link>
       </div>
 

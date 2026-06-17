@@ -122,10 +122,10 @@ function PagoMovilInstructions({ concept, amountBs }: { concept: string; amountB
       <DataRow label={t('cedula')}  value={PAGO_MOVIL_CONFIG.cedula}   copyable />
       <DataRow label={t('concept')} value={concept}                    copyable />
       {amountBs ? (
-        <DataRow label="Monto a transferir" value={`Bs. ${amountBs}`} copyable highlight />
+        <DataRow label={t('amountToTransfer')} value={`Bs. ${amountBs}`} copyable highlight />
       ) : (
         <p className="text-[10px] text-amber-400/80 pt-2 leading-snug">
-          ⚠ No se pudo obtener la tasa BCV. Consulta bcv.org.ve y aplica un 30% adicional.
+          {t('rateError')}
         </p>
       )}
     </div>
@@ -168,6 +168,7 @@ function ReferenceInput({
   id,
   label,
   hint,
+  placeholder,
   value,
   onChange,
   accentColor,
@@ -175,6 +176,7 @@ function ReferenceInput({
   id: string;
   label: string;
   hint: string;
+  placeholder: string;
   value: string;
   onChange: (v: string) => void;
   accentColor: string;
@@ -189,7 +191,7 @@ function ReferenceInput({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Ej: 93847261"
+        placeholder={placeholder}
         maxLength={40}
         className="w-full h-11 px-3 rounded-lg text-sm text-white bg-[#16161A] border border-[#3E3E44] outline-none transition-colors"
         onFocus={(e) => (e.currentTarget.style.borderColor = accentColor)}
@@ -481,6 +483,7 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
                 id="pago-movil-ref"
                 label={t('pagoMovil.refLabel')}
                 hint={t('pagoMovil.refHint')}
+                placeholder={t('referencePlaceholder')}
                 value={flow.reference}
                 onChange={flow.setReference}
                 accentColor="#10B981"
@@ -517,6 +520,7 @@ export function PaymentMethodModal({ plan, onClose, businessTimezone }: Props) {
                 id="binance-ref"
                 label={t('binance.refLabel')}
                 hint={t('binance.refHint')}
+                placeholder={t('referencePlaceholder')}
                 value={flow.reference}
                 onChange={flow.setReference}
                 accentColor="#F59E0B"

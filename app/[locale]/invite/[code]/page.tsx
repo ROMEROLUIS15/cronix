@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getRepos } from "@/lib/repositories";
 import Image from "next/image";
@@ -22,6 +23,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
   }
 
   const inviterName = result.data.name;
+  const t = await getTranslations("invite");
 
   return (
     <div
@@ -68,7 +70,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
         >
           <Gift size={14} style={{ color: "#A855F7" }} />
           <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#A855F7" }}>
-            Invitación especial
+            {t('badge')}
           </span>
         </div>
 
@@ -76,7 +78,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           className="font-black text-white mb-3"
           style={{ fontSize: "clamp(1.75rem, 5vw, 2.5rem)", letterSpacing: "-0.035em", lineHeight: 1.15 }}
         >
-          {inviterName} te invita a{" "}
+          {t('invitesYou', { name: inviterName })}{" "}
           <span
             style={{
               background: "linear-gradient(90deg, #A855F7, #6366F1)",
@@ -88,7 +90,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           </span>
         </h1>
         <p style={{ color: "#6A6A7A", fontSize: "15px", lineHeight: "1.6", marginBottom: "2rem" }}>
-          La plataforma inteligente para gestionar tu negocio. Agenda, clientes y finanzas en un solo lugar.
+          {t('subtitle')}
         </p>
 
         <div
@@ -96,9 +98,9 @@ export default async function InvitePage({ params }: InvitePageProps) {
           style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.2)" }}
         >
           {[
-            { icon: Calendar, text: "Agenda de citas inteligente" },
-            { icon: Star, text: "Gestión de clientes y servicios" },
-            { icon: Zap, text: "Control financiero en tiempo real" },
+            { icon: Calendar, text: t('feature1') },
+            { icon: Star, text: t('feature2') },
+            { icon: Zap, text: t('feature3') },
           ].map(({ icon: Icon, text }) => (
             <div key={text} className="flex items-center gap-3">
               <div
@@ -132,12 +134,12 @@ export default async function InvitePage({ params }: InvitePageProps) {
             boxShadow: "0 0 32px rgba(168,85,247,0.35), 0 4px 16px rgba(99,102,241,0.2)",
           }}
         >
-          Crear cuenta gratis
+          {t('cta')}
           <ArrowRight size={18} />
         </Link>
 
         <p style={{ color: "#3A3A4A", fontSize: "12px", marginTop: "1rem" }}>
-          Sin tarjeta de crédito · Configuración en 2 minutos
+          {t('disclaimer')}
         </p>
       </div>
     </div>

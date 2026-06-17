@@ -20,6 +20,7 @@ interface WarningDialogProps {
 }
 
 function WarningDialog({ title, description, msLeft, onKeep, onSignout }: WarningDialogProps) {
+  const t = useTranslations('sessionTimeout')
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -63,7 +64,7 @@ function WarningDialog({ title, description, msLeft, onKeep, onSignout }: Warnin
               className="py-2.5 rounded-xl text-sm font-bold transition-all duration-200 hover:brightness-110"
               style={{ backgroundColor: '#0062FF', color: '#fff' }}
             >
-              Mantener sesión
+              {t('keepSession')}
             </button>
           )}
           <button
@@ -75,7 +76,7 @@ function WarningDialog({ title, description, msLeft, onKeep, onSignout }: Warnin
               border:          '1px solid rgba(255,59,48,0.2)',
             }}
           >
-            Cerrar sesión
+            {t('signOut')}
           </button>
         </div>
       </div>

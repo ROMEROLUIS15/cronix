@@ -95,7 +95,7 @@ export function PwaInstallFloating() {
               style={{ width: '100%', background: '#161619', borderRadius: '16px 16px 0 0', padding: '24px', boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ margin: 0, color: '#F2F2F2', fontSize: '16px', fontWeight: 700 }}>Instalar Cronix</h3>
+                <h3 style={{ margin: 0, color: '#F2F2F2', fontSize: '16px', fontWeight: 700 }}>{t('installTitle')}</h3>
                 <button onClick={() => setShowFallback(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                   <X size={20} style={{ color: '#909098' }} />
                 </button>
@@ -105,13 +105,14 @@ export function PwaInstallFloating() {
               </p>
               <div style={{ background: 'rgba(56,132,255,0.06)', border: '1px solid rgba(56,132,255,0.15)', borderRadius: '12px', padding: '12px', marginBottom: '20px' }}>
                 <p style={{ color: '#D1D1D6', fontSize: '13px', margin: 0, lineHeight: 1.7 }}>
-                  1. Toca el menú <strong style={{ color: '#F2F2F2' }}>⋮</strong> (tres puntos, arriba a la derecha)<br />
-                  2. Selecciona <strong style={{ color: '#F2F2F2' }}>&ldquo;Instalar aplicación&rdquo;</strong> o <strong style={{ color: '#F2F2F2' }}>&ldquo;Añadir a pantalla de inicio&rdquo;</strong><br />
-                  3. Confirma pulsando <strong style={{ color: '#F2F2F2' }}>&ldquo;Instalar&rdquo;</strong>
+                  {t.rich('androidGuide', {
+                    b: (c) => <strong style={{ color: '#F2F2F2' }}>{c}</strong>,
+                    br: () => <br />,
+                  })}
                 </p>
               </div>
               <button onClick={() => setShowFallback(false)} style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}>
-                Entendido
+                {t('understood')}
               </button>
             </div>
           </div>

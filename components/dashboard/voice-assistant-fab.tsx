@@ -790,10 +790,10 @@ export function VoiceAssistantFab() {
           whileTap={{ scale: 0.9 }}
           type="button"
           data-testid="voice-assistant-fab-mobile"
-          aria-label="Abrir asistente de voz Luis IA"
+          aria-label={t('openAria')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={handleClick}
-          title="Luis IA — Arrastra para mover"
+          title={t('dragTitle')}
           className="relative flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all duration-300"
           style={
             state === 'listening'
@@ -826,7 +826,7 @@ export function VoiceAssistantFab() {
         <button
           type="button"
           data-testid="voice-assistant-fab"
-          aria-label="Abrir asistente de voz Luis IA"
+          aria-label={t('openAria')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={handleClick}
           title={t('fabTitle')}

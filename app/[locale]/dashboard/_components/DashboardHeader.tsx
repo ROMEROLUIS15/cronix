@@ -67,7 +67,7 @@ export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderP
           <Link href="/dashboard/finances/new" className="w-full">
             <button className="w-full h-11 text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
               style={{ background: "rgba(48,209,88,0.1)", color: "#30D158", border: "1px solid rgba(48,209,88,0.15)" }}>
-              <DollarSign size={16} /><span>Pagos</span>
+              <DollarSign size={16} /><span>{t('actionBar.payments')}</span>
             </button>
           </Link>
 
@@ -75,7 +75,7 @@ export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderP
             <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
               style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
               leftIcon={<User size={16} />}>
-              Cliente
+              {t('actionBar.client')}
             </Button>
           </Link>
 
@@ -83,7 +83,7 @@ export function DashboardHeader({ tab, onTabChange, userName }: DashboardHeaderP
             <Button variant="primary" className="w-full h-11 justify-center text-[13px] rounded-xl font-bold"
               style={{ background: "#0062FF", color: "#fff", border: "1px solid #0062FF", boxShadow: "0 4px 12px rgba(0,98,255,0.25)" }}
               leftIcon={<Plus size={16} />}>
-              Cita
+              {t('actionBar.appointment')}
             </Button>
           </Link>
         </div>

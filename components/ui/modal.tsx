@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
 import { Button } from './button'
@@ -23,6 +24,7 @@ const sizeClasses = {
 }
 
 export function Modal({ open, onClose, title, description, children, footer, size = 'md' }: ModalProps) {
+  const t = useTranslations('common')
   const overlayRef = useRef<HTMLDivElement>(null)
 
   // Close on Escape
@@ -74,7 +76,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
             <button
               onClick={onClose}
               className="btn-ghost ml-4 p-2 rounded-lg"
-              aria-label="Cerrar"
+              aria-label={t('close')}
             >
               <X size={18} />
             </button>
@@ -112,10 +114,11 @@ interface ConfirmModalProps {
 export function ConfirmModal({
   open, onClose, onConfirm,
   title, description,
-  confirmLabel = 'Confirmar',
+  confirmLabel,
   confirmVariant = 'primary',
   loading = false,
 }: ConfirmModalProps) {
+  const t = useTranslations('common')
   return (
     <Modal
       open={open}
@@ -125,10 +128,10 @@ export function ConfirmModal({
       footer={
         <div className="flex items-center justify-end gap-3">
           <Button variant="secondary" onClick={onClose} disabled={loading}>
-            Cancelar
+            {t('cancel')}
           </Button>
           <Button variant={confirmVariant} onClick={onConfirm} loading={loading}>
-            {confirmLabel}
+            {confirmLabel ?? t('confirm')}
           </Button>
         </div>
       }

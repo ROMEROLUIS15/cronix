@@ -92,7 +92,7 @@ function NewAppointmentForm() {
         <Link href="/dashboard/clients/new"
           className="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1.5 rounded-xl hover:opacity-80 transition-opacity"
           style={{ background: 'rgba(0,98,255,0.1)', color: '#3884FF', border: '1px solid rgba(0,98,255,0.2)' }}>
-          <UserPlus size={15} /> Nuevo Cliente
+          <UserPlus size={15} /> {t('newClientBtn')}
         </Link>
       </div>
 
@@ -108,7 +108,7 @@ function NewAppointmentForm() {
           disabled={aiParsing}
           variant="secondary"
           className={`h-11 w-11 p-0 rounded-full flex items-center justify-center transition-all ${isListening ? 'animate-pulse bg-red-500/20 border-red-500/50 text-red-500' : ''}`}
-          title="Asistente de Voz AI"
+          title={t('voiceAssistantTitle')}
         >
           {aiParsing ? (
             <Loader2 className="animate-spin text-brand-500" size={20} />
@@ -137,8 +137,8 @@ function NewAppointmentForm() {
                     <UserPlus size={18} />
                   </div>
                   <div>
-                    <p className="text-sm">¿Necesitas más citas?</p>
-                    <p className="text-xs text-white/80">Gana +10 citas extra invitando a un amigo</p>
+                    <p className="text-sm">{t('needMoreAppointments')}</p>
+                    <p className="text-xs text-white/80">{t('referralPromo')}</p>
                   </div>
                 </div>
                 <ArrowLeft size={16} className="rotate-180" />
@@ -410,11 +410,12 @@ function NewAppointmentForm() {
 
 // ── Page export — Suspense required for useSearchParams ───────────────────
 export default function NewAppointmentPage() {
+  const t = useTranslations('appointments.form')
   return (
     <Suspense fallback={
       <div className="flex justify-center items-center py-20" style={{ color: '#909098' }}>
         <Loader2 size={32} className="animate-spin" />
-        <span className="ml-3 font-medium">Cargando...</span>
+        <span className="ml-3 font-medium">{t('loading')}</span>
       </div>
     }>
       <NewAppointmentForm />

@@ -221,8 +221,8 @@ export function PhoneInputFlags({
             type="button"
             onClick={onPickContact}
             disabled={pickContactLoading}
-            aria-label="Seleccionar de contactos"
-            title="Importar desde agenda"
+            aria-label={t('selectFromContacts')}
+            title={t('importFromContacts')}
             className="flex items-center justify-center rounded-xl transition-all flex-shrink-0"
             style={{
               background: '#0062FF',

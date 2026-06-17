@@ -55,7 +55,7 @@ export default function FinancesPage() {
             className="w-full sm:w-auto"
             onClick={() => downloadElementAsPDF('finances-report', 'Reporte_Financiero_Mes.pdf')}
           >
-            Exportar PDF
+            {t('exportPdf')}
           </Button>
           <Link href="/dashboard/finances/expense" className="block flex-1 sm:flex-none">
             <Button variant="secondary" leftIcon={<Receipt size={16} />} className="w-full sm:w-auto">

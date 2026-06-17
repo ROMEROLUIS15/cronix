@@ -235,6 +235,7 @@ export function PwaInstallBanner({ variant = 'hero' }: PwaInstallBannerProps) {
 // ── Shared Fallback Instructions Sheet ────────────────────────────────────────
 
 function FallbackSheet({ instruction, onClose }: { instruction: string; onClose: () => void }) {
+  const t = useTranslations('pwa')
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 50000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
@@ -246,7 +247,7 @@ function FallbackSheet({ instruction, onClose }: { instruction: string; onClose:
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <h3 style={{ margin: 0, color: '#F2F2F2', fontSize: '16px', fontWeight: 700 }}>
-            Instalar Cronix
+            {t('installTitle')}
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             <X size={20} style={{ color: '#909098' }} />
@@ -260,9 +261,10 @@ function FallbackSheet({ instruction, onClose }: { instruction: string; onClose:
         {/* Visual step guide for Android Chrome */}
         <div style={{ background: 'rgba(56,132,255,0.06)', border: '1px solid rgba(56,132,255,0.15)', borderRadius: '12px', padding: '12px', marginBottom: '20px' }}>
           <p style={{ color: '#D1D1D6', fontSize: '13px', margin: 0, lineHeight: 1.7 }}>
-            1. Toca el menú <strong style={{ color: '#F2F2F2' }}>⋮</strong> (tres puntos, arriba a la derecha)<br />
-            2. Selecciona <strong style={{ color: '#F2F2F2' }}>&quot;Instalar aplicación&quot;</strong> o <strong style={{ color: '#F2F2F2' }}>&quot;Añadir a pantalla de inicio&quot;</strong><br />
-            3. Confirma pulsando <strong style={{ color: '#F2F2F2' }}>&quot;Instalar&quot;</strong>
+            {t.rich('androidGuide', {
+              b: (c) => <strong style={{ color: '#F2F2F2' }}>{c}</strong>,
+              br: () => <br />,
+            })}
           </p>
         </div>
 
@@ -270,7 +272,7 @@ function FallbackSheet({ instruction, onClose }: { instruction: string; onClose:
           onClick={onClose}
           style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'linear-gradient(135deg, #3884FF 0%, #1A5FDB 100%)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}
         >
-          Entendido
+          {t('understood')}
         </button>
       </div>
     </div>

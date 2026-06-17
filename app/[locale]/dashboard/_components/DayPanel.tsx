@@ -70,7 +70,7 @@ export function DayPanel({
                 href={`/dashboard/appointments/new?date=${format(selectedDate, "yyyy-MM-dd")}`}
                 className="p-2 rounded-xl transition-colors"
                 style={{ background: "rgba(0,98,255,0.1)", color: "#0062FF" }}
-                title="Nueva cita"
+                title={t('actions.newAppointment')}
               >
                 <Plus size={18} />
               </Link>

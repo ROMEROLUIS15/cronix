@@ -6,6 +6,7 @@
  */
 
 import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedSessionUser, getCachedUserProfile } from '@/lib/supabase/server-cache'
 import { ObservabilityRepo } from './_data/observability-repo'
@@ -26,6 +27,7 @@ export default async function ObservabilityPage() {
   const business = !Array.isArray(profile.businesses) ? profile.businesses : null
   const timezone = (business as { timezone?: string | null } | null)?.timezone ?? 'America/Bogota'
 
+  const t = await getTranslations('observability')
   const supabase = await createClient()
   const repo     = new ObservabilityRepo(supabase)
 
@@ -38,9 +40,9 @@ export default async function ObservabilityPage() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Observabilidad del Agente IA</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
         <p className="text-sm text-muted-foreground">
-          Métricas de las conversaciones del agente en las últimas 24 horas. Datos en tiempo real, anonimizados por hash.
+          {t('subtitle')}
         </p>
       </header>
 

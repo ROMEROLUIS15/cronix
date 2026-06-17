@@ -16,7 +16,7 @@
     "reports": "Berichte",
     "observability": "KI · Observability",
     "settings": "Einstellungen",
-    "referrals": "Empfehlungen",
+    "plans": "Tarif & Prämien",
     "activeBusiness": "Aktives Geschäft",
     "defaultCategory": "Leistungen",
     "closeMenu": "Menü schließen",
@@ -294,7 +294,7 @@
     },
     "welcome": {
       "title": "Willkommen bei Cronix!",
-      "subtitle": "Richten Sie Ihr Unternehmen ein, um loszulegen.",
+      "subtitle": "Richte dein Unternehmen ein, um loszulegen.",
       "button": "Einrichten"
     },
     "status": {
@@ -328,9 +328,18 @@
       "markCompleted": "Als abgeschlossen markieren",
       "cancelApt": "Termin stornieren",
       "editFullApt": "Termin bearbeiten",
-      "backToDay": "Zurück zum Tag"
+      "backToDay": "Zurück zum Tag",
+      "downloadReceipt": "PDF-Beleg herunterladen"
     },
-    "moreAppts": "+{count} mehr"
+    "moreAppts": "+{count} mehr",
+    "actionBar": {
+      "payments": "Zahlungen",
+      "client": "Kunde",
+      "appointment": "Termin"
+    },
+    "revenueBySpecialist": "Umsatz nach Spezialist",
+    "attendanceRate": "Anwesenheitsquote (No-Shows)",
+    "quickActionsTitle": "Schnellaktionen"
   },
   "appointments": {
     "title": "Neuer Termin",
@@ -355,7 +364,7 @@
       "couldNotVerifyNewAvailability": "Konnte neue Zeitverfügbarkeit nicht überprüfen.",
       "couldNotReschedule": "Konnte Termin nicht neu planen: {error}"
     },
-    "subtitle": "Verwalten Sie all Ihre Termine",
+    "subtitle": "Verwalte all deine Termine",
     "newAppointment": "Neuer Termin",
     "searchApt": "Termin suchen...",
     "day": "Tag",
@@ -408,7 +417,12 @@
       "connError": {
         "title": "Verbindungsfehler",
         "retry": "Erneut versuchen"
-      }
+      },
+      "newClientBtn": "Neuer Kunde",
+      "voiceAssistantTitle": "KI-Sprachassistent",
+      "referralPromo": "Verdiene +10 zusätzliche Termine, indem du einen Freund einlädst",
+      "loading": "Wird geladen...",
+      "needMoreAppointments": "Brauchst du mehr Termine?"
     }
   },
   "clients": {
@@ -511,14 +525,18 @@
       "noHistory": "Dieser Kunde hat noch keine registrierten Termine.",
       "payment": "Bezahlt:",
       "owes": "Schuldig:",
-      "paid": "Bezahlt"
+      "paid": "Bezahlt",
+      "vipTitle": "VIP-Kunde"
     },
     "select": {
-      "searchPlaceholder": "Nach Name oder Telefon suchen..."
+      "searchPlaceholder": "Nach Name oder Telefon suchen...",
+      "placeholder": "Kunde auswählen...",
+      "title": "Kunde auswählen",
+      "noResults": "Keine Kunden gefunden"
     },
     "validations": {
       "namePlaceholder": "Z. B. Max Mustermann",
-      "emailPlaceholder": "email@beispiel.com",
+      "emailPlaceholder": "E-Mail@beispiel.com",
       "tags": {
         "vip": "VIP",
         "frequent": "Häufig",
@@ -569,7 +587,7 @@
       "category": "Kategorie",
       "noCategory": "Keine Kategorie",
       "description": "Beschreibung",
-      "descriptionPlaceholder": "Beschreiben Sie den Dienst...",
+      "descriptionPlaceholder": "Beschreibe den Dienst...",
       "duration": "Dauer",
       "durations": {
         "30": "30 Min",
@@ -588,7 +606,7 @@
       "create": "Dienst erstellen"
     },
     "noServices": "Keine Dienste konfiguriert",
-    "createFirst": "Erstellen Sie Ihren ersten Dienst",
+    "createFirst": "Erstelle deinen ersten Dienst",
     "createFirstBtn": "Ersten Dienst erstellen",
     "count": "{count} Dienste",
     "categories": {
@@ -607,6 +625,13 @@
     "actions": {
       "deactivate": "Deaktivieren",
       "activate": "Aktivieren"
+    },
+    "onboarding": {
+      "title": "Richte deine Leistungen ein",
+      "badge": "Empfohlen",
+      "desc": "Du hast noch keine Leistungen eingerichtet. Füge sie hinzu, um Termine schneller zu erstellen und Preise und Zeiten im Blick zu behalten.",
+      "cta": "Leistungen hinzufügen",
+      "later": "Mache ich später"
     }
   },
   "finances": {
@@ -629,7 +654,7 @@
       "loadFailed": "Finanzen konnten nicht geladen werden",
       "savingExpense": "Fehler beim Speichern der Ausgabe",
       "savingPayment": "Fehler beim Speichern der Zahlung",
-      "paymentError": "Fehler beim Registrieren der Zahlung. Versuchen Sie es erneut."
+      "paymentError": "Fehler beim Registrieren der Zahlung. Versuche es erneut."
     },
     "errorLoading": "Fehler beim Laden",
     "subtitle": "Finanzkontrolle",
@@ -689,11 +714,20 @@
       "save": "Zahlung speichern"
     },
     "expensesPage": {
-      "searchPlaceholder": "Ausgabe suchen..."
+      "searchPlaceholder": "Ausgabe suchen...",
+      "title": "Ausgabenverlauf",
+      "addBtn": "Ausgabe erfassen",
+      "loadError": "Ausgaben konnten nicht geladen werden",
+      "countLabel": "{count} Ausgaben erfasst"
     },
     "transactionsPage": {
-      "searchPlaceholder": "Transaktion suchen..."
-    }
+      "searchPlaceholder": "Transaktion suchen...",
+      "title": "Zahlungsverlauf",
+      "addBtn": "Zahlung erfassen",
+      "loadError": "Zahlungen konnten nicht geladen werden",
+      "countLabel": "{count} Zahlungen erfasst"
+    },
+    "exportPdf": "PDF exportieren"
   },
   "reports": {
     "title": "Berichte",
@@ -829,7 +863,7 @@
     "addressPlace": "Straße, Stadt, Land",
     "saveChanges": "Speichern",
     "waLinkTitle": "WhatsApp-Link",
-    "waLinkSub": "Teilen Sie diesen Link mit Kunden",
+    "waLinkSub": "Teile diesen Link mit Kunden",
     "copied": "Kopiert!",
     "copy": "Kopieren",
     "waDescGenerated": "Link generiert",
@@ -844,13 +878,13 @@
     "to": "Bis",
     "saveHoursBtn": "Zeiten speichern",
     "adminNotifTitle": "Admin-Benachrichtigungen",
-    "adminNotifSub": "Alerts über Ihr Unternehmen",
+    "adminNotifSub": "Alerts über dein Unternehmen",
     "waBiz": "WhatsApp Business",
     "waBizSub": "Nummer verbinden",
     "verified": "Verifiziert",
     "linkWa": "WhatsApp verknüpfen",
     "aiAssistantTitle": "KI-Assistent",
-    "aiAssistantSub": "Luis KI hilft Ihnen beim Management",
+    "aiAssistantSub": "Luis KI hilft dir beim Management",
     "fabTitle": "KI-Schwebeknopf",
     "fabSub": "Im Dashboard anzeigen/ausblenden",
     "remindersTitle": "Automatische Erinnerungen",
@@ -891,9 +925,9 @@
       "currentPlanLabel": "Aktueller Plan:",
       "freeLimitNote": "Limit: 20 Kunden, 1 Geschäftsinhaber und 30 Termine/Monat",
       "limitErrors": {
-        "clients": "Sie haben das Limit von {limit} Kunden im kostenlosen Plan erreicht. Upgraden Sie Ihren Plan unter Einstellungen > Abrechnung.",
-        "employees": "Sie haben das Limit von {limit} {limit, plural, one {Mitarbeiter} other {Mitarbeitern}} im {plan}-Plan erreicht. Upgraden Sie Ihren Plan unter Einstellungen > Abrechnung.",
-        "appointments": "Sie haben das Limit von {limit} Terminen/Monat im kostenlosen Plan erreicht. Upgraden Sie Ihren Plan unter Einstellungen > Abrechnung."
+        "clients": "Du hast das Limit von {limit} Kunden im kostenlosen Plan erreicht. Upgrade deinen Plan unter Einstellungen > Abrechnung.",
+        "employees": "Du hast das Limit von {limit} {limit, plural, one {Mitarbeiter} other {Mitarbeitern}} im {plan}-Plan erreicht. Upgrade deinen Plan unter Einstellungen > Abrechnung.",
+        "appointments": "Du hast das Limit von {limit} Terminen/Monat im kostenlosen Plan erreicht. Upgrade deinen Plan unter Einstellungen > Abrechnung."
       },
       "tableFeature": "Funktion",
       "tableClients": "Kunden",
@@ -922,7 +956,7 @@
       "paymentNote": "Zahlung in USDT TRC-20 über NOWPayments. Das Abonnement wird automatisch innerhalb von 1–3 Minuten nach Blockchain-Bestätigung aktiviert. Laufzeit: 30 Tage.",
       "errorInternal": "Interner Fehler. Bitte erneut versuchen.",
       "paymentModal": {
-        "selectMethod": "Wählen Sie Ihre Zahlungsmethode:",
+        "selectMethod": "Wähle deine Zahlungsmethode:",
         "continueBtn": "Weiter",
         "backBtn": "Zurück",
         "sendRef": "Referenz senden",
@@ -930,31 +964,53 @@
         "copied": "Kopiert!",
         "registered": "Zahlung registriert!",
         "successTitle": "Referenz erhalten!",
-        "successMsg": "Ihre Zahlung wird geprüft. Innerhalb von 24 Werktagen wird unser Team die Transaktion verifizieren und Ihren {plan}-Plan aktivieren.",
-        "successNote": "Sie erhalten eine Dashboard-Benachrichtigung, wenn alles fertig ist.",
+        "successMsg": "Deine Zahlung wird geprüft. Innerhalb von 24 Werktagen wird unser Team die Transaktion verifizieren und deinen {plan}-Plan aktivieren.",
+        "successNote": "Du erhältst eine Dashboard-Benachrichtigung, wenn alles fertig ist.",
         "successBtn": "Verstanden",
         "openBinance": "Binance Pay öffnen",
         "methods": {
-          "nowpayments": { "label": "Kryptowährung (Automatisch)", "subtitle": "USDT im BSC-Netzwerk. Automatische Aktivierung nach Blockchain-Bestätigung (1–3 Min.).", "badge": "Automatisch" },
-          "paypal": { "label": "PayPal", "subtitle": "Bezahlen Sie sicher mit Ihrem PayPal-Konto oder Ihrer Kreditkarte.", "badge": "" },
-          "pago_movil":     { "label": "Pago Móvil (Venezuela)", "subtitle": "Überweisen Sie in Bs. an die registrierte Nummer. Manuelle Aktivierung innerhalb von 24 Werktagen." },
-          "binance_manual": { "label": "Binance Pay (Manuell)", "subtitle": "Senden Sie USDT mit Ihrer Binance Pay ID. Manuelle Aktivierung innerhalb von 24 Werktagen." }
+          "nowpayments": {
+            "label": "Kryptowährung (Automatisch)",
+            "subtitle": "USDT im BSC-Netzwerk. Automatische Aktivierung nach Blockchain-Bestätigung (1–3 Min.).",
+            "badge": "Automatisch"
+          },
+          "paypal": {
+            "label": "PayPal",
+            "subtitle": "Bezahle sicher mit deinem PayPal-Konto oder deiner Kreditkarte.",
+            "badge": ""
+          },
+          "pago_movil": {
+            "label": "Pago Móvil (Venezuela)",
+            "subtitle": "Überweise in Bs. an die registrierte Nummer. Manuelle Aktivierung innerhalb von 24 Werktagen."
+          },
+          "binance_manual": {
+            "label": "Binance Pay (Manuell)",
+            "subtitle": "Sende USDT mit deiner Binance Pay ID. Manuelle Aktivierung innerhalb von 24 Werktagen."
+          }
         },
         "pagoMovil": {
           "title": "Pago Móvil Daten",
-          "bank": "Bank", "phone": "Telefon", "cedula": "Ausweis", "concept": "Verwendungszweck",
-          "refLabel": "Ihre Pago Móvil Referenznummer",
-          "refHint": "Die Referenznummer erscheint nach dem Senden in Ihrer Banking-App."
+          "bank": "Bank",
+          "phone": "Telefon",
+          "cedula": "Ausweis",
+          "concept": "Verwendungszweck",
+          "refLabel": "Deine Pago Móvil Referenznummer",
+          "refHint": "Die Referenznummer erscheint nach dem Senden in deiner Banking-App.",
+          "amountToTransfer": "Zu überweisender Betrag",
+          "rateError": "⚠ Der BCV-Kurs konnte nicht abgerufen werden. Prüfe bcv.org.ve und rechne 30 % auf."
         },
         "binance": {
           "title": "Binance Pay Daten",
-          "payId": "Binance Pay ID", "currency": "Währung", "currencyValue": "USDT (BEP-20 / BSC)", "exactAmount": "Genauer Betrag",
+          "payId": "Binance Pay ID",
+          "currency": "Währung",
+          "currencyValue": "USDT (BEP-20 / BSC)",
+          "exactAmount": "Genauer Betrag",
           "refLabel": "Transaktions-ID oder die letzten 6 Ziffern der Referenz",
-          "refHint": "Finden Sie diese im Binance Pay Transaktionsverlauf."
-        }
+          "refHint": "Du findest sie im Binance Pay Transaktionsverlauf."
+        },
+        "referencePlaceholder": "z. B. 93847261"
       }
     }
-
   },
   "profile": {
     "title": "Mein Profil",
@@ -969,7 +1025,7 @@
     "errors": {
       "saveFailed": "Profil konnte nicht aktualisiert werden"
     },
-    "subtitle": "Verwalten Sie Ihre Profilinformationen",
+    "subtitle": "Verwalte deine Profilinformationen",
     "errorImgFormat": "Ungültiges Format",
     "errorImgSize": "Bild zu groß",
     "errorUpload": "Uploadfehler",
@@ -1050,7 +1106,7 @@
     "ownerBadge": "Inhaber",
     "employeesLabel": "Aktive Mitglieder",
     "noEmployeesTitle": "Keine weiteren Mitarbeiter",
-    "noEmployeesSub": "Sie sind der einzige Mitarbeiter.",
+    "noEmployeesSub": "Du bist der einzige Mitarbeiter.",
     "addFirstBtn": "Mitarbeiter hinzufügen",
     "inactiveBadge": "Inaktiv",
     "noContact": "Kein Kontakt",
@@ -1078,7 +1134,14 @@
     "close": "Schließen",
     "toastTitle": "Neue Version",
     "toastDesc": "Ein Update ist bereit.",
-    "toastBtn": "Aktualisieren"
+    "toastBtn": "Aktualisieren",
+    "installTitle": "Cronix installieren",
+    "understood": "Verstanden",
+    "iosTitle": "Auf iOS installieren",
+    "iosShareStep": "Tippe in Safari auf das Teilen-Symbol <icon></icon>",
+    "iosScrollStep": "Scrolle nach unten und tippe auf <b>„Zum Home-Bildschirm\"</b>",
+    "iosAddStep": "Tippe auf <b>„Hinzufügen\"</b> zum Bestätigen",
+    "androidGuide": "1. Tippe auf das Menü <b>⋮</b> (drei Punkte, oben rechts)<br></br>2. Wähle <b>„App installieren\"</b> oder <b>„Zum Home-Bildschirm\"</b><br></br>3. Bestätige mit <b>„Installieren\"</b>"
   },
   "setup": {
     "title": "Ersteinrichtung",
@@ -1094,7 +1157,7 @@
     "categoryLabel": "Kategorie",
     "categoryPlace": "Wählen",
     "createBtn": "Bereit",
-    "terms": "Durch Klicken akzeptieren Sie die AGB."
+    "terms": "Durch Klicken akzeptierst du die AGB."
   },
   "businessCategories": {
     "barbershop": "Friseur / Barbier",
@@ -1140,7 +1203,12 @@
     "no": "Nein",
     "savedAs": "Wird gespeichert als",
     "selectCountry": "Land auswählen",
-    "country": "Land"
+    "country": "Land",
+    "somethingWrong": "Etwas ist schiefgelaufen",
+    "unexpectedError": "Unerwarteter Fehler. Bitte versuche es erneut.",
+    "retry": "Erneut versuchen",
+    "selectFromContacts": "Aus Kontakten auswählen",
+    "importFromContacts": "Aus Adressbuch importieren"
   },
   "adminPulse": {
     "title": "System-Puls",
@@ -1190,25 +1258,28 @@
     "stillThereDesc": "Deine Sitzung wird wegen Inaktivität geschlossen. Möchtest du sie aktiv halten?",
     "expiringTitle": "Sitzung läuft ab",
     "expiringDesc": "Deine Sitzung erreicht das 12-Stunden-Limit. Speichere deine Arbeit und melde dich erneut an.",
-    "keepSession": "Sitzung behalten"
+    "keepSession": "Sitzung behalten",
+    "signOut": "Abmelden"
   },
   "voiceAssistant": {
     "fabTitle": "KI Executive Assistent — Gedrückt halten oder klicken zum Sprechen",
     "noAccess": "Kein Zugriff auf den Assistenten",
     "contactError": "Fehler beim Kontaktieren von Luis",
-    "networkError": "Netzwerkfehler — versuchen Sie es erneut",
-    "permissionDenied": "Erlauben Sie das Mikrofon im 🔒 der Adressleiste und laden Sie die Seite neu",
-    "noMicrophone": "Kein Mikrofon auf Ihrem Gerät erkannt",
-    "micInUse": "Das Mikrofon wird von einer anderen Anwendung verwendet. Schließen Sie sie und versuchen Sie es erneut.",
+    "networkError": "Netzwerkfehler — versuche es erneut",
+    "permissionDenied": "Erlaube das Mikrofon im 🔒 der Adressleiste und lade die Seite neu",
+    "noMicrophone": "Kein Mikrofon auf deinem Gerät erkannt",
+    "micInUse": "Das Mikrofon wird von einer anderen Anwendung verwendet. Schließe sie und versuche es erneut.",
     "micAccessError": "Konnte nicht auf das Mikrofon zugreifen",
-    "notHeard": "Ich habe Sie nicht gehört. Bitte versuchen Sie es erneut.",
-    "processingError": "Konnte Ihren Sprachbefehl nicht verarbeiten. Versuchen Sie es erneut.",
-    "processingSttError": "Ich konnte Ihre Sprachnachricht nicht richtig verarbeiten. Könnten Sie sie schreiben oder es erneut versuchen?",
-    "processingNoUnderstand": "Ich konnte Ihre Sprachnachricht nicht verstehen. Könnten Sie deutlicher sprechen, näher an das Mikrofon herantreten oder Ihre Frage schreiben?",
-    "maintenanceMode": "Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könnten Sie mir bitte schreiben?",
-    "aiMaintenance": "Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuchen Sie es in einer Minute erneut.",
-    "dailyLimitReached": "Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuchen Sie es morgen erneut oder kontaktieren Sie den Administrator.",
-    "technicalError": "Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung Ihrer Nachricht. Bitte versuchen Sie es in einem Moment erneut."
+    "notHeard": "Ich habe dich nicht gehört. Bitte versuche es erneut.",
+    "processingError": "Konnte deinen Sprachbefehl nicht verarbeiten. Versuche es erneut.",
+    "processingSttError": "Ich konnte deine Sprachnachricht nicht richtig verarbeiten. Könntest du sie schreiben oder es erneut versuchen?",
+    "processingNoUnderstand": "Ich konnte deine Sprachnachricht nicht verstehen. Könntest du deutlicher sprechen, näher an das Mikrofon herantreten oder deine Frage schreiben?",
+    "maintenanceMode": "Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könntest du mir bitte schreiben?",
+    "aiMaintenance": "Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuche es in einer Minute erneut.",
+    "dailyLimitReached": "Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuche es morgen erneut oder kontaktiere den Administrator.",
+    "technicalError": "Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung deiner Nachricht. Bitte versuche es in einem Moment erneut.",
+    "openAria": "Luis IA Sprachassistent öffnen",
+    "dragTitle": "Luis IA — Zum Verschieben ziehen"
   },
   "errors": {
     "notFound": "Seite nicht gefunden",
@@ -1216,10 +1287,10 @@
     "goToDashboard": "Zum Dashboard gehen",
     "goBack": "Zurück",
     "errorOccurred": "Etwas ist schief gelaufen",
-    "unexpectedError": "Unerwarteter Fehler. Bitte versuchen Sie es erneut.",
+    "unexpectedError": "Unerwarteter Fehler. Bitte versuche es erneut.",
     "retry": "Erneut versuchen",
-    "sessionError": "Sitzung konnte nicht abgerufen werden. Laden Sie die Seite neu.",
-    "businessNotFound": "Das Unternehmen konnte nicht identifiziert werden. Laden Sie die Seite neu.",
+    "sessionError": "Sitzung konnte nicht abgerufen werden. Lade die Seite neu.",
+    "businessNotFound": "Das Unternehmen konnte nicht identifiziert werden. Lade die Seite neu.",
     "unauthorized": "Nicht authentifiziert",
     "forbiddenError": "Nicht autorisiert für dieses Unternehmen",
     "invalidData": "Ungültige Daten",
@@ -1232,28 +1303,28 @@
     "passwordMismatch": "Das neue Passwort muss sich von dem aktuellen unterscheiden.",
     "linkGenerationError": "Konnte den Link nicht generieren.",
     "googleLinkError": "Konnte den Google-Link nicht generieren.",
-    "csrfToken": "Ungültiges Sicherheitstoken (CSRF). Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "csrfToken": "Ungültiges Sicherheitstoken (CSRF). Lade die Seite neu und versuche es erneut.",
     "noInput": "Eingabe erforderlich",
     "noBusinessAttached": "Kein Unternehmen verbunden",
-    "dupRequest": "Zu viele Anfragen. Versuchen Sie es in {seconds}s erneut.",
+    "dupRequest": "Zu viele Anfragen. Versuche es in {seconds}s erneut.",
     "rateLimit": "Tägliches KI-Limit erreicht. Morgen erneut versuchen.",
     "ttsProvider": "TTS-Anbieter nicht konfiguriert",
     "llmApiKey": "LLM-API-Schlüssel nicht konfiguriert",
     "vapidKeys": "VAPID-Schlüssel nicht konfiguriert",
     "businessLinkNotFound": "Kein Unternehmen mit diesem Link gefunden.",
-    "businessIdentifierNotFound": "Kein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfen Sie, ob der Link korrekt ist.",
-    "rateLimitWhatsapp": "Sie senden Nachrichten zu schnell. Bitte warten Sie eine Minute, bevor Sie fortfahren."
+    "businessIdentifierNotFound": "Kein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfe, ob der Link korrekt ist.",
+    "rateLimitWhatsapp": "Du sendest Nachrichten zu schnell. Bitte warte eine Minute, bevor du fortfährst."
   },
   "formValidation": {
     "nameRequired": "Der Name ist erforderlich",
     "amountGreaterThanZero": "Der Betrag muss größer als Null sein.",
-    "amountValid": "Geben Sie einen gültigen Betrag größer als 0 ein",
-    "clientRequired": "Wählen Sie einen Kunden aus",
+    "amountValid": "Gib einen gültigen Betrag größer als 0 ein",
+    "clientRequired": "Wähle einen Kunden aus",
     "serviceRequired": "Service ist erforderlich",
-    "selectAction": "Wählen Sie eine Aktion aus",
+    "selectAction": "Wähle eine Aktion aus",
     "imageFormatInvalid": "Ungültiges Bildformat",
     "imageTooLarge": "Das Bild muss weniger als 2 MB groß sein",
-    "errorSavingForm": "Fehler beim Speichern von Informationen. Versuchen Sie es erneut.",
+    "errorSavingForm": "Fehler beim Speichern von Informationen. Versuche es erneut.",
     "errorLoadingForm": "Fehler beim Laden der Formulardaten.",
     "errorDeleteRecord": "Fehler beim Löschen: {error}",
     "errorSavingRecord": "Fehler beim Speichern: {error}",
@@ -1266,7 +1337,7 @@
     "errorRegisteringUser": "Konnte Benutzer nicht erstellen.",
     "errorUnableChangeEmail": "Fehler beim Ändern der E-Mail: {error}",
     "errorUnableChangePassword": "Fehler beim Ändern des Passworts: {error}",
-    "errorLinkingAccount": "Fehler beim Verknüpfen Ihres Kontos mit dem Unternehmen. Versuchen Sie, sich erneut anzumelden."
+    "errorLinkingAccount": "Fehler beim Verknüpfen deines Kontos mit dem Unternehmen. Versuche, dich erneut anzumelden."
   },
   "monthNames": {
     "january": "Januar",
@@ -1297,14 +1368,14 @@
     "dec": "Dez"
   },
   "whatsappMessages": {
-    "businessNotFound": "❌ *Verknüpfungsfehler*\n\nKein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfen Sie, ob der Link korrekt ist.",
-    "rateLimitWarning": "⚠️ Sie senden Nachrichten zu schnell. Bitte warten Sie eine Minute, bevor Sie fortfahren.",
+    "businessNotFound": "❌ *Verknüpfungsfehler*\n\nKein Unternehmen mit dem Bezeichner \"{slug}\" gefunden. Überprüfe, ob der Link korrekt ist.",
+    "rateLimitWarning": "⚠️ Du sendest Nachrichten zu schnell. Bitte warte eine Minute, bevor du fortfährst.",
     "unknownBusiness": "❌ Kein Unternehmen mit diesem Link gefunden.",
-    "voiceMaintenance": "🤖 Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könnten Sie mir bitte schreiben?",
-    "voiceProcessingError": "Ich konnte Ihre Sprachnachricht nicht richtig verarbeiten. Könnten Sie sie schreiben oder es erneut versuchen?",
-    "dailyLimitReached": "🤖 Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuchen Sie es morgen erneut oder kontaktieren Sie den Administrator.",
-    "aiMaintenance": "🤖 Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuchen Sie es in einer Minute erneut.",
-    "technicalError": "⚠️ Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung Ihrer Nachricht. Bitte versuchen Sie es in einem Moment erneut.",
+    "voiceMaintenance": "🤖 Entschuldigung, mein Sprachsystem befindet sich in kurzer Wartung. Könntest du mir bitte schreiben?",
+    "voiceProcessingError": "Ich konnte deine Sprachnachricht nicht richtig verarbeiten. Könntest du sie schreiben oder es erneut versuchen?",
+    "dailyLimitReached": "🤖 Entschuldigung, dieses Unternehmen hat sein tägliches Verarbeitungslimit erreicht. Bitte versuche es morgen erneut oder kontaktiere den Administrator.",
+    "aiMaintenance": "🤖 Entschuldigung, mein KI-Gehirn befindet sich in kurzer Wartung. Bitte versuche es in einer Minute erneut.",
+    "technicalError": "⚠️ Entschuldigung, ich hatte ein technisches Problem bei der Verarbeitung deiner Nachricht. Bitte versuche es in einem Moment erneut.",
     "reminderTitle": "Termin-Erinnerung",
     "reminderFailed": "Konnte Erinnerung für {name} • {service} um {time} nicht senden"
   },
@@ -1334,7 +1405,16 @@
     "newClientsLabel": "Neuer Kunde"
   },
   "passkey": {
-    "verifyError": "Konnte Biometrie nicht überprüfen. Verwenden Sie Ihr Passwort."
+    "verifyError": "Konnte Biometrie nicht überprüfen. Verwende dein Passwort.",
+    "setupTitle": "So aktivierst du den biometrischen Login",
+    "step1": "Melde dich mit deinem Passwort oder Google an",
+    "step2": "Gehe zu deinem Profil (Seitenmenü, unten links)",
+    "step3": "Tippe auf „Fingerabdruck / Face ID registrieren\"",
+    "waiting": "Warte auf Biometrie...",
+    "loginBtn": "Mit Biometrie anmelden",
+    "noPasskeyHere": "Du hast hier keine Biometrie eingerichtet.",
+    "howToConfigure": "Wie einrichten?",
+    "firstTime": "Zum ersten Mal mit Biometrie?"
   },
   "toasts": {
     "clientAdded": "Kunde erfolgreich hinzugefügt",
@@ -1368,7 +1448,7 @@
     "pageSubtitle": "Lade andere Unternehmen ein und verdiene exklusive Belohnungen.",
     "heroBannerFree": "Verdiene +10 kostenlose Termine pro Freund",
     "heroBannerPaid": "Verdiene 1 Monat Pro-Plan gratis",
-    "heroDescFree": "Für jedes Unternehmen, das sich mit deinem Link registriert, fügen wir deinem monatlichen Limit dauerhaft 10 zusätzliche Termine hinzu. Sie erhalten auch einen Willkommensbonus!",
+    "heroDescFree": "Für jedes Unternehmen, das sich mit deinem Link registriert, fügen wir deinem monatlichen Limit dauerhaft 10 zusätzliche Termine hinzu. Das eingeladene Unternehmen erhält außerdem einen Willkommensbonus!",
     "heroDescPaid": "Lade ein Unternehmen zu Cronix ein. Wenn es seine erste Zahlung leistet, schenken wir dir automatisch 30 zusätzliche Tage für dein aktuelles Abonnement.",
     "copyLink": "Link kopieren",
     "copied": "Kopiert!",
@@ -1379,7 +1459,7 @@
     "expiryText": "Dein aktuelles Abonnement läuft ab am: {date}",
     "howItWorksTitle": "Wie funktioniert es?",
     "step1": "Teile deinen einzigartigen Link mit anderen Unternehmensbesitzern (Spa, Barbiere, Kliniken).",
-    "step2": "Sie registrieren sich und erstellen ihr kostenloses Konto.",
+    "step2": "Das eingeladene Unternehmen registriert sich und erstellt sein kostenloses Konto.",
     "step3": "Du erhältst sofort deine Belohnung (Extra-Termine) oder wenn sie zu einem bezahlten Plan wechseln (Gratismonate).",
     "referralsListTitle": "Deine Empfehlungen ({count})",
     "emptyReferrals": "Du hast noch kein Unternehmen eingeladen. Teile deinen Link, um zu beginnen!",
@@ -1396,5 +1476,251 @@
     "planSectionSub": "Vergleiche Pläne und verwalte dein Abonnement.",
     "referralSectionTitle": "Empfehlungsprogramm",
     "referralSectionSub": "Lade andere Unternehmen ein und schalte exklusive Belohnungen frei."
+  },
+  "observability": {
+    "title": "KI-Agent-Observability",
+    "subtitle": "Kennzahlen der Agentengespräche der letzten 24 Stunden. Echtzeitdaten, anonymisiert per Hash.",
+    "turns": "Durchläufe (24h)",
+    "turnsSubtitle": "{count} erfolgreich",
+    "successRate": "Erfolgsquote",
+    "successRateSubtitle": "{count} Fehler",
+    "tokens": "Tokens (24h)",
+    "tokensSubtitle": "tägliches Groq-Kontingent",
+    "latencyP95": "p95-Latenz",
+    "latencyP50Subtitle": "p50 {value}s",
+    "topErrorsTitle": "Häufigste Fehler",
+    "topErrorsTitlePeriod": "Häufigste Fehler (24h)",
+    "topErrorsEmpty": "Keine Fehler in den letzten 24 Stunden.",
+    "recentTitle": "Letzte Agent-Turns",
+    "recentEmpty": "Noch keine Gespräche erfasst. Sobald ein Kunde mit dem Agenten spricht, erscheinen die Turns hier.",
+    "tools": "{count, plural, one {# Tool} other {# Tools}}",
+    "channelVoice": "Sprache",
+    "outcomeSuccess": "Erfolg",
+    "outcomeFailure": "fehlgeschlagen",
+    "outcomeError": "Fehler",
+    "outcomeRateLimited": "Rate-Limit",
+    "outcomeNoAction": "keine Aktion",
+    "relativeJustNow": "gerade eben",
+    "relativeMinutes": "vor {mins} Min.",
+    "relativeHours": "vor {hours} Std."
+  },
+  "invite": {
+    "badge": "Besondere Einladung",
+    "invitesYou": "{name} lädt dich ein zu",
+    "subtitle": "Die intelligente Plattform für dein Geschäft. Termine, Kunden und Finanzen an einem Ort.",
+    "feature1": "Intelligente Terminplanung",
+    "feature2": "Kunden- und Leistungsverwaltung",
+    "feature3": "Finanzkontrolle in Echtzeit",
+    "cta": "Kostenloses Konto erstellen",
+    "disclaimer": "Keine Kreditkarte · Einrichtung in 2 Minuten"
+  },
+  "privacy": {
+    "title": "Datenschutzrichtlinie",
+    "lastUpdate": "Zuletzt aktualisiert: 25. März 2026",
+    "s1Title": "1. Einleitung",
+    "s1Body": "Cronix („wir\", „unser\" oder „die Plattform\") verpflichtet sich, deine Privatsphäre zu schützen. Diese Datenschutzrichtlinie erklärt, wie wir deine Informationen erfassen, verwenden, offenlegen und schützen, wenn du unsere Plattform zur Verwaltung von Terminen und Dienstleistungen nutzt.",
+    "s2Title": "2. Informationen, die wir erfassen",
+    "s2Intro": "Wir erfassen Informationen auf verschiedene Weise:",
+    "s2Items": [
+      {
+        "label": "Registrierungsinformationen:",
+        "text": "Name, E-Mail, Telefonnummer, Unternehmen und Geschäftsdaten."
+      },
+      {
+        "label": "Termininformationen:",
+        "text": "Kundendetails, Daten, Uhrzeiten und gebuchte Leistungen."
+      },
+      {
+        "label": "Kommunikationsinformationen:",
+        "text": "Telefonnummern für WhatsApp-Benachrichtigungen."
+      },
+      {
+        "label": "Zahlungsinformationen:",
+        "text": "Transaktionsdaten (verarbeitet durch sichere Zahlungsanbieter)."
+      },
+      {
+        "label": "Nutzungsdaten:",
+        "text": "Aktionen auf der Plattform, besuchte Seiten, Browser, IP und Gerätedaten."
+      }
+    ],
+    "s3Title": "3. Wie wir deine Informationen verwenden",
+    "s3Intro": "Wir verwenden die erfassten Informationen, um:",
+    "s3Items": [
+      "die Plattform bereitzustellen, zu warten und zu verbessern.",
+      "Terminerinnerungen per WhatsApp und andere Benachrichtigungen zu senden.",
+      "Zahlungen und Transaktionen zu verarbeiten.",
+      "mit dir über Änderungen, Aktualisierungen oder Sicherheitsvorfälle zu kommunizieren.",
+      "gesetzliche und behördliche Pflichten zu erfüllen.",
+      "die Nutzung der Plattform zu analysieren, um Dienste zu verbessern."
+    ],
+    "s4Title": "4. WhatsApp-Benachrichtigungen",
+    "s4Body1": "Cronix nutzt den WhatsApp Cloud API-Dienst von Meta, um Terminerinnerungen und Benachrichtigungen zu senden. Durch die Nutzung der Plattform autorisierst du den Versand dieser Nachrichten an deine registrierte Telefonnummer. Du kannst Benachrichtigungen jederzeit in deinem Profil abbestellen.",
+    "s4Body2": "Meta verarbeitet Daten wie Telefonnummer und Zustellungszeitstempel. Weitere Einzelheiten findest du in der <link>Datenschutzrichtlinie von WhatsApp</link>.",
+    "s5Title": "5. Datenspeicherung und Sicherheit",
+    "s5Intro": "Deine Informationen werden auf sicheren Servern von Supabase gespeichert, das Sicherheitsstandards auf Unternehmensniveau erfüllt. Wir setzen Folgendes um:",
+    "s5Items": [
+      "Verschlüsselung von Daten während der Übertragung (TLS/SSL).",
+      "Verschlüsselung im Ruhezustand für sensible Daten.",
+      "Zwei-Faktor-Authentifizierung (2FA).",
+      "Rollenbasierte Zugriffskontrolle (RBAC).",
+      "Prüfung des Zugriffs auf sensible Daten."
+    ],
+    "s5Outro": "Kein System ist jedoch zu 100 % sicher. Obwohl wir angemessene Anstrengungen unternehmen, um deine Informationen zu schützen, können wir keine absolute Sicherheit garantieren.",
+    "s6Title": "6. Datenaufbewahrung",
+    "s6Body": "Wir bewahren deine Informationen auf, solange dein Konto aktiv ist. Wenn du die Löschung deines Kontos beantragst, werden die Daten innerhalb von 30 Tagen gelöscht, es sei denn, das Gesetz verlangt eine längere Aufbewahrung (z. B. Transaktionsaufzeichnungen aus steuerlichen Gründen).",
+    "s7Title": "7. Weitergabe von Informationen",
+    "s7Intro": "Cronix verkauft oder vermietet deine personenbezogenen Daten nicht. Wir geben Daten nur weiter, wenn dies erforderlich ist für:",
+    "s7Items": [
+      "vertrauenswürdige Dienstleister (Hosting, Zahlungen, WhatsApp).",
+      "die Einhaltung des Gesetzes oder die Verteidigung von Rechtsansprüchen.",
+      "andere Parteien mit deiner ausdrücklichen Zustimmung."
+    ],
+    "s8Title": "8. Deine Datenschutzrechte",
+    "s8Intro": "Du hast das Recht:",
+    "s8Items": [
+      "auf deine personenbezogenen Daten zuzugreifen.",
+      "unrichtige Informationen zu berichtigen.",
+      "die Löschung von Daten zu verlangen (Recht auf Vergessenwerden).",
+      "der Verarbeitung deiner Daten zu widersprechen.",
+      "die Datenübertragbarkeit zu verlangen.",
+      "deine Einwilligung jederzeit zu widerrufen."
+    ],
+    "s8Contact": "Um diese Rechte auszuüben, kontaktiere: tiendaigmimport@gmail.com",
+    "s9Title": "9. Cookies und Tracking-Technologien",
+    "s9Body": "Cronix verwendet Cookies, um die Benutzererfahrung zu verbessern, authentifizierte Sitzungen aufrechtzuerhalten und die Nutzung zu analysieren. Du kannst Cookies in deinem Browser deaktivieren, dies kann jedoch die Funktionalität der Plattform beeinträchtigen.",
+    "s10Title": "10. Minderjährige",
+    "s10Body": "Cronix richtet sich nicht an Personen unter 13 Jahren. Wir erfassen keine Informationen von Minderjährigen. Wenn wir feststellen, dass wir Daten eines Minderjährigen erfasst haben, löschen wir diese Informationen umgehend.",
+    "s11Title": "11. Änderungen dieser Richtlinie",
+    "s11Body": "Wir können diese Datenschutzrichtlinie jederzeit aktualisieren. Wesentliche Änderungen werden per E-Mail mitgeteilt. Deine fortgesetzte Nutzung der Plattform nach Änderungen gilt als Annahme der neuen Richtlinie.",
+    "s12Title": "12. Rechtliche Konformität",
+    "s12Intro": "Cronix erfüllt Datenschutzbestimmungen, einschließlich:",
+    "s12Items": [
+      "DSGVO (Datenschutz-Grundverordnung)",
+      "CCPA (California Consumer Privacy Act)",
+      "geltende lokale Datenschutzbestimmungen"
+    ],
+    "s13Title": "13. Kontakt",
+    "s13Body": "Wenn du Fragen zu dieser Datenschutzrichtlinie oder deinen personenbezogenen Daten hast, kontaktiere:",
+    "s13EmailLabel": "E-Mail:",
+    "s13PlatformLabel": "Plattform:"
+  },
+  "terms": {
+    "title": "Allgemeine Geschäftsbedingungen",
+    "lastUpdate": "Zuletzt aktualisiert: 25. März 2026",
+    "s1Title": "1. Annahme der Bedingungen",
+    "s1Body": "Durch den Zugriff auf Cronix und dessen Nutzung erklärst du dich mit diesen Allgemeinen Geschäftsbedingungen einverstanden. Wenn du mit einem Teil nicht einverstanden bist, darfst du die Plattform nicht nutzen. Wir behalten uns das Recht vor, diese Bedingungen jederzeit zu aktualisieren.",
+    "s2Title": "2. Leistungsbeschreibung",
+    "s2Body": "Cronix ist eine SaaS-Plattform zur Verwaltung von Terminen und Dienstleistungen, mit der Unternehmen Termine planen, bestätigen und Kunden per WhatsApp-Benachrichtigungen daran erinnern können. Die Plattform umfasst:",
+    "s2Items": [
+      "Verwaltung des Terminkalenders.",
+      "Automatische WhatsApp-Benachrichtigungen.",
+      "Verwaltung von Kunden und Leistungen.",
+      "Geschäfts- und Finanzberichte.",
+      "Sichere biometrische Authentifizierung (Passkey)."
+    ],
+    "s3Title": "3. Berechtigung",
+    "s3Intro": "Um Cronix zu nutzen, musst du:",
+    "s3Items": [
+      "mindestens 18 Jahre alt oder eine autorisierte juristische Person sein.",
+      "befugt sein, verbindliche Verträge abzuschließen.",
+      "nicht auf einer Sanktionsliste stehen oder gesetzlich eingeschränkt sein.",
+      "die Datenschutzgesetze bei der Verarbeitung von Kundendaten einhalten."
+    ],
+    "s4Title": "4. Kontoerstellung und Verantwortung",
+    "s4Intro": "Bei der Erstellung eines Kontos bist du verantwortlich für:",
+    "s4Items": [
+      "die Bereitstellung genauer und aktueller Informationen.",
+      "die Vertraulichkeit deiner Zugangsdaten.",
+      "die unverzügliche Benachrichtigung bei unbefugtem Zugriff.",
+      "die Einhaltung aller geltenden Gesetze bei der Nutzung der Plattform."
+    ],
+    "s4Outro": "Wir behalten uns das Recht vor, Konten zu sperren oder zu löschen, die gegen diese Bedingungen verstoßen.",
+    "s5Title": "5. Zulässige Nutzung",
+    "s5Intro": "Du darfst Cronix nicht nutzen für:",
+    "s5Items": [
+      "illegale Aktivitäten oder solche, die Rechte Dritter verletzen.",
+      "Spam, Phishing, Malware oder Cyberangriffe.",
+      "Belästigung, Einschüchterung oder Identitätsmissbrauch.",
+      "das Versenden von obszönen, verleumderischen oder diskriminierenden Inhalten.",
+      "die Verletzung von Rechten des geistigen Eigentums.",
+      "Reverse Engineering oder unbefugten Zugriff auf Systeme.",
+      "die Verletzung der Privatsphäre Dritter ohne Einwilligung."
+    ],
+    "s6Title": "6. Kundendaten",
+    "s6Intro": "Du bist der Verantwortliche für die Daten deiner Kunden. Du bist verantwortlich für:",
+    "s6Items": [
+      "das Einholen einer gültigen Einwilligung vor der Erhebung von Kundendaten.",
+      "die Information der Kunden über die Nutzung von WhatsApp für Benachrichtigungen.",
+      "die Einhaltung von DSGVO, CCPA und lokalen Datenschutzbestimmungen.",
+      "die Wahrung der Vertraulichkeit sensibler Daten.",
+      "die Bearbeitung von Anfragen zu Datenschutzrechten der Kunden."
+    ],
+    "s6Outro": "Cronix handelt als Auftragsverarbeiter unter deiner Weisung und ist nicht dafür verantwortlich, wie du Kundendaten nutzt oder verarbeitest.",
+    "s7Title": "7. Integrationen von Drittanbietern",
+    "s7Intro": "Cronix integriert Dienste von Drittanbietern wie:",
+    "s7Items": [
+      {
+        "label": "Supabase:",
+        "text": "Datenspeicherung und Authentifizierung."
+      },
+      {
+        "label": "Meta WhatsApp Cloud API:",
+        "text": "Versand von Benachrichtigungen."
+      },
+      {
+        "label": "Stripe/Mercado Pago:",
+        "text": "Zahlungsabwicklung."
+      }
+    ],
+    "s7Outro": "Wir sind für diese Dienste nicht verantwortlich. Lies ihre Bedingungen und Datenschutzrichtlinien, bevor du Cronix nutzt.",
+    "s8Title": "8. Haftungsbeschränkung",
+    "s8Intro": "IM GRÖSSTMÖGLICHEN GESETZLICH ZULÄSSIGEN UMFANG:",
+    "s8Items": [
+      "wird Cronix „wie besehen\" ohne jegliche Gewährleistung bereitgestellt.",
+      "haften wir nicht für Datenverlust, Dienstunterbrechung oder Folgeschäden.",
+      "entspricht unsere maximale Haftung dem im letzten Monat gezahlten Betrag.",
+      "haften wir nicht für ausgebliebene Benachrichtigungen aufgrund von Ausfällen der WhatsApp-API oder von Meta."
+    ],
+    "s9Title": "9. Geistiges Eigentum",
+    "s9Body1": "Cronix ist Eigentümer der gesamten Technologie, des Codes, der Designs, der Logos und der Inhalte der Plattform. Mit der Nutzung von Cronix gewähren wir dir eine begrenzte, nicht ausschließliche Zugangslizenz.",
+    "s9Body2": "Du darfst keine Inhalte von Cronix ohne schriftliche Genehmigung kopieren, ändern, verbreiten oder verkaufen.",
+    "s10Title": "10. Preise und Abrechnung",
+    "s10Intro": "Die Preise sind auf unserer Abonnementseite verfügbar. Du stimmst zu, dass:",
+    "s10Items": [
+      "die Preise in USD angegeben sind und sich mit einer Frist von 30 Tagen ändern können.",
+      "die Abrechnung je nach Tarif monatlich oder jährlich erfolgt.",
+      "wir keine Rückerstattungen anbieten (außer wenn Cronix bei einem kritischen Dienst versagt).",
+      "du jederzeit kündigen kannst und den Zugang am Ende des Zeitraums verlierst."
+    ],
+    "s11Title": "11. Sperrung und Kündigung",
+    "s11Intro": "Wir behalten uns das Recht vor:",
+    "s11Items": [
+      "dein Konto zu sperren, wenn du gegen diese Bedingungen verstößt.",
+      "die Dienste mit einer Frist von 30 Tagen aus beliebigem Grund zu beenden.",
+      "die Daten deines Kontos 90 Tage nach der Schließung zu löschen."
+    ],
+    "s12Title": "12. Schadloshaltung",
+    "s12Body": "Du erklärst dich bereit, Cronix gegen alle Ansprüche, Schäden oder Kosten freizustellen und zu verteidigen, die aus deiner Nutzung der Plattform, einem Verstoß gegen diese Bedingungen oder einem Verstoß gegen geltende Gesetze entstehen.",
+    "s13Title": "13. Rechtliche Konformität",
+    "s13Intro": "Cronix erfüllt:",
+    "s13Items": [
+      "die DSGVO (Datenschutz-Grundverordnung)",
+      "den CCPA (California Consumer Privacy Act)",
+      "das LGPD (brasilianisches allgemeines Datenschutzgesetz)",
+      "die für WhatsApp geltenden Telekommunikationsvorschriften"
+    ],
+    "s14Title": "14. Streitbeilegung",
+    "s14Intro": "Jeder Streit wird gelöst durch:",
+    "s14Items": [
+      "eine gutgläubige Verhandlung innerhalb von 30 Tagen.",
+      "ein verbindliches Schiedsverfahren nach den Regeln der Handelskammer."
+    ],
+    "s14Outro": "Beide Parteien verzichten auf das Recht auf gerichtliche Auseinandersetzung und Geschworenenprozess.",
+    "s15Title": "15. Geltendes Recht",
+    "s15Body": "Diese Bedingungen unterliegen den Gesetzen des Landes/Staates, in dem der Dienst erbracht wird, ohne Berücksichtigung kollisionsrechtlicher Bestimmungen.",
+    "s16Title": "16. Kontakt",
+    "s16Body": "Bei Fragen zu diesen Bedingungen kontaktiere:",
+    "s16EmailLabel": "E-Mail:",
+    "s16PlatformLabel": "Plattform:"
   }
 }

@@ -174,7 +174,7 @@ export function AptDetailPanel({
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-80"
               style={{ background: "#262629", color: "#F5F5F5", border: "1px solid #3F3F46" }}
             >
-              <Printer size={15} /> Descargar Recibo PDF
+              <Printer size={15} /> {t('panels.downloadReceipt')}
             </button>
             <Link
               href={`/dashboard/appointments/${apt.id}/edit`}

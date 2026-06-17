@@ -12,6 +12,7 @@
  */
 
 import { useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { logger } from '@/lib/logger'
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function DashboardError({ error, reset }: Props) {
+  const t = useTranslations('common')
   useEffect(() => {
     // Centralized server-side error logging.
     // Replace with your observability service (Sentry, Datadog, etc.) here.
@@ -42,16 +44,16 @@ export default function DashboardError({ error, reset }: Props) {
 
       <div className="text-center space-y-1">
         <p className="text-base font-semibold" style={{ color: '#F5F5F5' }}>
-          Algo salió mal
+          {t('somethingWrong')}
         </p>
         <p className="text-sm" style={{ color: '#8A8A90' }}>
-          {error.message ?? 'Error inesperado. Por favor intenta de nuevo.'}
+          {error.message ?? t('unexpectedError')}
         </p>
       </div>
 
       <Button onClick={reset} variant="secondary" className="gap-2">
         <RefreshCcw className="w-4 h-4" />
-        Reintentar
+        {t('retry')}
       </Button>
     </div>
   )
