@@ -37,6 +37,8 @@ import type { AgentMessage } from "./groq-client.ts"
 import { buildMinimalSystemPrompt } from "./prompt-builder.ts"
 import { BOOKING_TOOLS, executeToolCall }                         from "./tool-executor.ts"
 import { toolsAllowedThisTurn, textHasExplicitBookingParams } from "./confirmation-gate.ts"
+import { resolveBookingTimeGap } from "./availability.ts"
+import type { WorkingHours } from "./availability.ts"
 import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
 import { FAQ_INTENTS, buildFaqResponse } from "./faq-responses.ts"
 import { selectFinalResponse } from "./final-response.ts"
@@ -220,6 +222,32 @@ export async function runAgentLoop(
   if (intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent)) {
     const text = buildFaqResponse(intent.intent, context)
     return { text, tokens: 0, toolCallsTrace: [] }
+  }
+
+  // ── Deterministic availability gap (anti-hallucination) ───────────────────
+  // When the client is booking and gave a date but NO time, never let the 8B
+  // invent one. Compute the real free slots from working_hours + booked slots
+  // and reply deterministically (propose the only slot, list options, or report
+  // the day is full). 0 tokens. Booking context = intent OR a prior assistant
+  // offer/confirmation so it fires even if the router mislabels the short reply.
+  const lastAssistantText = [...cappedHistory].reverse()
+    .find(h => h.role === 'model' || h.role === 'assistant')?.text ?? ''
+  const isBookingContext =
+    intent?.intent === 'book_appointment' ||
+    /¿\s*(te\s+gustar[íi]a\s+agendar|quieres\s+agendar|deseas\s+agendar|agendamos|confirmo\s+tu\s+cita|confirmo\s+la\s+cita|a\s+qu[ée]\s+hora)/i.test(lastAssistantText)
+  const bookingGap = resolveBookingTimeGap({
+    userText,
+    isBookingContext,
+    services:     context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min })),
+    workingHours: business.settings?.working_hours as unknown as WorkingHours,
+    timezone:     business.timezone,
+    bookedSlots:  (context.bookedSlots ?? []).map(s => ({ start_at: s.start_at, end_at: s.end_at })),
+  })
+  if (bookingGap) {
+    addBreadcrumb('Deterministic availability gap resolved (0 tokens)', 'agent', 'info', {
+      intent: intent?.intent ?? 'unknown',
+    })
+    return { text: bookingGap, tokens: 0, toolCallsTrace: [] }
   }
 
   // ── Open the per-turn trace (closed in the finally block below) ───────────

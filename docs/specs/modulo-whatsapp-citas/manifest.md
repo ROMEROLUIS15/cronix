@@ -155,6 +155,18 @@ Para reducir el consumo de tokens y latencia, las intenciones de tipo FAQ con co
 
 El conjunto de intenciones FAQ se define en `FAQ_INTENTS` dentro de `faq-responses.ts`. Para agregar una nueva intención FAQ, basta con añadir su label al `Set` e implementar el caso en `buildFaqResponse()`.
 
+### Resolver de Disponibilidad Determinista (anti-alucinación de hora) — NORMATIVO
+
+Cuando el cliente está en contexto de agendamiento y proporciona una **fecha pero NO una hora**, el agente NUNCA debe inventar una hora. Antes del LLM, `runAgentLoop` invoca `resolveBookingTimeGap` (`availability.ts`), que calcula de forma determinista (0 tokens) los horarios libres reales a partir de `working_hours` + slots ocupados + duración del servicio (`computeAvailableSlots`, espejo de la lógica del voice-agent):
+
+| Slots libres ese día | Respuesta determinista |
+|---|---|
+| Día cerrado / 0 libres | Informa y pide otra fecha. |
+| Exactamente 1 | Propone ese slot como pregunta de confirmación (`¿Confirmo…?` → la gate de 2 turnos abre con "sí"). |
+| Varios | Lista los horarios y pregunta cuál — **nunca elige por el cliente**. |
+
+Condiciones de disparo: contexto de booking (intent `book_appointment` o el turno anterior del asistente ofreció/propuso agendar) **+** fecha parseable (`parseDateExpression`, espejo determinista del voice) **+** sin hora en el texto (`textHasTime`) **+** servicio resoluble (único en catálogo o nombrado). Si falta cualquiera, cae al LLM. Sin `working_hours` configurado → default 09:00–18:00. Refuerzo secundario: el system prompt prohíbe explícitamente inventar la hora en citas nuevas.
+
 ### Compuerta Híbrida (Agendamiento Directo en Turno 1)
 
 Excepción a la regla de 2 turnos: si la intención es `book_appointment` con confianza >= 0.90 **y** el texto del usuario contiene referencias explícitas de fecha y hora (detectadas por `textHasExplicitBookingParams()`), la compuerta de herramientas se abre directamente (`activeTools = BOOKING_TOOLS`) permitiendo que el LLM llame a `confirm_booking` sin un turno de confirmación redundante.
