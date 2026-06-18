@@ -218,7 +218,23 @@ async function loadBusinessContext(supabase: any, businessId: string, timezone: 
 
   const settings = (bizRes.data?.settings ?? {}) as Record<string, unknown>
   const aiRules      = typeof settings.aiRules === 'string' ? settings.aiRules : undefined
-  const workingHours = settings.workingHours as Record<string, { open: string; close: string } | null> | undefined
+  // The dashboard stores settings.workingHours with 3-letter day keys
+  // (mon/tue/…/sun) and [open, close] tuples (or null = closed). The rest of the
+  // voice agent consumes { monday: { open, close } | null }, so normalise here —
+  // otherwise the configured schedule never matched and slots defaulted to 09–18.
+  const WH_DAY_MAP: Record<string, string> = {
+    mon: 'monday', tue: 'tuesday', wed: 'wednesday', thu: 'thursday',
+    fri: 'friday', sat: 'saturday', sun: 'sunday',
+  }
+  const rawWH = settings.workingHours as Record<string, [string, string] | null> | undefined
+  const workingHours = rawWH
+    ? Object.fromEntries(
+        Object.entries(rawWH).map(([k, v]) => [
+          WH_DAY_MAP[k] ?? k,
+          Array.isArray(v) ? { open: v[0], close: v[1] } : null,
+        ]),
+      ) as Record<string, { open: string; close: string } | null>
+    : undefined
 
   return {
     businessId,
