@@ -134,13 +134,33 @@ export class WhatsAppBookingAdapter {
 
     // Normalizar service_id: puede ser UUID o nombre
     service_id = sanitizeUUID(service_id)
-    if (!/^[0-9a-f-]{36}$/i.test(service_id)) {
-      const match = p.services.find((s) =>
+    if (!service_id) {
+      return { success: false, error: 'INVALID_ARGS', message: 'Necesito saber qué servicio deseas agendar.' }
+    }
+
+    // Resolver SIEMPRE contra el catálogo cargado. Un id con forma de UUID pero
+    // ajeno al catálogo (el LLM 8B a veces copia el UUID de ejemplo del prompt en
+    // lugar del REF# real) NUNCA debe llegar a la RPC: provocaría una violación de
+    // FK (appointments_service_id_fkey) → DB_ERROR. La verdad es p.services.
+    const byId = p.services.find((s) => s.id.toLowerCase() === service_id.toLowerCase())
+    if (byId) {
+      service_id = byId.id
+    } else {
+      const byName = p.services.find((s) =>
         s.name.toLowerCase().includes(service_id.toLowerCase()) ||
         service_id.toLowerCase().includes(s.name.toLowerCase())
       )
-      if (!match) return { success: false, error: 'INVALID_ARGS', message: `No encontré el servicio "${service_id}".` }
-      service_id = match.id
+      if (!byName) {
+        const names = p.services.map((s) => s.name).join(', ')
+        return {
+          success: false,
+          error:   'INVALID_ARGS',
+          message: names
+            ? `No encontré ese servicio. Los disponibles son: ${names}.`
+            : `No encontré el servicio "${service_id}".`,
+        }
+      }
+      service_id = byName.id
     }
 
     const normalizedTime = normalizeTime(time)
@@ -173,6 +193,10 @@ export class WhatsAppBookingAdapter {
       }
       if (result.error?.includes('BOOKING_RATE_LIMIT')) {
         return { success: false, error: 'BOOKING_RATE_LIMIT', message: 'Ya tienes el máximo de citas activas. Cancela una antes de agendar.' }
+      }
+      if (result.error?.includes('SERVICE_NOT_FOUND')) {
+        const names = p.services.map((s) => s.name).join(', ')
+        return { success: false, error: 'INVALID_ARGS', message: names ? `No encontré ese servicio. Los disponibles son: ${names}.` : 'No encontré ese servicio.' }
       }
       return { success: false, error: 'DB_ERROR', message: result.error ?? 'No se pudo crear la cita.' }
     }

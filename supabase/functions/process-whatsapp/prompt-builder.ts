@@ -155,9 +155,9 @@ MANEJO DE ERRORES:
   y ESPERA su confirmación antes de volver a llamar confirm_booking. NO reserves automáticamente otro horario.
 
 IDENTIFICADORES:
-- Pasa SOLO el UUID en los argumentos del tool. NUNCA incluyas el prefijo "REF#".
-- ✅ CORRECTO: "service_id": "339afed4-cbc2-423b-9d8c-17a6f52fb642"
-- ❌ INCORRECTO: "service_id": "REF#339afed4-cbc2-423b-9d8c-17a6f52fb642"
+- En los argumentos del tool, COPIA el REF# EXACTO del servicio tal como aparece en el CATÁLOGO DE SERVICIOS de arriba, carácter por carácter, SIN el prefijo "REF#". JAMÁS inventes, adivines ni reutilices un identificador de un ejemplo: solo existen los del catálogo.
+- ✅ CORRECTO: "service_id": "<el REF# exacto de ese servicio en el catálogo, sin REF#>"
+- ❌ INCORRECTO: incluir el prefijo "REF#" o un identificador que no esté en el catálogo.
 `
 
   if (recalled && recalled.length > 0) {
