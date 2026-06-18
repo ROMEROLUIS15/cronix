@@ -12,8 +12,9 @@ import { computeAvailableSlots, textHasTime, resolveBookingTimeGap, type Working
 const TZ = 'America/Caracas' // UTC-4, no DST
 
 function weekdayOf(dateISO: string): string {
+  // 3-letter lowercase key (mon/tue/…), matching the dashboard's workingHours.
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: TZ })
-    .format(new Date(`${dateISO}T12:00:00Z`)).toLowerCase()
+    .format(new Date(`${dateISO}T12:00:00Z`)).toLowerCase().slice(0, 3)
 }
 
 function tomorrowISO(): string {
@@ -52,7 +53,7 @@ describe('computeAvailableSlots', () => {
 
   it('respects custom hours and the must-end-by-close invariant', () => {
     const day = weekdayOf('2026-06-20')
-    const wh: WorkingHours = { [day]: { open: '10:00', close: '12:00' } }
+    const wh: WorkingHours = { [day]: ['10:00', '12:00'] }
     const r = computeAvailableSlots({ workingHours: wh, date: '2026-06-20', timezone: TZ, durationMin: 60, bookedSlots: [] })
     expect(r.slots).toEqual(['10:00', '10:30', '11:00']) // 11:30+60 ends 12:30 > close
   })
@@ -87,7 +88,7 @@ describe('resolveBookingTimeGap', () => {
 
   it('proposes the single remaining slot as a confirmation question', () => {
     const day = weekdayOf(tomorrowISO())
-    const wh: WorkingHours = { [day]: { open: '09:00', close: '09:30' } }
+    const wh: WorkingHours = { [day]: ['09:00', '09:30'] }
     const r = resolveBookingTimeGap({
       userText: 'sí, para mañana', isBookingContext: true,
       services: [{ id: 's1', name: 'Corte', duration_min: 30 }], workingHours: wh, timezone: TZ, bookedSlots: [],

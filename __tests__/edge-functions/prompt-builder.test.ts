@@ -20,7 +20,7 @@ function makeContext(overrides = {}): any {
       name: 'Mi Salón',
       timezone: 'America/Bogota',
       settings: {
-        working_hours: { monday: ['09:00', '18:00'], tuesday: ['09:00', '18:00'] },
+        workingHours: { mon: ['09:00', '18:00'], tue: ['09:00', '18:00'] },
       },
     },
     services: [
@@ -99,7 +99,7 @@ describe('WhatsApp Agent — buildMinimalSystemPrompt', () => {
     const prompt = buildMinimalSystemPrompt(ctx, 'María')
 
     expect(prompt).toContain('Horario de atención')
-    expect(prompt).toContain('monday')
+    expect(prompt).toContain('Lun: 09:00–18:00') // dashboard workingHours rendered human-readable
   })
 
   it('includes timezone', () => {

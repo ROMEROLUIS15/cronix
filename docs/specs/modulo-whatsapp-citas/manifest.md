@@ -170,7 +170,9 @@ Cuando el cliente está en contexto de agendamiento y proporciona una **fecha pe
 | Exactamente 1 | Propone ese slot como pregunta de confirmación (`¿Confirmo…?` → la gate de 2 turnos abre con "sí"). |
 | Varios | Lista los horarios y pregunta cuál — **nunca elige por el cliente**. |
 
-Condiciones de disparo: contexto de booking (intent `book_appointment` o el turno anterior del asistente ofreció/propuso agendar) **+** fecha parseable (`parseDateExpression`, espejo determinista del voice) **+** sin hora en el texto (`textHasTime`) **+** servicio resoluble (único en catálogo o nombrado). Si falta cualquiera, cae al LLM. Sin `working_hours` configurado → default 09:00–18:00. Refuerzo secundario: el system prompt prohíbe explícitamente inventar la hora en citas nuevas.
+Condiciones de disparo: contexto de booking (intent `book_appointment` o el turno anterior del asistente ofreció/propuso agendar) **+** fecha parseable (`parseDateExpression`, espejo determinista del voice) **+** sin hora en el texto (`textHasTime`) **+** servicio resoluble (único en catálogo o nombrado). Si falta cualquiera, cae al LLM. Refuerzo secundario: el system prompt prohíbe explícitamente inventar la hora en citas nuevas.
+
+**Formato de horario (NORMATIVO — fuente de verdad: el dashboard).** El agente lee `business.settings.workingHours` tal como lo escribe el dashboard (Settings): claves de día de 3 letras minúsculas `mon|tue|wed|thu|fri|sat|sun` y valor `[open, close]` (ej. `["09:00","18:00"]`) para día abierto o `null` para cerrado. **No** existe `settings.working_hours` (snake/objeto) — esa divergencia histórica hacía que el horario configurado nunca llegara al agente; corregido para que `computeAvailableSlots` y el system prompt lean `workingHours`. Si el objeto está ausente/vacío (negocio sin configurar) → default 09:00–18:00 todos los días. Nota: el voice-agent debe auditarse por la misma divergencia.
 
 ### Compuerta Híbrida (Agendamiento Directo en Turno 1)
 

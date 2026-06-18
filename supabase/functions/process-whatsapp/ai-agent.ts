@@ -252,7 +252,7 @@ export async function runAgentLoop(
     userText,
     isBookingContext,
     services:     context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min })),
-    workingHours: business.settings?.working_hours as unknown as WorkingHours,
+    workingHours: business.settings?.workingHours as unknown as WorkingHours,
     timezone:     business.timezone,
     bookedSlots:  (context.bookedSlots ?? []).map(s => ({ start_at: s.start_at, end_at: s.end_at })),
   })

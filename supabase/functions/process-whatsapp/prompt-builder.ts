@@ -51,8 +51,11 @@ export function buildMinimalSystemPrompt(
   const tomorrowHuman  = tomorrow.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: timezone })
 
   const currentTime    = now.toLocaleString('es-ES', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true })
-  const hours          = settings.working_hours
-    ? JSON.stringify(settings.working_hours, null, 2)
+  // Dashboard stores settings.workingHours as { mon: ["09:00","18:00"] | null, … }.
+  const DAY_ES: Record<string, string> = { mon: 'Lun', tue: 'Mar', wed: 'Mié', thu: 'Jue', fri: 'Vie', sat: 'Sáb', sun: 'Dom' }
+  const wh             = (settings as { workingHours?: Record<string, [string, string] | null> }).workingHours
+  const hours          = wh && Object.keys(wh).length > 0
+    ? Object.entries(wh).map(([d, v]) => `${DAY_ES[d] ?? d}: ${Array.isArray(v) ? `${v[0]}–${v[1]}` : 'cerrado'}`).join(', ')
     : 'No especificado'
 
   let prompt = `Eres el asistente de agendamiento de "${business.name}". Tu función es agendar, reagendar o cancelar citas.

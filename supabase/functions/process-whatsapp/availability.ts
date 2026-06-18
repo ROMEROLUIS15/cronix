@@ -16,7 +16,15 @@
 import { parseDateExpression } from './date-parser.ts'
 import { formatLocalTime }     from './prompt-builder.ts'
 
-export type WorkingHours = Record<string, { open?: string; close?: string } | null> | null | undefined
+/**
+ * Business working hours as stored by the dashboard (settings.workingHours):
+ *   - keys are 3-letter lowercase weekdays: mon|tue|wed|thu|fri|sat|sun
+ *   - value is [open, close] (e.g. ["09:00","18:00"]) for an open day, or null
+ *     when the day is closed/inactive.
+ * The agent reads THIS shape (the dashboard is the source of truth). When the
+ * object is absent/empty (never configured) the resolver defaults to 09:00–18:00.
+ */
+export type WorkingHours = Record<string, [string, string] | null> | null | undefined
 export type BookedSlot   = { start_at: string; end_at: string }
 type ServiceLite         = { id: string; name: string; duration_min: number }
 
@@ -64,17 +72,21 @@ export function computeAvailableSlots(p: {
     return { open: false, slots: [] }
   }
 
-  const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
-    .format(new Date(`${date}T12:00:00Z`)).toLowerCase()
+  // Dashboard day keys are 3-letter lowercase (mon/tue/.../sun). Intl 'long'
+  // weekday sliced to 3 chars yields exactly those (monday→mon, wednesday→wed…).
+  const dayKey = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
+    .format(new Date(`${date}T12:00:00Z`)).toLowerCase().slice(0, 3)
 
-  const wh = workingHours?.[dayName]
-  // Explicit closed day: the weekday key exists but is null/false.
-  if (workingHours && Object.prototype.hasOwnProperty.call(workingHours, dayName) && !wh) {
-    return { open: false, slots: [] }
+  const configured = !!workingHours && Object.keys(workingHours).length > 0
+  let open  = '09:00'
+  let close = '18:00'
+  if (configured) {
+    const wh = workingHours![dayKey]
+    // Closed day: key absent or explicitly null.
+    if (!wh || !Array.isArray(wh) || wh.length < 2) return { open: false, slots: [] }
+    open  = wh[0]
+    close = wh[1]
   }
-
-  const open  = wh?.open  ?? '09:00'
-  const close = wh?.close ?? '18:00'
   const [oh, om] = open.split(':').map(Number)
   const [ch, cm] = close.split(':').map(Number)
   if ([oh, om, ch, cm].some((n) => n === undefined || Number.isNaN(n))) return { open: true, slots: [] }
