@@ -39,6 +39,7 @@ import { BOOKING_TOOLS, executeToolCall }                         from "./tool-e
 import { toolsAllowedThisTurn, textHasExplicitBookingParams } from "./confirmation-gate.ts"
 import { resolveBookingTimeGap } from "./availability.ts"
 import type { WorkingHours } from "./availability.ts"
+import { isListAppointmentsQuery, buildAppointmentsListResponse } from "./read-intents.ts"
 import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
 import { FAQ_INTENTS, buildFaqResponse } from "./faq-responses.ts"
 import { selectFinalResponse } from "./final-response.ts"
@@ -123,6 +124,7 @@ function trackDedupCall(fingerprints: Set<string>, toolName: string, argsRaw: st
 
 const CANCEL_INTENT_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
 const RESCHEDULE_INTENT_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?\s+(?:mi\s+)?(?:cita|hora|fecha))\b/i
+const BOOK_INTENT_RE       = /\b(agend(?:a|ar|ame|alo)?|reserv(?:a|ar|ame)?|sacar|pedir|quiero|necesito|nueva)\b.*\bcita\b|\b(agend(?:a|ar|ame|alo)?|reserv(?:a|ar|ame)?)\b/i
 
 function formatApt(apt: ActiveAppointmentRow, timezone: string): { dateStr: string; timeStr: string } {
   const dt      = new Date(apt.start_at)
@@ -135,9 +137,20 @@ function buildDeterministicIntentResponse(
   userText:           string,
   activeAppointments: ActiveAppointmentRow[],
   timezone:           string,
+  services:           ReadonlyArray<{ name: string }> = [],
 ): string | null {
   const cancelIntent     = CANCEL_INTENT_RE.test(userText)
   const rescheduleIntent = RESCHEDULE_INTENT_RE.test(userText)
+
+  // Booking intent recovery: when the 8B failed to produce a usable reply for a
+  // booking turn, ask for the missing data deterministically instead of looping
+  // on the "Estoy verificando la información" fallback.
+  if (!cancelIntent && !rescheduleIntent && BOOK_INTENT_RE.test(userText)) {
+    if (services.length === 1) {
+      return `Con gusto te agendo *${services[0]!.name}*. ¿Para qué día y a qué hora te gustaría?`
+    }
+    return 'Con gusto te ayudo a agendar. ¿Qué servicio te gustaría y para qué día?'
+  }
 
   if (!cancelIntent && !rescheduleIntent) return null
 
@@ -248,6 +261,17 @@ export async function runAgentLoop(
       intent: intent?.intent ?? 'unknown',
     })
     return { text: bookingGap, tokens: 0, toolCallsTrace: [] }
+  }
+
+  // ── Deterministic read: "¿tengo alguna cita?" ────────────────────────────
+  // Answer appointment queries straight from context.activeAppointments instead
+  // of letting the 8B echo nonsense. Read-only, 0 tokens.
+  if (isListAppointmentsQuery(userText)) {
+    const text = buildAppointmentsListResponse(context.activeAppointments, business.timezone)
+    addBreadcrumb('Deterministic list-appointments resolved (0 tokens)', 'agent', 'info', {
+      count: context.activeAppointments.length,
+    })
+    return { text, tokens: 0, toolCallsTrace: [] }
   }
 
   // ── Open the per-turn trace (closed in the finally block below) ───────────
@@ -476,7 +500,7 @@ export async function runAgentLoop(
     // client always sees the actual appointment details when they ask to cancel
     // or reschedule — no matter what the 8B produced.
     const deterministic = !toolsAllowed
-      ? buildDeterministicIntentResponse(userText, context.activeAppointments, business.timezone)
+      ? buildDeterministicIntentResponse(userText, context.activeAppointments, business.timezone, context.services)
       : null
     finalText = deterministic ?? INTERNAL_SYNTAX_FALLBACK
   }

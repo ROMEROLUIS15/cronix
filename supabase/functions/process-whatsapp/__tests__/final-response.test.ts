@@ -165,12 +165,23 @@ describe('B — tool failed → deterministic error message', () => {
   it('unknown error code → generic error message', () => {
     const result = selectFinalResponse(
       true,
-      { success: false, error: 'TOOL_EXECUTION_ERROR: error interno' },
+      { success: false, error: 'SOMETHING_UNMAPPED: weird' },
       '',
       { tool: 'confirm_booking' },
       TZ,
     )
     expect(result).toContain('No pude procesar')
+  })
+
+  it('DB_ERROR / TOOL_EXECUTION_ERROR → technical-problem retry message (RC2b)', () => {
+    const result = selectFinalResponse(
+      true,
+      { success: false, error: 'TOOL_EXECUTION_ERROR: error interno' },
+      '',
+      { tool: 'confirm_booking' },
+      TZ,
+    )
+    expect(result).toMatch(/problema técnico/i)
   })
 
   it('null error field → generic error message', () => {

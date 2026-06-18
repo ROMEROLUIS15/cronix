@@ -119,6 +119,11 @@ El sistema captura y responde de forma determinista mediante las estructuras def
 | `BOOKING_RATE_LIMIT` | "⚠️ Has alcanzado el límite de citas nuevas por hoy..." |
 | `INVALID_ARGS` | "⚠️ Hubo un problema con los datos de la cita. Por favor indícame nuevamente el servicio, fecha y hora." |
 | `UNAUTHORIZED` / `NOT_FOUND` | "⚠️ No encontré esa cita en tu historial. ¿Puedes confirmarme los detalles?" |
+| `DB_ERROR` / `TOOL_EXECUTION_ERROR` | "⚠️ No pude completar la reserva por un problema técnico. ¿Intentamos de nuevo, o prefieres elegir otro horario?" |
+
+> **Consulta de citas (read-only, determinista):** "¿tengo alguna cita?", "mis citas", "cuándo es mi cita" → `isListAppointmentsQuery` (`read-intents.ts`) responde directo desde `activeAppointments` (0 tokens), sin pasar por el LLM. No dispara si el texto trae un verbo de escritura (agendar/cancelar/reagendar).
+>
+> **Recovery de intención de agendar:** cuando el 8B falla (salida vacía/sintaxis interna) en un turno de agendamiento con la gate cerrada, `buildDeterministicIntentResponse` pide el dato faltante de forma determinista (servicio/día) en lugar de caer en el bucle "Estoy verificando la información…".
 
 ### Criterios de Aceptación (Happy Path)
 

@@ -44,6 +44,9 @@ export function selectFinalResponse(
     if (errorCode.includes('UNAUTHORIZED') || errorCode.includes('NOT_FOUND')) {
       return '⚠️ No encontré esa cita en tu historial. ¿Puedes confirmarme los detalles?'
     }
+    if (errorCode.includes('DB_ERROR') || errorCode.includes('TOOL_EXECUTION_ERROR')) {
+      return '⚠️ No pude completar la reserva por un problema técnico. ¿Intentamos de nuevo, o prefieres elegir otro horario?'
+    }
     return '⚠️ No pude procesar tu solicitud en este momento. Por favor intenta de nuevo en unos minutos.'
   }
 
