@@ -162,6 +162,17 @@ Para reducir el consumo de tokens y latencia, las intenciones de tipo FAQ con co
 
 El conjunto de intenciones FAQ se define en `FAQ_INTENTS` dentro de `faq-responses.ts`. Para agregar una nueva intención FAQ, basta con añadir su label al `Set` e implementar el caso en `buildFaqResponse()`.
 
+### Flujo de Agendamiento Determinista (cero alucinación en la escritura) — NORMATIVO
+
+El camino de **escritura** de una cita nueva no depende del LLM 8B para ningún dato vinculante. `runAgentLoop` invoca `resolveBookingTurn` (`booking-flow.ts`) **antes** del loop ReAct; el 8B nunca emite `service_id`/`date`/`time` ni propone una hora. La máquina determinista resuelve dos momentos:
+
+| Momento | Disparo | Acción |
+|---|---|---|
+| **Propuesta** (`kind:'reply'`) | contexto de booking + servicio resoluble + fecha parseable + hora explícita (`extractTime`) | Valida la hora contra `computeAvailableSlots` (horario + slots ocupados). Si libre → emite "¿Confirmo tu cita de *X* para el … a las …?". Si ocupada → lista los horarios reales libres. Si cerrado → pide otra fecha. **Nunca** inventa ni auto-reserva. |
+| **Ejecución** (`kind:'execute'`) | el turno previo del asistente fue NUESTRA propuesta (`¿Confirmo tu cita de …`) **+** afirmativa del cliente | Recupera servicio/fecha/hora de la propuesta de forma determinista (acepta fecha ISO o expresión en español), **re-valida** el slot, y ejecuta `confirm_booking` con esos args exactos vía `executeToolCall`. |
+
+`kind:null` → no es un momento determinista (servicio ambiguo, falta fecha, cancel/reschedule); cae al resolver de hueco de hora y al LLM. La ejecución determinista reusa `executeToolCall` (rate-limit, adapter con validación servicio∈catálogo + solapamiento + horario, y pipeline de notificaciones); **omite** el reviewer constitucional a propósito (existe para vetar alucinaciones del LLM, y aquí los args son deterministas → 0 tokens). La validación de slot en el momento de ejecutar también cubre el caso de carrera (slot ocupado entre propuesta y "sí") y cierra el hueco de horario fuera de servicio. El 8B queda solo para charla/recopilación cuando el turno es ambiguo.
+
 ### Resolver de Disponibilidad Determinista (anti-alucinación de hora) — NORMATIVO
 
 Cuando el cliente está en contexto de agendamiento y proporciona una **fecha pero NO una hora**, el agente NUNCA debe inventar una hora. Antes del LLM, `runAgentLoop` invoca `resolveBookingTimeGap` (`availability.ts`), que calcula de forma determinista (0 tokens) los horarios libres reales a partir de `working_hours` + slots ocupados + duración del servicio (`computeAvailableSlots`, espejo de la lógica del voice-agent):
