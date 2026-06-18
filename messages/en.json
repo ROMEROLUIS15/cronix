@@ -1193,7 +1193,13 @@
     "categoryLabel": "Business Category",
     "categoryPlace": "Select",
     "createBtn": "Finish Setup",
-    "terms": "By continuing you accept the terms and conditions."
+    "terms": "By continuing you accept the terms and conditions.",
+    "hoursTitle": "Business hours",
+    "openLabel": "Opens",
+    "closeLabel": "Closes",
+    "sunOpenLabel": "Open on Sundays",
+    "hoursHint": "You can fine-tune hours per day in Settings.",
+    "hoursError": "Closing time must be after opening time."
   },
   "businessCategories": {
     "barbershop": "Barbershop",

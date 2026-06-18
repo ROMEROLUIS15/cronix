@@ -1157,7 +1157,13 @@
     "categoryLabel": "Kategorie",
     "categoryPlace": "Wählen",
     "createBtn": "Bereit",
-    "terms": "Durch Klicken akzeptierst du die AGB."
+    "terms": "Durch Klicken akzeptierst du die AGB.",
+    "hoursTitle": "Öffnungszeiten",
+    "openLabel": "Öffnet",
+    "closeLabel": "Schließt",
+    "sunOpenLabel": "Sonntags geöffnet",
+    "hoursHint": "Du kannst die Zeiten pro Tag in den Einstellungen anpassen.",
+    "hoursError": "Die Schließzeit muss nach der Öffnungszeit liegen."
   },
   "businessCategories": {
     "barbershop": "Friseur / Barbier",

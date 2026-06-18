@@ -38,6 +38,8 @@ Secciones del dashboard identificadas en sidebar (`components/layout/sidebar.tsx
 | `/dashboard/admin/users` | User Management | Sí (adminOnly) |
 | `/dashboard/admin/payments` | Payments | Sí (adminOnly) |
 
+> **Onboarding (`/dashboard/setup`) captura el horario.** El formulario de creación pide hora de apertura/cierre (default 09:00–18:00) + toggle de domingos; la action `createBusiness` lo persiste en `settings.workingHours` en el formato canónico (`{ mon: [open, close] | null, … }`, claves de 3 letras) que leen los agentes WhatsApp y voz. Así ningún negocio nace sin horario usable. El editor por-día completo vive en Configuración.
+
 ## 3. Reglas de Acceso
 
 Toda la protección se implementa en `app/[locale]/dashboard/layout.tsx`:

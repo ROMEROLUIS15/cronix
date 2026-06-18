@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createBusiness } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Store, ArrowRight, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import { Store, ArrowRight, Sparkles, AlertCircle, Loader2, Clock } from "lucide-react";
 import Image from "next/image";
 import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
 import { useTranslations } from "next-intl";
@@ -168,6 +168,45 @@ export default function SetupPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label
+                  className="flex items-center gap-2 text-sm font-semibold mb-2"
+                  style={{ color: "#F2F2F2" }}
+                >
+                  <Clock size={16} style={{ color: "#0062FF" }} />
+                  {t('hoursTitle')}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-xs" style={{ color: "#909098" }}>{t('openLabel')}</span>
+                    <input
+                      name="open"
+                      type="time"
+                      required
+                      defaultValue="09:00"
+                      className="input-base py-3 mt-1"
+                      style={{ backgroundColor: "#212125" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs" style={{ color: "#909098" }}>{t('closeLabel')}</span>
+                    <input
+                      name="close"
+                      type="time"
+                      required
+                      defaultValue="18:00"
+                      className="input-base py-3 mt-1"
+                      style={{ backgroundColor: "#212125" }}
+                    />
+                  </label>
+                </div>
+                <label className="flex items-center gap-2 mt-3 text-sm cursor-pointer" style={{ color: "#C0C0C8" }}>
+                  <input name="sunday_open" type="checkbox" value="1" className="h-4 w-4" />
+                  {t('sunOpenLabel')}
+                </label>
+                <p className="text-xs mt-1" style={{ color: "#606068" }}>{t('hoursHint')}</p>
               </div>
             </div>
 

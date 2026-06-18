@@ -1193,7 +1193,13 @@
     "categoryLabel": "Categoría del Negocio",
     "categoryPlace": "Seleccionar",
     "createBtn": "Terminar y Entrar",
-    "terms": "Al continuar aceptas los términos y condiciones."
+    "terms": "Al continuar aceptas los términos y condiciones.",
+    "hoursTitle": "Horario de atención",
+    "openLabel": "Abre",
+    "closeLabel": "Cierra",
+    "sunOpenLabel": "Abro los domingos",
+    "hoursHint": "Podrás ajustar el horario por día en Configuración.",
+    "hoursError": "La hora de cierre debe ser posterior a la de apertura."
   },
   "businessCategories": {
     "barbershop": "Barbería",

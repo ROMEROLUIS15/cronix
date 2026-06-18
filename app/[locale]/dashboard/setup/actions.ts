@@ -54,6 +54,23 @@ export async function createBusiness(
   const { name, category } = parsed.data
   const timezone = (formData.get('timezone') as string) || 'America/Caracas'
 
+  // Business hours captured at onboarding → stored in the dashboard's canonical
+  // shape (settings.workingHours: { mon: [open, close] | null, … }), which the
+  // WhatsApp and voice agents read. Mon–Sat get the chosen span; Sunday only if
+  // the owner opted in. So no business starts without a usable schedule.
+  const open  = (formData.get('open')  as string) || '09:00'
+  const close = (formData.get('close') as string) || '18:00'
+  const sundayOpen = formData.get('sunday_open') === '1'
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+  if (!TIME_RE.test(open) || !TIME_RE.test(close) || open >= close) {
+    return { error: 'El horario de cierre debe ser posterior al de apertura.' }
+  }
+  const span: [string, string] = [open, close]
+  const workingHours: Record<string, [string, string] | null> = {
+    mon: span, tue: span, wed: span, thu: span, fri: span, sat: span,
+    sun: sundayOpen ? span : null,
+  }
+
   // 3. Check if user already has a business (reuse the callerUser query above)
   if (callerUser?.business_id) {
     redirect('/dashboard')
@@ -80,6 +97,15 @@ export async function createBusiness(
 
   if (businessResult.error) {
     return { error: 'Error al crear el negocio: ' + businessResult.error }
+  }
+
+  // Seed the working hours onto the freshly created business (merge — never clobber
+  // any defaults the RPC set). Non-fatal: if it fails the business still exists and
+  // the owner can set hours in Settings.
+  const newBiz = businessResult.data
+  if (newBiz?.id) {
+    const currentSettings = (newBiz.settings ?? {}) as Record<string, unknown>
+    await repos.businesses.updateSettings(newBiz.id, { ...currentSettings, workingHours })
   }
 
   revalidatePath('/dashboard')

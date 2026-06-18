@@ -1157,7 +1157,13 @@
     "categoryLabel": "Secteur",
     "categoryPlace": "Sélectionner",
     "createBtn": "Terminer",
-    "terms": "En continuant, vous acceptez les C.G.U."
+    "terms": "En continuant, vous acceptez les C.G.U.",
+    "hoursTitle": "Horaires d'ouverture",
+    "openLabel": "Ouvre",
+    "closeLabel": "Ferme",
+    "sunOpenLabel": "Ouvert le dimanche",
+    "hoursHint": "Vous pourrez ajuster les horaires par jour dans Paramètres.",
+    "hoursError": "L'heure de fermeture doit être postérieure à l'heure d'ouverture."
   },
   "businessCategories": {
     "barbershop": "Barbier",

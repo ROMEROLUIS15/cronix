@@ -1157,7 +1157,13 @@
     "categoryLabel": "Categoria do Negócio",
     "categoryPlace": "Selecionar",
     "createBtn": "Entrar",
-    "terms": "Ao entrar, você concorda com nossos termos."
+    "terms": "Ao entrar, você concorda com nossos termos.",
+    "hoursTitle": "Horário de atendimento",
+    "openLabel": "Abre",
+    "closeLabel": "Fecha",
+    "sunOpenLabel": "Abro aos domingos",
+    "hoursHint": "Você poderá ajustar o horário por dia em Configurações.",
+    "hoursError": "O horário de fechamento deve ser posterior ao de abertura."
   },
   "businessCategories": {
     "barbershop": "Barbearia",

@@ -1157,7 +1157,13 @@
     "categoryLabel": "Categoria",
     "categoryPlace": "Selezionare",
     "createBtn": "Fine",
-    "terms": "Accetti i Termini di Servizio continaundo."
+    "terms": "Accetti i Termini di Servizio continaundo.",
+    "hoursTitle": "Orario di apertura",
+    "openLabel": "Apre",
+    "closeLabel": "Chiude",
+    "sunOpenLabel": "Aperto la domenica",
+    "hoursHint": "Potrai regolare gli orari per giorno nelle Impostazioni.",
+    "hoursError": "L'orario di chiusura deve essere successivo a quello di apertura."
   },
   "businessCategories": {
     "barbershop": "Barbiere",
