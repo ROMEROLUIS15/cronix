@@ -11,6 +11,9 @@ export const BusinessSettingsSchema = z.object({
       z.null(),
     ])
   ).optional(),
+  // True once the owner explicitly set their schedule (setup form or Settings save).
+  // Absent/false = system default seeded at signup → dashboard nudges them to confirm.
+  workingHoursConfirmed: z.boolean().optional(),
   notifications: z.object({
     whatsapp:       z.boolean().default(false),
     email:          z.boolean().default(false),

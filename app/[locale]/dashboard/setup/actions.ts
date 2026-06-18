@@ -105,7 +105,9 @@ export async function createBusiness(
   const newBiz = businessResult.data
   if (newBiz?.id) {
     const currentSettings = (newBiz.settings ?? {}) as Record<string, unknown>
-    await repos.businesses.updateSettings(newBiz.id, { ...currentSettings, workingHours })
+    // The owner explicitly chose these hours in the form → mark as confirmed so the
+    // dashboard "confirm your schedule" nudge never fires for them.
+    await repos.businesses.updateSettings(newBiz.id, { ...currentSettings, workingHours, workingHoursConfirmed: true })
   }
 
   revalidatePath('/dashboard')

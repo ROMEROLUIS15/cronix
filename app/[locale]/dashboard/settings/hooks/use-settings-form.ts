@@ -206,9 +206,19 @@ export function useSettingsForm(): SettingsFormReturn {
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
     const container = getBrowserContainer();
 
-    const result = await container.businesses.updateSettings(bizId, { ...currentSettings, workingHours });
+    // Saving here = the owner explicitly set their real schedule → confirm it so the
+    // "confirm your hours" nudge stops showing.
+    const newSettings = { ...currentSettings, workingHours, workingHoursConfirmed: true };
+    const result = await container.businesses.updateSettings(bizId, newSettings);
 
     setSavingHours(false);
+    if (!result.error) {
+      setBiz((prev) =>
+        prev
+          ? ({ ...prev, settings: newSettings as unknown as Business['settings'] } as any)
+          : prev,
+      );
+    }
     result.error
       ? showMsg('error', 'saveHoursError')
       : showMsg('success', 'saveHoursSuccess');

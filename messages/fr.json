@@ -228,6 +228,13 @@
     "selectBizCategory": "Veuillez sélectionner un type d'activité"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Confirmez vos horaires d'ouverture",
+      "badge": "Important",
+      "desc": "Votre établissement utilise des horaires par défaut (Lun–Sam 9h00–18h00). Confirmez-les ou ajustez-les pour que l'assistant ne réserve que pendant vos heures réelles.",
+      "cta": "Configurer les horaires",
+      "later": "Plus tard"
+    },
     "tabs": {
       "agenda": "Calendrier",
       "summary": "Résumé",

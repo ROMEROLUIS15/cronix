@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { isSameDay, parseISO } from "date-fns"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { ServicesOnboardingBanner } from "@/components/dashboard/services-onboarding-banner"
+import { WorkingHoursBanner } from "@/components/dashboard/working-hours-banner"
 import { NoBusinessView } from "../_components/NoBusinessView"
 import { DashboardHeader } from "../_components/DashboardHeader"
 import { AgendaTab } from "../_components/AgendaTab"
@@ -162,6 +163,8 @@ export function DashboardClient({
         {hasServices !== null && (
           <ServicesOnboardingBanner businessId={businessId ?? ""} hasServices={hasServices} />
         )}
+
+        {businessId && <WorkingHoursBanner businessId={businessId} />}
 
         {tab === "agenda" && (
           <AgendaTab

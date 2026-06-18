@@ -228,6 +228,13 @@
     "selectBizCategory": "Bitte wähle eine Unternehmensart aus"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Bestätige deine Öffnungszeiten",
+      "badge": "Wichtig",
+      "desc": "Dein Betrieb nutzt Standardzeiten (Mo–Sa 9:00–18:00). Bestätige oder passe sie an, damit der Assistent nur innerhalb deiner echten Zeiten Termine bucht.",
+      "cta": "Zeiten festlegen",
+      "later": "Später"
+    },
     "tabs": {
       "agenda": "Kalender",
       "summary": "Zusammenfassung",

@@ -145,6 +145,22 @@ async function ensureBusinessFromMetadata(user: User): Promise<void> {
     return
   }
 
+  // This path bypasses /setup, so there's no form to capture working hours. Seed a
+  // safe, explicit default (Mon–Sat 09:00–18:00, Sun closed) in the dashboard's
+  // canonical shape — the WhatsApp/voice agents read settings.workingHours, and an
+  // absent value makes them assume every day incl. Sunday is open. workingHoursConfirmed
+  // stays false so the dashboard can nudge the owner to confirm their real schedule.
+  const span: [string, string] = ['09:00', '18:00']
+  const defaultWorkingHours: Record<string, [string, string] | null> = {
+    mon: span, tue: span, wed: span, thu: span, fri: span, sat: span, sun: null,
+  }
+  const currentSettings = (bizData.settings ?? {}) as Record<string, unknown>
+  await businessesRepoInstance.updateSettings(bizData.id, {
+    ...currentSettings,
+    workingHours:          defaultWorkingHours,
+    workingHoursConfirmed: false,
+  })
+
   await usersRepoInstance.linkUserToBusiness(user.id, {
     name: dbUser.name ?? user.email?.split('@')[0] ?? 'Usuario',
     business_id: bizData.id,

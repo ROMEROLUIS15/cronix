@@ -126,6 +126,8 @@ export interface SlotCheckAppointment {
 
 export interface BusinessSettingsJson {
   workingHours?: Record<string, [string, string] | null>
+  /** True once the owner explicitly confirmed their schedule (setup/Settings). */
+  workingHoursConfirmed?: boolean
   notifications?: {
     whatsapp: boolean
     reminderHours?: number[]  // legacy

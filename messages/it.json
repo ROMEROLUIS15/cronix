@@ -228,6 +228,13 @@
     "selectBizCategory": "Seleziona un tipo di attività"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Conferma il tuo orario di apertura",
+      "badge": "Importante",
+      "desc": "La tua attività usa un orario predefinito (Lun–Sab 9:00–18:00). Confermalo o modificalo affinché l'assistente fissi appuntamenti solo nei tuoi orari reali.",
+      "cta": "Imposta orario",
+      "later": "Più tardi"
+    },
     "tabs": {
       "agenda": "Calendario",
       "summary": "Riepilogo",

@@ -228,6 +228,13 @@
     "selectBizCategory": "Selecione um tipo de negócio"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Confirme o seu horário de atendimento",
+      "badge": "Importante",
+      "desc": "O seu negócio está a usar um horário padrão (Seg–Sáb 9:00–18:00). Confirme ou ajuste-o para que o assistente agende apenas dentro do seu horário real.",
+      "cta": "Configurar horário",
+      "later": "Mais tarde"
+    },
     "tabs": {
       "agenda": "Calendário",
       "summary": "Resumo",

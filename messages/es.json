@@ -264,6 +264,13 @@
     "selectBizCategory": "Selecciona un tipo de negocio"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Confirma tu horario de atención",
+      "badge": "Importante",
+      "desc": "Tu negocio usa un horario por defecto (Lun–Sáb 9:00–18:00). Confírmalo o ajústalo para que el asistente agende solo dentro de tus horas reales.",
+      "cta": "Configurar horario",
+      "later": "Más tarde"
+    },
     "tabs": {
       "agenda": "Agenda",
       "summary": "Resumen",

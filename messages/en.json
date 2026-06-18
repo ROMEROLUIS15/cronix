@@ -264,6 +264,13 @@
     "selectBizCategory": "Please select a business type"
   },
   "dashboard": {
+    "hoursNudge": {
+      "title": "Confirm your business hours",
+      "badge": "Important",
+      "desc": "Your business is using a default schedule (Mon–Sat 9:00 AM–6:00 PM). Confirm or adjust it so the assistant only books within your real hours.",
+      "cta": "Set hours",
+      "later": "Later"
+    },
     "tabs": {
       "agenda": "Calendar",
       "summary": "Summary",
