@@ -154,7 +154,12 @@ Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal*
 | **Dashboard** — reagendar/editar | ✅ | n/a | `use-edit-appointment-form` → `container.notifications.create` + push |
 | **Dashboard** — cancelar/confirmar | ✅ | n/a | `use-dashboard-data` → `notificationForAppointment*` → `container.notifications.create` + push |
 
-**Realtime de la campana:** `useInAppNotifications` se suscribe a `postgres_changes` sobre `notifications` filtrado por `business_id` → **cualquier** inserción (cualquier superficie) refresca la campana en vivo. Invariante: ninguna superficie de escritura puede omitir la inserción en `notifications`.
+**Realtime de campana y calendario (NORMATIVO — debe ser en vivo, sin recargar).** La entrega en vivo usa **tres mecanismos en capas** para que ningún fallo de una capa deje el dashboard obsoleto:
+1. **`postgres_changes`** sobre `notifications`/`appointments` filtrado por `business_id` — cubre escrituras del dashboard/web (cliente autenticado).
+2. **Broadcast** en el canal `notifications:${businessId}` — lo emite `pushToRealtime` de las edge functions de WhatsApp/voz (`appointment.created|rescheduled|cancelled`). Es **independiente de RLS**, así que entrega aunque `postgres_changes` se caiga por la autorización de realtime en escrituras cross-channel (caso real observado: la cita/notif se escribían en DB pero solo aparecían al recargar). El dashboard se suscribe al mismo canal; la campana (estado propio, no React Query) se refresca vía un evento de ventana `cronix:realtime-refresh`.
+3. **Red de seguridad — refetch periódico** (20s, solo pestaña visible) en calendario, stats y campana. Como la escritura WA ya invalida la caché Upstash, el poll trae datos frescos en ≤20s aunque ambas capas de realtime fallen → **nunca** se requiere recargar a mano.
+
+Invariante: ninguna superficie de escritura puede omitir la inserción en `notifications`, y el reflejo en campana/calendario debe ocurrir **sin recarga manual**.
 
 > **Alcance por inquilino (diagnóstico — NORMATIVO).** Todo (cita, campana, WhatsApp al dueño) se escribe contra el `business_id` que resuelve el **slug** del mensaje (`#slug`). Si existen **negocios duplicados** (mismo nombre, distinto slug), una reserva hecha con el slug A aparece en el dashboard del negocio A, **no** en el del negocio B — aunque se llamen igual. Síntoma típico al verificar: "el agente agendó pero no veo la cita / no llegó el WhatsApp al dueño" cuando en realidad la operación fue correcta en otro `business_id`. Al diagnosticar SIEMPRE confirmar el `business_id` de la traza (`ai_traces.business_id`) contra el negocio cuyo dashboard se está mirando, y que ese negocio tenga `businesses.phone` para el canal WhatsApp del dueño.
 

@@ -63,7 +63,7 @@ export function useInAppNotifications(businessId: string | null) {
       ? ric.requestIdleCallback(fire, { timeout: 2000 })
       : (window.setTimeout(fire, 0) as unknown as number)
 
-    // Real-time subscription
+    // Real-time subscription (postgres_changes)
     const channel = supabase
       .channel(`business-notifications-${businessId}`)
       .on(
@@ -80,10 +80,25 @@ export function useInAppNotifications(businessId: string | null) {
       )
       .subscribe()
 
+    // Broadcast bridge: the dashboard realtime hook dispatches this window event when
+    // a broadcast arrives from the WhatsApp/voice edge functions (RLS-independent path),
+    // so the bell refreshes live even if postgres_changes is dropped for cross-channel writes.
+    const onRealtimeRefresh = () => { void fetchNotifications() }
+    window.addEventListener('cronix:realtime-refresh', onRealtimeRefresh)
+
+    // Safety net so the bell never needs a manual reload: poll every 20s while the tab
+    // is visible, even if realtime delivery is dropped. Broadcast/postgres_changes make
+    // it instant when they work.
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchNotifications()
+    }, 20_000)
+
     return () => {
       if (ric.cancelIdleCallback && ric.requestIdleCallback) ric.cancelIdleCallback(handle)
       else window.clearTimeout(handle)
       supabase.removeChannel(channel)
+      window.removeEventListener('cronix:realtime-refresh', onRealtimeRefresh)
+      window.clearInterval(poll)
     }
   }, [businessId, fetchNotifications, supabase])
 

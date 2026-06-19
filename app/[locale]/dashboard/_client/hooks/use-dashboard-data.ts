@@ -116,6 +116,11 @@ export function useDashboardData({
     },
     enabled: !!businessId,
     staleTime: 5 * 60 * 1000,
+    // Safety net so the calendar never requires a manual reload: a WhatsApp/voice
+    // write busts the server cache, and this poll (active tab only) picks it up within
+    // ~20s even if realtime delivery is dropped. Realtime/broadcast makes it instant.
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
     ...(useInitialMonthData ? { initialData: initialMonthApts } : {}),
   })
 
@@ -133,6 +138,8 @@ export function useDashboardData({
     },
     enabled: !!businessId,
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
     initialData: initialStats,
   })
 
