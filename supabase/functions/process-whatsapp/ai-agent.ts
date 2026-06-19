@@ -177,16 +177,22 @@ function buildDeterministicIntentResponse(
   return `Tienes varias citas activas:\n\n${list}\n\n¿Cuál de ellas quieres ${verb}?`
 }
 
-// ── Deterministic booking execution ────────────────────────────────────────────
-// Runs confirm_booking with code-derived, slot-validated args (the 8B never chose
+// ── Deterministic write execution (book | cancel | reschedule) ──────────────────
+// Runs the write tool with code-derived, slot-validated args (the 8B never chose
 // them). Reuses executeToolCall so rate-limit, the shared adapter (service ∈ catalog
-// + overlap + working-hours validation) and the notification pipeline all fire on
-// the same path as the LLM route. The constitutional reviewer (writeGuard) is
-// intentionally skipped: it exists to vet LLM hallucinations, and the args here are
-// deterministic, so running it would add an LLM call and defeat the 0-token path.
+// + overlap + working-hours validation), the cache invalidation and the notification
+// pipeline (owner + bell + push) all fire on the same path as the LLM route. The
+// constitutional reviewer (writeGuard) is intentionally skipped: it exists to vet LLM
+// hallucinations, and the args here are deterministic, so running it would add an LLM
+// call and defeat the 0-token path.
 
-async function executeDeterministicBooking(
-  directive:    { serviceId: string; serviceName: string; date: string; time: string },
+type DeterministicWrite =
+  | { kind: 'execute';           serviceId: string;     serviceName: string; date: string;    time: string }
+  | { kind: 'executeCancel';     appointmentId: string; serviceName: string; date: string;    time: string }
+  | { kind: 'executeReschedule'; appointmentId: string; serviceName: string; newDate: string; newTime: string }
+
+async function executeDeterministicWrite(
+  directive:    DeterministicWrite,
   context:      BusinessRagContext,
   sender:       string,
   customerName: string,
@@ -194,19 +200,25 @@ async function executeDeterministicBooking(
 ): Promise<{ text: string; tokens: number; toolCallsTrace: unknown[] }> {
   const { business } = context
 
+  // Map the directive to the corresponding write tool + args.
+  const { toolName, args } =
+    directive.kind === 'execute'
+      ? { toolName: 'confirm_booking',    args: { service_id: directive.serviceId, date: directive.date, time: directive.time } }
+    : directive.kind === 'executeCancel'
+      ? { toolName: 'cancel_booking',     args: { appointment_id: directive.appointmentId } }
+      : { toolName: 'reschedule_booking', args: { appointment_id: directive.appointmentId, new_date: directive.newDate, new_time: directive.newTime } }
+
+  const argsJson = JSON.stringify(args)
   const trace = tracer.start(
     { businessId: business.id, channel: 'whatsapp', actorKind: 'client_phone', actorKey: sender },
-    await shortHash(`${directive.serviceId}|${directive.date}|${directive.time}`),
-    { deterministic: true, path: 'booking_execute' },
+    await shortHash(`${toolName}|${argsJson}`),
+    { deterministic: true, path: 'write_execute', tool: toolName },
   )
 
   const synthetic: ToolCall = {
     id:       `det_${Date.now()}`,
     type:     'function',
-    function: {
-      name:      'confirm_booking',
-      arguments: JSON.stringify({ service_id: directive.serviceId, date: directive.date, time: directive.time }),
-    },
+    function: { name: toolName, arguments: argsJson },
   }
 
   const stepStart = Date.now()
@@ -214,7 +226,7 @@ async function executeDeterministicBooking(
   try {
     toolResult = await executeToolCall(synthetic, context, sender, customerName, undefined)
   } catch (err) {
-    captureException(err, { stage: 'deterministic_booking', service_id: directive.serviceId })
+    captureException(err, { stage: 'deterministic_write', tool: toolName })
     toolResult = JSON.stringify({ success: false, error: 'TOOL_EXECUTION_ERROR' })
   }
 
@@ -223,20 +235,20 @@ async function executeDeterministicBooking(
   const errCode = success ? '' : String(parsed?.error ?? '')
 
   trace.recordToolCall({
-    tool:            'confirm_booking',
+    tool:            toolName,
     durationMs:      Date.now() - stepStart,
     status:          success ? 'success' : errCode.includes('RATE_LIMIT') ? 'rate_limited' : 'error',
-    argsFingerprint: await shortHash(synthetic.function.arguments),
+    argsFingerprint: await shortHash(argsJson),
     errorCode:       success ? undefined : (errCode || 'UNKNOWN').slice(0, 64),
   })
 
-  const finalText = selectFinalResponse(true, parsed, '', { tool: 'confirm_booking' }, business.timezone)
+  const finalText = selectFinalResponse(true, parsed, '', { tool: toolName }, business.timezone)
 
   if (success) {
     void memoryEngine.write(memoryScope, {
       kind:     'episodic',
-      content:  `Cliente ${customerName}: confirm_booking — ${directive.serviceName} ${directive.date} ${directive.time}`,
-      metadata: { tool: 'confirm_booking', result: parsed },
+      content:  `Cliente ${customerName}: ${toolName} — ${directive.serviceName}`,
+      metadata: { tool: toolName, result: parsed },
       ttlDays:  180,
     })
   }
@@ -250,11 +262,7 @@ async function executeDeterministicBooking(
   return {
     text:   finalText,
     tokens: 0,
-    toolCallsTrace: [{
-      step: 1, tool: 'confirm_booking',
-      args: { service_id: directive.serviceId, date: directive.date, time: directive.time },
-      result: parsed, duration_ms: Date.now() - stepStart, success,
-    }],
+    toolCallsTrace: [{ step: 1, tool: toolName, args, result: parsed, duration_ms: Date.now() - stepStart, success }],
   }
 }
 
@@ -332,14 +340,15 @@ export async function runAgentLoop(
     workingHours: business.settings?.workingHours as unknown as WorkingHours,
     timezone:     business.timezone,
     bookedSlots:  (context.bookedSlots ?? []).map(s => ({ start_at: s.start_at, end_at: s.end_at })),
+    activeAppointments: context.activeAppointments.map(a => ({ id: a.id, service_name: a.service_name, start_at: a.start_at })),
     intent:       intent?.intent ?? null,
   })
   if (bookingTurn?.kind === 'reply') {
-    addBreadcrumb('Deterministic booking proposal/validation (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
+    addBreadcrumb('Deterministic booking/cancel/reschedule proposal (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
     return { text: bookingTurn.text, tokens: 0, toolCallsTrace: [] }
   }
-  if (bookingTurn?.kind === 'execute') {
-    return await executeDeterministicBooking(bookingTurn, context, sender, customerName, memoryScope)
+  if (bookingTurn && bookingTurn.kind !== 'reply') {
+    return await executeDeterministicWrite(bookingTurn, context, sender, customerName, memoryScope)
   }
 
   // ── Deterministic availability gap (anti-hallucination) ───────────────────

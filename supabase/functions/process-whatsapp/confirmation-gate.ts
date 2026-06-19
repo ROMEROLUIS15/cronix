@@ -36,7 +36,7 @@ const NEGATIVE_RE =
  * question (e.g. "¿Confirmo la cita?").
  */
 export function lastAssistantWasConfirmation(
-  history: { role: string; text: string }[],
+  history: ReadonlyArray<{ role: string; text: string }>,
 ): boolean {
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i]

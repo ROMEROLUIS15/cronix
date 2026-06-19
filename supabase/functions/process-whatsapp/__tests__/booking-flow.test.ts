@@ -161,7 +161,7 @@ describe('resolveBookingTurn — (A) deterministic execute on confirmation', () 
     expect(turn).toBeNull()
   })
 
-  it('returns null when the confirmation is for a non-booking proposal (cancel/reschedule)', () => {
+  it('executes a cancel confirmation (recovers the appointment from the proposal)', () => {
     const turn = resolveBookingTurn({
       userText: 'Si',
       history: [{ role: 'assistant', text: '¿Confirmas que cancele tu cita de *Tarjeta* del 25 de diciembre a las 9:00 am?' }],
@@ -169,8 +169,98 @@ describe('resolveBookingTurn — (A) deterministic execute on confirmation', () 
       workingHours: OPEN_ALL,
       timezone: TZ,
       bookedSlots: [],
+      activeAppointments: [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' }],
       intent: null,
     })
-    expect(turn).toBeNull()
+    expect(turn?.kind).toBe('executeCancel')
+    if (turn?.kind === 'executeCancel') expect(turn.appointmentId).toBe('apt-1')
+  })
+})
+
+describe('resolveBookingTurn — cancel flow', () => {
+  const APPTS = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' }] // 09:00 Bogota
+
+  it('proposes a cancel confirmation for the single active appointment', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero cancelar mi cita',
+      history: [],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPTS, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/cancele tu cita de \*Tarjeta\*/)
+      expect(turn.text).toContain('9:00 am')
+    }
+  })
+
+  it('lists appointments when there are several to cancel', () => {
+    const turn = resolveBookingTurn({
+      userText: 'cancelar',
+      history: [],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: [
+        { id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' },
+        { id: 'apt-2', service_name: 'Corte',   start_at: '2026-12-26T15:00:00Z' },
+      ],
+      intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/varias citas/i)
+  })
+
+  it('informs when there is nothing to cancel', () => {
+    const turn = resolveBookingTurn({
+      userText: 'cancelar mi cita',
+      history: [],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/no veo ninguna cita/i)
+  })
+})
+
+describe('resolveBookingTurn — reschedule flow', () => {
+  const APPTS = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' }] // 09:00 Bogota
+
+  it('proposes a validated reschedule when new date+time are given', () => {
+    const turn = resolveBookingTurn({
+      userText: 'reagenda mi cita para el 26 de diciembre a las 10 am',
+      history: [],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPTS, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Reagendo tu cita de \*Tarjeta\* del 25 de diciembre al 26 de diciembre/)
+      expect(turn.text).toContain('10:00 am')
+    }
+  })
+
+  it('asks for the time when only a new date is given', () => {
+    const turn = resolveBookingTurn({
+      userText: 'reagenda mi cita para el 26 de diciembre',
+      history: [],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPTS, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/a qué hora/i)
+  })
+
+  it('executes a reschedule confirmation (recovers appt + new slot from the proposal)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'dale',
+      history: [{ role: 'assistant', text: '¿Reagendo tu cita de *Tarjeta* del 25 de diciembre al 26 de diciembre a las 10:00 am?' }],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPTS, intent: null,
+    })
+    expect(turn?.kind).toBe('executeReschedule')
+    if (turn?.kind === 'executeReschedule') {
+      expect(turn.appointmentId).toBe('apt-1')
+      expect(turn.newDate).toBe('2026-12-26')
+      expect(turn.newTime).toBe('10:00')
+    }
   })
 })
