@@ -76,6 +76,12 @@ function sanitizeOutput(text: string): string {
     .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\s*\\([^)]*\\)`, 'gi'), '')
     .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\s*[:=]\\s*\\{[^}]*\\}`, 'gi'), '')
     .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\b`, 'gi'), '')
+    // Strip leaked catalog identifiers: the 8B sometimes echoes the prompt's
+    // "Servicio … | REF#<uuid>" line verbatim. Drop the "| REF#uuid" tail first,
+    // then any bare UUID still in prose. The REF# id must never reach the client.
+    .replace(/\s*\|\s*(?:REF#?\s*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '')
+    .replace(/\bREF#?\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '')
     // Collapse whitespace left behind
     .replace(/\s+/g, ' ')
     .trim()
