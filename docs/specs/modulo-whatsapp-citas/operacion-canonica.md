@@ -138,6 +138,20 @@ El mensaje debe:
 
 ---
 
+### 6.1 Matriz de notificaciones por superficie (NORMATIVO — verificado en código)
+
+Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal**, debe registrar la notificación en la campana del dueño. El **WhatsApp al dueño** aplica a las operaciones hechas por el **cliente vía WhatsApp**.
+
+| Superficie de escritura | Campana (tabla `notifications`) | WhatsApp al dueño | Cómo |
+|---|---|---|---|
+| **WhatsApp** (cliente agenda/reagenda/cancela) | ✅ | ✅ | `process-whatsapp` → `emitBookingEvent` (DB + realtime + WA dueño + push) |
+| **Voz / botón flotante** (`voice-worker`) | ✅ | n/a (lo opera el dueño) | inserta en `notifications` |
+| **Dashboard** — crear | ✅ | n/a | `use-appointment-form` → `container.notifications.create` + push |
+| **Dashboard** — reagendar/editar | ✅ | n/a | `use-edit-appointment-form` → `container.notifications.create` + push |
+| **Dashboard** — cancelar/confirmar | ✅ | n/a | `use-dashboard-data` → `notificationForAppointment*` → `container.notifications.create` + push |
+
+**Realtime de la campana:** `useInAppNotifications` se suscribe a `postgres_changes` sobre `notifications` filtrado por `business_id` → **cualquier** inserción (cualquier superficie) refresca la campana en vivo. Invariante: ninguna superficie de escritura puede omitir la inserción en `notifications`.
+
 ## 7. Identidad del cliente: nombre real de WhatsApp (NORMATIVO)
 
 > **INVARIANTE N1 — Nombre real.** Al agendar, el cliente se crea/actualiza con su **nombre de perfil de WhatsApp** real. Un placeholder (`Cliente 1234`) solo es admisible como último recurso cuando WhatsApp no entrega ningún nombre, y nunca debe pisar un nombre ya curado por el dueño.
