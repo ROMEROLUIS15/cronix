@@ -29,17 +29,75 @@ Cada operación exitosa produce, de forma automática y exactamente una vez, el 
 
 ---
 
-## 3. Rutas deterministas y anti-alucinación (NORMATIVO)
+## 3. Rutas deterministas y barreras anti-alucinación (NORMATIVO)
 
-El camino de **escritura** no depende del LLM 8B para ningún valor vinculante. Reglas innegociables:
+Esta es la columna vertebral del agente. **Principio rector:** el LLM (modelo pequeño `llama-3.1-8b-instant`) solo conversa y recopila; **nunca produce, calcula ni inventa un valor vinculante** de una cita (servicio, fecha, hora, identidad). Todo dato que se escribe en la base de datos es **extraído y validado de forma determinista** del catálogo real, del parser de fechas, del horario y de la disponibilidad real. Subir el modelo o el prompt solo reduce la tasa de error; estas barreras la llevan a **cero** en el camino de escritura.
 
-1. **Servicio:** SIEMPRE resuelto contra el catálogo cargado (`p.services`). Un `service_id` con forma de UUID que no pertenezca al catálogo se rechaza **antes** de tocar la base de datos (`INVALID_ARGS`), nunca llega a la RPC.
-2. **Fecha:** resuelta por el parser determinista (`parseDateExpression`); el modelo nunca calcula fechas.
-3. **Hora:** el agente **jamás** propone una hora que el cliente no dijo. Si el cliente da fecha sin hora, el sistema calcula los horarios libres reales (`computeAvailableSlots`) y los ofrece/lista; si da fecha+hora, la valida contra el horario y los slots ocupados antes de proponer la confirmación.
-4. **Confirmación de 2 turnos:** la escritura solo ocurre tras una propuesta `¿Confirmo…?` del propio sistema seguida de una afirmación inequívoca del cliente. La ejecución reconstruye los datos de forma determinista de esa propuesta y los re-valida en el momento de escribir.
-5. **Gate cerrada = sin tools:** si no hay confirmación, el LLM no recibe los esquemas de tools (`activeTools = []`).
+### 3.1 Orden de precedencia de rutas (árbol de decisión, NORMATIVO)
 
-> Detalle de implementación (descriptivo, no normativo): `process-whatsapp/booking-flow.ts` (`resolveBookingTurn`), `availability.ts`, `date-parser.ts`, `confirmation-gate.ts`, `_shared/booking-adapter.ts`, y la RPC `fn_book_appointment_wa` (valida servicio∈negocio). Ver §6 del `manifest.md`.
+Cada turno del cliente se evalúa en este orden estricto. La **primera** ruta que aplica responde y termina el turno; el LLM solo corre si ninguna ruta determinista aplica.
+
+| # | Ruta determinista | Disparo | Coste |
+|---|---|---|---|
+| 0 | **Intercept opt-out de retención** | el texto pide darse de baja | 0 tokens |
+| 1 | **Fast-path FAQ** | intención `greeting`/`pricing_inquiry` con confianza ≥ 0.90 | 0 tokens — plantilla |
+| 2 | **Flujo de agendamiento determinista** (propuesta/ejecución) | contexto de booking + datos resolubles (§3.3) | 0 tokens |
+| 3 | **Resolver de hueco de hora** | booking + fecha sin hora | 0 tokens — ofrece/lista horarios reales |
+| 4 | **Consulta de citas (read-only)** | "¿tengo cita?", "mis citas" | 0 tokens — desde citas activas reales |
+| 5 | **ReAct LLM (último recurso)** | nada de lo anterior aplicó (turno ambiguo / charla / recopilación) | con gate + barreras §3.4 |
+| 6 | **Pase final determinista** | siempre, sobre la salida del LLM | plantilla de éxito / mapa de error / saneo / fallback de intención |
+
+> El LLM nunca es la primera ni la única autoridad. Es un **respaldo conversacional** envuelto por barreras antes (gate, tools) y después (pase final, saneo, fallback).
+
+### 3.2 Los 4 datos críticos y su resolución determinista (NORMATIVO)
+
+| Dato | Fuente determinista | El LLM puede… |
+|---|---|---|
+| **Cliente** | Nombre de perfil de WhatsApp (no se pide en chat) | nunca lo inventa ni lo pide |
+| **Servicio** | Match contra el catálogo real cargado (`p.services`) | sugerir el más parecido por nombre y preguntar; nunca inventar uno ni un precio |
+| **Fecha** | Parser determinista de expresiones en español (`parseDateExpression`) | nunca calcula fechas (el 8B es poco fiable en aritmética de fechas) |
+| **Hora** | `computeAvailableSlots` sobre `workingHours` + slots ocupados + duración | **jamás** propone una hora que el cliente no dijo |
+
+**Regla de la hora (innegociable):** si el cliente da fecha **sin** hora, el sistema calcula los horarios libres reales y (a) propone el único libre como pregunta de confirmación, (b) lista los libres y pregunta cuál, o (c) informa que el día está cerrado/lleno. Si el cliente da fecha **y** hora explícita, se **valida** esa hora contra el horario y los slots ocupados antes de proponer; si no es válida, se ofrecen los libres. Nunca se elige una hora por el cliente.
+
+### 3.3 Contrato del flujo de escritura (NORMATIVO)
+
+La escritura de una cita ocurre en dos momentos, ambos deterministas:
+
+1. **Propuesta** — con servicio + fecha + hora resueltos y **validados** contra disponibilidad real, el sistema emite la pregunta `¿Confirmo tu cita de <servicio> para el <fecha> a las <hora>?`. El texto lo genera código, no el LLM.
+2. **Ejecución** — solo tras esa propuesta **y** una afirmación inequívoca del cliente ("sí/dale/ok/confirmo"). El sistema **reconstruye los datos de forma determinista de su propia propuesta** y los **re-valida** en el instante de escribir (defensa contra el slot ocupado entre la propuesta y el "sí", y contra una hora fuera de horario). `confirm_booking` lo invoca el código, no un tool-call elegido por el LLM.
+
+Reagendar y cancelar siguen el mismo contrato de 2 momentos: identificación determinista de la cita (por servicio/fecha de las citas activas reales), validación del nuevo slot (reagendar) y confirmación explícita antes de ejecutar.
+
+### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
+
+Todas deben permanecer activas. Quitar cualquiera reabre una superficie de alucinación.
+
+| ID | Barrera | Qué evita |
+|---|---|---|
+| **B1** | **Gate de confirmación de 2 turnos** | Que el modelo agende sin un "sí" explícito. Si la gate está cerrada, `activeTools = []` (el LLM ni ve los esquemas de tools). |
+| **B2** | **Resolución determinista de los 4 datos** (§3.2) | Que el LLM emita servicio/fecha/hora inventados. |
+| **B3** | **Validación de servicio contra catálogo** | Un `service_id` con forma de UUID ajeno al catálogo se rechaza (`INVALID_ARGS`) **antes** de la RPC; además la RPC valida `servicio ∈ negocio` (`SERVICE_NOT_FOUND`) en vez de reventar la FK. |
+| **B4** | **Validación de slot + horario** (en propuesta y en ejecución) | Agendar fuera del horario real o sobre un slot ocupado; carrera entre propuesta y confirmación. |
+| **B5** | **Prohibición de inventar hora** | Que el 8B fabrique "las 3 PM" cuando el cliente no dijo hora. |
+| **B6** | **Saneo de salida + detección de sintaxis interna** | Que se filtren al cliente UUIDs, `<function>`, JSON de tools o nombres de tool; si se detectan → fallback determinista. |
+| **B7** | **Guard de deduplicación por turno** | Doble ejecución de la misma tool con los mismos args (cita duplicada). |
+| **B8** | **Idempotencia por `event_id` determinista** | Notificaciones duplicadas al dueño si el loop o QStash reintentan. |
+| **B9** | **Revisor constitucional (WriteGuard)** sobre escrituras **propuestas por el LLM** | Hallucinaciones del LLM en el camino de respaldo. Se **omite** a propósito en el camino determinista (los args son de código → 0 tokens extra). |
+| **B10** | **Recuperación de función embebida solo con gate abierta** | Ejecutar como tool una alucinación que el modelo escupió como texto cuando NO debía. |
+| **B11** | **Fallback determinista de intención** | Que el 8B caiga en el bucle "Estoy verificando la información…": ante salida vacía/inusable se pide el dato faltante desde el estado real de la DB. |
+| **B12** | **Rate limit de reservas** | Abuso / spam de citas nuevas. |
+
+### 3.5 Qué puede y qué NO puede hacer el LLM (NORMATIVO)
+
+- **Puede:** saludar, explicar servicios/horarios (con datos reales inyectados), recopilar lo que falta, redactar respuestas amables, identificar la intención.
+- **NO puede:** emitir `service_id`/`date`/`time`/`appointment_id` que no provengan de las fuentes deterministas; proponer una hora no dicha por el cliente; confirmar/escribir sin la gate; afirmar que un servicio "no existe" sin revisar el catálogo; inventar precios, duraciones u horarios; ver los esquemas de tools con la gate cerrada.
+
+### 3.6 Errores deterministas
+
+Todo fallo se traduce a un mensaje determinista por código (`SLOT_CONFLICT`, `BOOKING_RATE_LIMIT`, `INVALID_ARGS`, `SERVICE_NOT_FOUND`, `UNAUTHORIZED/NOT_FOUND`, `DB_ERROR`). El cliente nunca recibe un error crudo ni una alucinación de recuperación; ver §5 del `manifest.md`.
+
+> Detalle de implementación (descriptivo, no normativo): `process-whatsapp/booking-flow.ts` (`resolveBookingTurn`, `extractTime`), `availability.ts` (`computeAvailableSlots`, `resolveBookingTimeGap`), `date-parser.ts`, `confirmation-gate.ts`, `read-intents.ts`, `faq-responses.ts`, `final-response.ts`, `ai-agent.ts` (orden de rutas + saneo + dedup), `_shared/booking-adapter.ts` y la RPC `fn_book_appointment_wa`. Ver §6 del `manifest.md`.
 
 ---
 
@@ -116,6 +174,15 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 
 ## 10. Criterios de aceptación (verificables)
 
+**Anti-alucinación y rutas deterministas (§3):**
+- **AC-DET:** Ningún `service_id`/`date`/`time`/`appointment_id` escrito proviene del LLM; todos son trazables a una fuente determinista (catálogo, parser, disponibilidad, citas activas).
+- **AC-GATE:** No existe ninguna escritura sin una propuesta `¿Confirmo…?` previa del sistema seguida de afirmación del cliente (o el camino híbrido con parámetros explícitos validados). Con la gate cerrada, `activeTools = []`.
+- **AC-TIME:** Dado fecha sin hora, el agente nunca propone una hora; ofrece/lista horarios reales o informa día cerrado/lleno.
+- **AC-SVC:** Un `service_id` ajeno al catálogo se rechaza antes de la RPC; la RPC valida `servicio ∈ negocio`.
+- **AC-SLOT:** La hora se valida contra `workingHours` + slots ocupados en la propuesta **y** en la ejecución; un slot ocupado entre ambos momentos no produce una reserva, sino una nueva oferta de horarios.
+- **AC-SANE:** El cliente nunca recibe UUIDs, `<function>`, JSON de tools, nombres de tool ni un error crudo.
+
+**Efectos de cada operación:**
 - **AC-C1:** Tras agendar/reagendar/cancelar, el cliente recibe **exactamente un** WhatsApp de acuse (contar mensajes salientes al cliente = 1 por operación).
 - **AC-O1:** Tras cada operación existe **una** fila en `notifications` (idempotente), la campana del dashboard la refleja, y el dueño recibe WhatsApp + web push.
 - **AC-O2:** El reagendamiento cumple AC-O1 igual que el agendamiento.
