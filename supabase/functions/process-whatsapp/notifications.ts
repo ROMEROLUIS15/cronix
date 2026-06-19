@@ -173,19 +173,33 @@ async function pushToRealtime(event: AppointmentEvent): Promise<void> {
 
 // ── Core: WhatsApp owner notification via whatsapp-service edge function ───────
 // whatsapp-service is the single WA transport point for the whole system.
-// We pass type:'text' + message so the service sends free-text instead of a template.
+//
+// Strategy (mirrors cron-reminders/sendOwnerWhatsAppSummary): try the approved
+// Meta TEMPLATE first — a template delivers OUTSIDE the 24h customer-service window,
+// which is the whole point of per-event owner alerts (a booking can land at any hour
+// when the owner hasn't messaged the bot recently). If the template send fails
+// (pending approval / quota / etc.) we fall back to free-form text, which still works
+// while the owner's 24h window is open. Booking is already committed → best-effort.
 
-async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string): Promise<void> {
+// Approved Meta template for per-event owner alerts. Configurable via secret so an
+// already-approved template can be wired without a redeploy; it MUST have exactly 4
+// body variables, in this order: {{1}} estado, {{2}} cliente, {{3}} servicio, {{4}}
+// fecha y hora. If the template isn't approved, the free-text fallback takes over.
+// @ts-ignore — Deno runtime globals
+const OWNER_EVENT_TEMPLATE = Deno.env.get('OWNER_EVENT_TEMPLATE') ?? 'owner_event_notification'
+
+function formatDateHuman(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number]
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+}
+
+async function sendOwnerWhatsApp(event: AppointmentEvent, _businessName: string): Promise<void> {
   try {
     // @ts-ignore — Deno runtime globals
-    const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? ''
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     // @ts-ignore
-    const accessToken   = Deno.env.get('WHATSAPP_ACCESS_TOKEN')   ?? ''
-
-    if (!phoneNumberId || !accessToken) {
-      console.warn('[NOTIFICATION-WA] WHATSAPP credentials not set — owner WA skipped')
-      return
-    }
+    const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
 
     // Owner's verified WhatsApp is stored in businesses.phone (set via VINCULAR-slug)
     const { data: bData } = await supabase
@@ -195,40 +209,40 @@ async function sendOwnerWhatsApp(event: AppointmentEvent, businessName: string):
       .maybeSingle()
 
     const rawPhone = (bData as { phone?: string | null })?.phone
-
     if (!rawPhone) {
       console.warn('[NOTIFICATION-WA] No owner phone found for business, skipping WA notification', event.businessId)
       return
     }
-
-    // Normalize phone: strip spaces, dashes, parens, leading +
-    // businesses.phone is stored WITHOUT '+' (e.g. '584247092980')
-    // Meta Graph API expects the number WITHOUT '+', as E.164 digits only
-    const phone = rawPhone.replace(/[\s\-\+\(\)]/g, '')
-
-    const message = buildOwnerWhatsAppMessage(event)
-
-    // Call Meta Graph API directly with a free-text message.
-    // NOTE: whatsapp-service only supports the appointment_reminder TEMPLATE,
-    // so we bypass it here and call Meta directly for owner notifications.
-    const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to:                phone,
-        type:              'text',
-        text:              { body: message },
-      }),
-    })
-
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      console.warn('[NOTIFICATION-WA] Meta API error:', (errBody as { error?: { message?: string } })?.error?.message ?? res.status)
+    if (!supabaseUrl || !cronSecret) {
+      console.warn('[NOTIFICATION-WA] whatsapp-service creds missing — owner WA skipped')
+      return
     }
+
+    const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
+    const prettyTime  = /^\d{2}:\d{2}$/.test(event.time) ? formatLocalTime(event.time) : event.time
+    const whenHuman   = `${formatDateHuman(event.date)} a las ${prettyTime}`
+
+    const post = (payload: Record<string, unknown>): Promise<boolean> =>
+      fetch(whatsappUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
+        body:    JSON.stringify({ to: rawPhone, ...payload }),
+      })
+        .then((r) => r.json().catch(() => ({ success: false })))
+        .then((d: { success?: boolean }) => d.success === true)
+        .catch(() => false)
+
+    // 1) Template first (delivers outside the 24h window).
+    const sentViaTemplate = await post({
+      type:         'template',
+      template:     OWNER_EVENT_TEMPLATE,
+      languageCode: 'es',
+      parameters:   [buildTitle(event.type), event.clientName, event.serviceName, whenHuman],
+    })
+    if (sentViaTemplate) return
+
+    // 2) Free-text fallback (works while the owner's 24h window is open).
+    await post({ type: 'text', message: buildOwnerWhatsAppMessage(event) })
   } catch (err) {
     // Non-critical — booking already committed, notification is best-effort
     console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
