@@ -334,4 +334,38 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
       expect(turn.text).not.toMatch(/¿Confirmo/i)
     }
   })
+
+  it('does NOT pull a stale date from a PREVIOUS (completed) booking in history', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero agendar',
+      history: [
+        { role: 'user', text: 'el 23 de diciembre a las 11 am' },
+        { role: 'assistant', text: '✅ ¡Listo! Tu cita para *Tarjeta* quedó agendada para el 23 de diciembre a las 11:00 am.' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: 'book_appointment',
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/qué día y a qué hora/i)
+      expect(turn.text).not.toMatch(/23 de diciembre/) // the stale date must NOT leak in
+    }
+  })
+
+  it('bounds gathering to the current booking intent (ignores an earlier abandoned date)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'a las 2 pm',
+      history: [
+        { role: 'user', text: 'el 23 de diciembre a las 11 am' },                                   // stale, abandoned
+        { role: 'assistant', text: '¿Confirmo tu cita de *Tarjeta* para el 23 de diciembre a las 11:00 am?' },
+        { role: 'user', text: 'quiero agendar otra' },                                               // fresh intent
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/qué día/i)              // asks the day (time given, date not)
+      expect(turn.text).not.toMatch(/23 de diciembre/)   // stale date excluded
+    }
+  })
 })

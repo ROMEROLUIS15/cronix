@@ -293,10 +293,22 @@ function gatherBookingState(
   timezone: string,
 ): { service: ServiceLite | null; date: string | null; time: string | null } {
   const today = todayInTimezone(timezone)
+  // CRITICAL: gather ONLY from the CURRENT booking sub-dialogue. The history window
+  // spans previous conversations/bookings, so reading the whole thing pulls a stale
+  // date/time the client stated in an EARLIER booking and re-proposes it now. Walk
+  // back from the newest turn and STOP at the boundary of this sub-dialogue: a prior
+  // completed booking (assistant BOOKING_DONE), or the turn where THIS booking
+  // started (a user BOOK_INTENT message — include it, then stop).
   const userTexts: string[] = [userText]
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i]
-    if (h && h.role === 'user' && h.text) userTexts.push(h.text)
+    if (!h || !h.text) continue
+    const isAssistant = h.role === 'model' || h.role === 'assistant'
+    if (isAssistant && BOOKING_DONE_RE.test(h.text)) break
+    if (h.role === 'user') {
+      userTexts.push(h.text)
+      if (BOOK_INTENT_RE.test(h.text)) break
+    }
   }
 
   let service: ServiceLite | null = null
