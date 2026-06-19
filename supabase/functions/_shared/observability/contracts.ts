@@ -36,6 +36,9 @@ export interface TraceFinish {
   readonly outcome:       TraceOutcome
   readonly errorCode?:    string
   readonly finalTextSha?: string
+  /** Extra fields merged into the trace metadata at close time (e.g. scrubbed
+   *  conversation text, the booking decision, anti-hallucination flags). */
+  readonly metadata?:     Readonly<Record<string, unknown>>
 }
 
 export interface TraceRecord {

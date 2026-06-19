@@ -95,6 +95,25 @@ function containsInternalSyntax(text: string): boolean {
 
 const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
 
+// ── Observability capture (scrubbed conversation + decision provenance) ─────────
+// ai_traces only stored hashes of the message/reply, so silent wrong behaviour
+// (outcome=success but the agent booked the wrong date) was invisible. We now store
+// the scrubbed turn text + the path that produced it in trace metadata, so a human
+// (or an automated check) can see WHAT happened, not just that it "succeeded".
+
+/** Redacts phone numbers and bearer tokens; keeps dates/times intact for debugging. */
+function scrubPII(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\+?\d{7,}/g, '[PHONE]')          // 7+ consecutive digits = phone (dates have '-', times ':')
+    .replace(/Bearer\s+[\w.\-]+/gi, '[TOKEN]')
+    .slice(0, 1000)
+}
+
+// A confirmation proposal carrying a date+time. After the deterministic redesign the
+// LLM must NEVER emit one of these — if it does, it's a hallucination to catch.
+const BOOKING_PROPOSAL_DETECT_RE = /¿\s*confirmo\s+tu\s+cita\s+de[\s\S]+para\s+el[\s\S]+a\s+las\s+/i
+
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 function buildWriteGuard(
@@ -203,6 +222,7 @@ async function executeDeterministicWrite(
   sender:       string,
   customerName: string,
   memoryScope:  MemoryScope,
+  userText:     string,
 ): Promise<{ text: string; tokens: number; toolCallsTrace: unknown[] }> {
   const { business } = context
 
@@ -263,6 +283,13 @@ async function executeDeterministicWrite(
     outcome:      success ? 'success' : errCode.includes('RATE_LIMIT') ? 'rate_limited' : 'failure',
     errorCode:    errCode ? errCode.slice(0, 64) : undefined,
     finalTextSha: await shortHash(finalText),
+    metadata: {
+      queryText: scrubPII(userText),
+      finalText: scrubPII(finalText),
+      path:      'deterministic_write',
+      // The booking decision — visible in the trace so a wrong date/time is auditable.
+      booking:   { tool: toolName, ...args, source: 'client-stated' },
+    },
   })
 
   return {
@@ -305,6 +332,24 @@ export async function runAgentLoop(
     actorKind:  'client_phone',
     actorKey:   sender,
   }
+
+  // Every turn — including the 0-token deterministic ones that used to return
+  // untraced — emits a trace with the scrubbed conversation text + the path, so no
+  // turn is ever invisible again. Best-effort: never breaks the turn.
+  const traceScope = {
+    businessId: business.id, channel: 'whatsapp' as const,
+    actorKind: 'client_phone' as const, actorKey: sender,
+  }
+  const quickTrace = async (finalText: string, path: string, extra: Record<string, unknown> = {}): Promise<void> => {
+    try {
+      const t = tracer.start(traceScope, await shortHash(userText), { path })
+      await t.finish({
+        outcome: 'success',
+        finalTextSha: await shortHash(finalText),
+        metadata: { queryText: scrubPII(userText), finalText: scrubPII(finalText), path, ...extra },
+      })
+    } catch { /* observability is best-effort */ }
+  }
   const [recalled, intent] = await Promise.all([
     memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 }),
     router.classify(userText),
@@ -330,6 +375,7 @@ export async function runAgentLoop(
   // deterministic, pre-configured answer.
   if (intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent)) {
     const text = buildFaqResponse(intent.intent, context)
+    await quickTrace(text, 'faq', { intent: intent.intent })
     return { text, tokens: 0, toolCallsTrace: [] }
   }
 
@@ -351,10 +397,14 @@ export async function runAgentLoop(
   })
   if (bookingTurn?.kind === 'reply') {
     addBreadcrumb('Deterministic booking/cancel/reschedule proposal (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
+    await quickTrace(bookingTurn.text, 'deterministic_booking', {
+      isProposal: BOOKING_PROPOSAL_DETECT_RE.test(bookingTurn.text),
+      intent: intent?.intent ?? null,
+    })
     return { text: bookingTurn.text, tokens: 0, toolCallsTrace: [] }
   }
   if (bookingTurn && bookingTurn.kind !== 'reply') {
-    return await executeDeterministicWrite(bookingTurn, context, sender, customerName, memoryScope)
+    return await executeDeterministicWrite(bookingTurn, context, sender, customerName, memoryScope, userText)
   }
 
   // ── Deterministic availability gap (anti-hallucination) ───────────────────
@@ -380,6 +430,7 @@ export async function runAgentLoop(
     addBreadcrumb('Deterministic availability gap resolved (0 tokens)', 'agent', 'info', {
       intent: intent?.intent ?? 'unknown',
     })
+    await quickTrace(bookingGap, 'deterministic_gap', { intent: intent?.intent ?? null })
     return { text: bookingGap, tokens: 0, toolCallsTrace: [] }
   }
 
@@ -391,6 +442,7 @@ export async function runAgentLoop(
     addBreadcrumb('Deterministic list-appointments resolved (0 tokens)', 'agent', 'info', {
       count: context.activeAppointments.length,
     })
+    await quickTrace(text, 'deterministic_list', { count: context.activeAppointments.length })
     return { text, tokens: 0, toolCallsTrace: [] }
   }
 
@@ -638,10 +690,27 @@ export async function runAgentLoop(
     return 'success'
   })()
 
+  // Anti-hallucination auto-catch: after the deterministic redesign the LLM must
+  // NEVER emit a booking proposal with a date+time. If this fires, the deterministic
+  // flow failed to own a booking turn — capture it loudly so we catch it without the
+  // user reporting it.
+  const llmProposedBooking = BOOKING_PROPOSAL_DETECT_RE.test(finalText)
+  if (llmProposedBooking) {
+    captureException(new Error('LLM emitted a booking proposal (deterministic flow should own this)'), {
+      stage: 'llm_proposed_booking', business_id: business.id, snippet: scrubPII(finalText).slice(0, 160),
+    })
+  }
+
   await trace.finish({
     outcome,
     errorCode:    lastFailedError ? lastFailedError.slice(0, 64) : undefined,
     finalTextSha: await shortHash(finalText),
+    metadata: {
+      queryText: scrubPII(userText),
+      finalText: scrubPII(finalText),
+      path:      'llm',
+      llmProposedBooking,
+    },
   })
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }

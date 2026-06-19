@@ -45,6 +45,16 @@ Columnas escritas por `PgTraceSink.write()`: `business_id`, `channel`,
 `final_text_sha`, `total_tokens`, `latency_ms`, `steps_count`, `tools_count`,
 `llm_steps`, `tool_calls`, `metadata`, `created_at`.
 
+### Captura de conversación y decisión (WhatsApp) — 🟢 implementado 2026-06-19
+
+`ai_traces` guardaba **solo hashes** del mensaje (`query_sha`) y de la respuesta (`final_text_sha`), por lo que un comportamiento **silenciosamente incorrecto** (p.ej. `outcome=success` pero agendó la fecha equivocada) era invisible y solo se detectaba si el dueño pegaba la conversación. Correcciones (NORMATIVO):
+
+* **Cada turno se traza, incluidos los deterministas de 0 tokens** (FAQ, propuesta/ejecución de booking, hueco de hora, lista de citas). Antes retornaban **antes** de `tracer.start()` → invisibles. Ahora `runAgentLoop` emite una traza por cada salida (`quickTrace`), con el campo `metadata.path` (`faq` | `deterministic_booking` | `deterministic_gap` | `deterministic_list` | `deterministic_write` | `llm`).
+* **Contenido depurado en `metadata`:** `metadata.queryText` y `metadata.finalText` guardan el texto del cliente y de la respuesta **con PII depurada** (teléfonos→`[PHONE]`, tokens→`[TOKEN]`; fechas/horas se conservan para depurar). Es el operador (founder) quien lo consume; no se expone al cliente.
+* **Decisión de booking auditable:** en la escritura determinista, `metadata.booking = { tool, service_id|appointment_id, date|new_date, time|new_time, source:'client-stated' }`.
+* **Auto-catch de alucinación (`metadata.llmProposedBooking`):** tras el rediseño determinista, el LLM **no debe** emitir una propuesta `¿Confirmo… para el … a las …?`. Si el texto final del LLM coincide con ese patrón, se marca `llmProposedBooking=true` **y** se captura en Sentry (`stage: llm_proposed_booking`) — el bug se atrapa solo, sin que el dueño lo reporte.
+* **Contrato:** `TraceFinish` admite `metadata?` que se **mergea** sobre la metadata de `start()` al cerrar (cambio espejado en la copia Node `lib/ai/observability/` y la Deno `_shared/observability/`; paridad verificada).
+
 ### Catálogo normativo de `outcome` y `error_code`
 
 `TraceOutcome` (`contracts.ts`): `success` | `failure` | `no_action` |

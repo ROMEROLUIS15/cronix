@@ -71,7 +71,7 @@ class TraceHandle implements ITraceHandle {
       toolsCount:   this.toolCalls.length,
       llmSteps:     this.llmSteps,
       toolCalls:    this.toolCalls,
-      metadata:     this.metadata,
+      metadata:     input.metadata ? { ...this.metadata, ...input.metadata } : this.metadata,
     }
 
     const res = await this.sink.write(record)
