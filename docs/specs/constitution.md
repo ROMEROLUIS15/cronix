@@ -3,6 +3,17 @@
 Este documento contiene las reglas de oro innegociables para el desarrollo de software en este repositorio. Cualquier agente de IA que genere o refactorice código DEBE cumplir estrictamente con estos lineamientos.
 
 ## 1. Patrones de Diseño y Estructura de Capas (DDD)
+
+### 1.0 Calidad estructural — INNEGOCIABLE (anti-espagueti, SOLID, anti-parche)
+
+> Esta cláusula es **vinculante para toda tarea de código**. Su incumplimiento es motivo de rechazo del cambio, sin excepción por "es pequeño".
+
+*   **Espagueti PROHIBIDO.** Queda prohibido el código enmarañado: funciones-Dios con múltiples responsabilidades, ramas `if/return` acumuladas sin un modelo explícito, lógica duplicada o capas que se solapan. Una función con más de una razón para cambiar debe descomponerse.
+*   **SOLID e independencia, no negociables.** **SRP** (una responsabilidad por unidad), **DIP** (depender de interfaces, no de implementaciones), y **separación de conceptos** entre capas. Una unidad de NLU/parseo, una de orquestación, una de estado de diálogo, una de persistencia — cada una independiente y testeable en aislamiento. La orquestación coordina; no acumula la lógica de cada capa en su cuerpo.
+*   **NO se aplican parches.** Está prohibido "tapar" un síntoma sin atacar la causa raíz. Un arreglo solo es admisible como parche cuando es **extremadamente leve y localizado** (p.ej. una condición de borde aislada). **Criterio de decisión obligatorio:** antes de parchear, analiza si el arreglo *podría expandirse* (más casos, más inputs, más estados). **Si puede expandirse → NO se parchea: se hace de la forma correcta** (componente dedicado, contrato, tests), aunque cueste más ahora. El parche que crece es deuda que rompe en otro lado.
+*   **Cada cambio deja el área igual o más limpia** (regla del campista): se elimina el código muerto que el cambio deja atrás; no se acumulan capas obsoletas "por si acaso".
+
+### 1.1 Separación de capas
 *   **Separación de Conceptos:** El sistema se divide estrictamente en Dominio, Infraestructura y Aplicación.
 *   **Regla de las Dos Capas de Casos de Uso:**
     - `lib/domain/use-cases/`: Reservado para clases orquestadoras con efectos secundarios (Comandos). Deben depender de interfaces, no de implementaciones (DIP).
