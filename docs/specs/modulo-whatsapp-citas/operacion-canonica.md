@@ -69,6 +69,10 @@ La escritura de una cita ocurre en dos momentos, ambos deterministas:
 
 Reagendar y cancelar siguen el mismo contrato de 2 momentos: identificación determinista de la cita (por servicio/fecha de las citas activas reales), validación del nuevo slot (reagendar) y confirmación explícita antes de ejecutar.
 
+> **La máquina de estados POSEE el sub-diálogo de agendar (NORMATIVO).** Apenas hay intención de agendar, el flujo determinista (`resolveBookingTurn`) maneja **cada turno** siguiente (servicio → día → hora → propuesta), de modo que el LLM **nunca** genera una pregunta de confirmación con fecha/hora. Servicio, fecha y hora se reconstruyen **solo de los mensajes del propio cliente** (`gatherBookingState`), nunca del texto de una propuesta del asistente (que un modelo pudo inventar); el valor más reciente que dijo el cliente gana, así una corrección ("mejor el martes") pisa la anterior. En el turno de confirmación se **ejecuta lo que el cliente dijo**, no el texto de la propuesta — una fecha/hora inventada jamás se agenda. La propuesta `¿Confirmo…?` solo puede originarse en este código.
+>
+> **Causa raíz histórica (2026-06-19):** el flujo determinista era un interceptor estrecho; cuando no disparaba (p.ej. tras elegir servicio, o cuando el router clasificaba mal "para el próximo martes" como `list_appointments`), el LLM tomaba el control, **inventaba fecha/hora** y el ejecutor determinista sellaba esa alucinación. Por eso ahora la máquina de estados es dueña del flujo y no depende del intent del router para fecha/hora (las detecta del texto directamente).
+
 ### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
 
 Todas deben permanecer activas. Quitar cualquiera reabre una superficie de alucinación.

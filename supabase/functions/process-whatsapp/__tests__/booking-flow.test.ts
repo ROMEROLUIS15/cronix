@@ -54,8 +54,7 @@ describe('resolveBookingTurn — (B) deterministic proposal', () => {
     }
   })
 
-  it('does NOT invent a time — defers (null) when no time given (time-gap layer handles it)', () => {
-    // resolveBookingTurn returns null here; ai-agent then calls resolveBookingTimeGap.
+  it('never invents a time — offers the real free slots when date given but no time', () => {
     const turn = resolveBookingTurn({
       userText: 'el 25 de diciembre',
       history: [],
@@ -65,7 +64,12 @@ describe('resolveBookingTurn — (B) deterministic proposal', () => {
       bookedSlots: [],
       intent: 'book_appointment',
     })
-    expect(turn).toBeNull()
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/horarios libres|a qué hora/i)
+      // crucially, it does NOT propose a confirmation with an invented time
+      expect(turn.text).not.toMatch(/¿Confirmo/i)
+    }
   })
 
   it('reports closed day instead of proposing', () => {
@@ -148,7 +152,7 @@ describe('resolveBookingTurn — (A) deterministic execute on confirmation', () 
     if (turn?.kind === 'reply') expect(turn.text).toMatch(/ocup|qued|otro/i)
   })
 
-  it('returns null on a negative reply (no execute)', () => {
+  it('does NOT execute on a negative reply — asks what to change (no re-propose)', () => {
     const turn = resolveBookingTurn({
       userText: 'no',
       history: [{ role: 'assistant', text: proposalISO }],
@@ -158,7 +162,8 @@ describe('resolveBookingTurn — (A) deterministic execute on confirmation', () 
       bookedSlots: [],
       intent: null,
     })
-    expect(turn).toBeNull()
+    expect(turn?.kind).not.toBe('execute')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/cambiar|cambias/i)
   })
 
   it('executes a cancel confirmation (recovers the appointment from the proposal)', () => {
@@ -261,6 +266,72 @@ describe('resolveBookingTurn — reschedule flow', () => {
       expect(turn.appointmentId).toBe('apt-1')
       expect(turn.newDate).toBe('2026-12-26')
       expect(turn.newTime).toBe('10:00')
+    }
+  })
+})
+
+// ── Anti-hallucination: the client's stated date/time always wins ──────────────
+describe('resolveBookingTurn — state machine owns booking, never trusts the proposal', () => {
+  it('re-proposes with the CLIENT\'s new date, ignoring a stale/invented proposal', () => {
+    const turn = resolveBookingTurn({
+      userText: 'mejor el 25 de diciembre a las 11 am',
+      history: [
+        { role: 'user', text: 'quiero agendar' },
+        { role: 'assistant', text: '¿Confirmo tu cita de *Tarjeta* para el 24 de diciembre a las 10:00 am?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/25 de diciembre/)
+      expect(turn.text).toContain('11:00 am')
+      expect(turn.text).not.toMatch(/24 de diciembre/) // never keeps the stale date
+    }
+  })
+
+  it('executes the CLIENT-stated date/time, not the (possibly invented) proposal text', () => {
+    const turn = resolveBookingTurn({
+      userText: 'Si',
+      history: [
+        { role: 'user', text: 'quiero agendar' },
+        { role: 'user', text: 'el 25 de diciembre a las 11 am' },
+        // proposal carries a WRONG date (24) — must be ignored in favour of what the client said.
+        { role: 'assistant', text: '¿Confirmo tu cita de *Tarjeta* para el 24 de diciembre a las 11:00 am?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('execute')
+    if (turn?.kind === 'execute') {
+      expect(turn.date).toBe('2026-12-25') // the client's date, NOT 24
+      expect(turn.time).toBe('11:00')
+    }
+  })
+
+  it('stays in booking context after a service-clarification sub-turn (single service)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'el 25 de diciembre a las 11 am',
+      history: [
+        { role: 'user', text: 'para agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Confirmo tu cita de \*Tarjeta\* para el 25 de diciembre a las 11:00 am/)
+    }
+  })
+
+  it('asks for day+time first (single service) without inventing anything', () => {
+    const turn = resolveBookingTurn({
+      userText: 'para agendar',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      intent: 'book_appointment',
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/qué día y a qué hora/i)
+      expect(turn.text).not.toMatch(/¿Confirmo/i)
     }
   })
 })

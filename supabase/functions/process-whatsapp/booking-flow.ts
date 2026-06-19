@@ -1,26 +1,24 @@
 /**
  * booking-flow.ts — Deterministic booking state machine for the WhatsApp agent.
  *
- * GOAL: zero hallucination on the booking WRITE path. The 8B model never emits
- * service_id / date / time, and never *proposes* a time. All three are extracted
- * and validated deterministically from the conversation + the loaded catalog +
- * real availability. The LLM remains only for free chat / gathering when the turn
- * is ambiguous (resolveBookingTurn returns null → caller falls through to the LLM).
+ * GOAL: zero hallucination on the booking path. Once booking is in play, this
+ * deterministic state machine OWNS every turn of the sub-dialogue — the LLM never
+ * emits service_id/date/time and never *proposes* a date or time. A confirmation
+ * question ("¿Confirmo tu cita de … para el … a las …?") can ONLY be produced here.
  *
- * Two deterministic moments:
- *   (A) Confirmation turn → EXECUTE. When the prior assistant turn was OUR booking
- *       proposal ("¿Confirmo tu cita de … para el … a las …?") and the user said
- *       "sí", we recover the exact booking from that proposal, re-validate the slot
- *       is still free, and return an `execute` directive. confirm_booking is run by
- *       code, not by a tool-call the model chose.
- *   (B) Proposal turn → REPLY. When the client gives service + date + (maybe time)
- *       in a booking context, we validate against working hours + booked slots and
- *       reply with a deterministic confirmation question (or list real free times).
+ * Core anti-hallucination rule: service/date/time are gathered ONLY from the
+ * client's OWN messages (gatherBookingState), never from an assistant proposal
+ * (which a model could have invented). The most recent client-stated value wins, so
+ * a correction overrides an earlier one. On the confirmation turn we EXECUTE what
+ * the client said — not the proposal text — so an invented date can never be booked.
  *
- * Anything outside this happy path (ambiguous service, cancel/reschedule, missing
- * date) returns null and the existing LLM loop / deterministic intent fallback
- * handles it. This module is additive: it shrinks the LLM's authority, the gate
- * and adapter validation remain as defence in depth for the fallback path.
+ * Turn handling (resolveBookingTurn):
+ *   (A) Confirmation + "sí" on OUR proposal → EXECUTE (book/cancel/reschedule),
+ *       re-validating the slot. Booking executes the gathered client state.
+ *   (B) In booking context → drive the sub-dialogue: ask service → ask day → offer
+ *       real free times → propose. Always replies/executes (never null).
+ *   (C) Cancel / reschedule of an EXISTING appointment.
+ *   else → null (not a booking moment) → LLM handles greeting/FAQ/clarification only.
  */
 
 import { parseDateExpression } from './date-parser.ts'
@@ -55,6 +53,19 @@ const OUR_RESCHEDULE_PROPOSAL_RE  = /¿\s*reagendo\s+tu\s+cita\s+de/i
 const CANCEL_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
 const RESCHEDULE_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?)\b/i
 
+// "Manage an EXISTING appointment" — cancel/reagendar explicitly. Exits new-booking
+// context (NOT the ambiguous "cambia/mover", which mid-booking means "change the proposal").
+const MANAGE_EXISTING_RE = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?)\b/i
+// Fresh new-booking intent. \bagend does NOT match "reagendar" (no word boundary), so
+// reschedule isn't mistaken for a new booking.
+const BOOK_INTENT_RE = /\b(agend(?:a|ar|ame|alo|emos|o)?|reserv(?:a|ar|ame|o)?|(?:quiero|necesito|sacar|pedir|dame|hacer)\s+(?:una\s+)?cita|nueva\s+cita)\b/i
+// Our OWN booking questions/proposals — keeps the flow "sticky" across sub-dialogue turns.
+const OUR_BOOKING_QUESTION_RE = /(¿\s*confirmo\s+tu\s+cita|para\s+qu[ée]\s+d[íi]a|a\s+qu[ée]\s+hora|qu[ée]\s+servicio\s+deseas|te\s+agendo|horarios?\s+libres|estamos\s+cerrados)/i
+// A completed/closed booking — ends booking context so we don't re-propose.
+const BOOKING_DONE_RE = /(qued[óo]\s+agendada|cita\s+reagendada|ha\s+sido\s+cancelada|listo!\s)/i
+// A clear decline — used to avoid re-proposing the same slot after the client says no.
+const NEGATIVE_RE = /^(no+|nop[ea]?|nel|para\s+nada|mejor\s+no|todav[íi]a\s+no|a[úu]n\s+no)\b/i
+
 function humanDate(dateISO: string): string {
   const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number]
   return new Date(Date.UTC(y, m - 1, d))
@@ -62,13 +73,6 @@ function humanDate(dateISO: string): string {
 }
 
 function pad2(n: number): string { return String(n).padStart(2, '0') }
-
-/** Picks the service to act on: the only one in the catalog, or one named in text. */
-function resolveService(text: string, services: ReadonlyArray<ServiceLite>): ServiceLite | null {
-  if (services.length === 1) return services[0]!
-  const t = text.toLowerCase()
-  return services.find((s) => s.name && t.includes(s.name.toLowerCase())) ?? null
-}
 
 /**
  * Extracts an explicit clock time from free text and normalises to 24h HH:mm.
@@ -262,11 +266,86 @@ function recoverRescheduleProposal(
   return { kind: 'executeReschedule', appointmentId: target.id, serviceName: target.service_name, newDate, newTime }
 }
 
+// ── New-booking session state (reconstructed from the client's OWN messages) ────
+
+/** Service named in the text (substring either direction, min 3 chars for reverse). */
+function serviceNamedIn(text: string, services: ReadonlyArray<ServiceLite>): ServiceLite | null {
+  const t = text.toLowerCase().trim()
+  if (!t) return null
+  return services.find((s) => {
+    const n = s.name.toLowerCase()
+    return !!n && (t.includes(n) || (t.length >= 3 && n.includes(t)))
+  }) ?? null
+}
+
+/**
+ * Reconstructs the booking the client has stated — service, date, time — scanning
+ * ONLY the client's own messages (current first, then history newest→oldest). This
+ * is the anti-hallucination core: we never read date/time from an assistant proposal
+ * (which the LLM could have invented). The most recent client-stated value wins, so a
+ * correction ("mejor el martes") overrides an earlier one. Service falls back to the
+ * single catalog entry. Returns nulls for whatever the client hasn't said yet.
+ */
+function gatherBookingState(
+  userText: string,
+  history: ReadonlyArray<{ role: string; text: string }>,
+  services: ReadonlyArray<ServiceLite>,
+  timezone: string,
+): { service: ServiceLite | null; date: string | null; time: string | null } {
+  const today = todayInTimezone(timezone)
+  const userTexts: string[] = [userText]
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if (h && h.role === 'user' && h.text) userTexts.push(h.text)
+  }
+
+  let service: ServiceLite | null = null
+  for (const t of userTexts) { const s = serviceNamedIn(t, services); if (s) { service = s; break } }
+  if (!service && services.length === 1) service = services[0]!
+
+  let date: string | null = null
+  for (const t of userTexts) {
+    const d = parseDateExpression(t, today, 'future')
+    if (d && d.date >= today) { date = d.date; break }
+  }
+
+  let time: string | null = null
+  for (const t of userTexts) { const tm = extractTime(t); if (tm) { time = tm; break } }
+
+  return { service, date, time }
+}
+
+/** True when this turn belongs to a NEW-booking sub-dialogue the deterministic flow owns. */
+function inBookingContext(
+  history: ReadonlyArray<{ role: string; text: string }>,
+  userText: string,
+  intent: string | null,
+): boolean {
+  // Explicit cancel/reagendar → managed elsewhere, not new booking.
+  if (MANAGE_EXISTING_RE.test(userText)) return false
+
+  const lastAssistant = [...history].reverse()
+    .find((h) => h.role === 'model' || h.role === 'assistant')?.text ?? ''
+
+  // A booking just finished → only re-enter on a brand-new booking intent.
+  if (BOOKING_DONE_RE.test(lastAssistant)) {
+    return intent === 'book_appointment' || BOOK_INTENT_RE.test(userText)
+  }
+
+  if (intent === 'book_appointment')          return true
+  if (BOOK_INTENT_RE.test(userText))          return true
+  if (OUR_BOOKING_QUESTION_RE.test(lastAssistant)) return true
+  // Sticky: a recent client turn expressed booking intent (covers the service-pick
+  // and date/time sub-turns where the current message alone has no booking keyword).
+  const recentUser = history.filter((h) => h.role === 'user').slice(-6)
+  return recentUser.some((h) => BOOK_INTENT_RE.test(h.text))
+}
+
 /**
  * Single deterministic entry point for a booking turn. Returns:
- *   - { kind:'execute' } → caller runs confirm_booking with these exact, validated args.
- *   - { kind:'reply' }   → caller sends this text verbatim (0 LLM tokens).
- *   - null               → not a deterministic booking moment; fall through to the LLM.
+ *   - { kind:'execute*' } → caller runs the write with these exact, validated args.
+ *   - { kind:'reply' }    → caller sends this text verbatim (0 LLM tokens).
+ *   - null                → not a deterministic moment; fall through to the LLM.
  */
 export function resolveBookingTurn(p: {
   userText:     string
@@ -283,100 +362,112 @@ export function resolveBookingTurn(p: {
 
   const lastAssistant = [...history].reverse()
     .find((h) => h.role === 'model' || h.role === 'assistant')?.text ?? ''
-  const inConfirmContext = lastAssistantWasConfirmation(history)
 
-  // ── (A) Confirmation → deterministic execute (book | cancel | reschedule) ────
-  if (inConfirmContext && isAffirmative(userText)) {
-    // (A.1) New-booking proposal → execute confirm_booking.
-    if (OUR_BOOKING_PROPOSAL_RE.test(lastAssistant)) {
-      const recovered = recoverProposedBooking(lastAssistant, services, timezone)
-      if (!recovered) return null // couldn't recover → let the LLM path handle it
-
-      // Re-validate the slot is still bookable at execution time (defence vs a slot
-      // taken between proposal and confirmation, or an out-of-hours proposal).
-      const { open, slots } = computeAvailableSlots({
-        workingHours, date: recovered.date, timezone, durationMin: recovered.durationMin, bookedSlots,
-      })
-      const when = humanDate(recovered.date)
-      if (!open) {
-        return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
-      }
-      if (!slots.includes(recovered.time)) {
-        return {
-          kind: 'reply',
-          text: slots.length > 0
-            ? `Justo se ocupó ese horario. Para el ${when} me quedan: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
-            : `Para el ${when} ya no me queda ningún horario libre. ¿Probamos con otro día?`,
-        }
-      }
-      return { kind: 'execute', serviceId: recovered.serviceId, serviceName: recovered.serviceName, date: recovered.date, time: recovered.time }
-    }
-
-    // (A.2) Cancel proposal → execute cancel_booking.
+  // ── (A) Confirmation + affirmative → deterministic EXECUTE ──────────────────
+  if (lastAssistantWasConfirmation(history) && isAffirmative(userText)) {
+    // (A.1) Cancel proposal → cancel_booking.
     if (OUR_CANCEL_PROPOSAL_RE.test(lastAssistant)) {
       const target = recoverCancelProposal(lastAssistant, activeAppointments, timezone)
       if (!target) return null
       const { date, time } = apptLocal(target, timezone)
       return { kind: 'executeCancel', appointmentId: target.id, serviceName: target.service_name, date, time }
     }
-
-    // (A.3) Reschedule proposal → execute reschedule_booking (re-validates slot).
+    // (A.2) Reschedule proposal → reschedule_booking.
     if (OUR_RESCHEDULE_PROPOSAL_RE.test(lastAssistant)) {
       return recoverRescheduleProposal(lastAssistant, activeAppointments, services, workingHours, timezone, bookedSlots)
     }
+    // (A.3) New-booking proposal → confirm_booking, executing what the CLIENT said
+    // (gathered from their own messages), NOT the proposal text. Anti-hallucination:
+    // if the proposal had an invented date but the client stated another, the client's
+    // wins. Falls back to the (deterministic) proposal only if the client's stating
+    // turn fell out of the history window.
+    if (OUR_BOOKING_PROPOSAL_RE.test(lastAssistant)) {
+      const st = gatherBookingState(userText, history, services, timezone)
+      let serviceId   = st.service?.id   ?? ''
+      let serviceName = st.service?.name ?? ''
+      let durationMin = st.service?.duration_min ?? 30
+      let date        = st.date
+      let time        = st.time
+      if (!serviceId || !date || !time) {
+        const rec = recoverProposedBooking(lastAssistant, services, timezone)
+        if (rec) {
+          serviceId   = serviceId   || rec.serviceId
+          serviceName = serviceName || rec.serviceName
+          durationMin = st.service?.duration_min ?? rec.durationMin
+          date        = date || rec.date
+          time        = time || rec.time
+        }
+      }
+      if (!serviceId || !date || !time) return null // genuinely incomplete → LLM
 
+      const { open, slots } = computeAvailableSlots({ workingHours, date, timezone, durationMin, bookedSlots })
+      const when = humanDate(date)
+      if (!open) {
+        return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
+      }
+      if (!slots.includes(time)) {
+        return { kind: 'reply', text: slots.length > 0
+          ? `Justo se ocupó ese horario. Para el ${when} me quedan: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+          : `Para el ${when} ya no me queda ningún horario libre. ¿Probamos con otro día?` }
+      }
+      return { kind: 'execute', serviceId, serviceName, date, time }
+    }
+
+    // Affirmative but not on one of OUR proposals → let downstream handle.
     return null
   }
 
-  // While awaiting a yes/no on a proposal, a non-affirmative reply is a deny or a
-  // change — let the LLM handle it; don't hijack with a fresh cancel/reschedule.
-  if (!inConfirmContext) {
-    // ── (B) Cancel intent → identify + propose ──────────────────────────────────
-    if (CANCEL_RE.test(userText) && !RESCHEDULE_RE.test(userText)) {
-      return resolveCancelIntent(userText, activeAppointments, timezone)
+  // ── (B) New-booking state machine — OWNS every booking-context turn ──────────
+  // Once booking is in play, the deterministic flow handles the whole sub-dialogue
+  // (service → date → time → propose), so the LLM never invents or proposes a
+  // date/time. Always returns a reply or execute (never null) while in context.
+  if (inBookingContext(history, userText, intent ?? null)) {
+    // Explicit "no" to a pending proposal → ask what to change (never re-propose the same).
+    if (NEGATIVE_RE.test(userText.trim()) && OUR_BOOKING_PROPOSAL_RE.test(lastAssistant)) {
+      return { kind: 'reply', text: '¿Qué te gustaría cambiar: el servicio, el día o la hora?' }
     }
-    // ── (C) Reschedule intent → identify + gather + validate + propose ─────────
-    if (RESCHEDULE_RE.test(userText)) {
-      return resolveRescheduleIntent(userText, activeAppointments, services, workingHours, timezone, bookedSlots)
+
+    const st = gatherBookingState(userText, history, services, timezone)
+
+    if (!st.service) {
+      const names = services.map((s) => s.name).join(', ')
+      return { kind: 'reply', text: names
+        ? `Con gusto te ayudo a agendar. ¿Qué servicio deseas? Tenemos: ${names}.`
+        : 'Con gusto te ayudo a agendar. ¿Qué servicio deseas?' }
     }
-  }
+    if (!st.date && !st.time) {
+      return { kind: 'reply', text: `Con gusto te agendo *${st.service.name}*. ¿Para qué día y a qué hora te gustaría?` }
+    }
+    if (!st.date) {
+      return { kind: 'reply', text: `¿Para qué día quieres tu cita de *${st.service.name}*?` }
+    }
 
-  // ── Booking context gate for the new-booking proposal branch ────────────────
-  const isBookingContext =
-    intent === 'book_appointment' ||
-    /¿\s*(te\s+gustar[íi]a\s+agendar|quieres\s+agendar|deseas\s+agendar|agendamos|a\s+qu[ée]\s+hora)/i.test(lastAssistant)
-  if (!isBookingContext) return null
-  if (CANCEL_RE.test(userText) || RESCHEDULE_RE.test(userText)) return null
-
-  const today  = todayInTimezone(timezone)
-  const service = resolveService(userText, services)
-  const parsed  = parseDateExpression(userText, today, 'future')
-  const time    = extractTime(userText)
-
-  // ── (B) service + date + time → validated deterministic proposal ────────────
-  if (service && parsed && parsed.date >= today && time) {
-    const { open, slots } = computeAvailableSlots({
-      workingHours, date: parsed.date, timezone, durationMin: service.duration_min, bookedSlots,
-    })
-    const when = humanDate(parsed.date)
+    const { open, slots } = computeAvailableSlots({ workingHours, date: st.date, timezone, durationMin: st.service.duration_min, bookedSlots })
+    const when = humanDate(st.date)
     if (!open) {
       return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
     }
-    if (!slots.includes(time)) {
-      return {
-        kind: 'reply',
-        text: slots.length > 0
-          ? `A las ${formatLocalTime(time)} no tengo disponible el ${when}. Horarios libres para *${service.name}*: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
-          : `Para el ${when} no me queda ningún horario libre para *${service.name}*. ¿Probamos con otro día?`,
-      }
+    if (!st.time) {
+      return { kind: 'reply', text: slots.length > 0
+        ? `Para el ${when} tengo estos horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿A qué hora te viene bien?`
+        : `Para el ${when} no me queda ningún horario libre para *${st.service.name}*. ¿Probamos con otro día?` }
     }
-    return {
-      kind: 'reply',
-      text: `¿Confirmo tu cita de *${service.name}* para el ${when} a las ${formatLocalTime(time)}?`,
+    if (!slots.includes(st.time)) {
+      return { kind: 'reply', text: slots.length > 0
+        ? `A las ${formatLocalTime(st.time)} no tengo disponible el ${when}. Horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+        : `Para el ${when} no me queda ningún horario libre para *${st.service.name}*. ¿Probamos con otro día?` }
     }
+    // service + date + valid time → the ONLY source of a booking proposal.
+    return { kind: 'reply', text: `¿Confirmo tu cita de *${st.service.name}* para el ${when} a las ${formatLocalTime(st.time)}?` }
   }
 
-  // Anything else (date without time, missing service, etc.) is handled by the
-  // existing resolveBookingTimeGap layer and the LLM fallback in ai-agent.ts.
+  // ── (C) Manage an EXISTING appointment (cancel / reschedule) ────────────────
+  if (CANCEL_RE.test(userText) && !RESCHEDULE_RE.test(userText)) {
+    return resolveCancelIntent(userText, activeAppointments, timezone)
+  }
+  if (RESCHEDULE_RE.test(userText)) {
+    return resolveRescheduleIntent(userText, activeAppointments, services, workingHours, timezone, bookedSlots)
+  }
+
   return null
 }
