@@ -15,10 +15,10 @@ import {
   emitCreatedEvent,
   emitRescheduledEvent,
   emitCancelledEvent,
-  sendClientBookingConfirmation,
 } from "./notifications.ts"
 import type { ReviewedToolName } from "../_shared/supervisor/contracts.ts"
 import { buildSuccessTemplateData } from "./success-data.ts"
+import { invalidateDashboardCache } from "../_shared/cache-invalidation.ts"
 
 export type WriteGuard = (
   toolName: ReviewedToolName,
@@ -144,11 +144,17 @@ export async function executeToolCall(
     senderPhone: sender,
     services: context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min, price: s.price })),
     activeAppts: context.activeAppointments.map(a => ({ id: a.id, service_name: a.service_name, start_at: a.start_at })),
+    customerName,  // real WhatsApp profile name → invariante N1 (no placeholder)
   })
 
   if (!adapterResult.success) {
     return JSON.stringify({ success: false, error: adapterResult.error })
   }
+
+  // Invariante O1 / AC-CACHE: toda escritura WA exitosa invalida la caché del
+  // dashboard (clients/appointments/dashboard) para que la cita aparezca en el
+  // calendario y la campana sin esperar la expiración del TTL. Fire-and-forget.
+  void invalidateDashboardCache(business.id)
 
   // WhatsApp-specific notifications.
   // reschedule_booking / cancel_booking carry no service_id, so recover the
@@ -163,15 +169,16 @@ export async function executeToolCall(
     ?? (adapterResult as any).service_name
     ?? 'Servicio'
 
+  // Notificación al DUEÑO (DB → campana → WhatsApp → push), invariantes O1/O2.
+  // El acuse al CLIENTE es ÚNICO (invariante C1): lo provee la respuesta
+  // conversacional del agente (renderBookingSuccessTemplate). NO se envía aquí un
+  // segundo mensaje al cliente — eso causaba la doble confirmación (defecto D1).
   if (name === 'confirm_booking') {
     emitCreatedEvent(business, client?.name ?? customerName, svcName, args['date'] ?? '', args['time'] ?? '', adapterResult.appointmentId ?? '')
-    sendClientBookingConfirmation(sender, 'created', business.name, svcName, args['date'] ?? '', args['time'] ?? '')
   } else if (name === 'reschedule_booking') {
     emitRescheduledEvent(business, client?.name ?? customerName, svcName, args['appointment_id'] ?? '', args['new_date'] ?? '', args['new_time'] ?? '')
-    sendClientBookingConfirmation(sender, 'rescheduled', business.name, svcName, args['new_date'] ?? '', args['new_time'] ?? '')
   } else if (name === 'cancel_booking') {
     emitCancelledEvent(business, client?.name ?? customerName, svcName, args['appointment_id'] ?? '', activeAppt?.start_at ?? '')
-    sendClientBookingConfirmation(sender, 'cancelled', business.name, svcName, '', '')
   }
 
   // Enrich the tool result with the fields renderBookingSuccessTemplate reads.

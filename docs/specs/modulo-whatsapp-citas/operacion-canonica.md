@@ -164,11 +164,11 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 
 | ID | Defecto observado | Invariante violada | Causa raíz (dónde) | Estado |
 |---|---|---|---|---|
-| D1 | Doble mensaje de confirmación al cliente | C1 | Dos rutas escriben al cliente: respuesta del agente + `notifications.ts: sendClientBookingConfirmation` | 🔴 a corregir |
-| D2 | La cita no aparece en calendario/campana al instante | O1 | `_shared/booking-adapter.ts` no invalida la caché del dashboard | 🔴 a corregir |
-| D3 | El dueño no recibe notificación de reagendamiento | O2 | Por verificar (emisión de `appointment.rescheduled` / canal WA dueño) | 🔴 a verificar+corregir |
-| D4 | Notificaciones "con error" | O1 | Encadenado a D2/D5; verificar errores de Meta API en `sendOwnerWhatsApp` | 🟡 a verificar |
-| D5 | Notificaciones/recordatorio sin nombre real ("Cliente 6589") | N1, R3 | `tool-executor.ts` no pasa `customerName`; `booking-adapter.ts` llama RPC con `p_client_name=null` | 🔴 a corregir |
+| D1 | Doble mensaje de confirmación al cliente | C1 | Dos rutas escriben al cliente: respuesta del agente + `notifications.ts: sendClientBookingConfirmation` | 🟢 **corregido** — se eliminó el 2º mensaje; el acuse único es la respuesta del agente |
+| D2 | La cita no aparece en calendario/campana al instante | O1 | `_shared/booking-adapter.ts` no invalida la caché del dashboard | 🟢 **corregido** — `tool-executor.ts` invalida la caché tras toda escritura WA exitosa |
+| D3 | El dueño no recibe notificación de reagendamiento | O2 | Reagendar no tiene ruta determinista; depende del 8B y no se ejecuta de forma fiable → no se emite el evento | 🟡 en curso — requiere ruta determinista de reagendar/cancelar (§3.3) |
+| D4 | Notificaciones "con error" | O1 | WhatsApp al dueño en texto libre fuera de la ventana de 24h de Meta es rechazado → requiere plantilla aprobada | 🟡 verificado — necesita plantilla Meta (ops) para el canal WA del dueño; campana/push no afectados |
+| D5 | Notificaciones/recordatorio sin nombre real ("Cliente 6589") | N1, R3 | `tool-executor.ts` no pasa `customerName`; `booking-adapter.ts` llama RPC con `p_client_name=null` | 🟢 **corregido** — se propaga el nombre real del perfil WA hasta la RPC |
 
 ---
 

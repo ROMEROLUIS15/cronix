@@ -106,12 +106,13 @@ export class WhatsAppBookingAdapter {
     senderPhone:  string
     services:     ServiceRow[]
     activeAppts:  ActiveAppointmentRow[]
+    customerName?: string
   }): Promise<ToolResult> {
-    const { toolName, rawArgs, businessId, timezone, senderPhone, services, activeAppts } = params
+    const { toolName, rawArgs, businessId, timezone, senderPhone, services, activeAppts, customerName } = params
 
     switch (toolName) {
       case 'confirm_booking':
-        return this.confirmBooking({ rawArgs, businessId, timezone, senderPhone, services })
+        return this.confirmBooking({ rawArgs, businessId, timezone, senderPhone, services, customerName })
       case 'cancel_booking':
         return this.cancelBooking({ rawArgs, businessId, timezone, senderPhone, activeAppts })
       case 'reschedule_booking':
@@ -129,6 +130,7 @@ export class WhatsAppBookingAdapter {
     timezone:    string
     senderPhone: string
     services:    ServiceRow[]
+    customerName?: string
   }): Promise<ToolResult> {
     let { service_id, date, time } = p.rawArgs
 
@@ -173,11 +175,18 @@ export class WhatsAppBookingAdapter {
 
     const startAt = localToUTC(date, normalizedTime, p.timezone)
 
+    // Nombre real del cliente (perfil de WhatsApp) → invariante N1. El RPC busca
+    // por teléfono y, en cliente nuevo, persiste este nombre; si está vacío o es el
+    // fallback genérico "Cliente", se pasa null para que el RPC genere el placeholder
+    // identificable "Cliente <últimos4>" en lugar de un "Cliente" ambiguo.
+    const profileName = (p.customerName ?? '').trim()
+    const clientName  = profileName && profileName.toLowerCase() !== 'cliente' ? profileName : null
+
     // Delegar al RPC que maneja la creación del cliente por teléfono atómicamente
     const { data, error } = await this.supabase.rpc('fn_book_appointment_wa', {
       p_business_id:  p.businessId,
       p_client_phone: p.senderPhone,
-      p_client_name:  null,  // el RPC busca por teléfono, no por nombre
+      p_client_name:  clientName,
       p_service_id:   service_id,
       p_start_at:     startAt,
     })
