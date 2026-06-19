@@ -73,6 +73,54 @@ Reagendar y cancelar siguen el mismo contrato de 2 momentos: identificación det
 >
 > **Causa raíz histórica (2026-06-19):** el flujo determinista era un interceptor estrecho; cuando no disparaba (p.ej. tras elegir servicio, o cuando el router clasificaba mal "para el próximo martes" como `list_appointments`), el LLM tomaba el control, **inventaba fecha/hora** y el ejecutor determinista sellaba esa alucinación. Por eso ahora la máquina de estados es dueña del flujo y no depende del intent del router para fecha/hora (las detecta del texto directamente).
 
+### 3.3-bis Gramática de fecha/hora y máquina de estados (NORMATIVO)
+
+El agente falló repetidamente porque el NLU de fecha era rígido (solo "21 de junio"/"día 21"/"el domingo") y la máquina de estados no tenía rama de "no entendí" → repetía la misma pregunta en bucle. Este contrato lo cierra.
+
+**Gramática de FECHA — el agente DEBE entender (sin inventar):**
+
+| Forma | Ejemplos | Resuelve a |
+|---|---|---|
+| Relativa | hoy · mañana · pasado mañana | hoy / +1 / +2 |
+| Día de semana (con o sin artículo) | lunes · el lunes · este lunes · (el) próximo/siguiente martes · domingo | próxima ocurrencia de ese día |
+| Día del mes (con o sin "día"/artículo) | 21 · el 21 · día 21 · el 21 de junio · 21 de junio (de 2026) | ese día; si solo número → próxima ocurrencia (este mes si ≥ hoy, si no el siguiente) |
+| Numérica | 21/6 · 21-06 · 21/06/2026 | esa fecha |
+| Rango relativo | en 3 días · dentro de 2 semanas | hoy + N |
+
+> Fechas **pasadas** se rechazan para agendar (se pide otra). El "domingo" (u otro día cerrado) se resuelve y se responde **"ese día no abrimos, ¿otro día?"** — nunca se re-pregunta en seco.
+
+**Gramática de HORA — el agente DEBE entender:**
+
+| Forma | Ejemplos | Resuelve a |
+|---|---|---|
+| 24h | 15:00 · 9:30 | tal cual |
+| 12h con meridiano | 11 am · 3 pm · 11:30 pm | 24h |
+| "a las N" | a las 11 · a las 3 | N:00 |
+| Franja | 11 de la mañana · 3 de la tarde · 9 de la noche | 24h por la franja |
+| Nombradas | mediodía · medianoche | 12:00 · 00:00 |
+
+> Hora ambigua (1–7 sin am/pm ni franja): no se asume; si cae fuera de horario, se ofrecen los libres reales.
+
+**Máquina de estados (explícita, NORMATIVO):** el estado se deriva del sub-diálogo actual (acotado: desde la última reserva completada o el inicio de ESTA intención; nunca arrastra datos de conversaciones previas).
+
+```
+NEED_SERVICE  → (servicio no resuelto)   lista los servicios reales y pregunta cuál.
+NEED_DATE     → (servicio ok, sin fecha) pregunta el día.
+NEED_TIME     → (servicio+fecha ok)      valida el día; si cerrado/lleno informa; si no, ofrece horarios libres reales y pregunta la hora.
+PROPOSE       → (servicio+fecha+hora)    valida el slot; emite "¿Confirmo… para el … a las …?".
+AWAIT_CONFIRM → "sí" ⇒ EXECUTE · corrección (nueva fecha/hora) ⇒ re-deriva y vuelve a PROPONER · "no" ⇒ pregunta qué cambiar.
+EXECUTE       → ejecuta confirm_booking determinista; dispara §4–§6.
+```
+
+> **Rama "NO ENTENDÍ" (NORMATIVO):** si en `NEED_DATE`/`NEED_TIME` el cliente responde algo que el NLU no logra parsear, el agente **no repite la misma pregunta**: responde reconociendo + da ejemplos concretos ("No te entendí la fecha. Puedes decir 'mañana', 'el 21' o 'el lunes'. ¿Para qué día?"). Nunca un bucle.
+
+**Criterios de aceptación (inputs naturales):**
+- **AC-NLU-1:** "Para el 21" / "21" → entiende día 21 (próxima ocurrencia), pasa a `NEED_TIME`.
+- **AC-NLU-2:** "21 a las 11 am" → entiende día 21 + 11:00 → `PROPOSE`.
+- **AC-NLU-3:** "Domingo" (día cerrado) → responde "no abrimos el domingo, ¿otro día?", no re-pregunta en seco.
+- **AC-NLU-4:** "Que servicios tienen" en `NEED_SERVICE` → lista los servicios reales (no un mensaje genérico repetido).
+- **AC-NLU-5:** input no parseable en `NEED_DATE` → mensaje con ejemplos, distinto de la pregunta anterior; sin bucle.
+
 ### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
 
 Todas deben permanecer activas. Quitar cualquiera reabre una superficie de alucinación.

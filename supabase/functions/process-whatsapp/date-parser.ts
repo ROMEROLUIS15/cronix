@@ -165,8 +165,9 @@ export function parseDateExpression(
   }
 
   const weekdayAlt = Object.keys(WEEKDAYS).join('|')
+  // Prefix (el/este/próximo…) is OPTIONAL so a bare weekday ("domingo") parses too.
   const wdRe = new RegExp(
-    `\\b(?:el\\s+|del\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+|en\\s+el\\s+)(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
+    `\\b(?:el\\s+|del\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+|en\\s+el\\s+)?(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
   )
   const wdM = t.match(wdRe)
   if (wdM) {
@@ -179,20 +180,23 @@ export function parseDateExpression(
     return { date: addDays(today, delta), reason: label, confidence: 'exact' }
   }
 
-  const bareRe = /\b(?:el\s+)?d[ií]a\s+(\d{1,2})\b/
-  const bareM  = t.match(bareRe)
-  if (bareM) {
-    const day = parseInt(bareM[1]!, 10)
-    if (day >= 1 && day <= 31) {
-      const [ty, tm, td] = ymdFromIso(today)
-      let m = tm, y = ty
-      if (day < td) {
-        m += 1
-        if (m > 12) { m = 1; y++ }
-      }
-      return { date: isoFromYMD(y, m, day), reason: `día ${day}`, confidence: 'inferred' }
-    }
+  // Day-of-month inference shared by the "día N" and bare-"el N"/"N" forms:
+  // if the day already passed this month, roll to next month.
+  const dayToDate = (day: number): ParsedDate | null => {
+    if (day < 1 || day > 31) return null
+    const [ty, tm, td] = ymdFromIso(today)
+    let m = tm, y = ty
+    if (day < td) { m += 1; if (m > 12) { m = 1; y++ } }
+    return { date: isoFromYMD(y, m, day), reason: `el ${day}`, confidence: 'inferred' }
   }
+
+  const bareM = t.match(/\b(?:el\s+)?d[ií]a\s+(\d{1,2})\b/)
+  if (bareM) { const d = dayToDate(parseInt(bareM[1]!, 10)); if (d) return d }
+
+  // Bare day-of-month WITHOUT the word "día": "(para) el 21", or the whole text "21".
+  // (Years like "2026" don't match: (\d{1,2}) can't sit inside a longer digit run.)
+  const elDayM = t.match(/\bel\s+(\d{1,2})\b/) ?? t.match(/^\s*(?:para\s+)?(\d{1,2})\s*$/)
+  if (elDayM) { const d = dayToDate(parseInt(elDayM[1]!, 10)); if (d) return d }
 
   return null
 }

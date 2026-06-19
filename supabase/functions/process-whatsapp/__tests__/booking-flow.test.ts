@@ -351,6 +351,39 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
     }
   })
 
+  it('understands "el 21" / bare day after asking the day (no loop, advances to time)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'el 21',
+      history: [
+        { role: 'user', text: 'para agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      // advanced to time (offers slots), did NOT re-ask the day
+      expect(turn.text).toMatch(/horarios libres|a qué hora/i)
+      expect(turn.text).not.toMatch(/¿Para qué día/i)
+    }
+  })
+
+  it('says "no entendí la fecha" with examples instead of repeating the question', () => {
+    const turn = resolveBookingTurn({
+      userText: 'xyzzy',
+      history: [
+        { role: 'user', text: 'para agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/no te entend[íi] la fecha/i)
+      expect(turn.text).toMatch(/el 21|mañana|el lunes/i) // gives examples
+    }
+  })
+
   it('bounds gathering to the current booking intent (ignores an earlier abandoned date)', () => {
     const turn = resolveBookingTurn({
       userText: 'a las 2 pm',

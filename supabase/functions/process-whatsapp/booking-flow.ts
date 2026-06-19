@@ -22,6 +22,7 @@
  */
 
 import { parseDateExpression } from './date-parser.ts'
+import { parseDateTime, extractTime } from './datetime-nlu.ts'
 import { formatLocalTime }     from './prompt-builder.ts'
 import {
   computeAvailableSlots,
@@ -31,6 +32,9 @@ import {
 } from './availability.ts'
 import { lastAssistantWasConfirmation, isAffirmative } from './confirmation-gate.ts'
 import { utcToLocalParts } from './time-utils.ts'
+
+// Re-exported for callers/tests that imported it from here historically.
+export { extractTime }
 
 const MAX_LISTED = 8
 
@@ -70,44 +74,6 @@ function humanDate(dateISO: string): string {
   const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number]
   return new Date(Date.UTC(y, m - 1, d))
     .toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' })
-}
-
-function pad2(n: number): string { return String(n).padStart(2, '0') }
-
-/**
- * Extracts an explicit clock time from free text and normalises to 24h HH:mm.
- * Returns null when the text carries no time the client actually stated — we
- * never guess one. Handles: "13:00", "9:00 am", "1 pm", "a las 9", "9 de la noche".
- */
-export function extractTime(text: string): string | null {
-  const t = text.toLowerCase()
-
-  // HH:mm, optionally followed by am/pm.
-  let m = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(a\.?\s?m\.?|p\.?\s?m\.?)?/)
-  if (m) {
-    let h = parseInt(m[1]!, 10)
-    const min = m[2]!
-    const ap  = (m[3] ?? '').replace(/[.\s]/g, '')
-    if (ap === 'pm' && h < 12) h += 12
-    if (ap === 'am' && h === 12) h = 0
-    if (h <= 23) return `${pad2(h)}:${min}`
-  }
-
-  // "a las 9", "para las 9", "9 am", "9 pm", "9 de la mañana/tarde/noche".
-  m = t.match(/\b(?:a\s+las?|para\s+las?)\s+(\d{1,2})(?::([0-5]\d))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?/)
-    ?? t.match(/\b(\d{1,2})(?::([0-5]\d))?\s*(a\.?\s?m\.?|p\.?\s?m\.?|de\s+la\s+(?:ma[nñ]ana|tarde|noche))\b/)
-  if (m) {
-    let h = parseInt(m[1]!, 10)
-    const min  = m[2] ?? '00'
-    const tail = (m[3] ?? '').replace(/[.\s]/g, '')
-    const isPm = tail.startsWith('p') || /tarde|noche/.test(tail)
-    const isAm = tail.startsWith('a') || /manana|mañana/.test(tail)
-    if (isPm && h < 12) h += 12
-    if (isAm && h === 12) h = 0
-    if (h <= 23) return `${pad2(h)}:${min}`
-  }
-
-  return null
 }
 
 /** ISO date in our (or the LLM's) proposal, or a Spanish expression. */
@@ -315,14 +281,16 @@ function gatherBookingState(
   for (const t of userTexts) { const s = serviceNamedIn(t, services); if (s) { service = s; break } }
   if (!service && services.length === 1) service = services[0]!
 
+  // Combined NLU per turn (parses time, strips it, then the date) so "21 a las 11"
+  // yields day 21 + 11:00 in one shot. Most recent stated value wins (newest-first).
   let date: string | null = null
-  for (const t of userTexts) {
-    const d = parseDateExpression(t, today, 'future')
-    if (d && d.date >= today) { date = d.date; break }
-  }
-
   let time: string | null = null
-  for (const t of userTexts) { const tm = extractTime(t); if (tm) { time = tm; break } }
+  for (const t of userTexts) {
+    const dt = parseDateTime(t, today)
+    if (!date && dt.date && dt.date >= today) date = dt.date
+    if (!time && dt.time) time = dt.time
+    if (date && time) break
+  }
 
   return { service, date, time }
 }
@@ -447,6 +415,19 @@ export function resolveBookingTurn(p: {
         ? `Con gusto te ayudo a agendar. ¿Qué servicio deseas? Tenemos: ${names}.`
         : 'Con gusto te ayudo a agendar. ¿Qué servicio deseas?' }
     }
+
+    // "No entendí": detect when we already asked for the day/time and the client's reply
+    // didn't parse, so we give examples instead of repeating the same question (no loop).
+    const askedDay   = /(para\s+qu[ée]\s+d[íi]a|d[íi]a\s+y\s+a\s+qu[ée]\s+hora)/i.test(lastAssistant)
+    const askedTime  = /(a\s+qu[ée]\s+hora|horarios?\s+libres)/i.test(lastAssistant)
+    const saidNow    = parseDateTime(userText, todayInTimezone(timezone))
+    const hasContent = userText.trim().length > 0
+
+    // "No entendí la fecha": we already asked for the day and the reply parsed to nothing
+    // → give examples (never repeat the same question = no robotic loop).
+    if (!st.date && askedDay && hasContent && !saidNow.date) {
+      return { kind: 'reply', text: `No te entendí la fecha 🙏. Puedes decir, por ejemplo, *mañana*, *el 21* o *el lunes*. ¿Para qué día quieres tu cita de *${st.service.name}*?` }
+    }
     if (!st.date && !st.time) {
       return { kind: 'reply', text: `Con gusto te agendo *${st.service.name}*. ¿Para qué día y a qué hora te gustaría?` }
     }
@@ -460,6 +441,9 @@ export function resolveBookingTurn(p: {
       return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
     }
     if (!st.time) {
+      if (askedTime && hasContent && !saidNow.time && slots.length > 0) {
+        return { kind: 'reply', text: `No te entendí la hora 🙏. Puedes decir *a las 3*, *11 am* o *15:30*. Para el ${when} tengo: ${listFreeTimes(slots)}. ¿A qué hora?` }
+      }
       return { kind: 'reply', text: slots.length > 0
         ? `Para el ${when} tengo estos horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿A qué hora te viene bien?`
         : `Para el ${when} no me queda ningún horario libre para *${st.service.name}*. ¿Probamos con otro día?` }
