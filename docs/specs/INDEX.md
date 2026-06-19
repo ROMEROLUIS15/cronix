@@ -51,7 +51,8 @@ docs/specs/
 ├── INDEX.md                          ← Estás aquí
 ├── constitution.md                   ← LEER SIEMPRE PRIMERO
 ├── modulo-whatsapp-citas/
-│   └── manifest.md
+│   ├── manifest.md
+│   └── operacion-canonica.md      ← contrato normativo de punta a punta del agente
 ├── modulo-notificaciones/
 │   └── manifest.md
 ├── modulo-citas-core/
@@ -74,7 +75,7 @@ docs/specs/
 
 | Si vas a tocar... | Lee estas specs |
 |---|---|
-| El agente de WhatsApp (`process-whatsapp/`) | `constitution.md` §3, §5, §6 + `modulo-whatsapp-citas` + `modulo-notificaciones` |
+| El agente de WhatsApp (`process-whatsapp/`) | `constitution.md` §3, §5, §6 + `modulo-whatsapp-citas` (+ **`operacion-canonica.md`**) + `modulo-notificaciones` |
 | Los Use Cases de citas (`lib/domain/`) | `constitution.md` §1, §2 + `modulo-citas-core` |
 | Notificaciones push/realtime | `constitution.md` §3 + `modulo-notificaciones` |
 | Pagos o suscripciones | `constitution.md` §1 + `modulo-pagos` |
@@ -101,6 +102,7 @@ docs/specs/
 
 | Fecha | Cambio |
 |---|---|
+| 2026-06-18 | Nuevo spec normativo **`modulo-whatsapp-citas/operacion-canonica.md`**: fuente única de la operación de punta a punta del agente de WhatsApp. Fija invariantes C1 (una sola confirmación al cliente), O1/O2 (notificación automática al dueño + campana + push en agendar/reagendar/cancelar), N1 (nombre real del cliente, no `Cliente <n>`), R1–R3 (recordatorio diario a las 20:00 hora local del negocio, país-agnóstico, que habilita reagendar/cancelar) y la regla de invalidación de caché del dashboard en toda escritura WA. Documenta los defectos D1–D5 observados (doble confirmación, cita ausente del calendario, reagendamiento sin notificar al dueño, notificaciones con error, nombre placeholder) mapeados a su causa raíz y estado. Pendiente: corrección de D1–D5 en código. |
 | 2026-06-17 | i18n Fase 3 (revisión de calidad nativa por idioma, los 6 locales): **DE** unificado a registro informal `du` (56 strings formales `Sie`→`du` con gramática correcta; elegido por el dueño) + anglicismo `observability.turns`→"Durchläufe"; **FR** abreviaturas de mes `Jun/Jul`→`Juin/Juil` (resto ya localizado), registro `vous` ya consistente; **IT** concordancia de género `clients.form.legacyPhoneDesc` "alla prossima salvataggio"→"al prossimo salvataggio", registro `tu` ya consistente; **PT/EN** ya limpios (sin leftovers de español). Sin cambios de claves (parity 14 tests verdes). |
 | 2026-06-17 | fix(setup/auth): registro con Google no podía crear negocio. `fn_create_business_and_link_owner` tenía DOS overloads en prod (7-arg huérfano de `20260420000001` + 8-arg con `p_referral_code` del referral system) porque `CREATE OR REPLACE` con firma cambiada crea overload nuevo, no reemplaza. La llamada de 7 args nombrados de `SupabaseBusinessRepository.createWithOwnerLink` quedaba ambigua → PostgREST PGRST203, el INSERT nunca corría. Solo afectaba a Google (email auto-crea negocio desde metadata vía `businesses.create()`, sin RPC). Fix: drop del overload huérfano (`20260617000000`, aplicado en prod). Mismo patrón que `20260604000000`. |
 | 2026-06-17 | modulo-dashboard §7 (nuevo, NORMATIVO): contrato i18n — cero texto hardcoded visible (server→`getTranslations`, client→`useTranslations`, formato locale-aware), paridad de claves obligatoria entre los 6 locales (`es` fuente). Fix bug: `nav.plans` faltaba en pt/fr/de/it (clave muerta `nav.referrals`). Migrados a i18n + traducidos ×6: dashboard (observability, finanzas, header, paneles, appointments/new, voice-fab, payment-modal…), auth/público (invite, passkey-login), componentes UI/PWA (modal, session-timeout, client-select, phone-input, banners PWA). Guard `__tests__/i18n/parity.test.ts`. Typos ES corregidos en privacy ("se serán"→"serán", "Oponermi"→"Oponerte") y terms ("Agreeings:"→"Acuerdas lo siguiente:"). **Páginas legales `privacy`+`terms` migradas ×6** (`t.raw` listas + `t.rich` links, server components async). Toda la superficie de cara al usuario queda i18n'd (44 namespaces ×6); solo resta revisión nativa de calidad por idioma. Excluido por decisión: admin (inglés interno), marca (`Free/Pro/Enterprise`), debug (`pwa-debug`). Nota: traducción legal = boilerplate, conviene revisión jurídica por jurisdicción. |

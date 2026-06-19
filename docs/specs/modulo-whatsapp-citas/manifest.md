@@ -2,6 +2,8 @@
 
 Este documento define las reglas de negocio inmutables para el módulo de agendamiento automatizado en WhatsApp y su reflejo en el Dashboard del comercio.
 
+> 🎯 **Fuente única de la operación de punta a punta:** [`operacion-canonica.md`](./operacion-canonica.md) — define de forma normativa el funcionamiento perfecto del agente (rutas deterministas, **una sola confirmación al cliente**, notificación automática al dueño + campana, identidad real del cliente, y recordatorio diario a las 20:00 hora local). Léelo junto a este manifiesto al tocar la superficie de cara al cliente/dueño.
+
 ## 1. Identificación Multi-Tenant e Isolation
 *   **Detección de Inquilino:** El agente de WhatsApp opera estrictamente dentro del contexto del `business_id` asociado al enlace o slot compartido. Queda prohibido consultar, mutar o listar agendas, servicios o configuraciones de un negocio ajeno.
 *   **Slug Routing:** El enrutamiento y la resolución del inquilino seguro se realizan mediante el mecanismo de parsing del slug (`#slug` → `tenant_id`). Queda prohibido hardcodear IDs. El sistema usa un enrutamiento de 3 niveles en orden de precedencia: (1) slug en el mensaje actual → (2) sesión activa del remitente → (3) mensaje de landing genérico.
