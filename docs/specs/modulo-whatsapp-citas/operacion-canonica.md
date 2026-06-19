@@ -152,6 +152,8 @@ Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal*
 
 **Realtime de la campana:** `useInAppNotifications` se suscribe a `postgres_changes` sobre `notifications` filtrado por `business_id` → **cualquier** inserción (cualquier superficie) refresca la campana en vivo. Invariante: ninguna superficie de escritura puede omitir la inserción en `notifications`.
 
+> **Alcance por inquilino (diagnóstico — NORMATIVO).** Todo (cita, campana, WhatsApp al dueño) se escribe contra el `business_id` que resuelve el **slug** del mensaje (`#slug`). Si existen **negocios duplicados** (mismo nombre, distinto slug), una reserva hecha con el slug A aparece en el dashboard del negocio A, **no** en el del negocio B — aunque se llamen igual. Síntoma típico al verificar: "el agente agendó pero no veo la cita / no llegó el WhatsApp al dueño" cuando en realidad la operación fue correcta en otro `business_id`. Al diagnosticar SIEMPRE confirmar el `business_id` de la traza (`ai_traces.business_id`) contra el negocio cuyo dashboard se está mirando, y que ese negocio tenga `businesses.phone` para el canal WhatsApp del dueño.
+
 ## 7. Identidad del cliente: nombre real de WhatsApp (NORMATIVO)
 
 > **INVARIANTE N1 — Nombre real.** Al agendar, el cliente se crea/actualiza con su **nombre de perfil de WhatsApp** real. Un placeholder (`Cliente 1234`) solo es admisible como último recurso cuando WhatsApp no entrega ningún nombre, y nunca debe pisar un nombre ya curado por el dueño.
