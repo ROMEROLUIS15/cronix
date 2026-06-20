@@ -42,6 +42,7 @@ import type { WorkingHours } from "./availability.ts"
 import { isListAppointmentsQuery, buildAppointmentsListResponse } from "./read-intents.ts"
 import { recoverEmbeddedToolCall } from "./tool-recovery.ts"
 import { FAQ_INTENTS, buildFaqResponse } from "./faq-responses.ts"
+import { isCancelIntent, isRescheduleIntent, isBookIntent } from "./intents.ts"
 import { selectFinalResponse } from "./final-response.ts"
 import { createMemoryEngine }   from "../_shared/memory/index.ts"
 import type { MemoryRecord, MemoryScope } from "../_shared/memory/contracts.ts"
@@ -147,10 +148,6 @@ function trackDedupCall(fingerprints: Set<string>, toolName: string, argsRaw: st
 // Builds the clarification/confirmation question directly from DB state so the
 // client always receives a specific, correct answer even if the model fails.
 
-const CANCEL_INTENT_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
-const RESCHEDULE_INTENT_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?\s+(?:mi\s+)?(?:cita|hora|fecha))\b/i
-const BOOK_INTENT_RE       = /\b(agend(?:a|ar|ame|alo)?|reserv(?:a|ar|ame)?|sacar|pedir|quiero|necesito|nueva)\b.*\bcita\b|\b(agend(?:a|ar|ame|alo)?|reserv(?:a|ar|ame)?)\b/i
-
 function formatApt(apt: ActiveAppointmentRow, timezone: string): { dateStr: string; timeStr: string } {
   const dt      = new Date(apt.start_at)
   const dateStr = dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: timezone })
@@ -164,13 +161,13 @@ function buildDeterministicIntentResponse(
   timezone:           string,
   services:           ReadonlyArray<{ name: string }> = [],
 ): string | null {
-  const cancelIntent     = CANCEL_INTENT_RE.test(userText)
-  const rescheduleIntent = RESCHEDULE_INTENT_RE.test(userText)
+  const cancelIntent     = isCancelIntent(userText)
+  const rescheduleIntent = isRescheduleIntent(userText)
 
   // Booking intent recovery: when the 8B failed to produce a usable reply for a
   // booking turn, ask for the missing data deterministically instead of looping
   // on the "Estoy verificando la información" fallback.
-  if (!cancelIntent && !rescheduleIntent && BOOK_INTENT_RE.test(userText)) {
+  if (!cancelIntent && !rescheduleIntent && isBookIntent(userText)) {
     if (services.length === 1) {
       return `Con gusto te agendo *${services[0]!.name}*. ¿Para qué día y a qué hora te gustaría?`
     }

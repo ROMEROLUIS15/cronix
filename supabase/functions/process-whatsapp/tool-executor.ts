@@ -189,5 +189,7 @@ export async function executeToolCall(
   const successData = buildSuccessTemplateData(name, adapterResult)
 
   addBreadcrumb(`Tool ${name} succeeded`, 'agent', 'info', { appointmentId: adapterResult.appointmentId })
-  return JSON.stringify({ success: true, ...adapterResult, ...successData })
+  // success:true is authoritative and goes LAST so neither spread can overwrite it
+  // (this is the success branch); the spreads only add the template/adapter fields.
+  return JSON.stringify({ ...adapterResult, ...successData, success: true })
 }

@@ -32,6 +32,7 @@ import {
 } from './availability.ts'
 import { lastAssistantWasConfirmation, isAffirmative } from './confirmation-gate.ts'
 import { utcToLocalParts } from './time-utils.ts'
+import { isCancelIntent, isRescheduleIntent, isManageExisting, isBookIntent } from './intents.ts'
 
 // Re-exported for callers/tests that imported it from here historically.
 export { extractTime }
@@ -54,18 +55,6 @@ const OUR_BOOKING_PROPOSAL_RE     = /¿\s*confirmo\s+tu\s+cita\s+de/i
 const OUR_CANCEL_PROPOSAL_RE      = /cancele\s+tu\s+cita\s+de/i
 const OUR_RESCHEDULE_PROPOSAL_RE  = /¿\s*reagendo\s+tu\s+cita\s+de/i
 
-// Verb stems use \w* so enclitic/inflected forms match too: "reagéndala",
-// "reagendarla", "cancélala", "reprográmame" (the bare \b...\b suffix list missed
-// the attached pronoun and dropped the turn to the LLM, which never executed).
-const CANCEL_RE     = /\b(cancel\w*|anul\w*|borr\w*)\b/i
-const RESCHEDULE_RE = /\b(reagend\w*|reprogram\w*|mover|mueve|cambi\w*)\b/i
-
-// "Manage an EXISTING appointment" — cancel/reagendar explicitly. Exits new-booking
-// context (NOT the ambiguous "cambia/mover", which mid-booking means "change the proposal").
-const MANAGE_EXISTING_RE = /\b(cancel\w*|anul\w*|reagend\w*|reprogram\w*)\b/i
-// Fresh new-booking intent. \bagend does NOT match "reagendar" (no word boundary), so
-// reschedule isn't mistaken for a new booking.
-const BOOK_INTENT_RE = /\b(agend(?:a|ar|ame|alo|emos|o)?|reserv(?:a|ar|ame|o)?|(?:quiero|necesito|sacar|pedir|dame|hacer)\s+(?:una\s+)?cita|nueva\s+cita)\b/i
 // Our OWN booking questions/proposals — keeps the flow "sticky" across sub-dialogue turns.
 const OUR_BOOKING_QUESTION_RE = /(¿\s*confirmo\s+tu\s+cita|para\s+qu[ée]\s+d[íi]a|a\s+qu[ée]\s+hora|qu[ée]\s+servicio\s+deseas|te\s+agendo|horarios?\s+libres|estamos\s+cerrados)/i
 // A completed/closed booking — ends booking context so we don't re-propose.
@@ -187,7 +176,7 @@ function rescheduleSubDialogueTexts(
   userText: string, history: ReadonlyArray<{ role: string; text: string }>,
 ): string[] {
   // The trigger turn itself starts (and bounds) the sub-dialogue.
-  if (RESCHEDULE_RE.test(userText)) return [userText]
+  if (isRescheduleIntent(userText)) return [userText]
   const texts = [userText]
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i]
@@ -195,7 +184,7 @@ function rescheduleSubDialogueTexts(
     if (h.role !== 'user' && BOOKING_DONE_RE.test(h.text)) break
     if (h.role === 'user') {
       texts.push(h.text)
-      if (RESCHEDULE_RE.test(h.text)) break
+      if (isRescheduleIntent(h.text)) break
     }
   }
   return texts
@@ -336,7 +325,7 @@ function gatherBookingState(
     if (isAssistant && BOOKING_DONE_RE.test(h.text)) break
     if (h.role === 'user') {
       userTexts.push(h.text)
-      if (BOOK_INTENT_RE.test(h.text)) break
+      if (isBookIntent(h.text)) break
     }
   }
 
@@ -369,11 +358,11 @@ function inBookingContext(
   intent: string | null,
 ): boolean {
   // Explicit cancel/reagendar → managed elsewhere, not new booking.
-  if (MANAGE_EXISTING_RE.test(userText)) return false
+  if (isManageExisting(userText)) return false
 
   // Fresh booking signal on THIS turn always opens a (new) booking.
   if (intent === 'book_appointment') return true
-  if (BOOK_INTENT_RE.test(userText)) return true
+  if (isBookIntent(userText)) return true
 
   const lastAssistant = [...history].reverse()
     .find((h) => h.role === 'model' || h.role === 'assistant')?.text ?? ''
@@ -392,7 +381,7 @@ function inBookingContext(
     if (!h || !h.text) continue
     const isAssistant = h.role === 'model' || h.role === 'assistant'
     if (isAssistant && BOOKING_DONE_RE.test(h.text)) return false
-    if (h.role === 'user' && BOOK_INTENT_RE.test(h.text)) return true
+    if (h.role === 'user' && isBookIntent(h.text)) return true
   }
   return false
 }
@@ -543,12 +532,12 @@ export function resolveBookingTurn(p: {
   // Reschedule keyword OR a sticky reschedule sub-dialogue (we asked the new date/time)
   // → the deterministic reschedule resolver owns the turn (the LLM never proposes one).
   const inReschedule = OUR_RESCHEDULE_QUESTION_RE.test(lastAssistant)
-  if (RESCHEDULE_RE.test(userText) || (inReschedule && !CANCEL_RE.test(userText))) {
+  if (isRescheduleIntent(userText) || (inReschedule && !isCancelIntent(userText))) {
     return resolveRescheduleTurn({
       userText, history, appts: activeAppointments, services, wh: workingHours, tz: timezone, booked: bookedSlots,
     })
   }
-  if (CANCEL_RE.test(userText)) {
+  if (isCancelIntent(userText)) {
     return resolveCancelIntent(userText, activeAppointments, timezone)
   }
 
