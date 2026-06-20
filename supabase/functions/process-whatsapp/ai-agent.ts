@@ -18,17 +18,19 @@
 import type { BusinessRagContext } from "./types.ts"
 import { LlmRateLimitError, CircuitBreakerError } from "./groq-client.ts"
 import { buildTurnContext, type TurnResult } from "./turn-context.ts"
-import { layerFaq, layerListAppointments, layerBooking } from "./pipeline.ts"
+import { layerFaq, layerListAppointments, layerServices, layerBooking, layerAvailability } from "./pipeline.ts"
 import { runReActLlm } from "./react-loop.ts"
 import { transcribeAudio } from "./transcription.ts"
 
 export { LlmRateLimitError, CircuitBreakerError, transcribeAudio }
 
 /**
- * Runs one WhatsApp turn. The deterministic pipeline is tried first (0 LLM tokens); a
- * READ query ("¿tengo citas?") is matched before the booking WRITE path so it's never
- * hijacked by a sticky booking context (safe: isListAppointmentsQuery excludes any
- * message carrying a write verb). If no layer resolves the turn, the ReAct LLM loop runs.
+ * Runs one WhatsApp turn. The deterministic pipeline is tried first (0 LLM tokens), in
+ * order: FAQ → list-appointments → services → booking → availability. Reads run before
+ * the booking WRITE path so they're never hijacked by a sticky booking context (each
+ * read detector excludes write verbs). Availability runs LAST so a mid-booking turn is
+ * owned by the state machine, and only a STANDALONE "¿qué horarios hay?" reaches it. If
+ * no layer resolves the turn, the ReAct LLM loop runs.
  *
  * @param userText     - Sanitized message text from the customer
  * @param context      - Full BusinessRagContext (services, history, booked slots, etc.)
@@ -43,7 +45,7 @@ export async function runAgentLoop(
 ): Promise<TurnResult> {
   const tc = await buildTurnContext(userText, context, customerName, sender)
 
-  for (const layer of [layerFaq, layerListAppointments, layerBooking]) {
+  for (const layer of [layerFaq, layerListAppointments, layerServices, layerBooking, layerAvailability]) {
     const result = await layer(tc)
     if (result) return result
   }

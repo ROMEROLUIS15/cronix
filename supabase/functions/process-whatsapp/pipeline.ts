@@ -9,8 +9,9 @@
 import { addBreadcrumb } from "../_shared/sentry.ts"
 import { resolveBookingTurn } from "./booking-flow.ts"
 import type { WorkingHours } from "./availability.ts"
-import { isListAppointmentsQuery, buildAppointmentsListResponse } from "./read-intents.ts"
-import { FAQ_INTENTS, buildFaqResponse } from "./faq-responses.ts"
+import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery } from "./read-intents.ts"
+import { FAQ_INTENTS, buildFaqResponse, buildServicesResponse } from "./faq-responses.ts"
+import { resolveAvailabilityQuery } from "./availability-query.ts"
 import { executeDeterministicWrite } from "./deterministic-write.ts"
 import { BOOKING_PROPOSAL_DETECT_RE } from "./output-sanitizer.ts"
 import type { TurnContext, TurnResult } from "./turn-context.ts"
@@ -59,5 +60,28 @@ export async function layerListAppointments(tc: TurnContext): Promise<TurnResult
   const text = buildAppointmentsListResponse(context.activeAppointments, business.timezone)
   addBreadcrumb('Deterministic list-appointments resolved (0 tokens)', 'agent', 'info', { count: context.activeAppointments.length })
   await tc.quickTrace(text, 'deterministic_list', { count: context.activeAppointments.length })
+  return { text, tokens: 0, toolCallsTrace: [] }
+}
+
+/** Deterministic catalog: "¿qué servicios tienen? / ¿cuánto cuesta?" → services + price list. */
+export async function layerServices(tc: TurnContext): Promise<TurnResult | null> {
+  if (!isServicesQuery(tc.userText)) return null
+  const text = buildServicesResponse(tc.context)
+  await tc.quickTrace(text, 'deterministic_services')
+  return { text, tokens: 0, toolCallsTrace: [] }
+}
+
+/** Deterministic availability: standalone "¿qué horarios hay el martes?" → real free slots. */
+export async function layerAvailability(tc: TurnContext): Promise<TurnResult | null> {
+  const { userText, context, business } = tc
+  if (!isAvailabilityQuery(userText)) return null
+  const text = resolveAvailabilityQuery({
+    userText,
+    services:     context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min })),
+    workingHours: (business.settings as { workingHours?: unknown } | null | undefined)?.workingHours as WorkingHours,
+    timezone:     business.timezone,
+    bookedSlots:  (context.bookedSlots ?? []).map(s => ({ start_at: s.start_at, end_at: s.end_at })),
+  })
+  await tc.quickTrace(text, 'deterministic_availability')
   return { text, tokens: 0, toolCallsTrace: [] }
 }

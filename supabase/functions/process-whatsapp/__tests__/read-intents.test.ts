@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { isListAppointmentsQuery, buildAppointmentsListResponse } from '../read-intents.ts'
+import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery } from '../read-intents.ts'
 import { selectFinalResponse } from '../final-response.ts'
 
 const TZ = 'America/Caracas'
@@ -27,6 +27,34 @@ describe('isListAppointmentsQuery', () => {
     expect(isListAppointmentsQuery('cancela mi cita')).toBe(false)
     expect(isListAppointmentsQuery('reagenda mi cita')).toBe(false)
     expect(isListAppointmentsQuery('qué horarios tienes disponible')).toBe(false)
+  })
+})
+
+describe('isServicesQuery', () => {
+  it('detects catalog / pricing questions', () => {
+    for (const t of ['qué servicios tienen', 'que servicios tienen disponibles?', 'qué ofrecen',
+                     'cuánto cuesta', 'cuanto cuesta Tarjeta', 'qué precios manejan', 'lista de servicios']) {
+      expect(isServicesQuery(t)).toBe(true)
+    }
+  })
+  it('does NOT fire on booking, availability or small talk', () => {
+    expect(isServicesQuery('quiero agendar una cita')).toBe(false)
+    expect(isServicesQuery('qué horarios hay el martes')).toBe(false)
+    expect(isServicesQuery('hola')).toBe(false)
+  })
+})
+
+describe('isAvailabilityQuery', () => {
+  it('detects standalone availability questions', () => {
+    for (const t of ['qué horarios hay el martes', 'horarios disponibles', 'tienes algo disponible mañana',
+                     'a qué horas atienden', 'qué disponibilidad hay']) {
+      expect(isAvailabilityQuery(t)).toBe(true)
+    }
+  })
+  it('does NOT fire when a write verb is present (booking owns it) or on services', () => {
+    expect(isAvailabilityQuery('agéndame el martes, qué horarios hay')).toBe(false)
+    expect(isAvailabilityQuery('qué servicios tienen')).toBe(false)
+    expect(isAvailabilityQuery('hola')).toBe(false)
   })
 })
 

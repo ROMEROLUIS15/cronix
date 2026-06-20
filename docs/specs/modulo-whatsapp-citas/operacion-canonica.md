@@ -130,6 +130,10 @@ EXECUTE       → ejecuta confirm_booking determinista; dispara §4–§6.
 - **AC-NLU-9:** reagendar multi-turno con enclítico ("reagéndala" → "para el 24" → "a la misma hora") → emite la propuesta determinista y, tras "sí", **ejecuta** `reschedule_booking` (DB + campana + push). El LLM nunca posee este flujo.
 - **AC-NLU-10:** número pelado respondiendo a una pregunta de HORA (fecha ya elegida, "¿A qué hora?") → se interpreta como **hora** ("10"→10:00), **no** como día; **no pisa** la fecha bloqueada. Una respuesta con fecha explícita ("el 10", "10 de julio") sí cambia la fecha.
 - **AC-NLU-11:** responder **solo el día** tras "¿Para qué día y a qué hora?" → ofrece los horarios reales y pregunta la hora; **nunca** responde "No te entendí la hora" (esa rama solo aplica a un intento de hora que no parsea).
+- **AC-NLU-12:** "qué servicios tienen" / "cuánto cuesta" → lista determinista **servicio + precio + duración** (`layerServices` → `buildServicesResponse`, 0 tokens) e invita a agendar; **nunca** repite el prompt robótico de captura ni deja que el LLM invente un precio. (Cierra el defecto de "¿Qué servicio deseas? Tenemos…" repetido.)
+- **AC-NLU-13:** "¿qué horarios hay el martes?" como pregunta **suelta** (sin agendar) → `layerAvailability` lista los **slots reales** del día (o pide el día/servicio que falte), 0 tokens; **nunca** el LLM inventa horarios. Corre DESPUÉS de la capa de booking, así un turno a mitad de agendamiento lo posee la máquina de estados.
+
+> **Pipeline determinista (NORMATIVO).** El orquestador prueba, en orden y a 0 tokens: **FAQ → list-appointments → services → booking → availability**. Las lecturas van antes de la escritura (cada detector excluye verbos de escritura vía los predicados acento-insensibles de `intents.ts`); availability va al final para no secuestrar un turno a mitad de booking. La primera capa que resuelve gana; si ninguna, cae al ReAct LLM.
 
 ### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
 
