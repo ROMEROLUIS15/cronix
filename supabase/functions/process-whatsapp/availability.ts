@@ -84,8 +84,12 @@ export function computeAvailableSlots(p: {
   timezone:     string
   durationMin:  number
   bookedSlots:  ReadonlyArray<BookedSlot>
+  /** "Now" in epoch ms (injectable for tests). Slots already in the past are dropped — a
+   *  same-day booking must never offer/accept an hour earlier than the current time. */
+  nowMs?:       number
 }): DayAvailability {
   const { workingHours, date, timezone, durationMin, bookedSlots } = p
+  const nowMs = p.nowMs ?? Date.now()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !durationMin || durationMin < 5) {
     return { open: false, slots: [] }
   }
@@ -117,6 +121,7 @@ export function computeAvailableSlots(p: {
   for (let t = openMin; t + durationMin <= closeMin; t += SLOT_INTERVAL) {
     const candidate = `${pad2(Math.floor(t / 60))}:${pad2(t % 60)}`
     const startMs   = new Date(localToUTC(date, candidate, timezone)).getTime()
+    if (startMs <= nowMs) continue // past time (only ever trims slots when date is today)
     const endMs     = startMs + durationMin * 60_000
     const conflict  = bookedSlots.some((b) =>
       new Date(b.start_at).getTime() < endMs && new Date(b.end_at).getTime() > startMs
