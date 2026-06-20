@@ -16,7 +16,7 @@ import { logInteraction }   from "./audit.ts"
 export async function getBusinessBySlug(slug: string): Promise<BusinessRow | null> {
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, phone, timezone, settings, slug')
+    .select('id, name, phone, address, timezone, settings, slug')
     .eq('slug', slug)
     .single()
 
@@ -39,7 +39,7 @@ export async function getSessionBusiness(senderPhone: string): Promise<BusinessR
 
   const { data, error } = await supabase
     .from('businesses')
-    .select('id, name, phone, timezone, settings, slug')
+    .select('id, name, phone, address, timezone, settings, slug')
     .eq('id', (session as { business_id: string }).business_id)
     .single()
 

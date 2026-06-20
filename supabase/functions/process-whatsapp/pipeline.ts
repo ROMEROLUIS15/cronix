@@ -9,9 +9,10 @@
 import { addBreadcrumb } from "../_shared/sentry.ts"
 import { resolveBookingTurn } from "./booking-flow.ts"
 import type { WorkingHours } from "./availability.ts"
-import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery } from "./read-intents.ts"
+import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery, isLocationQuery, isHoursQuery } from "./read-intents.ts"
 import { FAQ_INTENTS, buildFaqResponse, buildServicesResponse } from "./faq-responses.ts"
 import { resolveAvailabilityQuery } from "./availability-query.ts"
+import { buildLocationResponse, buildHoursResponse } from "./business-info.ts"
 import { executeDeterministicWrite } from "./deterministic-write.ts"
 import { BOOKING_PROPOSAL_DETECT_RE } from "./output-sanitizer.ts"
 import type { TurnContext, TurnResult } from "./turn-context.ts"
@@ -69,6 +70,23 @@ export async function layerServices(tc: TurnContext): Promise<TurnResult | null>
   const text = buildServicesResponse(tc.context)
   await tc.quickTrace(text, 'deterministic_services')
   return { text, tokens: 0, toolCallsTrace: [] }
+}
+
+/** Deterministic business info: "¿dónde están?" / "¿a qué hora abren?" → real data, never invented. */
+export async function layerBusinessInfo(tc: TurnContext): Promise<TurnResult | null> {
+  const { userText, business } = tc
+  if (isLocationQuery(userText)) {
+    const text = buildLocationResponse(business)
+    await tc.quickTrace(text, 'deterministic_location')
+    return { text, tokens: 0, toolCallsTrace: [] }
+  }
+  if (isHoursQuery(userText)) {
+    const wh = (business.settings as { workingHours?: unknown } | null | undefined)?.workingHours as WorkingHours
+    const text = buildHoursResponse(wh, business.name)
+    await tc.quickTrace(text, 'deterministic_hours')
+    return { text, tokens: 0, toolCallsTrace: [] }
+  }
+  return null
 }
 
 /** Deterministic availability: standalone "¿qué horarios hay el martes?" → real free slots. */

@@ -18,7 +18,7 @@
 import type { BusinessRagContext } from "./types.ts"
 import { LlmRateLimitError, CircuitBreakerError } from "./groq-client.ts"
 import { buildTurnContext, type TurnResult } from "./turn-context.ts"
-import { layerFaq, layerListAppointments, layerServices, layerBooking, layerAvailability } from "./pipeline.ts"
+import { layerFaq, layerListAppointments, layerServices, layerBusinessInfo, layerBooking, layerAvailability } from "./pipeline.ts"
 import { runReActLlm } from "./react-loop.ts"
 import { transcribeAudio } from "./transcription.ts"
 
@@ -26,7 +26,7 @@ export { LlmRateLimitError, CircuitBreakerError, transcribeAudio }
 
 /**
  * Runs one WhatsApp turn. The deterministic pipeline is tried first (0 LLM tokens), in
- * order: FAQ → list-appointments → services → booking → availability. Reads run before
+ * order: FAQ → list-appointments → services → business-info → booking → availability. Reads run before
  * the booking WRITE path so they're never hijacked by a sticky booking context (each
  * read detector excludes write verbs). Availability runs LAST so a mid-booking turn is
  * owned by the state machine, and only a STANDALONE "¿qué horarios hay?" reaches it. If
@@ -45,7 +45,7 @@ export async function runAgentLoop(
 ): Promise<TurnResult> {
   const tc = await buildTurnContext(userText, context, customerName, sender)
 
-  for (const layer of [layerFaq, layerListAppointments, layerServices, layerBooking, layerAvailability]) {
+  for (const layer of [layerFaq, layerListAppointments, layerServices, layerBusinessInfo, layerBooking, layerAvailability]) {
     const result = await layer(tc)
     if (result) return result
   }

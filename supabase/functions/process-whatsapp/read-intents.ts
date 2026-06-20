@@ -48,6 +48,24 @@ export function isAvailabilityQuery(text: string): boolean {
   return AVAILABILITY_QUERY_RE.test(text)
 }
 
+// "Where are you / what's the address" — answered from the real address, never invented.
+const LOCATION_QUERY_RE =
+  /\b(d[óo]nde\s+(?:est[áa]n|queda|es|se\s+ubican|los?\s+encuentro)|direcci[óo]n|ubicaci[óo]n|ubicad[oa]s|c[óo]mo\s+(?:llego|llegar)|en\s+qu[ée]\s+(?:lugar|zona|parte|sitio))\b/i
+
+export function isLocationQuery(text: string): boolean {
+  return LOCATION_QUERY_RE.test(text)
+}
+
+// "What time / what days are you open" — the SCHEDULE (distinct from availability-for-booking,
+// which asks for free slots on a date). Answered deterministically from working hours.
+const HOURS_QUERY_RE =
+  /\b(a\s+qu[ée]\s+hora\s+(?:abren|cierran|atienden|abres|cierras|atiendes)|hasta\s+qu[ée]\s+hora|qu[ée]\s+d[íi]as?\s+(?:abren|trabajan|atienden|laboran|abres|trabajas)|horario\s+de\s+atenci[óo]n|cu[áa]l\s+es\s+(?:su|el)\s+horario|est[áa]n\s+abiert[oa]s?|abren\s+(?:hoy|los|el|ma[ñn]ana)|trabajan\s+(?:hoy|los|el|ma[ñn]ana)|qu[ée]\s+horario)\b/i
+
+export function isHoursQuery(text: string): boolean {
+  if (hasWriteVerb(text)) return false
+  return HOURS_QUERY_RE.test(text)
+}
+
 export function buildAppointmentsListResponse(
   appts:    ReadonlyArray<ActiveAppt>,
   timezone: string,

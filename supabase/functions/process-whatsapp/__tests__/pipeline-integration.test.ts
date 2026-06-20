@@ -67,7 +67,7 @@ const OPEN_ALL = {
 
 function ctx(over: Partial<BusinessRagContext> = {}): BusinessRagContext {
   return {
-    business: { id: 'biz-1', name: 'IGM', timezone: 'America/Bogota', phone: '573000000000', slug: 'igm',
+    business: { id: 'biz-1', name: 'IGM', timezone: 'America/Bogota', phone: '573000000000', address: 'Calle 5 #10-20', slug: 'igm',
       settings: { workingHours: OPEN_ALL } as unknown as BusinessRagContext['business']['settings'] },
     services: [{ id: 'svc-c', name: 'Corte', duration_min: 30, price: 25 }],
     client: { id: 'cli-1', name: 'Luis' },
@@ -102,6 +102,18 @@ describe('pipeline integration — deterministic layers (0 LLM tokens)', () => {
     expect(r.tokens).toBe(0)
     expect(r.text).toMatch(/25 de diciembre/)
     expect(r.text).toMatch(/9:00 am/)
+  })
+
+  it('location query → real address (never invented), no LLM', async () => {
+    const r = await run('dónde están ubicados')
+    expect(r.tokens).toBe(0)
+    expect(r.text).toMatch(/Calle 5 #10-20/)
+  })
+
+  it('hours query → schedule from working hours, no LLM', async () => {
+    const r = await run('a qué hora abren')
+    expect(r.tokens).toBe(0)
+    expect(r.text).toMatch(/9:00 am a 6:00 pm/)
   })
 
   it('list-appointments → lists the active appointment, no LLM', async () => {

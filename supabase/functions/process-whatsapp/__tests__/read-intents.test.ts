@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery } from '../read-intents.ts'
+import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery, isLocationQuery, isHoursQuery } from '../read-intents.ts'
 import { selectFinalResponse } from '../final-response.ts'
 
 const TZ = 'America/Caracas'
@@ -55,6 +55,31 @@ describe('isAvailabilityQuery', () => {
     expect(isAvailabilityQuery('agéndame el martes, qué horarios hay')).toBe(false)
     expect(isAvailabilityQuery('qué servicios tienen')).toBe(false)
     expect(isAvailabilityQuery('hola')).toBe(false)
+  })
+})
+
+describe('isLocationQuery', () => {
+  it('detects location/address questions', () => {
+    for (const t of ['dónde están ubicados', 'cuál es la dirección', 'cómo llego', 'en qué zona están', 'su ubicación']) {
+      expect(isLocationQuery(t)).toBe(true)
+    }
+  })
+  it('does NOT fire on booking or hours', () => {
+    expect(isLocationQuery('quiero agendar')).toBe(false)
+    expect(isLocationQuery('a qué hora abren')).toBe(false)
+  })
+})
+
+describe('isHoursQuery', () => {
+  it('detects schedule questions', () => {
+    for (const t of ['a qué hora abren', 'qué días trabajan', 'cuál es su horario', 'están abiertos hoy', 'hasta qué hora atienden']) {
+      expect(isHoursQuery(t)).toBe(true)
+    }
+  })
+  it('does NOT fire on availability-for-booking, location or write verbs', () => {
+    expect(isHoursQuery('qué horarios hay el martes')).toBe(false) // availability, not schedule
+    expect(isHoursQuery('dónde están')).toBe(false)
+    expect(isHoursQuery('agéndame mañana')).toBe(false)
   })
 })
 

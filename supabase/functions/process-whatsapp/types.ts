@@ -33,6 +33,7 @@ export interface BusinessRow {
   id:       string
   name:     string
   phone:    string | null
+  address:  string | null
   timezone: string | null
   settings: WaBusinessSettings | null
   slug:     string | null
@@ -76,6 +77,7 @@ export interface BusinessRagContext {
     name:     string
     timezone: string
     phone:    string | null
+    address:  string | null
     settings: WaBusinessSettings
     slug:     string | null
   }

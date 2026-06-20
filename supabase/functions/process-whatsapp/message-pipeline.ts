@@ -74,6 +74,7 @@ async function stepFetchContext(ctx: WhatsAppPipelineInput) {
       name:     ctx.business.name,
       timezone,
       phone:    ctx.business.phone ?? null,
+      address:  ctx.business.address ?? null,
       slug:     ctx.business.slug ?? null,
       settings: (ctx.business.settings ?? {}) as WaBusinessSettings,
     },
