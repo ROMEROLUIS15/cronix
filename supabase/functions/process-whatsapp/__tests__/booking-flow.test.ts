@@ -322,6 +322,43 @@ describe('resolveBookingTurn — reschedule (enclitic + sticky sub-dialogue + mi
   })
 })
 
+// ── Bare-number ambiguity (day vs hour) resolved by conversational context. ────
+describe('resolveBookingTurn — bare number is the HOUR when answering the time', () => {
+  it('a bare "10" after offering slots keeps the locked date (not day-of-month)', () => {
+    const turn = resolveBookingTurn({
+      userText: '10',
+      history: [
+        { role: 'user', text: 'quiero agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+        { role: 'user', text: 'el 25 de diciembre' },
+        { role: 'assistant', text: 'Para el 25 de diciembre tengo estos horarios libres para *Tarjeta*: 9:00 am, 9:30 am, 10:00 am. ¿A qué hora te viene bien?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Confirmo tu cita de \*Tarjeta\* para el 25 de diciembre a las 10:00 am/)
+      expect(turn.text).not.toMatch(/julio|enero|noviembre/) // never shifted to "day 10"
+    }
+  })
+
+  it('answering only the day offers the slots — never scolds "no entendí la hora"', () => {
+    const turn = resolveBookingTurn({
+      userText: 'el 25 de diciembre',
+      history: [
+        { role: 'user', text: 'quiero agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/horarios libres|a qué hora te viene/i)
+      expect(turn.text).not.toMatch(/no te entend/i)
+    }
+  })
+})
+
 // ── Bug 2: accent-insensitive service recognition. ─────────────────────────────
 describe('resolveBookingTurn — service recognition is accent-insensitive', () => {
   const SVCS = [

@@ -103,6 +103,8 @@ El agente falló repetidamente porque el NLU de fecha era rígido (solo "21 de j
 
 > **Hora ambigua (NORMATIVO).** Una hora pelada **1–7 sin am/pm ni franja** ("a las 5") se resuelve a la **tarde** (N+12 → 17:00): un negocio opera 1–7 PM, nunca 1–7 AM (probabilidad casi nula). Las horas **8–12** se mantienen literales (la mañana es plausible). El meridiano/franja explícitos siempre mandan ("5 am" → 05:00). El slot resultante se **valida igual** contra el horario real; si la inferencia fuese errónea, se ofrecen los libres reales (no se agenda a ciegas).
 
+> **Número pelado: día vs hora según contexto (NORMATIVO).** Un número solo ("10") es ambiguo entre día-del-mes y hora. La **máquina de estados** desambigua: si el turno anterior del agente fue una **pregunta de hora con la fecha ya elegida** ("¿A qué hora?", "no tengo disponible…", "¿cuál prefieres?"), el número es **hora** y **no** puede pisar la fecha bloqueada; en cualquier otro punto es **día**. La NLU (`datetime-nlu`) es libre de contexto; el `expecting` lo aporta la máquina de estados (separación de responsabilidades). Una respuesta con fecha explícita ("el 10", "10 de julio") siempre se interpreta como fecha aunque se esté preguntando la hora.
+
 **Máquina de estados (explícita, NORMATIVO):** el estado se deriva del sub-diálogo actual (acotado: desde la última reserva completada o el inicio de ESTA intención; nunca arrastra datos de conversaciones previas).
 
 ```
@@ -126,6 +128,8 @@ EXECUTE       → ejecuta confirm_booking determinista; dispara §4–§6.
 - **AC-NLU-7:** hora pelada 1–7 sin meridiano ("a las 5") → 17:00 (tarde); "5 am" sigue 05:00.
 - **AC-NLU-8:** día con typo del artículo ("para e 23") → entiende día 23 (próxima ocurrencia, futura).
 - **AC-NLU-9:** reagendar multi-turno con enclítico ("reagéndala" → "para el 24" → "a la misma hora") → emite la propuesta determinista y, tras "sí", **ejecuta** `reschedule_booking` (DB + campana + push). El LLM nunca posee este flujo.
+- **AC-NLU-10:** número pelado respondiendo a una pregunta de HORA (fecha ya elegida, "¿A qué hora?") → se interpreta como **hora** ("10"→10:00), **no** como día; **no pisa** la fecha bloqueada. Una respuesta con fecha explícita ("el 10", "10 de julio") sí cambia la fecha.
+- **AC-NLU-11:** responder **solo el día** tras "¿Para qué día y a qué hora?" → ofrece los horarios reales y pregunta la hora; **nunca** responde "No te entendí la hora" (esa rama solo aplica a un intento de hora que no parsea).
 
 ### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
 

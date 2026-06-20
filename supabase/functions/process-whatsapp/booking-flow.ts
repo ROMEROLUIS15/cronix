@@ -77,6 +77,10 @@ const OUR_RESCHEDULE_QUESTION_RE =
   /(nueva\s+fecha\s+quieres\s+reagendar|hora\s+quieres\s+tu\s+cita|cu[áa]l\s+deseas\s+reagendar|¿\s*reagendo\s+tu\s+cita)/i
 // "a la misma hora" / "el mismo horario" → keep the appointment's current time.
 const SAME_HOUR_RE = /\b(?:a\s+la\s+)?misma\s+hora\b|\bmismo\s+horario\b|\bigual\s+(?:hora|horario)\b/i
+// Our OWN messages that mean "the date is locked, choose the TIME" — so a bare number
+// in the client's reply is an HOUR, not a day. NOT the combined "¿…día y a qué hora?"
+// (date not chosen yet → a bare number there can still be the day).
+const ASKING_TIME_RE = /(¿\s*a\s+qu[ée]\s+hora|no\s+tengo\s+disponible|no\s+te\s+entend[íi]\s+la\s+hora|¿\s*cu[áa]l\s+prefieres)/i
 // A clear decline — used to avoid re-proposing the same slot after the client says no.
 const NEGATIVE_RE = /^(no+|nop[ea]?|nel|para\s+nada|mejor\s+no|todav[íi]a\s+no|a[úu]n\s+no)\b/i
 
@@ -315,6 +319,7 @@ function gatherBookingState(
   history: ReadonlyArray<{ role: string; text: string }>,
   services: ReadonlyArray<ServiceLite>,
   timezone: string,
+  expecting: 'time' | 'date' | null = null,
 ): { service: ServiceLite | null; date: string | null; time: string | null } {
   const today = todayInTimezone(timezone)
   // CRITICAL: gather ONLY from the CURRENT booking sub-dialogue. The history window
@@ -341,10 +346,14 @@ function gatherBookingState(
 
   // Combined NLU per turn (parses time, strips it, then the date) so "21 a las 11"
   // yields day 21 + 11:00 in one shot. Most recent stated value wins (newest-first).
+  // `expecting` only applies to the CURRENT turn (index 0): if the agent just asked
+  // the time, a bare number there is the hour, not a new day that would clobber the
+  // already-chosen date.
   let date: string | null = null
   let time: string | null = null
-  for (const t of userTexts) {
-    const dt = parseDateTime(t, today)
+  for (let idx = 0; idx < userTexts.length; idx++) {
+    const t  = userTexts[idx]!
+    const dt = parseDateTime(t, today, idx === 0 && expecting ? { expecting } : {})
     if (!date && dt.date && dt.date >= today) date = dt.date
     if (!time && dt.time) time = dt.time
     if (date && time) break
@@ -474,7 +483,10 @@ export function resolveBookingTurn(p: {
       return { kind: 'reply', text: '¿Qué te gustaría cambiar: el servicio, el día o la hora?' }
     }
 
-    const st = gatherBookingState(userText, history, services, timezone)
+    // If the agent just asked the TIME (date already chosen), a bare number is the hour
+    // → tell the NLU so "10" becomes 10:00 and never overwrites the locked date.
+    const expecting: 'time' | null = ASKING_TIME_RE.test(lastAssistant) ? 'time' : null
+    const st = gatherBookingState(userText, history, services, timezone, expecting)
 
     if (!st.service) {
       const names = services.map((s) => s.name).join(', ')
@@ -487,7 +499,7 @@ export function resolveBookingTurn(p: {
     // didn't parse, so we give examples instead of repeating the same question (no loop).
     const askedDay   = /(para\s+qu[ée]\s+d[íi]a|d[íi]a\s+y\s+a\s+qu[ée]\s+hora)/i.test(lastAssistant)
     const askedTime  = /(a\s+qu[ée]\s+hora|horarios?\s+libres)/i.test(lastAssistant)
-    const saidNow    = parseDateTime(userText, todayInTimezone(timezone))
+    const saidNow    = parseDateTime(userText, todayInTimezone(timezone), expecting ? { expecting } : {})
     const hasContent = userText.trim().length > 0
 
     // "No entendí la fecha": we already asked for the day and the reply parsed to nothing
@@ -508,7 +520,10 @@ export function resolveBookingTurn(p: {
       return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
     }
     if (!st.time) {
-      if (askedTime && hasContent && !saidNow.time && slots.length > 0) {
+      // Only scold "no entendí la hora" if the client actually attempted a time and it
+      // failed to parse — NOT when they just gave the day (saidNow.date present), which
+      // is normal progress toward the time and must offer the slots, not a "no entendí".
+      if (askedTime && hasContent && !saidNow.time && !saidNow.date && slots.length > 0) {
         return { kind: 'reply', text: `No te entendí la hora 🙏. Puedes decir *a las 3*, *11 am* o *15:30*. Para el ${when} tengo: ${listFreeTimes(slots)}. ¿A qué hora?` }
       }
       return { kind: 'reply', text: slots.length > 0

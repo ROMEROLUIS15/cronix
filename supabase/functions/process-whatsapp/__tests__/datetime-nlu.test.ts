@@ -42,3 +42,19 @@ describe('parseDateTime — grammar from the spec', () => {
     expect(extractTime('medianoche')).toBe('00:00')
   })
 })
+
+describe('parseDateTime — expecting:"time" (bare number is the hour, not the day)', () => {
+  it('parses a bare number as the hour when the agent just asked the time', () => {
+    expect(parseDateTime('10', TODAY, { expecting: 'time' })).toEqual({ date: null, time: '10:00' })
+    expect(parseDateTime('5',  TODAY, { expecting: 'time' })).toEqual({ date: null, time: '17:00' }) // 1–7 → PM
+    expect(parseDateTime('10:30', TODAY, { expecting: 'time' })).toEqual({ date: null, time: '10:30' })
+  })
+  it('still treats an EXPLICIT date reply as a date, even when expecting a time', () => {
+    expect(parseDateTime('el 10', TODAY, { expecting: 'time' }).date).toBe('2026-07-10') // day 10 → next July
+    expect(parseDateTime('10 de julio', TODAY, { expecting: 'time' }).date).toBe('2026-07-10')
+  })
+  it('without the hint, a bare number is still the day-of-month', () => {
+    expect(parseDateTime('10', TODAY).date).toBe('2026-07-10')
+    expect(parseDateTime('10', TODAY).time).toBeNull()
+  })
+})

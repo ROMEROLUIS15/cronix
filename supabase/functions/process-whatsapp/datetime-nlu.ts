@@ -74,8 +74,23 @@ export function extractTime(text: string): string | null {
  * Combined date+time understanding. Parses the time, removes its span from the text,
  * then parses the date from the remainder so a bare day ("21") is never mistaken for
  * the hour. Returns nulls for anything the client didn't say.
+ *
+ * `expecting` carries the conversational context the NLU itself can't know: when the
+ * agent just asked "¿A qué hora?" (date already chosen), a bare number is the HOUR, not
+ * the day-of-month — so "10" answering the time becomes 10:00 and never clobbers the
+ * locked date. An explicit date reply ("el 10", "10 de julio") carries extra tokens, so
+ * the whole-message guard below won't fire and it is still parsed as a date.
  */
-export function parseDateTime(text: string, today: string): { date: string | null; time: string | null } {
+export function parseDateTime(
+  text: string, today: string, opts: { expecting?: 'time' | 'date' } = {},
+): { date: string | null; time: string | null } {
+  if (opts.expecting === 'time') {
+    const bare = text.trim().match(/^(\d{1,2})(?::([0-5]\d))?$/)
+    if (bare) {
+      const h = disambiguateBareHour(parseInt(bare[1]!, 10))
+      if (h <= 23) return { date: null, time: `${pad2(h)}:${bare[2] ?? '00'}` }
+    }
+  }
   const ts = extractTimeSpan(text)
   const time = ts ? ts.time : null
   const dateText = ts ? `${text.slice(0, ts.start)} ${text.slice(ts.end)}` : text
