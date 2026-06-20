@@ -8,9 +8,10 @@
 
 type ActiveAppt = { service_name: string; start_at: string }
 
-// Phrases that ask "do I have / show me my appointment(s)".
+// Phrases that ask "do I have / show me my appointment(s)". `citas?` matches both
+// singular and plural; covers natural openers ("quiero saber si tengo citas…").
 const LIST_APPTS_RE =
-  /\b(?:tengo\s+(?:alguna\s+|una\s+)?cita|mis\s+citas|cu[áa]ndo\s+(?:es|tengo)\s+mi\s+cita|qu[ée]\s+citas\s+tengo|cita\s+(?:programada|agendada|pendiente|disponible)|ver\s+mis?\s+citas?|consultar\s+mis?\s+citas?)\b/i
+  /\b(?:tengo\s+(?:alguna\s+|una\s+|alguna\s+otra\s+)?citas?|mis\s+citas?|cu[áa]ndo\s+(?:es|tengo|ten[ií]a)\s+mi\s+cita|qu[ée]\s+citas?\s+tengo|cu[áa]les?\s+son\s+mis\s+citas?|saber\s+(?:si\s+)?(?:tengo\s+)?(?:mis\s+)?citas?|citas?\s+(?:programad|agendad|pendient|disponibl|activ)\w*|ver\s+mis?\s+citas?|consultar\s+mis?\s+citas?)\b/i
 
 // If the message also carries a write verb, it's a booking/cancel/reschedule
 // flow — not a pure query — so we let the normal pipeline handle it.

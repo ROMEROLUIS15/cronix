@@ -304,21 +304,27 @@ function inBookingContext(
   // Explicit cancel/reagendar → managed elsewhere, not new booking.
   if (MANAGE_EXISTING_RE.test(userText)) return false
 
+  // Fresh booking signal on THIS turn always opens a (new) booking.
+  if (intent === 'book_appointment') return true
+  if (BOOK_INTENT_RE.test(userText)) return true
+
   const lastAssistant = [...history].reverse()
     .find((h) => h.role === 'model' || h.role === 'assistant')?.text ?? ''
-
-  // A booking just finished → only re-enter on a brand-new booking intent.
-  if (BOOKING_DONE_RE.test(lastAssistant)) {
-    return intent === 'book_appointment' || BOOK_INTENT_RE.test(userText)
-  }
-
-  if (intent === 'book_appointment')          return true
-  if (BOOK_INTENT_RE.test(userText))          return true
+  // Mid-flow: the prior assistant turn was one of OUR booking questions.
   if (OUR_BOOKING_QUESTION_RE.test(lastAssistant)) return true
-  // Sticky: a recent client turn expressed booking intent (covers the service-pick
-  // and date/time sub-turns where the current message alone has no booking keyword).
-  const recentUser = history.filter((h) => h.role === 'user').slice(-6)
-  return recentUser.some((h) => BOOK_INTENT_RE.test(h.text))
+
+  // Otherwise decide by the conversation boundary: walk back from the newest turn —
+  // a booking intent that hasn't been completed yet keeps the context active, but a
+  // COMPLETED booking (BOOKING_DONE) ends it. This stops a finished booking from
+  // making an unrelated later message ("¿tengo citas?", "gracias") look like a new one.
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if (!h || !h.text) continue
+    const isAssistant = h.role === 'model' || h.role === 'assistant'
+    if (isAssistant && BOOKING_DONE_RE.test(h.text)) return false
+    if (h.role === 'user' && BOOK_INTENT_RE.test(h.text)) return true
+  }
+  return false
 }
 
 /**

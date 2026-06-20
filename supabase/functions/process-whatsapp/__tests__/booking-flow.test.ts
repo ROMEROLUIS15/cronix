@@ -335,6 +335,22 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
     }
   })
 
+  it('a COMPLETED booking ends booking context (a later read query is not hijacked)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero saber si tengo citas disponibles',
+      history: [
+        { role: 'user', text: 'para agendar' },
+        { role: 'assistant', text: '¿Confirmo tu cita de *Tarjeta* para el 22 de diciembre a las 3:00 pm?' },
+        { role: 'user', text: 'si' },
+        { role: 'assistant', text: '✅ ¡Listo! Tu cita para *Tarjeta* quedó agendada para el 22 de diciembre a las 3:00 pm.' },
+        { role: 'user', text: 'hola' },
+        { role: 'assistant', text: '¡Hola! 👋 Soy el asistente virtual de IGM. ¿En qué puedo servirte?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn).toBeNull() // booking layer yields → list-appointments handles the read
+  })
+
   it('does NOT pull a stale date from a PREVIOUS (completed) booking in history', () => {
     const turn = resolveBookingTurn({
       userText: 'quiero agendar',

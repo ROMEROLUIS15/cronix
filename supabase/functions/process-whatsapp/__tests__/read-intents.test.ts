@@ -15,6 +15,13 @@ describe('isListAppointmentsQuery', () => {
     expect(isListAppointmentsQuery('cuándo es mi cita')).toBe(true)
     expect(isListAppointmentsQuery('ver mis citas')).toBe(true)
   })
+  it('detects plural / natural phrasings (the real failing inputs)', () => {
+    expect(isListAppointmentsQuery('quiero saber si tengo citas disponibles')).toBe(true)
+    expect(isListAppointmentsQuery('tengo citas')).toBe(true)
+    expect(isListAppointmentsQuery('qué citas tengo')).toBe(true)
+    expect(isListAppointmentsQuery('cuáles son mis citas')).toBe(true)
+    expect(isListAppointmentsQuery('mis citas pendientes')).toBe(true)
+  })
   it('does NOT fire on write flows or availability queries', () => {
     expect(isListAppointmentsQuery('quiero agendar una cita')).toBe(false)
     expect(isListAppointmentsQuery('cancela mi cita')).toBe(false)

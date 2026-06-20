@@ -709,7 +709,10 @@ export async function runAgentLoop(
   const tc = await buildTurnContext(userText, context, customerName, sender)
 
   // Deterministic pipeline — first non-null result wins (0 LLM tokens).
-  for (const layer of [layerFaq, layerBooking, layerListAppointments]) {
+  // Order matters: a READ query ("¿tengo citas?") is matched before the booking
+  // WRITE path so it's never hijacked by a sticky booking context. Safe because
+  // isListAppointmentsQuery excludes any message carrying a write verb.
+  for (const layer of [layerFaq, layerListAppointments, layerBooking]) {
     const result = await layer(tc)
     if (result) return result
   }
