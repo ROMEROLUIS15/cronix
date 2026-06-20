@@ -182,12 +182,9 @@ export function parseDateExpression(
 
   // ── 5. Weekday with optional modifier (próximo/siguiente/este/que viene) ─
   const weekdayAlt = Object.keys(WEEKDAYS).join('|')
-  // Require an article or "para" before the weekday to avoid matching weekday
-  // names embedded in narrative ("el lunes pasó algo"). Also require the
-  // weekday to be at the end or followed by a non-weekday connector to keep
-  // scope tight.
+  // Prefix (el/este/para…) is OPTIONAL so a bare weekday answer ("domingo") parses.
   const wdRe = new RegExp(
-    `\\b(?:el\\s+|del\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+|en\\s+el\\s+)(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
+    `\\b(?:el\\s+|del\\s+|para\\s+(?:el\\s+)?|este\\s+|esta\\s+|en\\s+el\\s+)?(?:(proximo|siguiente|que\\s+viene)\\s+)?(${weekdayAlt})\\b`,
   )
   const wdM = t.match(wdRe)
   if (wdM) {
@@ -208,21 +205,22 @@ export function parseDateExpression(
     return { date: addDays(today, delta), reason: label, confidence: 'exact' }
   }
 
-  // ── 6. "el día N" / "día N" — bare day, infer month ──────────────────────
-  const bareRe = /\b(?:el\s+)?d[ií]a\s+(\d{1,2})\b/
-  const bareM  = t.match(bareRe)
-  if (bareM) {
-    const day = parseInt(bareM[1]!, 10)
-    if (day >= 1 && day <= 31) {
-      const [ty, tm, td] = ymdFromIso(today)
-      let m = tm, y = ty
-      if (day < td) {
-        m += 1
-        if (m > 12) { m = 1; y++ }
-      }
-      return { date: isoFromYMD(y, m, day), reason: `día ${day}`, confidence: 'inferred' }
-    }
+  // ── 6. Bare day-of-month — "el día N", "(para) el N", or the whole text "N" ──
+  const dayToDate = (day: number): ParsedDate | null => {
+    if (day < 1 || day > 31) return null
+    const [ty, tm, td] = ymdFromIso(today)
+    let m = tm, y = ty
+    if (day < td) { m += 1; if (m > 12) { m = 1; y++ } }
+    return { date: isoFromYMD(y, m, day), reason: `el ${day}`, confidence: 'inferred' }
   }
+
+  const bareM = t.match(/\b(?:el\s+)?d[ií]a\s+(\d{1,2})\b/)
+  if (bareM) { const d = dayToDate(parseInt(bareM[1]!, 10)); if (d) return d }
+
+  // Bare day WITHOUT the word "día": "(para) el 21", or the whole text "21".
+  // (Years like "2026" don't match: (\d{1,2}) can't sit inside a longer digit run.)
+  const elDayM = t.match(/\bel\s+(\d{1,2})\b/) ?? t.match(/^\s*(?:para\s+)?(\d{1,2})\s*$/)
+  if (elDayM) { const d = dayToDate(parseInt(elDayM[1]!, 10)); if (d) return d }
 
   return null
 }

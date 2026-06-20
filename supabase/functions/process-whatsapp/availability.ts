@@ -13,9 +13,6 @@
  * operates on the bookedSlots already in BusinessRagContext (no extra query).
  */
 
-import { parseDateExpression } from './date-parser.ts'
-import { formatLocalTime }     from './prompt-builder.ts'
-
 /**
  * Business working hours as stored by the dashboard (settings.workingHours):
  *   - keys are 3-letter lowercase weekdays: mon|tue|wed|thu|fri|sat|sun
@@ -26,10 +23,8 @@ import { formatLocalTime }     from './prompt-builder.ts'
  */
 export type WorkingHours = Record<string, [string, string] | null> | null | undefined
 export type BookedSlot   = { start_at: string; end_at: string }
-type ServiceLite         = { id: string; name: string; duration_min: number }
 
 const SLOT_INTERVAL = 30
-const MAX_LISTED    = 8
 
 function pad2(n: number): string { return String(n).padStart(2, '0') }
 
@@ -106,81 +101,4 @@ export function computeAvailableSlots(p: {
     if (!conflict) free.push(candidate)
   }
   return { open: true, slots: free }
-}
-
-// ── Time-presence detector ────────────────────────────────────────────────────
-
-/** True when the text already carries an explicit time the client chose. */
-export function textHasTime(text: string): boolean {
-  const t = text.toLowerCase()
-  if (/\b([01]?\d|2[0-3]):[0-5]\d\b/.test(t)) return true
-  if (/\b(a\s+las?|para\s+las?)\s+\d{1,2}\b/.test(t)) return true
-  if (/\b\d{1,2}\s*(?:am|pm|h)\b/i.test(t)) return true
-  if (/\b\d{1,2}\s+de\s+la\s+(?:mañana|manana|tarde|noche)\b/i.test(t)) return true
-  return false
-}
-
-// ── Deterministic booking-gap resolver ────────────────────────────────────────
-
-const CANCEL_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
-const RESCHEDULE_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?)\b/i
-
-function humanDate(dateISO: string): string {
-  const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number]
-  return new Date(Date.UTC(y, m - 1, d))
-    .toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' })
-}
-
-/** Picks the service to quote a time for: the only one, or one named in the text. */
-function resolveService(userText: string, services: ReadonlyArray<ServiceLite>): ServiceLite | null {
-  if (services.length === 1) return services[0]!
-  const t = userText.toLowerCase()
-  return services.find((s) => t.includes(s.name.toLowerCase())) ?? null
-}
-
-/**
- * Returns a deterministic reply (0 LLM tokens) ONLY when the client is booking,
- * gave a recognisable date, gave NO time, and the service is unambiguous.
- * Otherwise returns null and the caller falls through to the LLM.
- */
-export function resolveBookingTimeGap(p: {
-  userText:         string
-  /** True when the turn is clearly about booking (intent OR prior assistant offer/confirm). */
-  isBookingContext: boolean
-  services:         ReadonlyArray<ServiceLite>
-  workingHours:     WorkingHours
-  timezone:         string
-  bookedSlots:      ReadonlyArray<BookedSlot>
-}): string | null {
-  const { userText, isBookingContext, services, workingHours, timezone, bookedSlots } = p
-
-  if (!isBookingContext) return null
-  if (CANCEL_RE.test(userText) || RESCHEDULE_RE.test(userText)) return null
-  if (textHasTime(userText)) return null
-
-  const today  = todayInTimezone(timezone)
-  const parsed = parseDateExpression(userText, today, 'future')
-  if (!parsed || parsed.date < today) return null
-
-  const service = resolveService(userText, services)
-  if (!service) return null
-
-  const { open, slots } = computeAvailableSlots({
-    workingHours, date: parsed.date, timezone, durationMin: service.duration_min, bookedSlots,
-  })
-  const when = humanDate(parsed.date)
-
-  if (!open) {
-    return `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?`
-  }
-  if (slots.length === 0) {
-    return `Para el ${when} no me queda ningún horario libre para *${service.name}*. ¿Probamos con otro día?`
-  }
-  if (slots.length === 1) {
-    // Phrased as a confirmation question → the 2-turn gate opens on "sí".
-    return `¿Confirmo tu cita de *${service.name}* para el ${when} a las ${formatLocalTime(slots[0]!)}?`
-  }
-  const list = slots.slice(0, MAX_LISTED).map(formatLocalTime).join(', ')
-  const more = slots.length > MAX_LISTED ? ', entre otros' : ''
-  return `Para el ${when} tengo estos horarios libres para *${service.name}*: ${list}${more}. ¿A qué hora te viene bien?`
 }
