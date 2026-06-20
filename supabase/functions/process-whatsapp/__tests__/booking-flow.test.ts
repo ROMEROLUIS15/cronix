@@ -301,6 +301,26 @@ describe('resolveBookingTurn — reschedule (enclitic + sticky sub-dialogue + mi
     }
   })
 
+  it('reports a CLOSED reschedule date immediately (before asking time) + suggests open days', () => {
+    const closedSun: Record<string, [string, string] | null> = { ...OPEN_ALL, sun: null } // 2026-12-27 = Sunday
+    const turn = resolveBookingTurn({
+      userText: 'para el 27 de diciembre',
+      history: [
+        { role: 'user', text: 'quiero reagendarla' },
+        { role: 'assistant', text: '¿Para qué nueva fecha quieres reagendar tu cita de *Tarjeta*?' },
+      ],
+      services: SERVICES, workingHours: closedSun, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/no abre|cerrad/i)
+      expect(turn.text).not.toMatch(/¿A qué hora/i)   // did NOT ask the time on a closed day
+      expect(turn.text).toMatch(/reagendamos/)        // kept reschedule context sticky
+      expect(turn.text).toMatch(/lunes 28 de diciembre/) // suggested a concrete open day
+    }
+  })
+
   it('keeps reschedule context after a CLOSED-DAY retry (does not fall to new-booking)', () => {
     const closedFri: Record<string, [string, string] | null> = { ...OPEN_ALL, fri: null } // 2026-12-25 = Friday
     const turn = resolveBookingTurn({

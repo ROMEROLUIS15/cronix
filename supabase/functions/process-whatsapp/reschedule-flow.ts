@@ -15,6 +15,7 @@ import { isRescheduleIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, apptLocal, humanDate, listFreeTimes, matchAppointments, listActiveAppointments,
+  suggestOpenDays, cutoffHint,
 } from './booking-shared.ts'
 
 // "a la misma hora" / "el mismo horario" → keep the appointment's current time.
@@ -71,19 +72,25 @@ export function resolveRescheduleTurn(p: {
   if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = apptLocal(target, tz).time
 
   if (!newDate) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
-  if (!newTime) return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${humanDate(newDate)}?` }
 
+  // Validate the day is OPEN as soon as the date is known — before asking the time — so a
+  // closed day is reported immediately (and suggests concrete open days), not after the
+  // client also provides a time.
   const dur = services.find((s) => s.name.toLowerCase() === target.service_name.toLowerCase())?.duration_min ?? 30
   const { open, slots } = computeAvailableSlots({ workingHours: wh, date: newDate, timezone: tz, durationMin: dur, bookedSlots: booked })
   const when = humanDate(newDate)
-  if (!open) return { kind: 'reply', text: `Lo siento, el ${when} el negocio está cerrado. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?` }
+  if (!open) {
+    const sugg = suggestOpenDays(wh, newDate)
+    return { kind: 'reply', text: `El ${when} el negocio no abre 😕. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?${sugg ? ` Por ejemplo, ${sugg}.` : ''}` }
+  }
+  if (slots.length === 0) {
+    return { kind: 'reply', text: `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?` }
+  }
+  if (!newTime) {
+    return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? Para reagendar tengo: ${listFreeTimes(slots)}.` }
+  }
   if (!slots.includes(newTime)) {
-    return {
-      kind: 'reply',
-      text: slots.length > 0
-        ? `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}. Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
-        : `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?`,
-    }
+    return { kind: 'reply', text: `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?` }
   }
   const origDate = apptLocal(target, tz).date
   return { kind: 'reply', text: `¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?` }

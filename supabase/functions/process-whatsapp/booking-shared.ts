@@ -6,7 +6,7 @@
 
 import { parseDateExpression } from './date-parser.ts'
 import { formatLocalTime } from './prompt-builder.ts'
-import { todayInTimezone } from './availability.ts'
+import { todayInTimezone, nextOpenDates, type WorkingHours } from './availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
 
 export type ServiceLite    = { id: string; name: string; duration_min: number }
@@ -77,4 +77,24 @@ export function listActiveAppointments(
 /** Lowercase + strip accents so "electronica" matches the service "Electrónica". */
 export function foldText(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+}
+
+/** "el lunes 29 de junio o el martes 30 de junio" — next open days, or '' if none. */
+export function suggestOpenDays(wh: WorkingHours, fromISO: string, count = 2): string {
+  const parts = nextOpenDates(wh, fromISO, count).map((iso) => {
+    const [y, m, d] = iso.split('-').map(Number) as [number, number, number]
+    const weekday = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', { weekday: 'long', timeZone: 'UTC' })
+    return `el ${weekday} ${humanDate(iso)}`
+  })
+  return parts.join(' o ')
+}
+
+/**
+ * "La última cita del día empieza a las 4:00 pm." — only when the requested time is AFTER
+ * the last free slot (the service doesn't fit before closing), which is the common
+ * confusion: a long service can't START near closing time. '' otherwise.
+ */
+export function cutoffHint(requestedTime: string, slots: string[]): string {
+  const last = slots[slots.length - 1]
+  return last && requestedTime > last ? ` La última cita del día empieza a las ${formatLocalTime(last)}.` : ''
 }

@@ -15,6 +15,7 @@ import { isManageExisting, isBookIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, OUR_RESCHEDULE_QUESTION_RE, foldText, humanDate, listFreeTimes,
+  suggestOpenDays, cutoffHint,
 } from './booking-shared.ts'
 
 // A proposal WE generate always opens with this shape, so the confirmation turn can
@@ -189,7 +190,8 @@ export function resolveNewBookingTurn(p: {
   const { open, slots } = computeAvailableSlots({ workingHours, date: st.date, timezone, durationMin: st.service.duration_min, bookedSlots })
   const when = humanDate(st.date)
   if (!open) {
-    return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres que busquemos otra fecha?` }
+    const sugg = suggestOpenDays(workingHours, st.date)
+    return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados 😕. ¿Quieres que busquemos otra fecha?${sugg ? ` Trabajamos, por ejemplo, ${sugg}.` : ''}` }
   }
   if (!st.time) {
     // Only scold "no entendí la hora" if the client attempted a time that failed to parse
@@ -203,7 +205,7 @@ export function resolveNewBookingTurn(p: {
   }
   if (!slots.includes(st.time)) {
     return { kind: 'reply', text: slots.length > 0
-      ? `A las ${formatLocalTime(st.time)} no tengo disponible el ${when}. Horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+      ? `A las ${formatLocalTime(st.time)} no tengo disponible el ${when}.${cutoffHint(st.time, slots)} Horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
       : `Para el ${when} no me queda ningún horario libre para *${st.service.name}*. ¿Probamos con otro día?` }
   }
   // service + date + valid time → the ONLY source of a booking proposal.

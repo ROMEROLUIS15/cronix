@@ -33,6 +33,29 @@ export function todayInTimezone(timezone: string): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: timezone })
 }
 
+// Dashboard day keys (mon..sun), indexed by Date.getUTCDay() (0=Sunday).
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+
+/**
+ * ISO dates of the next `count` OPEN days strictly after `fromISO` (≤30-day horizon).
+ * Pure: used to suggest concrete alternative dates when a requested day is closed.
+ * A day is open when its working_hours entry is a valid [open,close] tuple (or when
+ * hours are unconfigured — then every day counts as open, mirroring computeAvailableSlots).
+ */
+export function nextOpenDates(workingHours: WorkingHours, fromISO: string, count: number): string[] {
+  const out: string[] = []
+  const configured = !!workingHours && Object.keys(workingHours).length > 0
+  const [y, m, d] = fromISO.split('-').map(Number) as [number, number, number]
+  const cur = new Date(Date.UTC(y, m - 1, d))
+  for (let i = 0; i < 30 && out.length < count; i++) {
+    cur.setUTCDate(cur.getUTCDate() + 1)
+    if (!configured) { out.push(cur.toISOString().slice(0, 10)); continue }
+    const wh = workingHours![DAY_KEYS[cur.getUTCDay()]!]
+    if (wh && Array.isArray(wh) && wh.length >= 2) out.push(cur.toISOString().slice(0, 10))
+  }
+  return out
+}
+
 /** Local date+time (HH:mm) → UTC ISO. Same Intl algorithm as booking-adapter. */
 function localToUTC(date: string, time: string, timezone: string): string {
   const naiveAsUTC = new Date(`${date}T${time}:00Z`)
