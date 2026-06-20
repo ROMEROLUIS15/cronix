@@ -218,8 +218,10 @@ export function parseDateExpression(
   if (bareM) { const d = dayToDate(parseInt(bareM[1]!, 10)); if (d) return d }
 
   // Bare day WITHOUT the word "día": "(para) el 21", or the whole text "21".
+  // `el?` tolerates the common typo "e 23" (missing "l"); a lone Spanish "e"/"el"
+  // before a number is only ever the article, never a real word, so it stays safe.
   // (Years like "2026" don't match: (\d{1,2}) can't sit inside a longer digit run.)
-  const elDayM = t.match(/\bel\s+(\d{1,2})\b/) ?? t.match(/^\s*(?:para\s+)?(\d{1,2})\s*$/)
+  const elDayM = t.match(/\bel?\s+(\d{1,2})\b/) ?? t.match(/^\s*(?:para\s+)?(\d{1,2})\s*$/)
   if (elDayM) { const d = dayToDate(parseInt(elDayM[1]!, 10)); if (d) return d }
 
   return null

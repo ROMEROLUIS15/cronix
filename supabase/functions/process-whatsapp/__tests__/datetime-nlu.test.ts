@@ -22,6 +22,14 @@ describe('parseDateTime — grammar from the spec', () => {
     ['domingo',           '2026-06-21', null],    // bare weekday → Sun 21
     ['a las 11',          null,         '11:00'],
     ['11 am',             null,         '11:00'],
+    // Ambiguous bare hour 1–7 (no am/pm) → afternoon, a business never opens at 5 AM.
+    ['a las 5',           null,         '17:00'],
+    ['a las 3',           null,         '15:00'],
+    ['a las 5 am',        null,         '05:00'], // explicit am is still respected
+    ['a las 9',           null,         '09:00'], // 8–12 stay literal (morning is plausible)
+    // Bare day with the "e 23" typo (missing "l") + ambiguous hour, in one message.
+    ['para e 23 a las 5', '2026-06-23', '17:00'],
+    ['e 23',              '2026-06-23', null],
     ['hola',              null,         null],     // never invents
   ])('parses "%s" → date=%s time=%s', (input, date, time) => {
     const r = parseDateTime(input, TODAY)

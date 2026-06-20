@@ -14,6 +14,16 @@ import { parseDateExpression } from './date-parser.ts'
 
 function pad2(n: number): string { return String(n).padStart(2, '0') }
 
+/**
+ * A bare spoken hour 1–7 with no am/pm and no franja ("a las 5", "para el 23 a las 5")
+ * means the afternoon: a business runs 1–7 PM, never 1–7 AM (near-zero probability), so
+ * we resolve it to PM. 8–12 stay literal (plausible morning hours). The slot is still
+ * validated against working hours, so a genuinely-wrong guess just offers the real slots.
+ */
+function disambiguateBareHour(h: number): number {
+  return h >= 1 && h <= 7 ? h + 12 : h
+}
+
 interface TimeSpan { time: string; start: number; end: number }
 
 /** Extracts the first explicit clock time the client stated, plus its match span. */
@@ -47,7 +57,8 @@ function extractTimeSpan(text: string): TimeSpan | null {
     const isPm = tail.startsWith('p') || /tarde|noche/.test(tail)
     const isAm = tail.startsWith('a') || /manana|mañana/.test(tail)
     if (isPm && h < 12) h += 12
-    if (isAm && h === 12) h = 0
+    else if (isAm && h === 12) h = 0
+    else if (!isPm && !isAm) h = disambiguateBareHour(h) // ambiguous "a las 5" → 17:00
     if (h <= 23) return { time: `${pad2(h)}:${min}`, start: m.index, end: m.index + m[0].length }
   }
 

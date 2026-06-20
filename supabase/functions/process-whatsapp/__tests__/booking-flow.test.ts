@@ -270,6 +270,81 @@ describe('resolveBookingTurn — reschedule flow', () => {
   })
 })
 
+// ── Reschedule sticky multi-turn — the LLM never owned this; it must write end-to-end.
+describe('resolveBookingTurn — reschedule (enclitic + sticky sub-dialogue + misma hora)', () => {
+  const APPT = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' }] // 09:00 Bogota
+
+  it('matches an enclitic "reagendarla" instead of dropping to the LLM', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero reagendarla',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/nueva fecha quieres reagendar/i)
+  })
+
+  it('stays in reschedule context across turns and resolves "a la misma hora"', () => {
+    const turn = resolveBookingTurn({
+      userText: 'para el 26 de diciembre a la misma hora',
+      history: [
+        { role: 'user', text: 'quiero reagendarla' },
+        { role: 'assistant', text: '¿Para qué nueva fecha quieres reagendar tu cita de *Tarjeta*?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Reagendo tu cita de \*Tarjeta\* del 25 de diciembre al 26 de diciembre/)
+      expect(turn.text).toContain('9:00 am') // keeps the original 09:00
+    }
+  })
+
+  it('executes once the deterministic proposal is confirmed (no silent no-op)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'si',
+      history: [
+        { role: 'user', text: 'quiero reagendarla' },
+        { role: 'assistant', text: '¿Para qué nueva fecha quieres reagendar tu cita de *Tarjeta*?' },
+        { role: 'user', text: 'para el 26 de diciembre a la misma hora' },
+        { role: 'assistant', text: '¿Reagendo tu cita de *Tarjeta* del 25 de diciembre al 26 de diciembre a las 9:00 am?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT, intent: null,
+    })
+    expect(turn?.kind).toBe('executeReschedule')
+    if (turn?.kind === 'executeReschedule') {
+      expect(turn.appointmentId).toBe('apt-1')
+      expect(turn.newDate).toBe('2026-12-26')
+      expect(turn.newTime).toBe('09:00')
+    }
+  })
+})
+
+// ── Bug 2: accent-insensitive service recognition. ─────────────────────────────
+describe('resolveBookingTurn — service recognition is accent-insensitive', () => {
+  const SVCS = [
+    { id: 'svc-t', name: 'Tarjeta',     duration_min: 30 },
+    { id: 'svc-e', name: 'Electrónica', duration_min: 30 },
+  ]
+  it('recognizes "electronica" (no accent) as Electrónica and advances', () => {
+    const turn = resolveBookingTurn({
+      userText: 'para electronica',
+      history: [
+        { role: 'user', text: 'quiero agendar una cita' },
+        { role: 'assistant', text: 'Con gusto te ayudo a agendar. ¿Qué servicio deseas? Tenemos: Tarjeta, Electrónica.' },
+      ],
+      services: SVCS, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/Electrónica/)
+      expect(turn.text).not.toMatch(/¿Qué servicio deseas/i) // recognized → did not re-ask
+    }
+  })
+})
+
 // ── Anti-hallucination: the client's stated date/time always wins ──────────────
 describe('resolveBookingTurn — state machine owns booking, never trusts the proposal', () => {
   it('re-proposes with the CLIENT\'s new date, ignoring a stale/invented proposal', () => {

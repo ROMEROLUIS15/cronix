@@ -69,6 +69,8 @@ La escritura de una cita ocurre en dos momentos, ambos deterministas:
 
 Reagendar y cancelar siguen el mismo contrato de 2 momentos: identificación determinista de la cita (por servicio/fecha de las citas activas reales), validación del nuevo slot (reagendar) y confirmación explícita antes de ejecutar.
 
+> **El sub-diálogo de reagendar también lo POSEE el código, y es multi-turno (NORMATIVO).** Igual que agendar, el reagendamiento es **sticky**: una vez detectada la intención (`reagend\w*`, tolerando enclíticos: "reagéndala", "reagendarla"), el resolver determinista (`resolveRescheduleTurn`) maneja **cada turno** siguiente (nueva fecha → nueva hora → propuesta `¿Reagendo… del … al … a las …?`), recopilando la nueva fecha/hora de **todos** los mensajes del cliente en ese sub-diálogo. "A la misma hora" reusa la hora actual de la cita. El LLM **nunca** propone un reagendamiento: si lo hiciera, su texto no calza con la recuperación determinista del "sí" y la escritura **no ocurre** (causa raíz 2026-06-20: la intención con enclítico no era capturada → caía al LLM, que conversaba pero nunca ejecutaba `reschedule_booking`).
+
 > **La máquina de estados POSEE el sub-diálogo de agendar (NORMATIVO).** Apenas hay intención de agendar, el flujo determinista (`resolveBookingTurn`) maneja **cada turno** siguiente (servicio → día → hora → propuesta), de modo que el LLM **nunca** genera una pregunta de confirmación con fecha/hora. Servicio, fecha y hora se reconstruyen **solo de los mensajes del propio cliente** (`gatherBookingState`), nunca del texto de una propuesta del asistente (que un modelo pudo inventar); el valor más reciente que dijo el cliente gana, así una corrección ("mejor el martes") pisa la anterior. En el turno de confirmación se **ejecuta lo que el cliente dijo**, no el texto de la propuesta — una fecha/hora inventada jamás se agenda. La propuesta `¿Confirmo…?` solo puede originarse en este código.
 >
 > **Causa raíz histórica (2026-06-19):** el flujo determinista era un interceptor estrecho; cuando no disparaba (p.ej. tras elegir servicio, o cuando el router clasificaba mal "para el próximo martes" como `list_appointments`), el LLM tomaba el control, **inventaba fecha/hora** y el ejecutor determinista sellaba esa alucinación. Por eso ahora la máquina de estados es dueña del flujo y no depende del intent del router para fecha/hora (las detecta del texto directamente).
@@ -95,11 +97,11 @@ El agente falló repetidamente porque el NLU de fecha era rígido (solo "21 de j
 |---|---|---|
 | 24h | 15:00 · 9:30 | tal cual |
 | 12h con meridiano | 11 am · 3 pm · 11:30 pm | 24h |
-| "a las N" | a las 11 · a las 3 | N:00 |
+| "a las N" | a las 11 · a las 3 | N:00 (8–12) · N+12 (1–7, ver abajo) |
 | Franja | 11 de la mañana · 3 de la tarde · 9 de la noche | 24h por la franja |
 | Nombradas | mediodía · medianoche | 12:00 · 00:00 |
 
-> Hora ambigua (1–7 sin am/pm ni franja): no se asume; si cae fuera de horario, se ofrecen los libres reales.
+> **Hora ambigua (NORMATIVO).** Una hora pelada **1–7 sin am/pm ni franja** ("a las 5") se resuelve a la **tarde** (N+12 → 17:00): un negocio opera 1–7 PM, nunca 1–7 AM (probabilidad casi nula). Las horas **8–12** se mantienen literales (la mañana es plausible). El meridiano/franja explícitos siempre mandan ("5 am" → 05:00). El slot resultante se **valida igual** contra el horario real; si la inferencia fuese errónea, se ofrecen los libres reales (no se agenda a ciegas).
 
 **Máquina de estados (explícita, NORMATIVO):** el estado se deriva del sub-diálogo actual (acotado: desde la última reserva completada o el inicio de ESTA intención; nunca arrastra datos de conversaciones previas).
 
@@ -120,6 +122,10 @@ EXECUTE       → ejecuta confirm_booking determinista; dispara §4–§6.
 - **AC-NLU-3:** "Domingo" (día cerrado) → responde "no abrimos el domingo, ¿otro día?", no re-pregunta en seco.
 - **AC-NLU-4:** "Que servicios tienen" en `NEED_SERVICE` → lista los servicios reales (no un mensaje genérico repetido).
 - **AC-NLU-5:** input no parseable en `NEED_DATE` → mensaje con ejemplos, distinto de la pregunta anterior; sin bucle.
+- **AC-NLU-6:** servicio sin acento ("electronica") → reconoce "Electrónica" (match insensible a acentos) y avanza; no re-pregunta el servicio.
+- **AC-NLU-7:** hora pelada 1–7 sin meridiano ("a las 5") → 17:00 (tarde); "5 am" sigue 05:00.
+- **AC-NLU-8:** día con typo del artículo ("para e 23") → entiende día 23 (próxima ocurrencia, futura).
+- **AC-NLU-9:** reagendar multi-turno con enclítico ("reagéndala" → "para el 24" → "a la misma hora") → emite la propuesta determinista y, tras "sí", **ejecuta** `reschedule_booking` (DB + campana + push). El LLM nunca posee este flujo.
 
 ### 3.4 Capas anti-alucinación (barreras, NORMATIVO)
 

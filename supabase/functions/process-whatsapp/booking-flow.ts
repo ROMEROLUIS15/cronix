@@ -54,12 +54,15 @@ const OUR_BOOKING_PROPOSAL_RE     = /¿\s*confirmo\s+tu\s+cita\s+de/i
 const OUR_CANCEL_PROPOSAL_RE      = /cancele\s+tu\s+cita\s+de/i
 const OUR_RESCHEDULE_PROPOSAL_RE  = /¿\s*reagendo\s+tu\s+cita\s+de/i
 
-const CANCEL_RE     = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|borrar?)\b/i
-const RESCHEDULE_RE = /\b(reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?|mover|mueve|cambia(?:r)?)\b/i
+// Verb stems use \w* so enclitic/inflected forms match too: "reagéndala",
+// "reagendarla", "cancélala", "reprográmame" (the bare \b...\b suffix list missed
+// the attached pronoun and dropped the turn to the LLM, which never executed).
+const CANCEL_RE     = /\b(cancel\w*|anul\w*|borr\w*)\b/i
+const RESCHEDULE_RE = /\b(reagend\w*|reprogram\w*|mover|mueve|cambi\w*)\b/i
 
 // "Manage an EXISTING appointment" — cancel/reagendar explicitly. Exits new-booking
 // context (NOT the ambiguous "cambia/mover", which mid-booking means "change the proposal").
-const MANAGE_EXISTING_RE = /\b(cancel(?:a|ar|o|en|ame|alo)?|anul(?:a|ar)?|reagend(?:a|ar|ame|alo)?|reprogram(?:a|ar|ame)?)\b/i
+const MANAGE_EXISTING_RE = /\b(cancel\w*|anul\w*|reagend\w*|reprogram\w*)\b/i
 // Fresh new-booking intent. \bagend does NOT match "reagendar" (no word boundary), so
 // reschedule isn't mistaken for a new booking.
 const BOOK_INTENT_RE = /\b(agend(?:a|ar|ame|alo|emos|o)?|reserv(?:a|ar|ame|o)?|(?:quiero|necesito|sacar|pedir|dame|hacer)\s+(?:una\s+)?cita|nueva\s+cita)\b/i
@@ -67,6 +70,13 @@ const BOOK_INTENT_RE = /\b(agend(?:a|ar|ame|alo|emos|o)?|reserv(?:a|ar|ame|o)?|(
 const OUR_BOOKING_QUESTION_RE = /(¿\s*confirmo\s+tu\s+cita|para\s+qu[ée]\s+d[íi]a|a\s+qu[ée]\s+hora|qu[ée]\s+servicio\s+deseas|te\s+agendo|horarios?\s+libres|estamos\s+cerrados)/i
 // A completed/closed booking — ends booking context so we don't re-propose.
 const BOOKING_DONE_RE = /(qued[óo]\s+agendada|cita\s+reagendada|ha\s+sido\s+cancelada|listo!\s)/i
+// Our OWN reschedule questions/proposal — keep the reschedule sub-dialogue sticky
+// across turns and out of the new-booking state machine (its time question overlaps
+// OUR_BOOKING_QUESTION_RE's "a qué hora").
+const OUR_RESCHEDULE_QUESTION_RE =
+  /(nueva\s+fecha\s+quieres\s+reagendar|hora\s+quieres\s+tu\s+cita|cu[áa]l\s+deseas\s+reagendar|¿\s*reagendo\s+tu\s+cita)/i
+// "a la misma hora" / "el mismo horario" → keep the appointment's current time.
+const SAME_HOUR_RE = /\b(?:a\s+la\s+)?misma\s+hora\b|\bmismo\s+horario\b|\bigual\s+(?:hora|horario)\b/i
 // A clear decline — used to avoid re-proposing the same slot after the client says no.
 const NEGATIVE_RE = /^(no+|nop[ea]?|nel|para\s+nada|mejor\s+no|todav[íi]a\s+no|a[úu]n\s+no)\b/i
 
@@ -168,38 +178,80 @@ function recoverCancelProposal(
   return cand.find((a) => { const l = apptLocal(a, tz); return l.date === pd && (!time || l.time === time) }) ?? cand[0] ?? null
 }
 
-/** Reschedule intent → identify the appointment, gather new date/time, validate, propose. */
-function resolveRescheduleIntent(
-  text: string, appts: ReadonlyArray<ActiveApptLite>,
-  services: ReadonlyArray<ServiceLite>, wh: WorkingHours, tz: string, booked: ReadonlyArray<BookedSlot>,
-): BookingTurn {
+/** Client texts that belong to the CURRENT reschedule sub-dialogue (newest→trigger). */
+function rescheduleSubDialogueTexts(
+  userText: string, history: ReadonlyArray<{ role: string; text: string }>,
+): string[] {
+  // The trigger turn itself starts (and bounds) the sub-dialogue.
+  if (RESCHEDULE_RE.test(userText)) return [userText]
+  const texts = [userText]
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    if (!h || !h.text) continue
+    if (h.role !== 'user' && BOOKING_DONE_RE.test(h.text)) break
+    if (h.role === 'user') {
+      texts.push(h.text)
+      if (RESCHEDULE_RE.test(h.text)) break
+    }
+  }
+  return texts
+}
+
+/**
+ * Reschedule of an EXISTING appointment — deterministic and multi-turn. Identifies the
+ * target, gathers the NEW date/time across the whole reschedule sub-dialogue (supporting
+ * "a la misma hora" → the appointment's current time), validates the slot and proposes.
+ * The LLM never proposes a reschedule (anti-hallucination): this is the ONLY source of
+ * "¿Reagendo tu cita…?", so the confirmation "sí" can always be recovered and executed.
+ */
+function resolveRescheduleTurn(p: {
+  userText: string
+  history:  ReadonlyArray<{ role: string; text: string }>
+  appts:    ReadonlyArray<ActiveApptLite>
+  services: ReadonlyArray<ServiceLite>
+  wh:       WorkingHours
+  tz:       string
+  booked:   ReadonlyArray<BookedSlot>
+}): BookingTurn {
+  const { userText, history, appts, services, wh, tz, booked } = p
   if (appts.length === 0) {
     return { kind: 'reply', text: 'No veo ninguna cita activa para reagendar. ¿Quieres agendar una nueva?' }
   }
-  const cands = appts.length === 1 ? [...appts] : matchAppointments(text, appts, tz)
+  const texts = rescheduleSubDialogueTexts(userText, history)
+  const cands = appts.length === 1 ? [...appts] : matchAppointments(texts.join(' '), appts, tz)
   if (cands.length !== 1) {
     return { kind: 'reply', text: listActiveAppointments(cands, tz, 'reagendar') }
   }
   const target = cands[0]!
-  const parsed = parseDateExpression(text, todayInTimezone(tz), 'future')
-  const time   = extractTime(text)
-  if (!parsed) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
-  if (!time)   return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${humanDate(parsed.date)}?` }
+
+  // Gather the NEW date/time from the client's reschedule turns (most recent wins).
+  let newDate: string | null = null
+  let newTime: string | null = null
+  for (const t of texts) {
+    const dt = parseDateTime(t, todayInTimezone(tz))
+    if (!newDate && dt.date) newDate = dt.date
+    if (!newTime && dt.time) newTime = dt.time
+    if (newDate && newTime) break
+  }
+  if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = apptLocal(target, tz).time
+
+  if (!newDate) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
+  if (!newTime) return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${humanDate(newDate)}?` }
 
   const dur = services.find((s) => s.name.toLowerCase() === target.service_name.toLowerCase())?.duration_min ?? 30
-  const { open, slots } = computeAvailableSlots({ workingHours: wh, date: parsed.date, timezone: tz, durationMin: dur, bookedSlots: booked })
-  const when = humanDate(parsed.date)
+  const { open, slots } = computeAvailableSlots({ workingHours: wh, date: newDate, timezone: tz, durationMin: dur, bookedSlots: booked })
+  const when = humanDate(newDate)
   if (!open) return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres otra fecha?` }
-  if (!slots.includes(time)) {
+  if (!slots.includes(newTime)) {
     return {
       kind: 'reply',
       text: slots.length > 0
-        ? `A las ${formatLocalTime(time)} no tengo disponible el ${when}. Horarios libres: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+        ? `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}. Horarios libres: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
         : `Para el ${when} no me queda ningún horario libre. ¿Probamos con otro día?`,
     }
   }
   const origDate = apptLocal(target, tz).date
-  return { kind: 'reply', text: `¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(time)}?` }
+  return { kind: 'reply', text: `¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?` }
 }
 
 /** Recovers the appointment + validated new slot from OUR reschedule proposal. */
@@ -234,12 +286,18 @@ function recoverRescheduleProposal(
 
 // ── New-booking session state (reconstructed from the client's OWN messages) ────
 
-/** Service named in the text (substring either direction, min 3 chars for reverse). */
+/** Lowercase + strip accents so "electronica" matches the service "Electrónica". */
+function foldText(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+}
+
+/** Service named in the text (substring either direction, min 3 chars for reverse).
+ *  Accent-insensitive: "electronica" → "Electrónica". */
 function serviceNamedIn(text: string, services: ReadonlyArray<ServiceLite>): ServiceLite | null {
-  const t = text.toLowerCase().trim()
+  const t = foldText(text)
   if (!t) return null
   return services.find((s) => {
-    const n = s.name.toLowerCase()
+    const n = foldText(s.name)
     return !!n && (t.includes(n) || (t.length >= 3 && n.includes(t)))
   }) ?? null
 }
@@ -310,6 +368,9 @@ function inBookingContext(
 
   const lastAssistant = [...history].reverse()
     .find((h) => h.role === 'model' || h.role === 'assistant')?.text ?? ''
+  // A reschedule sub-dialogue is owned by the reschedule resolver, not the new-booking
+  // machine — its time question "¿A qué hora quieres tu cita…?" overlaps OUR_BOOKING_QUESTION_RE.
+  if (OUR_RESCHEDULE_QUESTION_RE.test(lastAssistant)) return false
   // Mid-flow: the prior assistant turn was one of OUR booking questions.
   if (OUR_BOOKING_QUESTION_RE.test(lastAssistant)) return true
 
@@ -464,11 +525,16 @@ export function resolveBookingTurn(p: {
   }
 
   // ── (C) Manage an EXISTING appointment (cancel / reschedule) ────────────────
-  if (CANCEL_RE.test(userText) && !RESCHEDULE_RE.test(userText)) {
-    return resolveCancelIntent(userText, activeAppointments, timezone)
+  // Reschedule keyword OR a sticky reschedule sub-dialogue (we asked the new date/time)
+  // → the deterministic reschedule resolver owns the turn (the LLM never proposes one).
+  const inReschedule = OUR_RESCHEDULE_QUESTION_RE.test(lastAssistant)
+  if (RESCHEDULE_RE.test(userText) || (inReschedule && !CANCEL_RE.test(userText))) {
+    return resolveRescheduleTurn({
+      userText, history, appts: activeAppointments, services, wh: workingHours, tz: timezone, booked: bookedSlots,
+    })
   }
-  if (RESCHEDULE_RE.test(userText)) {
-    return resolveRescheduleIntent(userText, activeAppointments, services, workingHours, timezone, bookedSlots)
+  if (CANCEL_RE.test(userText)) {
+    return resolveCancelIntent(userText, activeAppointments, timezone)
   }
 
   return null
