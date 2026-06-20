@@ -243,7 +243,7 @@ async function executeDeterministicWrite(
   const synthetic: ToolCall = {
     id:       `det_${Date.now()}`,
     type:     'function',
-    function: { name: toolName, arguments: argsJson },
+    function: { name: toolName as ToolCall['function']['name'], arguments: argsJson },
   }
 
   const stepStart = Date.now()
@@ -298,43 +298,37 @@ async function executeDeterministicWrite(
   }
 }
 
-// ── Public API: Agent Loop ────────────────────────────────────────────────────
+// ── Per-turn pipeline (orchestrator + layers) ─────────────────────────────────
 
-/**
- * Runs the ReAct agent loop for a WhatsApp message.
- *
- * Inner loop (SMALL_MODEL): decides whether to call a booking tool, executes it,
- * feeds the DB result back to the LLM, and retries if needed (up to MAX_STEPS).
- *
- * Final pass: deterministic — success template, errorCode map, or 8B loopText verbatim.
- * No second LLM call is made at any point.
- *
- * @param userText     - Sanitized message text from the customer
- * @param context      - Full BusinessRagContext (services, history, booked slots, etc.)
- * @param customerName - Display name from WhatsApp
- * @param sender       - WhatsApp phone number (used for booking payload)
- */
-export async function runAgentLoop(
-  userText:     string,
-  context:      BusinessRagContext,
-  customerName: string,
-  sender:       string,
-): Promise<{ text: string; tokens: number; toolCallsTrace: unknown[] }> {
+type TurnResult = { text: string; tokens: number; toolCallsTrace: unknown[] }
+
+/** Everything the per-turn layers need, built once per message. */
+interface TurnContext {
+  userText:      string
+  context:       BusinessRagContext
+  customerName:  string
+  sender:        string
+  business:      BusinessRagContext['business']
+  cappedHistory: BusinessRagContext['history']
+  recalled:      ReadonlyArray<MemoryRecord>
+  intent:        ClassifyResult | null
+  memoryScope:   MemoryScope
+  writeGuard:    WriteGuard | undefined
+  quickTrace:    (finalText: string, path: string, extra?: Record<string, unknown>) => Promise<void>
+}
+
+/** Builds the shared per-turn context: history window, memory recall + intent
+ *  classification (parallel), the constitutional guard, and the trace helper. */
+async function buildTurnContext(
+  userText: string, context: BusinessRagContext, customerName: string, sender: string,
+): Promise<TurnContext> {
   const { business } = context
+  const cappedHistory = context.history.slice(-14) // ~7 turns
 
-  // Cap history at 14 messages (~7 turns) for much better memory
-  const cappedHistory = context.history.slice(-14)
+  const memoryScope: MemoryScope = { businessId: business.id, actorKind: 'client_phone', actorKey: sender }
 
-  // ── Memory recall + intent classification (parallel, both degrade gracefully)
-  const memoryScope: MemoryScope = {
-    businessId: business.id,
-    actorKind:  'client_phone',
-    actorKey:   sender,
-  }
-
-  // Every turn — including the 0-token deterministic ones that used to return
-  // untraced — emits a trace with the scrubbed conversation text + the path, so no
-  // turn is ever invisible again. Best-effort: never breaks the turn.
+  // Every turn (including the 0-token deterministic ones) emits a trace with the
+  // scrubbed conversation text + path, so no turn is ever invisible. Best-effort.
   const traceScope = {
     businessId: business.id, channel: 'whatsapp' as const,
     actorKind: 'client_phone' as const, actorKey: sender,
@@ -349,17 +343,14 @@ export async function runAgentLoop(
       })
     } catch { /* observability is best-effort */ }
   }
+
   const [recalled, intent] = await Promise.all([
     memoryEngine.recall(memoryScope, userText, { topK: 5, threshold: 0.78 }),
     router.classify(userText),
   ])
 
-  // Build the constitutional guard for this turn. recentMemory comes from
-  // the same recall above — never empty by accident, never a second round-trip.
   const writeGuard = buildWriteGuard(
-    reviewer,
-    business.id,
-    userText,
+    reviewer, business.id, userText,
     recalled.map(r => ({ content: r.content, similarity: r.similarity, createdAt: r.createdAt })),
   )
 
@@ -369,26 +360,28 @@ export async function runAgentLoop(
     confidence:  intent?.confidence ?? 0,
   })
 
-  // ── Fast Path: FAQ intents with high confidence bypass the LLM entirely ──
-  // Avoids burning tokens on small-talk or info queries that have a
-  // deterministic, pre-configured answer.
-  if (intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent)) {
-    const text = buildFaqResponse(intent.intent, context)
-    await quickTrace(text, 'faq', { intent: intent.intent })
-    return { text, tokens: 0, toolCallsTrace: [] }
-  }
+  return { userText, context, customerName, sender, business, cappedHistory, recalled, intent, memoryScope, writeGuard, quickTrace }
+}
 
-  // ── Deterministic booking flow (anti-hallucination, WRITE path) ───────────
-  // The 8B never emits service_id/date/time and never proposes a time. When the
-  // turn is a recoverable booking moment, resolve it deterministically:
-  //   - 'execute' → run confirm_booking with code-derived, slot-validated args.
-  //   - 'reply'   → send a validated confirmation question / real free-times list.
-  //   - null      → ambiguous; fall through to the time-gap layer and the LLM.
+// ── Deterministic pipeline layers (each: a TurnResult, or null to pass on) ─────
+
+/** FAQ fast-path: high-confidence info/greeting intents bypass the LLM entirely. */
+async function layerFaq(tc: TurnContext): Promise<TurnResult | null> {
+  const { intent, context } = tc
+  if (!(intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent))) return null
+  const text = buildFaqResponse(intent.intent, context)
+  await tc.quickTrace(text, 'faq', { intent: intent.intent })
+  return { text, tokens: 0, toolCallsTrace: [] }
+}
+
+/** Deterministic booking state machine (anti-hallucination WRITE path). */
+async function layerBooking(tc: TurnContext): Promise<TurnResult | null> {
+  const { userText, context, customerName, sender, business, cappedHistory, intent, memoryScope } = tc
   const bookingTurn = resolveBookingTurn({
     userText,
     history:      cappedHistory,
     services:     context.services.map(s => ({ id: s.id, name: s.name, duration_min: s.duration_min })),
-    workingHours: business.settings?.workingHours as unknown as WorkingHours,
+    workingHours: (business.settings as { workingHours?: unknown } | null | undefined)?.workingHours as WorkingHours,
     timezone:     business.timezone,
     bookedSlots:  (context.bookedSlots ?? []).map(s => ({ start_at: s.start_at, end_at: s.end_at })),
     activeAppointments: context.activeAppointments.map(a => ({ id: a.id, service_name: a.service_name, start_at: a.start_at })),
@@ -396,31 +389,32 @@ export async function runAgentLoop(
   })
   if (bookingTurn?.kind === 'reply') {
     addBreadcrumb('Deterministic booking/cancel/reschedule proposal (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
-    await quickTrace(bookingTurn.text, 'deterministic_booking', {
+    await tc.quickTrace(bookingTurn.text, 'deterministic_booking', {
       isProposal: BOOKING_PROPOSAL_DETECT_RE.test(bookingTurn.text),
       intent: intent?.intent ?? null,
     })
     return { text: bookingTurn.text, tokens: 0, toolCallsTrace: [] }
   }
-  if (bookingTurn && bookingTurn.kind !== 'reply') {
+  if (bookingTurn) {
+    // narrowed to an execute directive (the reply case returned above)
     return await executeDeterministicWrite(bookingTurn, context, sender, customerName, memoryScope, userText)
   }
+  return null
+}
 
-  // NOTE: the deterministic "availability gap" layer was removed — the booking state
-  // machine (resolveBookingTurn) now owns date-without-time (offers real free slots),
-  // so that overlapping layer was dead code.
+/** Deterministic read: "¿tengo alguna cita?" answered from active appointments. */
+async function layerListAppointments(tc: TurnContext): Promise<TurnResult | null> {
+  const { userText, context, business } = tc
+  if (!isListAppointmentsQuery(userText)) return null
+  const text = buildAppointmentsListResponse(context.activeAppointments, business.timezone)
+  addBreadcrumb('Deterministic list-appointments resolved (0 tokens)', 'agent', 'info', { count: context.activeAppointments.length })
+  await tc.quickTrace(text, 'deterministic_list', { count: context.activeAppointments.length })
+  return { text, tokens: 0, toolCallsTrace: [] }
+}
 
-  // ── Deterministic read: "¿tengo alguna cita?" ────────────────────────────
-  // Answer appointment queries straight from context.activeAppointments instead
-  // of letting the 8B echo nonsense. Read-only, 0 tokens.
-  if (isListAppointmentsQuery(userText)) {
-    const text = buildAppointmentsListResponse(context.activeAppointments, business.timezone)
-    addBreadcrumb('Deterministic list-appointments resolved (0 tokens)', 'agent', 'info', {
-      count: context.activeAppointments.length,
-    })
-    await quickTrace(text, 'deterministic_list', { count: context.activeAppointments.length })
-    return { text, tokens: 0, toolCallsTrace: [] }
-  }
+/** Fallback: the ReAct LLM loop (SMALL_MODEL) + deterministic final pass. */
+async function runReActLlm(tc: TurnContext): Promise<TurnResult> {
+  const { userText, context, customerName, sender, business, cappedHistory, recalled, intent, memoryScope, writeGuard } = tc
 
   // ── Open the per-turn trace (closed in the finally block below) ───────────
   const trace = tracer.start(
@@ -690,6 +684,38 @@ export async function runAgentLoop(
   })
 
   return { text: finalText, tokens: totalTokens, toolCallsTrace }
+}
+
+// ── Public API: Agent Loop (thin orchestrator) ────────────────────────────────
+
+/**
+ * Runs one WhatsApp turn. Builds the shared turn context, then dispatches through
+ * the deterministic pipeline (FAQ → booking → list-appointments, each 0 LLM tokens);
+ * the first layer that resolves the turn wins. If none do, it falls back to the
+ * ReAct LLM loop. The final response text is always deterministic (success template,
+ * errorCode map, or the 8B reply verbatim) — see runReActLlm.
+ *
+ * @param userText     - Sanitized message text from the customer
+ * @param context      - Full BusinessRagContext (services, history, booked slots, etc.)
+ * @param customerName - Display name from WhatsApp
+ * @param sender       - WhatsApp phone number (used for booking payload)
+ */
+export async function runAgentLoop(
+  userText:     string,
+  context:      BusinessRagContext,
+  customerName: string,
+  sender:       string,
+): Promise<TurnResult> {
+  const tc = await buildTurnContext(userText, context, customerName, sender)
+
+  // Deterministic pipeline — first non-null result wins (0 LLM tokens).
+  for (const layer of [layerFaq, layerBooking, layerListAppointments]) {
+    const result = await layer(tc)
+    if (result) return result
+  }
+
+  // Fallback: the ReAct LLM loop.
+  return await runReActLlm(tc)
 }
 
 // ── Public API: Audio Transcription ───────────────────────────────────────────
