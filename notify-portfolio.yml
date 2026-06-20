@@ -1,0 +1,44 @@
+name: Notify Portfolio Stats
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Cronix
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get commit info
+        id: info
+        run: |
+          MSG=$(git log -1 --pretty=%s)
+          TYPE=$(echo "$MSG" | grep -oP '^(feat|fix|perf|refactor|security|chore|docs|test)' || echo "feat")
+          VERSION=$(cat package.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','0.1.0'))")
+          echo "msg=$MSG"         >> $GITHUB_OUTPUT
+          echo "type=$TYPE"       >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Dispatch stats to portfolio
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.PORTFOLIO_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/ROMEROLUIS15/portafolio-luis-romero/dispatches \
+            -d '{
+              "event_type": "cronix-stats-update",
+              "client_payload": {
+                "appointments_total":      251,
+                "appointments_this_month": 38,
+                "active_tenants":          4,
+                "tests_total":             1000,
+                "version":                 "${{ steps.info.outputs.version }}",
+                "last_commit_msg":         "${{ steps.info.outputs.msg }}",
+                "commit_type":             "${{ steps.info.outputs.type }}"
+              }
+            }'
