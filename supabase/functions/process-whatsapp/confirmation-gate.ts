@@ -22,7 +22,7 @@ const CONFIRMATION_QUESTION_RE =
 // common Spanish affirmative ("sí"). Mirrors core/conversation/frame.ts.
 const AFF_END = '(?:\\s|[.,!?]|$)'
 const AFFIRMATIVE_RE = new RegExp(
-  `^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\\s+supuesto|as[íi]\\s+es|est[áa]\\s+bien|todo\\s+bien|me\\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|aj[áa]|de\\s+acuerdo|de\\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)${AFF_END}`,
+  `^(s[íi]+p?|sii+|dale|ok(?:ay|is)?|oks|va+le?|vamos|confirm[oa](?:do|ar)?|list[oa]|clar[oa]|perfect[oa]|adelante|procede|proceda|por\\s+supuesto|as[íi]\\s+es|est[áa]\\s+bien|todo\\s+bien|me\\s+parece|correcto|exact[oa](?:mente)?|bien|bueno|buenas|genial|hecho|seguro|obvio|afirmativo|sim[óo]n|sisas|aj[áa]|de\\s+acuerdo|de\\s+una|dalee+|agenda(?:lo|r)?|reagenda(?:lo|r)?|cancela(?:lo|r)?|confirmado|confirmada|confirma)${AFF_END}`,
   'i',
 )
 

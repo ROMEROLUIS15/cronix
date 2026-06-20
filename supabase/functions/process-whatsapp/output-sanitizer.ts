@@ -14,7 +14,7 @@ export function sanitizeOutput(text: string): string {
   return text
     .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, '')
     .replace(/<function>[\s\S]*?<\/function>/gi, '')
-    .replace(/\[CONFIRM_[^\]]+\]/gi, '')
+    .replace(/\[(?:CONFIRM|CANCEL|RESCHEDULE)_[^\]]+\]/gi, '')
     .replace(/\{[\s\S]*?"(?:service_id|client_id|appointment_id|date|time)":[\s\S]*?\}/gi, '')
     // Strip plaintext tool invocations leaking through when tool_choice is 'none'
     .replace(new RegExp(`\\b${TOOL_NAME_ALTERNATION}\\s*\\([^)]*\\)`, 'gi'), '')
@@ -35,7 +35,7 @@ export function sanitizeOutput(text: string): string {
 export function containsInternalSyntax(text: string): boolean {
   // Bare UUIDs leaked by the 8B when the confirmation gate blocks tool access
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text.trim())) return true
-  return new RegExp(`<function[=\\s>]|CONFIRM_|"service_id"|"client_id"|"appointment_id"|\\b${TOOL_NAME_ALTERNATION}\\b`, 'i').test(text)
+  return new RegExp(`<function[=\\s>]|(?:CONFIRM|CANCEL|RESCHEDULE)_|"service_id"|"client_id"|"appointment_id"|\\b${TOOL_NAME_ALTERNATION}\\b`, 'i').test(text)
 }
 
 export const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'

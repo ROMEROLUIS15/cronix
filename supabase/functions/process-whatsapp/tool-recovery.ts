@@ -36,6 +36,9 @@ export function recoverEmbeddedToolCall(content: string): EmbeddedRecovery {
   else if (match2) { fnName = match2[1] ?? ''; argsRaw = match2[2] ?? '' }
 
   if (!fnName) return null
+  // The capture regexes use the /i flag, so a leaked "<function=Confirm_Booking>" yields
+  // mixed case → normalize before VALID_TOOL_NAMES.has() and the RecoverableToolName cast.
+  fnName = fnName.toLowerCase()
 
   let argsValid = false
   try { JSON.parse(argsRaw); argsValid = true } catch { /* malformed JSON — not recoverable */ }

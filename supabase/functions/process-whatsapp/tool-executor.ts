@@ -25,8 +25,6 @@ export type WriteGuard = (
   args:     Readonly<Record<string, unknown>>,
 ) => Promise<{ blocked: true; reason: string } | null>
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 // ── Adapter singleton (lazy) ─────────────────────────────────────────────────
 
 let _adapter: WhatsAppBookingAdapter | null = null
@@ -104,7 +102,10 @@ export async function executeToolCall(
   guard?:       WriteGuard,
 ): Promise<string> {
   const { business, services, client } = context
-  const name = toolCall.function.name
+  // Normalize the tool name: native tool-calling returns it lowercase, but a recovered
+  // <function=…> leak can carry mixed case — the adapter + the `name === '…'` notification
+  // checks below all use lowercase literals, so fold it once here.
+  const name = toolCall.function.name.toLowerCase()
 
   let args: Record<string, string>
   try {
