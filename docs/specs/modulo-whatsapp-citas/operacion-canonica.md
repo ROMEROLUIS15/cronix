@@ -153,6 +153,7 @@ Todas deben permanecer activas. Quitar cualquiera reabre una superficie de aluci
 | **B10** | **Recuperación de función embebida solo con gate abierta** | Ejecutar como tool una alucinación que el modelo escupió como texto cuando NO debía. |
 | **B11** | **Fallback determinista de intención** | Que el 8B caiga en el bucle "Estoy verificando la información…": ante salida vacía/inusable se pide el dato faltante desde el estado real de la DB. |
 | **B12** | **Rate limit de reservas** | Abuso / spam de citas nuevas. |
+| **B13** | **Bloqueo de propuesta del LLM** (`react-loop`, NORMATIVO) | Si el texto final del LLM calza con una propuesta de reserva con fecha+hora (`¿Confirmo… a las…?`) — que tras el rediseño NO debe ocurrir — se **captura para forense Y se reemplaza** por un re-gather determinista; la propuesta inventada **nunca llega al cliente**. Antes solo se capturaba (observación); ahora **bloquea**. La escritura ya estaba protegida por la re-validación (B4); esto cierra también la superficie cosmética. |
 
 ### 3.5 Qué puede y qué NO puede hacer el LLM (NORMATIVO)
 

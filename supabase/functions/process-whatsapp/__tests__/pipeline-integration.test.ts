@@ -147,4 +147,11 @@ describe('pipeline integration — LLM fallback boundary', () => {
     expect(r.tokens).toBe(42)                      // the mocked LLM was actually called
     expect(r.text).toMatch(/con gusto te ayudo/i)
   })
+
+  it('BLOCKS a hallucinated LLM booking proposal — the invented "¿Confirmo… a las…?" never reaches the client', async () => {
+    llmReply.content = '¿Confirmo tu cita de *Corte* para el 25 de diciembre a las 3:00 pm?'
+    const r = await run('algo que caiga al modelo')
+    expect(r.text).not.toMatch(/¿Confirmo tu cita/i)        // the proposal was suppressed
+    expect(r.text).toMatch(/necesito el servicio, el día y la hora/i) // safe deterministic re-gather
+  })
 })

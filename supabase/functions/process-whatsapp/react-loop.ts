@@ -27,6 +27,11 @@ import type { TurnContext, TurnResult } from "./turn-context.ts"
 
 type Trace = ReturnType<typeof tracer.start>
 
+// Replacement sent when the LLM leaks a booking proposal: a deterministic re-gather so the
+// next turn re-enters the state machine (which owns service/date/time) — never the model's.
+const LLM_PROPOSAL_BLOCK_MSG =
+  'Para agendar tu cita necesito el servicio, el día y la hora exactos. ¿Me los confirmas, por favor? 😊'
+
 /** Same tool + same args twice in one turn = duplicate booking risk → blocked. */
 function isDuplicateCall(seen: Set<string>, toolName: string, argsRaw: string): boolean {
   const fp = `${toolName}::${argsRaw}`
@@ -219,21 +224,26 @@ export async function runReActLlm(tc: TurnContext): Promise<TurnResult> {
     return 'success'
   })()
 
-  // Anti-hallucination auto-catch: after the deterministic redesign the LLM must NEVER
-  // emit a booking proposal with a date+time. If it does, capture it loudly.
+  // Anti-hallucination guard (BLOCKING, not just observing): after the deterministic
+  // redesign the LLM must NEVER emit a date+time booking proposal — the deterministic flow
+  // owns that. If it leaks here we (1) capture the original for forensics AND (2) REPLACE
+  // it so the invented "¿Confirmo… a las…?" never reaches the client; the deterministic
+  // gather restarts on the next turn. (The DB write was already protected by re-validation;
+  // this closes the cosmetic surface too.)
   const llmProposedBooking = BOOKING_PROPOSAL_DETECT_RE.test(finalText)
   if (llmProposedBooking) {
     captureException(new Error('LLM emitted a booking proposal (deterministic flow should own this)'), {
       stage: 'llm_proposed_booking', business_id: tc.business.id, snippet: scrubPII(finalText).slice(0, 160),
     })
   }
+  const textToSend = llmProposedBooking ? LLM_PROPOSAL_BLOCK_MSG : finalText
 
   await trace.finish({
     outcome,
     errorCode:    lastFailedError ? lastFailedError.slice(0, 64) : undefined,
-    finalTextSha: await shortHash(finalText),
-    metadata: { queryText: scrubPII(tc.userText), finalText: scrubPII(finalText), path: 'llm', llmProposedBooking },
+    finalTextSha: await shortHash(textToSend),
+    metadata: { queryText: scrubPII(tc.userText), finalText: scrubPII(textToSend), path: 'llm', llmProposedBooking, blocked: llmProposedBooking },
   })
 
-  return { text: finalText, tokens: totalTokens, toolCallsTrace }
+  return { text: textToSend, tokens: totalTokens, toolCallsTrace }
 }
