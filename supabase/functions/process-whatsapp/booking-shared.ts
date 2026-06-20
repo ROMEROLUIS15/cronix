@@ -25,8 +25,11 @@ const MAX_LISTED = 8
 export const BOOKING_DONE_RE = /(qued[óo]\s+agendada|cita\s+reagendada|ha\s+sido\s+cancelada|listo!\s)/i
 // Our OWN reschedule questions/proposal — keep the reschedule sub-dialogue sticky across
 // turns and out of the new-booking state machine (its time question overlaps the booking one).
+// `reagendamos`/`para reagendar` cover the RETRY prompts (closed day / slot taken), which
+// otherwise matched only the NEW-booking sticky regex and dropped the reschedule context.
+// Both phrases are unique to the reschedule retries — the success message says "reagendada".
 export const OUR_RESCHEDULE_QUESTION_RE =
-  /(nueva\s+fecha\s+quieres\s+reagendar|hora\s+quieres\s+tu\s+cita|cu[áa]l\s+deseas\s+reagendar|¿\s*reagendo\s+tu\s+cita)/i
+  /(nueva\s+fecha\s+quieres\s+reagendar|hora\s+quieres\s+tu\s+cita|cu[áa]l\s+deseas\s+reagendar|¿\s*reagendo\s+tu\s+cita|reagendamos|para\s+reagendar)/i
 
 export function humanDate(dateISO: string): string {
   const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number]

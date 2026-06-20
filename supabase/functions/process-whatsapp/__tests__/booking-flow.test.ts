@@ -301,6 +301,26 @@ describe('resolveBookingTurn — reschedule (enclitic + sticky sub-dialogue + mi
     }
   })
 
+  it('keeps reschedule context after a CLOSED-DAY retry (does not fall to new-booking)', () => {
+    const closedFri: Record<string, [string, string] | null> = { ...OPEN_ALL, fri: null } // 2026-12-25 = Friday
+    const turn = resolveBookingTurn({
+      userText: 'para el 26 de diciembre',
+      history: [
+        { role: 'user', text: 'quiero reagendarla' },
+        { role: 'assistant', text: '¿Para qué nueva fecha quieres reagendar tu cita de *Tarjeta*?' },
+        { role: 'user', text: 'el 25 de diciembre a las 10' },
+        { role: 'assistant', text: 'Lo siento, el 25 de diciembre el negocio está cerrado. ¿Para qué otra fecha reagendamos tu cita de *Tarjeta*?' },
+      ],
+      services: SERVICES, workingHours: closedFri, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).not.toMatch(/Qué servicio deseas/i)            // did NOT lose context
+      expect(turn.text).toMatch(/¿Reagendo tu cita de \*Tarjeta\* del 25 de diciembre al 26 de diciembre/)
+    }
+  })
+
   it('executes once the deterministic proposal is confirmed (no silent no-op)', () => {
     const turn = resolveBookingTurn({
       userText: 'si',

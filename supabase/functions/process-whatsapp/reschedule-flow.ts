@@ -76,13 +76,13 @@ export function resolveRescheduleTurn(p: {
   const dur = services.find((s) => s.name.toLowerCase() === target.service_name.toLowerCase())?.duration_min ?? 30
   const { open, slots } = computeAvailableSlots({ workingHours: wh, date: newDate, timezone: tz, durationMin: dur, bookedSlots: booked })
   const when = humanDate(newDate)
-  if (!open) return { kind: 'reply', text: `Lo siento, el ${when} estamos cerrados. ¿Quieres otra fecha?` }
+  if (!open) return { kind: 'reply', text: `Lo siento, el ${when} el negocio está cerrado. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?` }
   if (!slots.includes(newTime)) {
     return {
       kind: 'reply',
       text: slots.length > 0
-        ? `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}. Horarios libres: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
-        : `Para el ${when} no me queda ningún horario libre. ¿Probamos con otro día?`,
+        ? `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}. Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+        : `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?`,
     }
   }
   const origDate = apptLocal(target, tz).date
@@ -112,8 +112,8 @@ export function recoverRescheduleProposal(
     return {
       kind: 'reply',
       text: slots.length > 0
-        ? `Justo se ocupó ese horario. El ${humanDate(newDate)} me quedan: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
-        : `Para el ${humanDate(newDate)} ya no me queda ningún horario libre. ¿Probamos con otro día?`,
+        ? `Justo se ocupó ese horario. Para reagendar el ${humanDate(newDate)} me quedan: ${listFreeTimes(slots)}. ¿Cuál prefieres?`
+        : `Para el ${humanDate(newDate)} ya no queda horario libre para reagendar. ¿Probamos con otra fecha?`,
     }
   }
   return { kind: 'executeReschedule', appointmentId: target.id, serviceName: target.service_name, newDate, newTime }
