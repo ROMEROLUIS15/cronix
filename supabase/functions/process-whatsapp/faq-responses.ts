@@ -23,12 +23,19 @@ export const FAQ_INTENTS = new Set<string>([
 const INTERNAL_SYNTAX_FALLBACK = 'Estoy verificando la información. ¿Podrías confirmarme?'
 
 /**
- * Natural services + pricing list. Shared by the pricing_inquiry FAQ and the
+ * Natural services + pricing answer. Shared by the pricing_inquiry FAQ and the
  * deterministic services-query layer so "qué servicios tienen" / "cuánto cuesta" are
- * answered the SAME way — never the robotic booking-gather repeat.
+ * answered the SAME way — never the robotic booking-gather repeat. When the question
+ * names a SPECIFIC service ("cuánto cuesta electronica") it answers just that one.
  */
-export function buildServicesResponse(context: BusinessRagContext): string {
+export function buildServicesResponse(
+  context: BusinessRagContext,
+  named?:  { name: string; duration_min: number; price: number },
+): string {
   const { business, services } = context
+  if (named) {
+    return `*${named.name}* cuesta $${named.price} y dura ${named.duration_min} min. ¿Te agendo una cita? 😊`
+  }
   const svcList = services.length > 0
     ? services.map(s => `• *${s.name}* — ${s.duration_min} min — $${s.price}`).join('\n')
     : '(Sin servicios configurados)'

@@ -536,6 +536,22 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
     }
   })
 
+  it('tells the client a PAST date already passed (does not silently re-ask)', () => {
+    const turn = resolveBookingTurn({
+      userText: 'ayer',
+      history: [
+        { role: 'user', text: 'quiero agendar' },
+        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+      ],
+      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/ya pasó/i)
+      expect(turn.text).not.toMatch(/No te entend/i)
+    }
+  })
+
   it('says "no entendí la fecha" with examples instead of repeating the question', () => {
     const turn = resolveBookingTurn({
       userText: 'xyzzy',

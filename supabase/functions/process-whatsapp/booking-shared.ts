@@ -79,6 +79,17 @@ export function foldText(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
 }
 
+/** The service named in the text (substring either way, min 3 chars reverse), accent-insensitive.
+ *  Generic over any {name} row so both the booking state machine and the services layer share it. */
+export function serviceNamedIn<T extends { name: string }>(text: string, services: ReadonlyArray<T>): T | null {
+  const t = foldText(text)
+  if (!t) return null
+  return services.find((s) => {
+    const n = foldText(s.name)
+    return !!n && (t.includes(n) || (t.length >= 3 && n.includes(t)))
+  }) ?? null
+}
+
 /** "el lunes 29 de junio o el martes 30 de junio" — next open days, or '' if none. */
 export function suggestOpenDays(wh: WorkingHours, fromISO: string, count = 2): string {
   const parts = nextOpenDates(wh, fromISO, count).map((iso) => {

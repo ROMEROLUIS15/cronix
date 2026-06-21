@@ -125,6 +125,20 @@ describe('pipeline integration — deterministic layers (0 LLM tokens)', () => {
     expect(r.text).toMatch(/cita activa/i)
   })
 
+  it('specific-service pricing → answers just that service, no LLM', async () => {
+    const r = await run('cuánto cuesta corte')
+    expect(r.tokens).toBe(0)
+    expect(r.text).toMatch(/\*Corte\* cuesta \$25 y dura 30 min/)
+  })
+
+  it('multi-intent "hola, quiero agendar" → defers to booking, not just a greeting', async () => {
+    h.intent = { intent: 'greeting', confidence: 0.96 }
+    const r = await run('hola, quiero agendar un corte')
+    expect(r.tokens).toBe(0)
+    expect(r.text).toMatch(/qué día y a qué hora/i)        // booking handled it
+    expect(r.text).not.toMatch(/asistente virtual/i)       // not the greeting template
+  })
+
   it('new booking intent → asks day/time deterministically, no LLM', async () => {
     const r = await run('quiero agendar un corte')
     expect(r.tokens).toBe(0)

@@ -14,8 +14,8 @@ import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedS
 import { isManageExisting, isBookIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
-  BOOKING_DONE_RE, OUR_RESCHEDULE_QUESTION_RE, foldText, humanDate, listFreeTimes,
-  suggestOpenDays, cutoffHint,
+  BOOKING_DONE_RE, OUR_RESCHEDULE_QUESTION_RE, humanDate, listFreeTimes,
+  suggestOpenDays, cutoffHint, serviceNamedIn,
 } from './booking-shared.ts'
 
 // A proposal WE generate always opens with this shape, so the confirmation turn can
@@ -50,17 +50,6 @@ export function recoverProposedBooking(
   const time = extractTime(proposal)
   if (!time) return null
   return { serviceId: svc.id, serviceName: svc.name, date, time, durationMin: svc.duration_min }
-}
-
-/** Service named in the text (substring either direction, min 3 chars for reverse).
- *  Accent-insensitive: "electronica" → "Electrónica". */
-function serviceNamedIn(text: string, services: ReadonlyArray<ServiceLite>): ServiceLite | null {
-  const t = foldText(text)
-  if (!t) return null
-  return services.find((s) => {
-    const n = foldText(s.name)
-    return !!n && (t.includes(n) || (t.length >= 3 && n.includes(t)))
-  }) ?? null
 }
 
 /**
@@ -171,10 +160,17 @@ export function resolveNewBookingTurn(p: {
       : 'Con gusto te ayudo a agendar. ¿Qué servicio deseas?' }
   }
 
+  const today      = todayInTimezone(timezone)
   const askedDay   = /(para\s+qu[ée]\s+d[íi]a|d[íi]a\s+y\s+a\s+qu[ée]\s+hora)/i.test(lastAssistant)
   const askedTime  = /(a\s+qu[ée]\s+hora|horarios?\s+libres)/i.test(lastAssistant)
-  const saidNow    = parseDateTime(userText, todayInTimezone(timezone), expecting ? { expecting } : {})
+  const saidNow    = parseDateTime(userText, today, expecting ? { expecting } : {})
   const hasContent = userText.trim().length > 0
+
+  // The client stated a date that already passed ("ayer", "el 5" de un mes ya ido) → say so
+  // explicitly instead of silently dropping it (gatherBookingState only keeps date >= today).
+  if (saidNow.date && saidNow.date < today) {
+    return { kind: 'reply', text: `El ${humanDate(saidNow.date)} ya pasó 🗓️. ¿Para qué día de hoy en adelante quieres tu cita de *${st.service.name}*?` }
+  }
 
   // "No entendí la fecha": asked the day and the reply parsed to nothing → give examples.
   if (!st.date && askedDay && hasContent && !saidNow.date) {

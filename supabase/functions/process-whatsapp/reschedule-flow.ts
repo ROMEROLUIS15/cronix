@@ -72,6 +72,9 @@ export function resolveRescheduleTurn(p: {
   if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = apptLocal(target, tz).time
 
   if (!newDate) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
+  if (newDate < todayInTimezone(tz)) {
+    return { kind: 'reply', text: `El ${humanDate(newDate)} ya pasó 🗓️. ¿Para qué fecha de hoy en adelante reagendamos tu cita de *${target.service_name}*?` }
+  }
 
   // Validate the day is OPEN as soon as the date is known — before asking the time — so a
   // closed day is reported immediately (and suggests concrete open days), not after the

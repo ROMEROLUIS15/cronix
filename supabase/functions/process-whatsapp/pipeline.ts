@@ -13,15 +13,23 @@ import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery
 import { FAQ_INTENTS, buildFaqResponse, buildServicesResponse } from "./faq-responses.ts"
 import { resolveAvailabilityQuery } from "./availability-query.ts"
 import { buildLocationResponse, buildHoursResponse } from "./business-info.ts"
+import { serviceNamedIn } from "./booking-shared.ts"
+import { isBookIntent, isManageExisting } from "./intents.ts"
 import { executeDeterministicWrite } from "./deterministic-write.ts"
 import { BOOKING_PROPOSAL_DETECT_RE } from "./output-sanitizer.ts"
 import type { TurnContext, TurnResult } from "./turn-context.ts"
 
 /** FAQ fast-path: high-confidence info/greeting intents bypass the LLM entirely. */
 export async function layerFaq(tc: TurnContext): Promise<TurnResult | null> {
-  const { intent, context } = tc
+  const { intent, context, userText } = tc
   if (!(intent && intent.confidence >= 0.90 && FAQ_INTENTS.has(intent.intent))) return null
-  const text = buildFaqResponse(intent.intent, context)
+  // Multi-intent: a greeting that ALSO asks to book/manage ("hola, quiero agendar mañana")
+  // must NOT be answered with just a greeting — defer to the booking layer.
+  if (intent.intent === 'greeting' && (isBookIntent(userText) || isManageExisting(userText))) return null
+  // pricing_inquiry: answer the specific service if one is named, else the full list.
+  const text = intent.intent === 'pricing_inquiry'
+    ? buildServicesResponse(context, serviceNamedIn(userText, context.services) ?? undefined)
+    : buildFaqResponse(intent.intent, context)
   await tc.quickTrace(text, 'faq', { intent: intent.intent })
   return { text, tokens: 0, toolCallsTrace: [] }
 }
@@ -67,7 +75,8 @@ export async function layerListAppointments(tc: TurnContext): Promise<TurnResult
 /** Deterministic catalog: "¿qué servicios tienen? / ¿cuánto cuesta?" → services + price list. */
 export async function layerServices(tc: TurnContext): Promise<TurnResult | null> {
   if (!isServicesQuery(tc.userText)) return null
-  const text = buildServicesResponse(tc.context)
+  const named = serviceNamedIn(tc.userText, tc.context.services) ?? undefined
+  const text = buildServicesResponse(tc.context, named)
   await tc.quickTrace(text, 'deterministic_services')
   return { text, tokens: 0, toolCallsTrace: [] }
 }
