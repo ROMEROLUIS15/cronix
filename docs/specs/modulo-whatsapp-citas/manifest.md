@@ -45,7 +45,7 @@ para toda la lógica de negocio.
 ### Proveedor STT
 **Deepgram Nova-2** (`model=nova-2&language=es&smart_format=true`).
 Acepta cualquier formato de audio que Meta envíe (ogg/opus, mp4, webm).
-Proveedor real: `transcribeAudio` en `ai-agent.ts` llama a `api.deepgram.com` con `DEEPGRAM_AURA_API_KEY`. Este path migró de Groq Whisper a Deepgram Nova-2 (los identificadores `whisper*` muertos de la migración fueron eliminados de `groq-client.ts`/`message-handler.ts`).
+Proveedor real: `transcribeAudio` en **`transcription.ts`** (extraído de `ai-agent.ts` en el refactor de descomposición) llama a `api.deepgram.com` con `DEEPGRAM_AURA_API_KEY`. Este path migró de Groq Whisper a Deepgram Nova-2 (los identificadores `whisper*` muertos de la migración fueron eliminados de `groq-client.ts`/`message-handler.ts`).
 
 ### Flujo de Procesamiento
 Cliente envía nota de voz
@@ -106,9 +106,9 @@ El pipeline ejecuta los canales en el siguiente orden jerárquico:
 3.  **WhatsApp al Dueño:** Se despacha una plantilla de alerta al número vinculado del dueño del negocio (vía Meta Graph API directa). Falla silenciosamente.
 4.  **Web Push al PWA del Dueño:** Se envía una notificación push al PWA instalado del dueño vía la edge function `push-notify`. Falla silenciosamente.
 
-En paralelo (independiente del pipeline del dueño), se envía un mensaje de confirmación formal al número de WhatsApp del cliente.
+**Acuse ÚNICO al cliente (invariante C1).** El cliente recibe **exactamente un** mensaje de resultado: la respuesta conversacional del propio agente (`renderBookingSuccessTemplate`). **No** se envía un segundo mensaje "formal" en paralelo — eso causaba la doble confirmación (defecto D1) y se eliminó (`sendClientBookingConfirmation`/`buildClientWhatsAppMessage` fueron borradas como código muerto). Ver `operacion-canonica.md` invariante C1.
 
-*Garantía de idempotencia:* Cada evento tiene un `eventId` determinista generado por `buildAppointmentEventId()`. Si QStash reintenta el mismo tool call, el pipeline detecta el `event_id` existente en DB y no duplica notificaciones.
+*Garantía de idempotencia:* Cada evento tiene un `eventId` determinista generado por `buildAppointmentEventId()`. Si QStash reintenta el mismo tool call, el pipeline detecta el `event_id` existente en DB y no duplica notificaciones. El pipeline de notificaciones vive en `notifications.ts` (facade) + `notif-channels.ts` + `notif-contracts.ts`.
 
 ## 5. Criterios de Aceptación y Errores Deterministas
 
@@ -153,20 +153,39 @@ El sistema captura y responde de forma determinista mediante las estructuras def
 
 ## 6. Optimizaciones de Rendimiento: Fast Path y Compuerta Híbrida
 
-### Fast Path (Bypass de LLM)
+### Arquitectura actual: pipeline determinista de capas (NORMATIVO)
 
-Para reducir el consumo de tokens y latencia, las intenciones de tipo FAQ con confianza alta (>= 0.90) se responden con una plantilla determinista sin invocar `callLlm()`.
+`runAgentLoop` (`ai-agent.ts`, orquestador fino) construye el contexto del turno y lo pasa por un **pipeline determinista a 0 tokens**, en orden; la **primera capa que resuelve gana**, y solo si ninguna lo hace cae al **fallback ReAct LLM** (`react-loop.ts`):
+
+```
+FAQ → list-appointments → services → business-info → booking → availability → (LLM)
+```
+
+| Capa | Módulo | Qué resuelve |
+|---|---|---|
+| `layerFaq` | `pipeline.ts` + `faq-responses.ts` | Saludo (intent `greeting` ≥0.90) y precio (cede si el saludo trae intención de reservar). |
+| `layerListAppointments` | `read-intents.ts` | "¿tengo citas?" desde `activeAppointments`. |
+| `layerServices` | `faq-responses.ts` | "qué servicios / cuánto cuesta" (lista o el servicio puntual nombrado). |
+| `layerBusinessInfo` | `business-info.ts` | Ubicación (dirección real) y horario (desde `workingHours`) — **nunca inventados**. |
+| `layerBooking` | `booking-flow.ts` (+ `booking-state`/`cancel-flow`/`reschedule-flow`/`booking-shared`) | Agendar / reagendar / cancelar deterministas (máquina de estados). |
+| `layerAvailability` | `availability-query.ts` | "¿qué horarios hay el martes?" suelta (corre al final). |
+
+> **Descomposición (refactor de saneamiento).** El antiguo `ai-agent.ts` monolítico (804 líneas) y `booking-flow.ts` (556) se descompusieron por concepto (≤300 líneas/archivo, regla `constitution §1.0`): `turn-context`, `pipeline`, `react-loop`, `deterministic-write`, `deterministic-intent`, `output-sanitizer`, `transcription`, `agent-singletons`, `intents` (única fuente de detección de intención, acento-insensible), y los `booking-*`/`notif-*`. La intención del LLM, los args y la operación de negocio se validan en su propia capa. Detalle normativo de cada ruta y sus ACs: **`operacion-canonica.md`**.
+
+### Fast Path FAQ (Bypass de LLM)
+
+Las intenciones FAQ con confianza alta (>= 0.90) se responden con plantilla determinista sin `callLlm()`. El conjunto se define en `FAQ_INTENTS` (`faq-responses.ts`):
 
 | Intención | Respuesta |
 |---|---|
-| `greeting` (saludo) | Plantilla de bienvenida con el nombre del negocio. |
-| `pricing_inquiry` (consulta de servicios/horarios) | Lista de servicios con precio y duración del catálogo del negocio. |
+| `greeting` (saludo) | Plantilla de bienvenida con el nombre del negocio (cede si el mensaje también pide reservar/gestionar). |
+| `pricing_inquiry` (consulta de precios) | Lista de servicios con precio y duración (o el servicio puntual si se nombra). |
 
-El conjunto de intenciones FAQ se define en `FAQ_INTENTS` dentro de `faq-responses.ts`. Para agregar una nueva intención FAQ, basta con añadir su label al `Set` e implementar el caso en `buildFaqResponse()`.
+Para agregar una intención FAQ, añade su label al `Set` e implementa el caso en `buildFaqResponse()`. (Las consultas de **servicios, ubicación, horario y disponibilidad** ya tienen rutas deterministas propias por detector de texto, independientes del umbral del router — ver la tabla del pipeline.)
 
 ### Flujo de Agendamiento Determinista (cero alucinación en la escritura) — NORMATIVO
 
-El camino de **escritura** de una cita nueva no depende del LLM 8B para ningún dato vinculante. `runAgentLoop` invoca `resolveBookingTurn` (`booking-flow.ts`) **antes** del loop ReAct; el 8B nunca emite `service_id`/`date`/`time` ni propone una hora. La máquina determinista resuelve dos momentos:
+El camino de **escritura** de una cita nueva no depende del LLM 8B para ningún dato vinculante. Lo resuelve la capa **`layerBooking`** del pipeline (`resolveBookingTurn`, `booking-flow.ts`), **antes** del fallback ReAct; el 8B nunca emite `service_id`/`date`/`time` ni propone una hora. La máquina determinista resuelve dos momentos:
 
 | Momento | Disparo | Acción |
 |---|---|---|
@@ -175,17 +194,17 @@ El camino de **escritura** de una cita nueva no depende del LLM 8B para ningún 
 
 `kind:null` → no es un momento determinista (servicio ambiguo, falta fecha, cancel/reschedule); cae al resolver de hueco de hora y al LLM. La ejecución determinista reusa `executeToolCall` (rate-limit, adapter con validación servicio∈catálogo + solapamiento + horario, y pipeline de notificaciones); **omite** el reviewer constitucional a propósito (existe para vetar alucinaciones del LLM, y aquí los args son deterministas → 0 tokens). La validación de slot en el momento de ejecutar también cubre el caso de carrera (slot ocupado entre propuesta y "sí") y cierra el hueco de horario fuera de servicio. El 8B queda solo para charla/recopilación cuando el turno es ambiguo.
 
-### Resolver de Disponibilidad Determinista (anti-alucinación de hora) — NORMATIVO
+### Fecha sin hora → la máquina de estados ofrece los slots reales (anti-alucinación) — NORMATIVO
 
-Cuando el cliente está en contexto de agendamiento y proporciona una **fecha pero NO una hora**, el agente NUNCA debe inventar una hora. Antes del LLM, `runAgentLoop` invoca `resolveBookingTimeGap` (`availability.ts`), que calcula de forma determinista (0 tokens) los horarios libres reales a partir de `working_hours` + slots ocupados + duración del servicio (`computeAvailableSlots`, espejo de la lógica del voice-agent):
+Cuando el cliente da una **fecha pero NO una hora**, el agente NUNCA inventa una hora. Esto **ya no** lo resuelve un helper aparte (`resolveBookingTimeGap` fue **eliminado** en el refactor): lo posee la **máquina de estados** dentro de la capa `layerBooking` (`booking-flow.ts` → `resolveNewBookingTurn` en `booking-state.ts`), que tras conocer la fecha calcula con `computeAvailableSlots` (working hours + slots ocupados + duración del servicio, descartando horas ya pasadas si es hoy):
 
 | Slots libres ese día | Respuesta determinista |
 |---|---|
-| Día cerrado / 0 libres | Informa y pide otra fecha. |
-| Exactamente 1 | Propone ese slot como pregunta de confirmación (`¿Confirmo…?` → la gate de 2 turnos abre con "sí"). |
-| Varios | Lista los horarios y pregunta cuál — **nunca elige por el cliente**. |
+| Día cerrado | Informa de inmediato y **sugiere días abiertos concretos** (`suggestOpenDays`). |
+| 0 libres | Informa que no queda horario y pide otra fecha. |
+| Varios | Lista los horarios reales y pregunta cuál — **nunca elige por el cliente**. |
 
-Condiciones de disparo: contexto de booking (intent `book_appointment` o el turno anterior del asistente ofreció/propuso agendar) **+** fecha parseable (`parseDateExpression`, espejo determinista del voice) **+** sin hora en el texto (`textHasTime`) **+** servicio resoluble (único en catálogo o nombrado). Si falta cualquiera, cae al LLM. Refuerzo secundario: el system prompt prohíbe explícitamente inventar la hora en citas nuevas.
+La fecha se parsea con `parseDateExpression` (`date-parser.ts`, espejo determinista del voice-agent; cubre día pelado, typo del artículo, número-pelado-como-hora según contexto). Una fecha **pasada** se informa explícitamente ("ya pasó"). Refuerzo secundario: el system prompt prohíbe inventar la hora. La gramática completa de fecha/hora y la máquina de estados están en **`operacion-canonica.md §3.3`** (fuente única, ACs `AC-NLU-*`).
 
 **Siembra de horario en todo alta de negocio (NORMATIVO).** Ningún negocio debe quedar sin `settings.workingHours`, porque el agente entonces asume 09–18 todos los días (incl. domingo). Los dos caminos de creación lo siembran: (a) `/dashboard/setup` con lo que elige el dueño (`workingHoursConfirmed:true`); (b) el alta automática por signup de email (`auth/callback` → `ensureBusinessFromMetadata`), que no tiene formulario, siembra un default seguro **Lun–Sáb 09–18, Dom cerrado** con `workingHoursConfirmed:false`. El dashboard muestra un banner (`WorkingHoursBanner`, namespace `dashboard.hoursNudge`) mientras `workingHoursConfirmed !== true` para que el dueño confirme su horario real; guardar en Settings o en setup lo marca `true`. Negocios antiguos con horario null fueron rellenados con el mismo default (migración `20260618140000`). **Un negocio que YA tenía un horario real configurado antes de existir el flag cuenta como confirmado** — la migración `20260619000000` marca `workingHoursConfirmed=true` a todo negocio con `workingHours` no vacío y sin el flag, para no molestar a quien ya estableció su horario (solo siguen con el nudge los negocios que recibieron el default, `flag=false`).
 
