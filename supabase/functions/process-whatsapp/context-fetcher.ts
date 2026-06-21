@@ -63,16 +63,21 @@ export async function getActiveAppointments(
 
   if (!data) return []
 
+  // PostgREST embeds the to-one `services(name)` as an object, but its inferred type can be
+  // an array — accept both shapes so the cast is honest and the name is never lost.
   return (data as Array<{
     id: string; start_at: string; end_at: string; status: string
-    services: { name: string } | null
-  }>).map(row => ({
-    id:           row.id,
-    service_name: row.services?.name ?? 'Servicio',
-    start_at:     row.start_at,
-    end_at:       row.end_at,
-    status:       row.status,
-  }))
+    services: { name: string } | { name: string }[] | null
+  }>).map(row => {
+    const svc = Array.isArray(row.services) ? row.services[0] : row.services
+    return {
+      id:           row.id,
+      service_name: svc?.name ?? 'Servicio',
+      start_at:     row.start_at,
+      end_at:       row.end_at,
+      status:       row.status,
+    }
+  })
 }
 
 /**

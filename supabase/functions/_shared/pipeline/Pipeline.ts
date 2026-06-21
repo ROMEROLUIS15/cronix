@@ -1,42 +1,48 @@
 import type { StepOptions, StepResult, PipelineHooks, StepFn } from './types.ts'
 import { PipelineTimeoutError } from './types.ts'
 
-type StepEntry<T extends Record<string, unknown>> = {
+type AnyRecord = Record<string, unknown>
+type StepEntry = {
   name:    string
-  fn:      StepFn<T, Record<string, unknown>>
-  options: StepOptions<T>
+  fn:      StepFn<AnyRecord, AnyRecord>
+  options: StepOptions<AnyRecord>
 }
 
-export class Pipeline<T extends Record<string, unknown>> {
-  private steps: StepEntry<any>[] = []
-  private hooks: PipelineHooks<T> = {}
+/**
+ * `TInput` is what `.run()` accepts (the initial context); `TCtx` is what each step sees,
+ * growing via `.step()`. Keeping them separate is why `.run(initial)` takes ONLY the input
+ * — not the fully-accumulated type. `TCtx` defaults to `TInput` for the no-steps case.
+ */
+export class Pipeline<
+  TInput extends Record<string, unknown>,
+  TCtx   extends Record<string, unknown> = TInput,
+> {
+  private steps: StepEntry[] = []
+  private hooks: PipelineHooks<TCtx> = {}
 
   constructor(private pipelineName?: string) {}
 
   /** Register lifecycle hooks. */
-  on(hooks: PipelineHooks<T>): this {
+  on(hooks: PipelineHooks<TCtx>): this {
     this.hooks = { ...this.hooks, ...hooks }
     return this
   }
 
   /**
-   * Register a step. The step function receives the current context and returns
+   * Register a step. The step function receives the accumulated context and returns
    * a partial object that gets merged into the context for downstream steps.
-   *
-   * TypeScript tip: provide the input context type explicitly, e.g.:
-   *   pipeline.step<{ myKey: string }>('my-step', (ctx) => ...)
    */
   step<R extends Record<string, unknown>>(
     name:    string,
-    fn:      StepFn<T & Record<string, unknown>, R>,
-    options?: StepOptions<T & Record<string, unknown>>,
-  ): Pipeline<T & R> {
+    fn:      StepFn<TCtx, R>,
+    options?: StepOptions<TCtx>,
+  ): Pipeline<TInput, TCtx & R> {
     this.steps.push({
       name,
-      fn: fn as StepFn<T, Record<string, unknown>>,
-      options: options ?? {},
+      fn: fn as unknown as StepFn<AnyRecord, AnyRecord>,
+      options: (options ?? {}) as StepOptions<AnyRecord>,
     })
-    return this as unknown as Pipeline<T & R>
+    return this as unknown as Pipeline<TInput, TCtx & R>
   }
 
   /**
@@ -44,11 +50,11 @@ export class Pipeline<T extends Record<string, unknown>> {
    * context from all previous steps. The context starts as `initial` and grows
    * as each step's return value is merged via Object.assign.
    */
-  async run(initial: T): Promise<{
-    context: T & Record<string, unknown>
+  async run(initial: TInput): Promise<{
+    context: TCtx & Record<string, unknown>
     results: StepResult[]
   }> {
-    const ctx = { ...initial } as T & Record<string, unknown>
+    const ctx = { ...initial } as unknown as TCtx & Record<string, unknown>
     const results: StepResult[] = []
 
     for (const step of this.steps) {

@@ -34,11 +34,14 @@ export class AgentTransientError extends Error {
 
 // ── Pipeline Context ──────────────────────────────────────────────────────────
 
-export interface WhatsAppPipelineInput {
+// A `type` alias (not `interface`) so it satisfies the Pipeline's `Record<string, unknown>`
+// constraint — interfaces lack the implicit index signature that closed object types have.
+export type WhatsAppPipelineInput = {
   sender:        string
   customerName:  string
   text:          string
-  business:      import("./types.ts").BusinessRow & { timezone: string }
+  // timezone may be null here; stepFetchContext defaults it to 'UTC' before use.
+  business:      import("./types.ts").BusinessRow
 }
 
 export interface WhatsAppPipelineOutput {
