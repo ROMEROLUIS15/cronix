@@ -92,3 +92,7 @@ __pycache__/
 .pytest_cache/
 .deepeval/
 .deepeval_telemetry.txt
+
+# Deno lockfiles — generados por `deno check`; el repo versiona deno.json, no el lock
+# (el deploy de edge functions lo regenera via --use-api). Se ignoran como artefactos.
+supabase/functions/**/deno.lock
