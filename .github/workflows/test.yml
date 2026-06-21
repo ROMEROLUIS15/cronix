@@ -34,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Deterministic E2E golden CONVERSATION evals for the WhatsApp agent: drives the real
+      # runAgentLoop across multi-turn flows (LLM/DB mocked), 0 network, BLOCKING. Runs first
+      # so a behaviour regression in a golden scenario fails fast with a clear name.
+      - name: Agent E2E conversation evals (golden)
+        run: npm run test:evals:agent
+
       - name: Run Unit & Repository Tests (Vitest)
         run: npm test
 

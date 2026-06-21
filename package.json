@@ -19,6 +19,7 @@
     "test:e2e:smoke": "playwright test --project=smoke",
     "test:evals": "python -m pytest evals -v",
     "test:evals:rotator": "python -m pytest evals/test_groq_rotator.py -v",
+    "test:evals:agent": "vitest run supabase/functions/process-whatsapp/__tests__/conversation-evals.test.ts",
     "e2e:setup": "tsx scripts/setup-e2e-data.ts",
     "sim:whatsapp": "tsx scripts/sim-whatsapp.ts",
     "trigger:voice": "tsx scripts/trigger-voice.ts",
