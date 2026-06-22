@@ -58,6 +58,18 @@ DB+PostgREST ceiling, not RLS/auth overhead.
   you're hitting connection/pool or compute saturation, not a query problem.
 - Remember the local box is beefier than the free tier: treat absolute numbers as
   optimistic, the **trends** as faithful.
+- A flagged Seq Scan on a **small** table (e.g. `services`, a few thousand rows)
+  is usually a **false alarm** — a hash join over a tiny table is the optimal plan
+  and an index wouldn't help. The flag is a prompt to look, not a verdict.
+
+### ⚠️ Statistics matter more than you'd think (real finding)
+At 500 businesses, with **fresh statistics** every dashboard query is <17ms. But
+measured **immediately after the bulk seed, before `ANALYZE`**, the planner used
+stale row estimates and `get_clients_debts` blew up to **~6 minutes** (a ~20,000×
+swing). `seed.ts` now runs `ANALYZE` for you so `explain.ts` reports steady-state
+numbers. The operational lesson for prod: **always `ANALYZE` after a bulk import,
+backup restore, or backfill migration** — don't wait for autovacuum, or the first
+queries can pick catastrophic plans.
 
 ## Safety
 - `LOADTEST_DATABASE_URL` overrides the target, but only `127.0.0.1`/`localhost`

@@ -127,6 +127,14 @@ async function main() {
          FROM lt_biz CROSS JOIN generate_series(1, 12) e`)
 
     await db.query('COMMIT')
+
+    // CRITICAL: refresh planner statistics. Right after a bulk load the stats are
+    // stale, and the planner can pick catastrophic plans (observed: get_clients_debts
+    // at ~6 MINUTES vs ~16ms once analyzed) until autovacuum's autoanalyze catches
+    // up. This is the same ANALYZE you must run after any real bulk import/restore.
+    console.log('📊 Running ANALYZE (fresh statistics → realistic query plans)…')
+    await db.query('ANALYZE public.appointments, public.appointment_services, public.transactions, public.clients, public.services, public.expenses')
+
     const secs = ((Date.now() - t0) / 1000).toFixed(1)
 
     const counts = await db.query<{ relname: string; n: string }>(
