@@ -12,7 +12,8 @@
     "supabase/functions/**",
     "types/database.types.ts",
     "lib/mock/**",
-    "tests/load/**"
+    "tests/load/**",
+    "scripts/loadtest/k6-dashboard.js"
   ],
   "ignoreBinaries": ["python"],
   "ignoreDependencies": [
