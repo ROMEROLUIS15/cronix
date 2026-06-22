@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(94);
+SELECT plan(95);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -964,6 +964,16 @@ SELECT throws_ok(
 );
 
 RESET ROLE;
+
+-- Drift guard: match_ai_memories_v2 must be created by a migration (it used to
+-- exist only in production — see 20260622160000).
+SELECT ok(
+  EXISTS(
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_ai_memories_v2'
+  ),
+  'match_ai_memories_v2 exists (migration drift closed)'
+);
 
 SELECT * FROM finish();
 
