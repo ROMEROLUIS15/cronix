@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(86);
+SELECT plan(89);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -890,6 +890,46 @@ SELECT ok(
   EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='wa_sessions'        AND policyname LIKE 'Users can view%'),
   'policy wa_sessions view exists'
 );
+
+-- ── 27. SECURITY DEFINER dashboard RPCs enforce the tenant guard ──────────────
+-- These functions bypass RLS, so they MUST verify the caller owns p_business_id.
+-- Regression guard for the cross-tenant financial leak fixed in 20260622120000.
+
+-- Owner B cannot read Owner A's monthly metrics / dashboard stats → 42501.
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT throws_ok(
+  $q$ SELECT * FROM public.fn_get_monthly_metrics(
+        'aaaaaaaa-0000-0000-0000-000000000001', date_trunc('month', now())::date) $q$,
+  '42501',
+  NULL,
+  'Owner B cannot read Owner A monthly metrics (SECURITY DEFINER tenant guard)'
+);
+
+SELECT throws_ok(
+  $q$ SELECT * FROM public.fn_get_dashboard_stats(
+        'aaaaaaaa-0000-0000-0000-000000000001',
+        to_char(now(),'YYYY-MM-DD'), to_char(now(),'YYYY-MM-DD'),
+        to_char(date_trunc('month', now()),'YYYY-MM-DD')) $q$,
+  '42501',
+  NULL,
+  'Owner B cannot read Owner A dashboard stats (SECURITY DEFINER tenant guard)'
+);
+
+RESET ROLE;
+
+-- Owner A CAN read their own metrics.
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}';
+
+SELECT lives_ok(
+  $q$ SELECT * FROM public.fn_get_monthly_metrics(
+        'aaaaaaaa-0000-0000-0000-000000000001', date_trunc('month', now())::date) $q$,
+  'Owner A can read own monthly metrics'
+);
+
+RESET ROLE;
 
 SELECT * FROM finish();
 
