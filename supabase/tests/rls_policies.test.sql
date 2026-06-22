@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(89);
+SELECT plan(94);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -927,6 +927,40 @@ SELECT lives_ok(
   $q$ SELECT * FROM public.fn_get_monthly_metrics(
         'aaaaaaaa-0000-0000-0000-000000000001', date_trunc('month', now())::date) $q$,
   'Owner A can read own monthly metrics'
+);
+
+RESET ROLE;
+
+-- ── 28. SECURITY DEFINER RPC hardening (20260622140000) ──────────────────────
+-- Edge/agent-only functions must NOT be executable by browser roles; their only
+-- caller is the Deno edge runtime via service_role.
+
+SELECT ok(
+  NOT has_function_privilege('authenticated', 'public.fn_find_client_by_phone(uuid, text)', 'EXECUTE'),
+  'authenticated cannot EXECUTE fn_find_client_by_phone (edge-only)'
+);
+SELECT ok(
+  NOT has_function_privilege('authenticated', 'public.fn_book_appointment_wa(uuid, text, text, uuid, timestamptz)', 'EXECUTE'),
+  'authenticated cannot EXECUTE fn_book_appointment_wa (edge-only)'
+);
+SELECT ok(
+  NOT has_function_privilege('authenticated', 'public.fn_wa_check_token_quota(uuid, integer)', 'EXECUTE'),
+  'authenticated cannot EXECUTE fn_wa_check_token_quota (edge-only)'
+);
+SELECT ok(
+  has_function_privilege('service_role', 'public.fn_find_client_by_phone(uuid, text)', 'EXECUTE'),
+  'service_role CAN still EXECUTE fn_find_client_by_phone (edge path intact)'
+);
+
+-- Guarded browser-facing read rejects a foreign tenant at the guard.
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}';
+
+SELECT throws_ok(
+  $q$ SELECT * FROM public.get_clients_debts('aaaaaaaa-0000-0000-0000-000000000001') $q$,
+  '42501',
+  NULL,
+  'Owner B cannot read Owner A client debts (SECURITY DEFINER tenant guard)'
 );
 
 RESET ROLE;
