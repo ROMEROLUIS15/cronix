@@ -44,7 +44,7 @@ export function useReportsData(): UseReportsDataReturn {
 
       // Finance figures come from the SAME canonical aggregator Home and Finances
       // use (fn_get_monthly_metrics) — so all three sections reconcile.
-      const [aptsRes, clientsRes, metricsRes] = await Promise.all([
+      const [aptsRes, clientsRes, metricsRes, businessRes] = await Promise.all([
         supabase
           .from('appointments')
           .select('id, start_at, status, service:services(name, price), client:clients(name)')
@@ -54,11 +54,17 @@ export function useReportsData(): UseReportsDataReturn {
           .order('start_at', { ascending: false }),
         container.clients.getAll(bId),
         container.finances.getMonthlyMetrics(bId, monthStartDate),
+        supabase
+          .from('businesses')
+          .select('name')
+          .eq('id', bId)
+          .single(),
       ]);
 
       const apts = (aptsRes.data ?? []) as ReportAppointment[];
       const activeClients = (clientsRes.data ?? []).filter((c: any) => !c.deleted_at);
       const metrics = metricsRes.data ?? { billed: 0, collected: 0, expenses: 0 };
+      const businessName: string | undefined = businessRes.data?.name ?? undefined;
 
       // Per-service breakdown of BILLED value (list price of completed appts) —
       // the same basis as `metrics.billed`, so the breakdown reconciles with it.
@@ -81,6 +87,7 @@ export function useReportsData(): UseReportsDataReturn {
         netProfit: metrics.collected - metrics.expenses,
         byService,
         recentAppointments: apts.slice(0, 10),
+        businessName,
       };
 
       setData(reportData);
