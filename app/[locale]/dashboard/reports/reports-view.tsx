@@ -8,7 +8,13 @@ import {
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { downloadElementAsPDF } from '@/lib/utils/pdf-generator'
+import {
+  generateGeneralReport,
+  generateAppointmentsReport,
+  generateFinancesReport,
+  generateClientsReport,
+  generateServicesReport,
+} from '@/lib/utils/report-pdf-generator'
 import { useTranslations } from 'next-intl'
 
 /* ─────────────────────────── types ─────────────────────────── */
@@ -28,6 +34,7 @@ export interface ReportData {
   totalClients:          number
   billed:                number
   collected:             number
+  businessName?:         string
   expenses:              number
   netProfit:             number
   byService:             Record<string, { count: number; revenue: number }>
@@ -233,12 +240,13 @@ export function ReportsView({ data }: ReportsViewProps) {
   const [activeReport, setActiveReport] = useState<string | null>(null)
   const t = useTranslations('reports')
 
-  const handleDownloadReport = () => {
-    downloadElementAsPDF(
-      'reports-wrapper',
-      `Reporte_Cronix_${new Date().toISOString().split('T')[0]}.pdf`,
-    )
-  }
+  const pdfData = { ...data }
+
+  const handleDownloadReport    = () => generateGeneralReport(pdfData)
+  const handleAppointmentsPdf   = () => generateAppointmentsReport(pdfData)
+  const handleFinancesPdf       = () => generateFinancesReport(pdfData)
+  const handleClientsPdf        = () => generateClientsReport(pdfData)
+  const handleServicesPdf       = () => generateServicesReport(pdfData)
 
   const reportCards = [
     {
@@ -249,6 +257,7 @@ export function ReportsView({ data }: ReportsViewProps) {
       icon:        <Calendar size={20} />,
       accentColor: '#3884FF',
       accentBg:    'rgba(56,132,255,0.14)',
+      onDownload:  handleAppointmentsPdf,
     },
     {
       id: 'finances',
@@ -258,6 +267,7 @@ export function ReportsView({ data }: ReportsViewProps) {
       icon:        <DollarSign size={20} />,
       accentColor: '#30D158',
       accentBg:    'rgba(48,209,88,0.14)',
+      onDownload:  handleFinancesPdf,
     },
     {
       id: 'clients',
@@ -267,6 +277,7 @@ export function ReportsView({ data }: ReportsViewProps) {
       icon:        <Users size={20} />,
       accentColor: '#A78BFA',
       accentBg:    'rgba(167,139,250,0.14)',
+      onDownload:  handleClientsPdf,
     },
     {
       id: 'services',
@@ -276,6 +287,7 @@ export function ReportsView({ data }: ReportsViewProps) {
       icon:        <Star size={20} />,
       accentColor: '#FFB800',
       accentBg:    'rgba(255,184,0,0.14)',
+      onDownload:  handleServicesPdf,
     },
   ]
 
@@ -331,7 +343,7 @@ export function ReportsView({ data }: ReportsViewProps) {
             accentBg={r.accentBg}
             active={activeReport === r.id}
             onToggle={() => setActiveReport(activeReport === r.id ? null : r.id)}
-            onDownload={e => { e.stopPropagation(); handleDownloadReport() }}
+            onDownload={e => { e.stopPropagation(); r.onDownload() }}
           />
         ))}
       </div>
