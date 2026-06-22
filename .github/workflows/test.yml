@@ -7,6 +7,15 @@ on:
     branches: ['**']
   workflow_dispatch: # manual trigger — runs the full authenticated E2E suite (e2e-full)
 
+# Dedupe runs for the SAME commit. develop is ff-merged to main, so the same SHA
+# lands on two branches and (with `push: ['**']`) would otherwise trigger this
+# workflow twice — duplicate check-runs + a lingering "pending" status. Keying the
+# group by SHA collapses those into one run; cancel-in-progress also drops a stale
+# run when a newer commit supersedes it on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
 env:
   NEXT_PUBLIC_SUPABASE_URL:       ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
   NEXT_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

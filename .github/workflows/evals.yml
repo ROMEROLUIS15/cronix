@@ -15,6 +15,12 @@ on:
     branches: ['**']
   workflow_dispatch: # manual trigger — runs the live Groq-judged eval suite
 
+# Dedupe runs for the SAME commit: develop is ff-merged to main, so one SHA on two
+# branches would otherwise fire this workflow twice. See test.yml for the rationale.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   # ── Offline rotation logic — blocking, no Groq egress ─────────────────────
   evals-rotator:
