@@ -105,12 +105,6 @@ function baseStyles(): string {
       margin-bottom: 32px;
     }
     .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-logo {
-      width: 40px; height: 40px; border-radius: 10px;
-      background: linear-gradient(135deg, #0062FF, #3884FF);
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-weight: 900; font-size: 16px;
-    }
     .brand-name { font-size: 18px; font-weight: 700; color: #0f172a; }
     .brand-sub  { font-size: 12px; color: #64748b; margin-top: 1px; }
     .meta { text-align: right; font-size: 12px; color: #64748b; line-height: 1.6; }
@@ -215,7 +209,13 @@ function pageHeader(title: string, subtitle: string, businessName?: string): str
   return `
     <div class="header">
       <div class="brand">
-        <div class="brand-logo">C</div>
+        <img
+          src="/icon.png"
+          alt="Cronix"
+          width="44"
+          height="44"
+          style="border-radius:12px;object-fit:cover;flex-shrink:0;"
+        />
         <div>
           <div class="brand-name">${businessName ?? 'Cronix'}</div>
           <div class="brand-sub">Sistema de Gestión</div>
