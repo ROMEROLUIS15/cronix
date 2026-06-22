@@ -668,6 +668,9 @@
     "registerExpense": "Registrar despesa",
     "registerIncome": "Registrar receita",
     "incomeMonth": "Receita do mês",
+    "billedMonth": "Serviços prestados",
+    "collectedMonth": "Recebido no mês",
+    "collectionRate": "Cobrança",
     "expenseMonth": "Despesas do mês",
     "netProfit": "Lucro líquido",
     "margin": "Margem",
@@ -777,6 +780,8 @@
       "total": "Total",
       "completed": "Concluídos",
       "cancelled": "Cancelados",
+      "billed": "Faturado",
+      "collected": "Recebido",
       "income": "Receitas",
       "expenses": "Despesas",
       "netProfit": "Lucro líquido"

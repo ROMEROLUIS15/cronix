@@ -38,6 +38,23 @@ export type RevenueDataPoint = {
 }
 
 /**
+ * Canonical monthly metrics for a business, computed by the DB in a single
+ * round-trip. The ONE source of truth shared by Home, Finances and Reports.
+ *
+ * Both revenue figures are attributed to a month by the appointment date
+ * (start_at); transactions without a linked appointment fall back to paid_at.
+ *
+ *  - billed:    value of services rendered (list price of completed appointments)
+ *  - collected: real cash in (net_amount of transactions)
+ *  - expenses:  total expenses dated within the month
+ */
+export type MonthlyMetrics = {
+  billed:    number
+  collected: number
+  expenses:  number
+}
+
+/**
  * A single item in an atomic batch insert.
  * Omits business_id — it is passed once at the batch level to avoid
  * repetition and prevent cross-business data leaks.
@@ -86,6 +103,18 @@ export interface IFinanceRepository {
     from: string,
     to: string
   ): Promise<Result<number>>
+
+  /**
+   * Returns the canonical monthly metrics (billed / collected / expenses) for
+   * the calendar month containing `monthStart`. Computed entirely in the DB —
+   * the single source of truth for every dashboard revenue figure.
+   *
+   * @param monthStart Any date within the target month (YYYY-MM-DD).
+   */
+  getMonthlyMetrics(
+    businessId: string,
+    monthStart: string
+  ): Promise<Result<MonthlyMetrics>>
 
   /**
    * Atomically inserts multiple transactions in a single DB transaction.

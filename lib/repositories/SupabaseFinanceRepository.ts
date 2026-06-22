@@ -11,6 +11,7 @@ import {
   CreateExpensePayload,
   RevenueDataPoint,
   BatchTransactionItem,
+  MonthlyMetrics,
 } from '@/lib/domain/repositories/IFinanceRepository'
 import type { ExpenseRow, TransactionRow } from '@/types'
 
@@ -122,6 +123,27 @@ export class SupabaseFinanceRepository implements IFinanceRepository {
     // PostgREST returns aggregate as { sum: string | number } when using select='sum:net_amount.sum()'
     const aggregate = data as { sum: number | string } | null
     return ok(aggregate ? Number(aggregate.sum) : 0)
+  }
+
+  async getMonthlyMetrics(
+    businessId: string,
+    monthStart: string
+  ): Promise<Result<MonthlyMetrics>> {
+    const { data, error } = await this.supabase
+      .rpc('fn_get_monthly_metrics', {
+        p_business_id: businessId,
+        p_month_start: monthStart,
+      })
+      .single()
+
+    if (error) return fail(`getMonthlyMetrics: ${error.message}`)
+
+    // PostgREST returns NUMERIC columns as strings — coerce to number.
+    return ok({
+      billed:    Number(data?.billed_revenue ?? 0),
+      collected: Number(data?.collected_revenue ?? 0),
+      expenses:  Number(data?.total_expenses ?? 0),
+    })
   }
 
   async createTransactionBatch(

@@ -668,6 +668,9 @@
     "registerExpense": "Registra spesa",
     "registerIncome": "Registra entrata",
     "incomeMonth": "Entrate del mese",
+    "billedMonth": "Servizi erogati",
+    "collectedMonth": "Incassato del mese",
+    "collectionRate": "Incasso",
     "expenseMonth": "Spese del mese",
     "netProfit": "Utile netto",
     "margin": "Margine",
@@ -770,6 +773,8 @@
       "total": "Totale",
       "completed": "Completati",
       "cancelled": "Annullati",
+      "billed": "Fatturato",
+      "collected": "Incassato",
       "income": "Entrate",
       "expenses": "Uscite",
       "netProfit": "Utile netto"

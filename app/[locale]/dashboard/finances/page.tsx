@@ -20,7 +20,7 @@ import { useFinancesDashboard } from './hooks/use-finances-dashboard'
 // ── Component ──────────────────────────────────────────────────────────────
 export default function FinancesPage() {
   const t = useTranslations('finances')
-  const { summary, recentTransactions, recentExpenses, loading, fetchError, marginPct, expensePct } = useFinancesDashboard()
+  const { view, recentTransactions, recentExpenses, loading, fetchError } = useFinancesDashboard()
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
@@ -69,22 +69,28 @@ export default function FinancesPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          title={t('incomeMonth')}
-          value={formatCurrency(summary.totalRevenue)}
+          title={t('billedMonth')}
+          value={formatCurrency(view.billed)}
           icon={<TrendingUp size={22} />}
+        />
+        <StatCard
+          title={t('collectedMonth')}
+          value={formatCurrency(view.collected)}
+          subtitle={view.billed > 0 ? `${t('collectionRate')}: ${Math.round(view.collectionRate)}%` : undefined}
+          icon={<DollarSign size={22} />}
           accent
         />
         <StatCard
           title={t('expenseMonth')}
-          value={formatCurrency(summary.totalExpenses)}
+          value={formatCurrency(view.expenses)}
           icon={<TrendingDown size={22} />}
         />
         <StatCard
           title={t('netProfit')}
-          value={formatCurrency(summary.netProfit)}
-          subtitle={summary.totalRevenue > 0 ? `${t('margin')}: ${marginPct}%` : undefined}
+          value={formatCurrency(view.netProfit)}
+          subtitle={view.collected > 0 ? `${t('margin')}: ${view.marginPct}%` : undefined}
           icon={<DollarSign size={22} />}
         />
       </div>
@@ -98,7 +104,7 @@ export default function FinancesPage() {
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
               <span>{t('income')}</span>
-              <span>{formatCurrency(summary.totalRevenue)}</span>
+              <span>{formatCurrency(view.collected)}</span>
             </div>
             <div className="h-3 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full" style={{ width: '100%', background: '#0062FF' }} />
@@ -107,12 +113,12 @@ export default function FinancesPage() {
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
               <span>{t('expenses')}</span>
-              <span>{formatCurrency(summary.totalExpenses)}</span>
+              <span>{formatCurrency(view.expenses)}</span>
             </div>
             <div className="h-3 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${expensePct}%`, background: '#FF3B30' }}
+                style={{ width: `${view.expensePct}%`, background: '#FF3B30' }}
               />
             </div>
           </div>

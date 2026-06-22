@@ -1760,6 +1760,17 @@ export type Database = {
           total_clients: number
         }[]
       }
+      fn_get_monthly_metrics: {
+        Args: {
+          p_business_id: string
+          p_month_start: string
+        }
+        Returns: {
+          billed_revenue: number
+          collected_revenue: number
+          total_expenses: number
+        }[]
+      }
       fn_mark_all_notifications_as_read: {
         Args: { target_business_id: string }
         Returns: undefined

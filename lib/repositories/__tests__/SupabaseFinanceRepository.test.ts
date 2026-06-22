@@ -33,6 +33,41 @@ describe('SupabaseFinanceRepository', () => {
     })
   })
 
+  describe('getMonthlyMetrics', () => {
+    it('coerces NUMERIC strings from the RPC into numbers', async () => {
+      // PostgREST returns NUMERIC columns as strings.
+      mockSupabase.rpc.mockReturnValue(
+        mockSupabaseResponse({ billed_revenue: '70', collected_revenue: '140', total_expenses: '0' })
+      )
+
+      const result = await repository.getMonthlyMetrics('biz_123', '2026-06-01')
+
+      expect(result.error).toBeNull()
+      expect(result.data).toEqual({ billed: 70, collected: 140, expenses: 0 })
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('fn_get_monthly_metrics', {
+        p_business_id: 'biz_123',
+        p_month_start: '2026-06-01',
+      })
+    })
+
+    it('returns zeros when the RPC yields no row', async () => {
+      mockSupabase.rpc.mockReturnValue(mockSupabaseResponse(null))
+
+      const result = await repository.getMonthlyMetrics('biz_123', '2026-06-01')
+
+      expect(result.data).toEqual({ billed: 0, collected: 0, expenses: 0 })
+    })
+
+    it('propagates RPC errors', async () => {
+      mockSupabase.rpc.mockReturnValue(mockSupabaseResponse(null, { message: 'boom' }))
+
+      const result = await repository.getMonthlyMetrics('biz_123', '2026-06-01')
+
+      expect(result.data).toBeNull()
+      expect(result.error).toContain('boom')
+    })
+  })
+
   describe('createTransaction', () => {
     it('should insert a transaction with default date if not provided', async () => {
       mockSupabase.from.mockReturnValue(mockSupabaseResponse(null, null))

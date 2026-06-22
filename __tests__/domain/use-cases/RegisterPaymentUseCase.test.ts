@@ -10,6 +10,7 @@ function makeFinanceRepo(overrides: Partial<IFinanceRepository> = {}): IFinanceR
     createExpense:          vi.fn(),
     findByPaidAtRange:      vi.fn(),
     sumNetAmount:           vi.fn(),
+    getMonthlyMetrics:      vi.fn(),
     createTransactionBatch: vi.fn(),
     ...overrides,
   } as unknown as IFinanceRepository

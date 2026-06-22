@@ -41,9 +41,10 @@ export function useReportsData(): UseReportsDataReturn {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
       const monthStartDate = monthStart.split('T')[0] ?? '';
-      const monthEndDate = monthEnd.split('T')[0] ?? '';
 
-      const [aptsRes, clientsRes, txnsRes, expensesRes] = await Promise.all([
+      // Finance figures come from the SAME canonical aggregator Home and Finances
+      // use (fn_get_monthly_metrics) — so all three sections reconcile.
+      const [aptsRes, clientsRes, metricsRes] = await Promise.all([
         supabase
           .from('appointments')
           .select('id, start_at, status, service:services(name, price), client:clients(name)')
@@ -52,21 +53,15 @@ export function useReportsData(): UseReportsDataReturn {
           .lte('start_at', monthEnd)
           .order('start_at', { ascending: false }),
         container.clients.getAll(bId),
-        container.finances.getTransactions(bId),
-        container.finances.getExpenses(bId),
+        container.finances.getMonthlyMetrics(bId, monthStartDate),
       ]);
 
       const apts = (aptsRes.data ?? []) as ReportAppointment[];
-      const txns = txnsRes.data ?? [];
-      const expenses = expensesRes.data ?? [];
       const activeClients = (clientsRes.data ?? []).filter((c: any) => !c.deleted_at);
+      const metrics = metricsRes.data ?? { billed: 0, collected: 0, expenses: 0 };
 
-      const monthTxns = txns.filter(txn => (txn.paid_at ?? '') >= monthStart && (txn.paid_at ?? '') <= monthEnd);
-      const monthExps = expenses.filter(exp => (exp.expense_date ?? '') >= monthStartDate && (exp.expense_date ?? '') <= monthEndDate);
-
-      const totalRevenue = monthTxns.reduce((sum, txn) => sum + (txn.net_amount ?? 0), 0);
-      const totalExpenses = monthExps.reduce((sum, exp) => sum + exp.amount, 0);
-
+      // Per-service breakdown of BILLED value (list price of completed appts) —
+      // the same basis as `metrics.billed`, so the breakdown reconciles with it.
       const byService: Record<string, { count: number; revenue: number }> = {};
       apts.forEach(apt => {
         const name = apt.service?.name ?? t('misc.noService');
@@ -80,9 +75,10 @@ export function useReportsData(): UseReportsDataReturn {
         completedAppointments: apts.filter(a => a.status === 'completed').length,
         cancelledAppointments: apts.filter(a => a.status === 'cancelled').length,
         totalClients: activeClients.length,
-        totalRevenue,
-        totalExpenses,
-        netProfit: totalRevenue - totalExpenses,
+        billed: metrics.billed,
+        collected: metrics.collected,
+        expenses: metrics.expenses,
+        netProfit: metrics.collected - metrics.expenses,
         byService,
         recentAppointments: apts.slice(0, 10),
       };

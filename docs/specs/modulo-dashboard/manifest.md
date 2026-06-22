@@ -112,3 +112,23 @@ Reglas (innegociables):
 5. **Sin errores ortográficos** en ningún idioma (revisión nativa por locale).
 
 > Estado: dashboard + auth/público + componentes UI/PWA + páginas legales (`privacy`, `terms`) migrados y verificados (`tsc` limpio, parity test verde, 44 namespaces ×6 locales). Toda la superficie de cara al usuario está internacionalizada; lo único hardcoded restante es marca (`Cronix`, `Free`/`Pro`/`Enterprise`), herramientas internas `platform_admin` (inglés a propósito) y la herramienta de debug `pwa-debug`. Las traducciones legales (privacy/terms) son boilerplate SaaS y conviene una revisión legal por jurisdicción. Revisión nativa de calidad por idioma COMPLETADA (DE→registro `du` unificado; FR→meses Juin/Juil; IT→concordancia de género; PT/EN limpios). Único polish opcional restante: consistencia cosmética `email`/`e-mail` (todos los locales).
+
+## 8. Métricas financieras — fuente canónica (NORMATIVO)
+
+Home, Finanzas y Reportes muestran cifras del mes. **Las tres consumen UNA sola fuente de verdad: el RPC `fn_get_monthly_metrics(p_business_id, p_month_start date)`** (migración `20260622000000`). Está prohibido recalcular ingresos del mes con una fórmula propia en cualquier sección — eso reintroduce la divergencia que este contrato elimina.
+
+El RPC deriva el mes calendario completo a partir de `p_month_start` y devuelve, **atribuyendo por la fecha de la cita (`start_at`)**:
+
+| Campo | Significado | Base |
+|---|---|---|
+| `billed_revenue` | **Prestado** — valor de servicios prestados | `SUM(services.price)` de citas `completed` con `start_at` en el mes |
+| `collected_revenue` | **Cobrado** — caja real | `SUM(transactions.net_amount)`; se atribuye por el `start_at` de la cita vinculada. **Una transacción sin cita** (`appointment_id` nulo: pago manual/walk-in) se atribuye por su `paid_at`, porque no tiene `start_at`. |
+| `total_expenses` | **Gastos** | `SUM(expenses.amount)` con `expense_date` (columna `date`) dentro del mes, comparado como `date` (incluye día 1 y último día). |
+
+Reglas normativas:
+
+1. **Dos métricas separadas, nunca mezcladas.** Prestado (`billed`) y Cobrado (`collected`) son universos distintos y **no tienen por qué cuadrar entre sí** (una cita completada puede no estar pagada; un pago puede llevar descuento/propina). La utilidad y los ratios (`marginPct`, `expensePct`) se calculan sobre **Cobrado**; `collectionRate = collected/billed`. La derivación vive en la función pura `buildMonthlyFinanceView` (`lib/use-cases/finances.use-case.ts`).
+2. **El desglose "por servicio" de Reportes es base Prestado** (precio de lista de citas completed) — la misma base que `billed`, para que reconcilien.
+3. **`fn_get_dashboard_stats.month_revenue` = `collected`** (mismo RPC). El Home muestra caja real.
+4. **Cotas correctas:** rango half-open `[inicio_mes, inicio_mes_siguiente)`; jamás filtrar "del 1 en adelante" sin cota superior (bug histórico), ni comparar `date` contra timestamp ISO como string (descartaba el gasto del día 1).
+5. Acceso solo vía repo: `finances.getMonthlyMetrics(businessId, monthStart)` (`IFinanceRepository`), que coacciona los `NUMERIC` (strings de PostgREST) a number.

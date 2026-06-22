@@ -668,6 +668,9 @@
     "registerExpense": "Ausgabe erfassen",
     "registerIncome": "Einnahme erfassen",
     "incomeMonth": "Einnahmen diesen Monat",
+    "billedMonth": "Erbrachte Leistungen",
+    "collectedMonth": "Diesen Monat eingenommen",
+    "collectionRate": "Inkasso",
     "expenseMonth": "Ausgaben diesen Monat",
     "netProfit": "Nettogewinn",
     "margin": "Marge",
@@ -770,6 +773,8 @@
       "total": "Gesamt",
       "completed": "Abgeschlossen",
       "cancelled": "Storniert",
+      "billed": "Fakturiert",
+      "collected": "Eingenommen",
       "income": "Einnahmen",
       "expenses": "Ausgaben",
       "netProfit": "Nettogewinn"

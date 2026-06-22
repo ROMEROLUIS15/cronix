@@ -704,6 +704,9 @@
     "registerExpense": "Register expense",
     "registerIncome": "Register income",
     "incomeMonth": "Income this month",
+    "billedMonth": "Services rendered",
+    "collectedMonth": "Collected this month",
+    "collectionRate": "Collection",
     "expenseMonth": "Expenses this month",
     "netProfit": "Net profit",
     "margin": "Margin",
@@ -806,6 +809,8 @@
       "total": "Total",
       "completed": "Completed",
       "cancelled": "Cancelled",
+      "billed": "Billed",
+      "collected": "Collected",
       "income": "Income",
       "expenses": "Expenses",
       "netProfit": "Net profit"

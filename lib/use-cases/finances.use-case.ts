@@ -6,8 +6,10 @@
  * Exposes:
  *  - calculateClientDebt:      compute total debt from appointment + transaction data
  *  - calculateAppointmentDebt: compute debt for a single appointment
- *  - calculateMonthlySummary:  aggregate revenue, expenses and profit for a given month
+ *  - buildMonthlyFinanceView:  derive profit + ratios from canonical monthly metrics
  */
+
+import type { MonthlyMetrics } from '@/lib/domain/repositories/IFinanceRepository'
 
 interface AppointmentWithPayment {
   start_at: string
@@ -62,70 +64,36 @@ export function calculateAppointmentDebt(apt: AppointmentWithPayment): number {
   return Math.max(0, price - paid)
 }
 
-// ── Monthly finance summary ────────────────────────────────────────────────
+// ── Monthly finance view ───────────────────────────────────────────────────
 
-interface TransactionInput {
-  paid_at:    string | null
-  net_amount: number | null
-}
-
-interface ExpenseInput {
-  expense_date: string | null
-  amount:       number | null
-}
-
-export interface FinanceMonthlySummary {
-  totalRevenue:  number
-  totalExpenses: number
-  netProfit:     number
-  marginPct:     number
-  expensePct:    number
-}
-
-export interface MonthlySlices<T extends TransactionInput, E extends ExpenseInput> {
-  monthTransactions: T[]
-  monthExpenses:     E[]
-  summary:           FinanceMonthlySummary
+/**
+ * Presentation-ready monthly finances: the canonical metrics plus the derived
+ * figures the dashboard renders. Profit and ratios are based on COLLECTED cash
+ * (real money in), not billed value.
+ */
+export interface MonthlyFinanceView {
+  billed:         number  // value of services rendered (list price of completed)
+  collected:      number  // real cash collected
+  expenses:       number  // expenses dated within the month
+  netProfit:      number  // collected − expenses
+  marginPct:      number  // netProfit / collected   (0–100, rounded)
+  expensePct:     number  // expenses / collected    (0–100, capped)
+  collectionRate: number  // collected / billed      (0–100, capped) — how much
+                          // of the rendered value was actually collected
 }
 
 /**
- * Filters transactions and expenses to the current calendar month,
- * then computes revenue, expenses, profit and derived percentages.
- *
- * Pure function — no side effects, framework-agnostic, easily testable.
- * Safe to migrate: depends only on plain data shapes, not on Supabase types.
- *
- * @param transactions  Full list of transactions for the business
- * @param expenses      Full list of expenses for the business
- * @param referenceDate Month to compute (defaults to current month)
+ * Derives profit and ratios from the canonical monthly metrics returned by the
+ * DB (`fn_get_monthly_metrics`). Pure function — no side effects, framework- and
+ * Supabase-agnostic, trivially testable.
  */
-export function calculateMonthlySummary<
-  T extends TransactionInput,
-  E extends ExpenseInput,
->(
-  transactions: T[],
-  expenses: E[],
-  referenceDate: Date = new Date(),
-): MonthlySlices<T, E> {
-  const startOfMonth = new Date(
-    referenceDate.getFullYear(),
-    referenceDate.getMonth(),
-    1,
-  ).toISOString()
+export function buildMonthlyFinanceView(metrics: MonthlyMetrics): MonthlyFinanceView {
+  const { billed, collected, expenses } = metrics
+  const netProfit = collected - expenses
 
-  const monthTransactions = transactions.filter(t => (t.paid_at ?? '') >= startOfMonth)
-  const monthExpenses     = expenses.filter(e => (e.expense_date ?? '') >= startOfMonth)
+  const marginPct      = collected > 0 ? Math.round((netProfit / collected) * 100) : 0
+  const expensePct     = collected > 0 ? Math.min((expenses / collected) * 100, 100) : 0
+  const collectionRate = billed > 0 ? Math.min((collected / billed) * 100, 100) : 0
 
-  const totalRevenue  = monthTransactions.reduce((acc, t) => acc + (t.net_amount ?? 0), 0)
-  const totalExpenses = monthExpenses.reduce((acc, e) => acc + (e.amount ?? 0), 0)
-  const netProfit     = totalRevenue - totalExpenses
-
-  const marginPct  = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0
-  const expensePct = totalRevenue > 0 ? Math.min((totalExpenses / totalRevenue) * 100, 100) : 0
-
-  return {
-    monthTransactions,
-    monthExpenses,
-    summary: { totalRevenue, totalExpenses, netProfit, marginPct, expensePct },
-  }
+  return { billed, collected, expenses, netProfit, marginPct, expensePct, collectionRate }
 }

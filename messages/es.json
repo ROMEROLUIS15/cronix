@@ -704,6 +704,9 @@
     "registerExpense": "Registrar gasto",
     "registerIncome": "Registrar cobro",
     "incomeMonth": "Ingresos del mes",
+    "billedMonth": "Servicios prestados",
+    "collectedMonth": "Cobrado del mes",
+    "collectionRate": "Cobranza",
     "expenseMonth": "Gastos del mes",
     "netProfit": "Ganancia neta",
     "margin": "Margen",
@@ -806,6 +809,8 @@
       "total": "Total",
       "completed": "Completadas",
       "cancelled": "Canceladas",
+      "billed": "Prestado",
+      "collected": "Cobrado",
       "income": "Ingresos",
       "expenses": "Gastos",
       "netProfit": "Ganancia neta"

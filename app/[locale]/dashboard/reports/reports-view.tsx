@@ -21,8 +21,9 @@ export interface ReportData {
   completedAppointments: number
   cancelledAppointments: number
   totalClients:          number
-  totalRevenue:          number
-  totalExpenses:         number
+  billed:                number
+  collected:             number
+  expenses:              number
   netProfit:             number
   byService:             Record<string, { count: number; revenue: number }>
   recentAppointments:    ReportAppointment[]
@@ -75,7 +76,7 @@ export function ReportsView({ data }: ReportsViewProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           title={t('stats.incomeMonth')}
-          value={formatCurrency(data.totalRevenue)}
+          value={formatCurrency(data.collected)}
           icon={<TrendingUp size={22} />}
           accent
         />
@@ -185,30 +186,32 @@ export function ReportsView({ data }: ReportsViewProps) {
             <DollarSign size={18} style={{ color: '#0062FF' }} /> {t('sections.finances')}
           </h2>
           <div className="space-y-4">
-            {[
-              { label: t('stats.income'),      value: data.totalRevenue,  color: '#30D158', barBg: 'rgba(48,209,88,0.5)'  },
-              { label: t('stats.expenses'),        value: data.totalExpenses, color: '#FF3B30', barBg: 'rgba(255,59,48,0.5)'  },
-              { label: t('stats.netProfit'), value: data.netProfit,     color: data.netProfit >= 0 ? '#3884FF' : '#FF3B30', barBg: 'rgba(56,132,255,0.5)' },
-            ].map(s => (
-              <div key={s.label}>
-                <div className="flex justify-between text-sm mb-1.5">
-                  <span style={{ color: '#909098' }}>{s.label}</span>
-                  <span className="font-semibold" style={{ color: s.color }}>
-                    {formatCurrency(s.value)}
-                  </span>
+            {(() => {
+              const base = Math.max(data.billed, data.collected, data.expenses, 1)
+              return [
+                { label: t('stats.billed'),    value: data.billed,    color: '#30D158', barBg: 'rgba(48,209,88,0.5)'  },
+                { label: t('stats.collected'), value: data.collected, color: '#0062FF', barBg: 'rgba(0,98,255,0.5)'    },
+                { label: t('stats.expenses'),  value: data.expenses,  color: '#FF3B30', barBg: 'rgba(255,59,48,0.5)'  },
+                { label: t('stats.netProfit'), value: data.netProfit, color: data.netProfit >= 0 ? '#3884FF' : '#FF3B30', barBg: 'rgba(56,132,255,0.5)' },
+              ].map(s => (
+                <div key={s.label}>
+                  <div className="flex justify-between text-sm mb-1.5">
+                    <span style={{ color: '#909098' }}>{s.label}</span>
+                    <span className="font-semibold" style={{ color: s.color }}>
+                      {formatCurrency(s.value)}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        background: s.barBg,
+                        width: `${Math.min(Math.abs(s.value) / base * 100, 100)}%`,
+                      }} />
+                  </div>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden"
-                  style={{ background: 'rgba(255,255,255,0.06)' }}>
-                  <div className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      background: s.barBg,
-                      width: data.totalRevenue > 0
-                        ? `${Math.min(Math.abs(s.value) / data.totalRevenue * 100, 100)}%`
-                        : '0%',
-                    }} />
-                </div>
-              </div>
-            ))}
+              ))
+            })()}
           </div>
         </Card>
       )}

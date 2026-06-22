@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   calculateClientDebt,
   calculateAppointmentDebt,
+  buildMonthlyFinanceView,
 } from '@/lib/use-cases/finances.use-case'
 
 // ── calculateAppointmentDebt ──────────────────────────────────────────────
@@ -123,5 +124,32 @@ describe('calculateClientDebt', () => {
       },
     ])
     expect(debt).toBe(0)
+  })
+})
+
+// ── buildMonthlyFinanceView ───────────────────────────────────────────────
+
+describe('buildMonthlyFinanceView', () => {
+  it('deriva utilidad y ratios sobre el dinero COBRADO, no el prestado', () => {
+    const view = buildMonthlyFinanceView({ billed: 1000, collected: 800, expenses: 200 })
+    expect(view.netProfit).toBe(600)          // 800 - 200
+    expect(view.marginPct).toBe(75)           // 600 / 800
+    expect(view.expensePct).toBe(25)          // 200 / 800
+    expect(view.collectionRate).toBe(80)      // 800 / 1000
+  })
+
+  it('evita divisiones por cero cuando no hay datos', () => {
+    const view = buildMonthlyFinanceView({ billed: 0, collected: 0, expenses: 0 })
+    expect(view).toEqual({
+      billed: 0, collected: 0, expenses: 0,
+      netProfit: 0, marginPct: 0, expensePct: 0, collectionRate: 0,
+    })
+  })
+
+  it('capa los porcentajes a 100 y admite utilidad negativa', () => {
+    const view = buildMonthlyFinanceView({ billed: 100, collected: 200, expenses: 500 })
+    expect(view.netProfit).toBe(-300)
+    expect(view.expensePct).toBe(100)         // 500/200 capado
+    expect(view.collectionRate).toBe(100)     // 200/100 capado
   })
 })
