@@ -12,6 +12,7 @@
     "check:spec-drift": "tsx scripts/check-spec-drift.ts",
     "loadtest:seed": "tsx scripts/loadtest/seed.ts",
     "loadtest:explain": "tsx scripts/loadtest/explain.ts",
+    "loadtest:load": "tsx scripts/loadtest/load.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
