@@ -1,5 +1,9 @@
 # Load-test harness (LOCAL only)
 
+> Results, interpretation and the scaling/architecture plan live in
+> [`docs/architecture/capacity-and-scaling.md`](../../docs/architecture/capacity-and-scaling.md).
+> This file is just how to run the tools.
+
 Capacity / bottleneck experiment for the dashboard read paths. **Runs only against
 the local Docker Supabase stack — never the cloud/free-tier project.** `db.ts`
 hard-fails on any non-`127.0.0.1` host, so you can't point it at prod by accident.
