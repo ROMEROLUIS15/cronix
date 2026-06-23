@@ -11,9 +11,22 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { getBrowserContainer } from '@/lib/browser-container';
+import { registerClientPayment, registerOtherIncome } from '@/app/[locale]/dashboard/clients/actions';
+import { useTranslations } from 'next-intl';
 import type { PaymentMethod, Client } from '@/types';
 
+/**
+ * Two modes, because "cobro" means two different things:
+ *  - client_payment: settle the client's appointment debt → routes through
+ *    registerClientPayment (distributes across unpaid appointments, idempotent),
+ *    so debt + income + dashboard all reconcile.
+ *  - other_income: ad-hoc income (product sale, tip) NOT tied to a debt →
+ *    standalone transaction that counts as revenue but settles no appointment.
+ */
+export type CobroMode = 'client_payment' | 'other_income';
+
 export interface NewTransactionForm {
+  mode: CobroMode;
   client_id: string;
   amount: string;
   method: PaymentMethod;
@@ -34,8 +47,10 @@ export interface UseNewTransactionFormReturn {
 export function useNewTransactionForm(): UseNewTransactionFormReturn {
   const router = useRouter();
   const { businessId, loading: contextLoading } = useBusinessContext();
+  const t = useTranslations('finances.cobro');
 
   const [form, setForm] = useState<NewTransactionForm>({
+    mode: 'client_payment',
     client_id: '',
     amount: '',
     method: 'cash' as PaymentMethod,
@@ -47,6 +62,8 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
   const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Fresh key per mount → submit is idempotent even on double-click / retry.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (!businessId) {
@@ -65,8 +82,16 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId || !form.client_id) {
-      setMsg({ type: 'error', text: 'Cliente requerido' });
+    if (!businessId) return;
+
+    // Client is required to settle debt; optional for ad-hoc income.
+    if (form.mode === 'client_payment' && !form.client_id) {
+      setMsg({ type: 'error', text: t('errorClient') });
+      return;
+    }
+    const amount = parseFloat(form.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMsg({ type: 'error', text: t('amountValid') });
       return;
     }
 
@@ -74,31 +99,35 @@ export function useNewTransactionForm(): UseNewTransactionFormReturn {
     setMsg(null);
 
     try {
-      const amount = parseFloat(form.amount);
-
-      const container = getBrowserContainer();
-      const result = await container.finances.createTransaction({
-        business_id: businessId!,
-        client_id: form.client_id,
-        amount,
-        net_amount: amount,
-        method: form.method,
-        notes: form.notes.trim() || null,
-        paid_at: form.date ? new Date(form.date).toISOString() : new Date().toISOString(),
-      });
-
-      if (result.error) {
-        setMsg({ type: 'error', text: 'Error al guardar el cobro' });
-        return;
+      if (form.mode === 'client_payment') {
+        await registerClientPayment({
+          business_id: businessId,
+          client_id: form.client_id,
+          amount,
+          method: form.method,
+          notes: form.notes.trim() || undefined,
+          idempotency_key: idempotencyKey,
+        });
+      } else {
+        await registerOtherIncome({
+          client_id: form.client_id || undefined,
+          amount,
+          method: form.method,
+          notes: form.notes.trim() || undefined,
+          paid_at: form.date ? new Date(form.date).toISOString() : undefined,
+          idempotency_key: idempotencyKey,
+        });
       }
       router.push('/dashboard/finances');
       router.refresh();
-    } catch {
-      setMsg({ type: 'error', text: 'Error al guardar el cobro' });
+    } catch (err) {
+      // Rotate the key so a corrected retry isn't silently dropped as a duplicate.
+      setIdempotencyKey(crypto.randomUUID());
+      setMsg({ type: 'error', text: err instanceof Error ? err.message : t('errorSave') });
     } finally {
       setSaving(false);
     }
-  }, [businessId, form, router]);
+  }, [businessId, form, router, idempotencyKey, t]);
 
   return { form, setForm, clients, loadingData, saving, msg, handleSubmit };
 }

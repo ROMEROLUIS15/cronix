@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { isPast } from 'date-fns'
 import { getContainer } from '@/lib/container'
 import { revalidatePath } from 'next/cache'
+import cache from '@/lib/cache'
 import type { Client } from '@/types'
 import type { BatchTransactionItem } from '@/lib/domain/repositories/IFinanceRepository'
 import { getClientLimit } from '@/lib/plans/plan-limits'
@@ -269,9 +270,77 @@ export async function registerClientPayment(
       )
       if (batchResult.error) throw new Error(batchResult.error)
     }
+
+    // Money must never vanish: anything beyond the client's outstanding debt
+    // (an overpayment, or a client who owes nothing) is recorded as standalone
+    // income instead of being silently dropped.
+    if (remaining > 0) {
+      const extraResult = await container.finances.createTransaction({
+        business_id:     businessId,
+        client_id:       validData.client_id,
+        amount:          remaining,
+        net_amount:      remaining,
+        method:          validData.method,
+        notes:           validData.notes ?? null,
+        idempotency_key: validData.idempotency_key ? `${validData.idempotency_key}-extra` : undefined,
+      })
+      if (extraResult.error) throw new Error(extraResult.error)
+    }
   }
 
+  // Bust the dashboard-stats cache so the home "month revenue" reflects the
+  // payment immediately, like appointment writes already do.
+  void cache.invalidateKey(businessId, 'dashboard', 'stats')
   revalidatePath(`/dashboard/clients/${validData.client_id}`)
+  revalidatePath('/dashboard/finances')
+
+  return { success: true }
+}
+
+// ── Zod schema for standalone income (not tied to appointment debt) ──────────
+const RegisterOtherIncomeSchema = z.object({
+  client_id:       z.string().uuid().optional(),
+  amount:          z.number().positive('El monto debe ser mayor a cero.'),
+  method:          z.enum(['cash', 'card', 'transfer', 'qr', 'other']),
+  notes:           z.string().max(200).optional(),
+  paid_at:         z.string().optional(),
+  idempotency_key: z.string().uuid().optional(),
+})
+
+type RegisterOtherIncomeInput = z.infer<typeof RegisterOtherIncomeSchema>
+
+/**
+ * Registers ad-hoc income NOT tied to a client's appointment debt (a product
+ * sale, a tip, a walk-in). Creates a single standalone transaction — it counts
+ * as revenue but deliberately does NOT settle any appointment, so it can't be
+ * confused with debt payment (that's `registerClientPayment`).
+ */
+export async function registerOtherIncome(
+  formData: RegisterOtherIncomeInput
+): Promise<{ success: true }> {
+  const parsed = RegisterOtherIncomeSchema.safeParse(formData)
+  if (!parsed.success) {
+    throw new Error(parsed.error.errors[0]?.message ?? 'Datos inválidos')
+  }
+  const validData = parsed.data
+
+  const container = await getContainer()
+  // business_id derived from session, never trusted from input.
+  const businessId = await getSessionBusinessId()
+
+  const result = await container.finances.createTransaction({
+    business_id:     businessId,
+    client_id:       validData.client_id,
+    amount:          validData.amount,
+    net_amount:      validData.amount,
+    method:          validData.method,
+    notes:           validData.notes ?? null,
+    paid_at:         validData.paid_at,
+    idempotency_key: validData.idempotency_key,
+  })
+  if (result.error) throw new Error(result.error)
+
+  void cache.invalidateKey(businessId, 'dashboard', 'stats')
   revalidatePath('/dashboard/finances')
 
   return { success: true }

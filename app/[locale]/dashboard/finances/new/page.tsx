@@ -41,6 +41,29 @@ export default function NewFinancePage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Mode selector — "cobro" means two different things (settle debt vs ad-hoc income). */}
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl" style={{ background: '#1A1A1F', border: '1px solid #2E2E33' }}>
+          {([
+            { id: 'client_payment', label: t('modeClientPayment') },
+            { id: 'other_income',   label: t('modeOtherIncome') },
+          ] as const).map(m => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setForm(f => ({ ...f, mode: m.id }))}
+              className="py-2.5 rounded-xl text-sm font-semibold transition-colors"
+              style={form.mode === m.id
+                ? { background: 'rgba(48,209,88,0.15)', color: '#30D158', border: '1px solid rgba(48,209,88,0.35)' }
+                : { color: '#909098' }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs -mt-2" style={{ color: '#909098' }}>
+          {form.mode === 'client_payment' ? t('modeClientPaymentHelp') : t('modeOtherIncomeHelp')}
+        </p>
+
         <Card>
           <div className="flex items-center gap-3 mb-5">
             <div className="h-9 w-9 rounded-xl bg-emerald-900/30 flex items-center justify-center border border-emerald-500/20">
@@ -58,10 +81,10 @@ export default function NewFinancePage() {
                 clients={clients}
                 value={form.client_id}
                 onChange={val => setForm(f => ({ ...f, client_id: val }))}
-                required
+                required={form.mode === 'client_payment'}
               />
               <p className="text-xs text-muted-foreground mt-2 mt-1">
-                {t('clientHelp')}
+                {form.mode === 'client_payment' ? t('clientHelp') : t('clientHelpOptional')}
               </p>
             </div>
           </div>
