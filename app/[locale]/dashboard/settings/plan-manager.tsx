@@ -70,15 +70,15 @@ export function PlanManager({
   };
 
   const renderButtonText = (icon: React.ReactNode, text: string) => {
-    // Extraemos solo la acción ("Activar Pro") y omitimos el precio
+    // Keep only the action part (drop " — $price" suffix if present)
     const mainText = text.split(' — ')[0];
-    
+
     return (
-      <div className="flex items-center justify-center gap-1">
+      <div className="flex items-center justify-center gap-1.5 flex-wrap">
         <div className="flex-shrink-0 flex items-center justify-center">
           {icon}
         </div>
-        <span className="leading-tight text-center whitespace-nowrap tracking-tight">
+        <span className="leading-tight text-center break-words min-w-0">
           {mainText}
         </span>
       </div>
@@ -288,20 +288,20 @@ export function PlanManager({
                     </tr>
                     <tr className="border-t border-[#2E2E33] bg-[#16161A]">
                       <td className="p-3"></td>
-                      <td className="p-3 text-center h-1">
+                      <td className="p-3 text-center align-middle">
                         <Button
                           type="button"
-                          className="w-full h-full min-h-[44px] text-xs font-semibold pointer-events-none opacity-100 px-1"
+                          className="w-full min-h-[44px] text-xs font-semibold pointer-events-none opacity-100 px-2 py-2 h-auto"
                           style={{ background: 'rgba(144,144,152,0.08)', color: '#909098', border: '1px solid rgba(144,144,152,0.2)' }}
                           tabIndex={-1}
                         >
                           {renderButtonText(<Check size={14} />, 'Plan Básico')}
                         </Button>
                       </td>
-                      <td className="p-3 text-center h-1">
+                      <td className="p-3 text-center align-middle">
                         <Button
                           id="desktop-activate-pro"
-                          className="w-full h-full min-h-[44px] bg-[#0062FF] hover:bg-[#0050CC] text-white text-xs font-semibold px-1"
+                          className="w-full min-h-[44px] bg-[#0062FF] hover:bg-[#0050CC] text-white text-xs font-semibold px-2 py-2 h-auto"
                           onClick={() => openPayment('pro')}
                           disabled={currentPlan === 'pro' || currentPlan === 'enterprise'}
                         >
@@ -311,10 +311,10 @@ export function PlanManager({
                           }
                         </Button>
                       </td>
-                      <td className="p-3 text-center h-1">
+                      <td className="p-3 text-center align-middle">
                         <Button
                           id="desktop-activate-enterprise"
-                          className="w-full h-full min-h-[44px] text-xs font-semibold px-1"
+                          className="w-full min-h-[44px] text-xs font-semibold px-2 py-2 h-auto"
                           style={{ background: currentPlan === 'enterprise' ? '#6b21a8' : '#A855F7', color: 'white' }}
                           onClick={() => openPayment('enterprise')}
                           disabled={currentPlan === 'enterprise'}
