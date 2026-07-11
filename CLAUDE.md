@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Cronix — Gobernanza para Agentes
 
 Este repositorio opera bajo **Spec-Driven Development (SDD)**. Las especificaciones viven en `docs/specs/` y son vinculantes.
@@ -21,6 +25,66 @@ Reglas del gate (innegociables):
 ## Reglas de estilo y arquitectura
 
 Las reglas detalladas de código (capas DDD, tipado estricto, manejo de errores, multi-tenant, testing) viven en `.agent/rules/good-development-practices.md` y también son vinculantes.
+
+Puntos que muerden en cada revisión: `noUncheckedIndexedAccess: true` está activo → nunca accedas a un array por índice sin guarda (`array[0]!` solo si la lógica lo garantiza). Nunca uses `.catch()` sobre un query builder de Supabase; chequea `{ data, error }` explícitamente. Prohibido `any` y `SELECT *` en producción.
+
+---
+
+## Comandos
+
+```bash
+# Desarrollo
+npm run dev                # Next.js + Turbopack (localhost:3000)
+npm run build              # Build de producción
+npm run lint               # ESLint
+npm run typecheck          # tsc --noEmit
+npm run knip               # Detecta dead code / deps sin usar (¡es gate de CI y puede poner "Tests" en rojo!)
+
+# Tests unitarios (Vitest)
+npm test                   # Toda la suite unitaria
+npm run test:watch         # Modo watch
+npx vitest run <ruta>      # Un solo archivo, p.ej. lib/payments/nowpayments.test.ts
+npx vitest run -t "<nombre parcial del test>"   # Un test por nombre
+npm run test:coverage      # Coverage v8
+
+# Otras suites
+npm run test:integration   # Integración contra Supabase local (vitest.integration.config.ts)
+npm run test:e2e           # Playwright (todos los specs)
+npm run test:e2e:smoke     # Playwright suite reducida (--project=smoke)
+npm run test:evals:agent   # Evals E2E del agente WhatsApp (conversaciones golden, BLOQUEANTE en CI)
+npm run test:evals         # Evals Python/DeepEval (necesita evals/.venv)
+npx supabase test db       # pgTAP: RLS + funciones RPC + alertas (corre contra Supabase local)
+
+# Base de datos / Supabase (requiere Docker)
+npx supabase start                    # Levanta Postgres + Edge + Studio (127.0.0.1:54323)
+npx supabase db reset                 # Reaplica migraciones + seed
+npm run check:spec-drift              # Verifica que specs y código no divergieron
+
+# Loadtest (local, free-tier-safe — nunca contra prod)
+npm run loadtest:seed / :explain / :load
+```
+
+**Deno / Edge Functions** (`supabase/functions/`) no usan npm ni Vitest: se validan con `deno check` y tests `deno test` propios. Desde Windows, desplegar una Edge Function requiere `supabase functions deploy <name> --use-api` (el bundling con Docker rompe los import maps).
+
+**Quality gates** (Husky): pre-commit corre `eslint --fix` sobre staged; pre-push corre `lint + tsc + vitest + npm audit`. Un fallo cancela el push — no lo bypassees.
+
+## Arquitectura esencial (lo que no se ve leyendo un solo archivo)
+
+Lee `README.md` para el panorama completo. Lo crítico para no romper cosas:
+
+- **Doble runtime físico con duplicación byte-a-byte.** El código de IA vive dos veces: `lib/ai/**` (Node, para el dashboard) y `supabase/functions/_shared/**` (Deno, para Edge Functions). **No hay cross-imports** — Deno no puede importar módulos Node. Si tocas lógica compartida (supervisor, router, memory, observability, training, cache-invalidation) **debes editar ambas copias**: los tests `__tests__/ai/**/contracts-parity.test.ts` fallan al menor drift. Lo mismo para i18n (`__tests__/i18n/parity.test.ts`, 6 locales, `es` es la fuente).
+
+- **Dos agentes de IA, un Pipeline Engine.** WhatsApp (`supabase/functions/process-whatsapp/`, cliente vía teléfono) y Voz (`supabase/functions/voice-worker/`, dueño vía nombre) comparten el `Pipeline<T>` de `_shared/pipeline/`. Ambos priorizan rutas deterministas (fast-paths sin LLM) sobre el LLM; el LLM tiene prohibido inventar datos del negocio. Contrato normativo de punta a punta: `docs/specs/modulo-whatsapp-citas/operacion-canonica.md`.
+
+- **Aislamiento multi-tenant en 3 capas independientes.** (1) Repos filtran `.eq('business_id', …)` + ownership asserts; (2) RLS en Postgres deriva el tenant del JWT (`current_business_id()`); (3) `ConstitutionalReviewer` (Groq 8B) revisa los writes de IA. Toda query lleva `business_id`. **Las RPC `SECURITY DEFINER` browser-facing deben invocar `fn_assert_business_access(business_id)`** o son fuga cross-tenant (ver Historial de INDEX.md, 2026-06-22).
+
+- **Toda escritura de datos invalida el caché del dashboard** vía `_shared/cache-invalidation.ts` / `cache.invalidateKey(business, …)`. Omitirlo = datos obsoletos hasta ~3 min. Las server actions van por `lib/domain/use-cases/` (Zod → conflict check → repo → invalidate), nunca directo a la DB desde la UI.
+
+- **`types/database.types.ts` se mantiene a mano.** El regen completo de Supabase se descartó; añade columnas/RPC nuevas manualmente en vez de regenerar el archivo entero.
+
+- **Pagos idempotentes.** PayPal → RPC `fn_finalize_paypal_payment` (FOR UPDATE) + webhook como red de seguridad; NOWPayments (cripto) → QStash queue; manual → aprobación admin. Todos convergen en `saas_invoices`. `PAYPAL_ENV=live` es opt-in explícito (no derivar de `NODE_ENV`, Vercel lo pone en `production` en previews).
+
+- **Migraciones son inmutables una vez aplicadas.** Nueva migración = nuevo archivo timestamped en `supabase/migrations/`; `CREATE OR REPLACE FUNCTION` con firma distinta crea un *overload* nuevo (no reemplaza) → causa de bugs PGRST203 pasados.
 
 ---
 
