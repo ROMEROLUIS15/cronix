@@ -12,7 +12,7 @@ import {
   UpdateServicePayload
 } from '@/lib/domain/repositories/IServiceRepository'
 import type { Service } from '@/types'
-import cache, { TTL, TTL_SEC } from '@/lib/cache'
+import cache, { TTL_SEC } from '@/lib/cache'
 
 type Client = SupabaseClient<Database>
 

@@ -145,6 +145,3 @@ export const TTL_SEC = {
   DASHBOARD_STATS:    60,     // 1 min
   TEAM_MEMBERS:       300,    // 5 min
 } as const
-
-/** Legacy alias for backward compatibility — repositories should use TTL_SEC. */
-export const TTL = TTL_SEC

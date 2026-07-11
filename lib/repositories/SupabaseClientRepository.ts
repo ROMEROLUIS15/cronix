@@ -13,7 +13,7 @@ import {
   EligibleClientRow
 } from '@/lib/domain/repositories/IClientRepository'
 import type { Client, ClientAppointmentWithDetails } from '@/types'
-import cache, { TTL, TTL_SEC } from '@/lib/cache'
+import cache, { TTL_SEC } from '@/lib/cache'
 
 type SupaClient = SupabaseClient<Database>
 

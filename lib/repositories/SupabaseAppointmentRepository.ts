@@ -16,7 +16,7 @@ import {
   CreateAppointmentPayload
 } from '@/lib/domain/repositories/IAppointmentRepository'
 import type { AppointmentWithRelations, SlotCheckAppointment } from '@/types'
-import cache, { TTL, TTL_SEC } from '@/lib/cache'
+import cache, { TTL_SEC } from '@/lib/cache'
 import { logger } from '@/lib/logger'
 
 type Client = SupabaseClient<Database>

@@ -5,6 +5,7 @@
     "worker/index.js",
     "i18n/**/*.ts",
     "vitest.components.config.ts",
+    "vitest.integration.config.ts",
     "__tests__/setup/test-setup.ts",
     "tests/e2e/**/*.ts"
   ],
@@ -13,7 +14,9 @@
     "types/database.types.ts",
     "lib/mock/**",
     "tests/load/**",
-    "scripts/loadtest/k6-dashboard.js"
+    "scripts/loadtest/k6-dashboard.js",
+    "lib/ai/memory/**",
+    "lib/ai/router/**"
   ],
   "ignoreBinaries": ["python"],
   "ignoreDependencies": [
