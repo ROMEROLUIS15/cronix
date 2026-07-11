@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { User } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { createClient } from '@/lib/supabase/server'
 
+/** Exact type of the authenticated server client injected below. */
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+/** Next.js 15 route context: `params` is a Promise. */
+type RouteContext = { params: Promise<Record<string, string | string[]>> }
+
 type ApiHandler = (
-  req: NextRequest, 
-  context: { params: Record<string, string | string[]> },
-  supabase: any,
-  user: any
+  req: NextRequest,
+  context: RouteContext,
+  supabase: SupabaseServerClient,
+  user: User,
 ) => Promise<NextResponse>
 
 /**
@@ -17,7 +24,7 @@ type ApiHandler = (
  * - Returns clean, non-leaking JSON responses
  */
 export function withErrorHandler(handler: ApiHandler) {
-  return async (req: NextRequest, context: any) => {
+  return async (req: NextRequest, context: RouteContext) => {
     const requestId = req.headers.get('x-request-id') || 'unknown'
     const supabase = await createClient()
 
@@ -33,7 +40,7 @@ export function withErrorHandler(handler: ApiHandler) {
       // 2. Execute actual handler
       return await handler(req, context, supabase, user)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 3. Centralized Error Management
       const errorMsg = err instanceof Error ? err.message : 'Internal Server Error'
       const stack = err instanceof Error ? err.stack : undefined
