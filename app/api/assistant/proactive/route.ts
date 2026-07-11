@@ -4,6 +4,7 @@ import { getRepos } from '@/lib/repositories'
 import { withErrorHandler } from '@/lib/api/with-error-handler'
 import { GroqProvider } from '@/lib/ai/providers/groq-provider'
 import { DeepgramProvider } from '@/lib/ai/providers/deepgram-provider'
+import { enforceUserRateLimit, ASSISTANT_LIMITS } from '@/lib/rate-limit/user-rate-limit'
 import { logger } from '@/lib/logger'
 
 /**
@@ -12,6 +13,11 @@ import { logger } from '@/lib/logger'
  * Generates a proactive welcome message for the dashboard mount.
  */
 export const GET = withErrorHandler(async (req, _context, supabase, user) => {
+  // This route is bypassed by the middleware rate-limiter (see middleware.ts
+  // isSelfAuthedApi) and calls both an LLM and TTS, so enforce a per-user cap here.
+  const limited = await enforceUserRateLimit(user.id, ASSISTANT_LIMITS.proactive)
+  if (limited) return limited
+
   // Admin client bypasses RLS on users table — prevents infinite recursion in users_isolation policy
   const admin = createAdminClient()
   const { users: usersRepoInstance } = getRepos(admin)

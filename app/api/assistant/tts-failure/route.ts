@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createTracer, shortHash } from '@/lib/ai/observability'
+import { isUserRateLimited, ASSISTANT_LIMITS } from '@/lib/rate-limit/user-rate-limit'
 import { logger } from '@/lib/logger'
 
 /**
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new NextResponse(null, { status: 401 })
+
+  // Light per-user cap so a misbehaving client can't spam the trace table.
+  // Preserve the fire-and-forget contract: silently drop (204), never 429.
+  if (await isUserRateLimited(user.id, ASSISTANT_LIMITS.ttsFailure)) {
+    return new NextResponse(null, { status: 204 })
+  }
 
   const { data: profile } = await supabase
     .from('users')
