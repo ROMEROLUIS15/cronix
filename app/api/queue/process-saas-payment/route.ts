@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { sendReferralBonusPush } from '@/lib/payments/subscription-fulfillment';
 import { REFERRAL_BONUS_DAYS } from '@/lib/plans/plan-limits';
+import { logger } from '@/lib/logger';
 import { Database } from '@/types/database.types';
 
 const supabaseAdmin = createAdminClient();
@@ -50,7 +51,7 @@ async function handler(req: Request) {
     });
 
     if (error) {
-      console.error('Crypto finalize RPC failed:', error.message);
+      logger.error('CRYPTO-FINALIZE', 'RPC failed', error.message);
       return NextResponse.json({ error: 'Finalize failed' }, { status: 500 });
     }
 
@@ -61,7 +62,7 @@ async function handler(req: Request) {
 
     switch (row.result_status) {
       case 'invoice_not_found':
-        console.error('Invoice not found:', invoiceId);
+        logger.error('CRYPTO-FINALIZE', 'Invoice not found', { invoiceId });
         return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
       case 'already_processed':
@@ -95,12 +96,12 @@ async function handler(req: Request) {
         return NextResponse.json({ success: true });
 
       default:
-        console.error('Unknown finalize status:', row.result_status);
+        logger.error('CRYPTO-FINALIZE', 'Unknown finalize status', { status: row.result_status });
         return NextResponse.json({ error: 'Unknown status' }, { status: 500 });
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Queue processing error:', message);
+    logger.error('CRYPTO-FINALIZE', 'Queue processing error', message);
     return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
 }

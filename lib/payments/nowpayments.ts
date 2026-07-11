@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 // Usamos variable de entorno para permitir cambiar a Sandbox si es necesario
 const API_URL = process.env.NOWPAYMENTS_API_URL || 'https://api.nowpayments.io/v1';
@@ -39,7 +40,7 @@ export class NOWPaymentsAPI {
     this.ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET || '';
 
     if (!this.apiKey || !this.ipnSecret) {
-      console.warn('NOWPayments credentials are not fully configured in environment variables.');
+      logger.warn('NOWPAYMENTS', 'Credentials are not fully configured in environment variables');
     }
   }
 
@@ -60,7 +61,7 @@ export class NOWPaymentsAPI {
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('[NOWPayments] Invoice creation failed:', JSON.stringify(data));
+        logger.error('NOWPAYMENTS', 'Invoice creation failed', data);
         return { error: data.message || 'Failed to create invoice' };
       }
 
@@ -70,7 +71,7 @@ export class NOWPaymentsAPI {
         invoice_id: resData.id?.toString()
       };
     } catch (error: unknown) {
-      console.error('NOWPayments Fetch Error:', error);
+      logger.error('NOWPAYMENTS', 'Fetch error', error);
       return { error: 'Internal error communicating with payment gateway' };
     }
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Client } from '@upstash/qstash';
 import { nowpayments } from '@/lib/payments/nowpayments';
+import { logger } from '@/lib/logger';
 
 const qstash = new Client({ token: process.env.QSTASH_TOKEN || '' });
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     // Verificamos la firma criptográfica contra el body RAW (NOWPayments firma el JSON crudo)
     const isValid = nowpayments.verifyIpnSignature(rawBody, signature);
     if (!isValid) {
-      console.error('Invalid NOWPayments signature for payload:', payload);
+      logger.error('NOWPAYMENTS-WEBHOOK', 'Invalid signature for payload', payload);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     // NOWPayments requiere un 200 OK inmediatamente
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Webhook Error:', error);
+    logger.error('NOWPAYMENTS-WEBHOOK', 'Webhook error', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

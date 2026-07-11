@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { verifyWebhookSignature } from '@/lib/payments/paypal';
 import { finalizePayPalPayment } from '@/lib/payments/subscription-fulfillment';
+import { logger } from '@/lib/logger';
 
 /**
  * Webhook async de PayPal — red de seguridad cuando el flujo del frontend
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
   const capturedAmount = amountObj?.value ? Number(amountObj.value) : null;
 
   if (!orderId) {
-    console.warn('[PayPal Webhook] PAYMENT.CAPTURE.COMPLETED without related order_id', { event });
+    logger.warn('PAYPAL-WEBHOOK', 'PAYMENT.CAPTURE.COMPLETED without related order_id', { event });
     return NextResponse.json({ received: true, missing: 'order_id' });
   }
 
@@ -62,13 +63,13 @@ export async function POST(req: Request) {
     case 'already_processed':
       return NextResponse.json({ success: true, result: result.status });
     case 'invoice_not_found':
-      console.warn('[PayPal Webhook] Order not found in saas_invoices', { orderId });
+      logger.warn('PAYPAL-WEBHOOK', 'Order not found in saas_invoices', { orderId });
       return NextResponse.json({ received: true, missing: 'invoice' });
     case 'amount_mismatch':
-      console.error('[PayPal Webhook] Amount mismatch', { orderId, ...result });
+      logger.error('PAYPAL-WEBHOOK', 'Amount mismatch', { orderId, ...result });
       return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
     case 'db_error':
-      console.error('[PayPal Webhook] DB error', { orderId, message: result.message });
+      logger.error('PAYPAL-WEBHOOK', 'DB error', { orderId, message: result.message });
       return NextResponse.json({ error: 'DB error' }, { status: 500 });
   }
 }

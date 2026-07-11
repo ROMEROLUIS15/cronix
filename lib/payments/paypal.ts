@@ -1,5 +1,7 @@
 // lib/payments/paypal.ts
 
+import { logger } from '@/lib/logger';
+
 const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
 const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET;
 
@@ -65,7 +67,7 @@ export async function createOrder(amountUsd: number, description: string) {
 
   const data = await response.json();
   if (!response.ok) {
-    console.error('[PayPal API] Create Order Error:', data);
+    logger.error('PAYPAL-API', 'Create order error', data);
     return { error: 'Failed to create PayPal order' };
   }
 
@@ -86,7 +88,7 @@ export async function captureOrder(orderId: string) {
 
   const data = await response.json();
   if (!response.ok) {
-    console.error('[PayPal API] Capture Order Error:', data);
+    logger.error('PAYPAL-API', 'Capture order error', data);
     return { error: 'Failed to capture PayPal order' };
   }
 
@@ -115,7 +117,7 @@ export async function verifyWebhookSignature(
 ): Promise<boolean> {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID;
   if (!webhookId) {
-    console.error('[PayPal Webhook] PAYPAL_WEBHOOK_ID not configured');
+    logger.error('PAYPAL-WEBHOOK', 'PAYPAL_WEBHOOK_ID not configured');
     return false;
   }
 
@@ -126,7 +128,7 @@ export async function verifyWebhookSignature(
   const transmissionTime = headers.get('paypal-transmission-time');
 
   if (!authAlgo || !certUrl || !transmissionId || !transmissionSig || !transmissionTime) {
-    console.warn('[PayPal Webhook] Missing required PayPal headers');
+    logger.warn('PAYPAL-WEBHOOK', 'Missing required PayPal headers');
     return false;
   }
 
@@ -134,7 +136,7 @@ export async function verifyWebhookSignature(
   try {
     parsedBody = JSON.parse(rawBody);
   } catch {
-    console.warn('[PayPal Webhook] Body is not valid JSON');
+    logger.warn('PAYPAL-WEBHOOK', 'Body is not valid JSON');
     return false;
   }
 
@@ -158,7 +160,7 @@ export async function verifyWebhookSignature(
 
   if (!verifyRes.ok) {
     const errorBody = await verifyRes.text().catch(() => '<unreadable>');
-    console.error('[PayPal Webhook] Verification API error:', {
+    logger.error('PAYPAL-WEBHOOK', 'Verification API error', {
       status: verifyRes.status,
       body: errorBody,
       sentWebhookIdLength: webhookId.length,
@@ -170,7 +172,7 @@ export async function verifyWebhookSignature(
 
   const verifyData = await verifyRes.json();
   if (verifyData.verification_status !== 'SUCCESS') {
-    console.warn('[PayPal Webhook] Verification status not SUCCESS:', verifyData);
+    logger.warn('PAYPAL-WEBHOOK', 'Verification status not SUCCESS', verifyData);
   }
   return verifyData.verification_status === 'SUCCESS';
 }

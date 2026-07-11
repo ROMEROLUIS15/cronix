@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { Database } from '@/types/database.types';
 
 const supabaseAdmin = createClient<Database>(
@@ -19,7 +20,7 @@ async function handler(req: Request) {
       .lt('subscription_ends_at', now);
 
     if (fetchError) {
-      console.error('Error fetching expired subscriptions:', fetchError);
+      logger.error('CRON-SUBSCRIPTIONS', 'Error fetching expired subscriptions', fetchError);
       return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
     }
 
@@ -39,7 +40,7 @@ async function handler(req: Request) {
       .in('id', businessIds);
 
     if (updateError) {
-      console.error('Error downgrading subscriptions:', updateError);
+      logger.error('CRON-SUBSCRIPTIONS', 'Error downgrading subscriptions', updateError);
       return NextResponse.json({ error: 'Failed to downgrade' }, { status: 500 });
     }
 
@@ -48,8 +49,8 @@ async function handler(req: Request) {
       downgraded: businessIds.length,
       businesses: businessIds 
     });
-  } catch (err: any) {
-    console.error('Cron job error:', err);
+  } catch (err: unknown) {
+    logger.error('CRON-SUBSCRIPTIONS', 'Cron job error', err);
     return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
 }
