@@ -1,7 +1,7 @@
 # Evals — DeepEval + Groq (free tier)
 
 LLM-as-judge evaluation of the Voice Agent using [DeepEval](https://github.com/confident-ai/deepeval),
-judged by Groq's `llama-3.3-70b-versatile` with **round-robin API-key rotation**
+judged by Groq's `openai/gpt-oss-120b` with **round-robin API-key rotation**
 to stay under the free-tier rate limits.
 
 ## Layout

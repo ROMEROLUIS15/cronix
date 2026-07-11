@@ -31,7 +31,7 @@ Cada operación exitosa produce, de forma automática y exactamente una vez, el 
 
 ## 3. Rutas deterministas y barreras anti-alucinación (NORMATIVO)
 
-Esta es la columna vertebral del agente. **Principio rector:** el LLM (modelo pequeño `llama-3.1-8b-instant`) solo conversa y recopila; **nunca produce, calcula ni inventa un valor vinculante** de una cita (servicio, fecha, hora, identidad). Todo dato que se escribe en la base de datos es **extraído y validado de forma determinista** del catálogo real, del parser de fechas, del horario y de la disponibilidad real. Subir el modelo o el prompt solo reduce la tasa de error; estas barreras la llevan a **cero** en el camino de escritura.
+Esta es la columna vertebral del agente. **Principio rector:** el LLM (modelo pequeño `openai/gpt-oss-20b`) solo conversa y recopila; **nunca produce, calcula ni inventa un valor vinculante** de una cita (servicio, fecha, hora, identidad). Todo dato que se escribe en la base de datos es **extraído y validado de forma determinista** del catálogo real, del parser de fechas, del horario y de la disponibilidad real. Subir el modelo o el prompt solo reduce la tasa de error; estas barreras la llevan a **cero** en el camino de escritura.
 
 ### 3.1 Orden de precedencia de rutas (árbol de decisión, NORMATIVO)
 

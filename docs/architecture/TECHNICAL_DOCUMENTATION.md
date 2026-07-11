@@ -118,10 +118,10 @@ Verifiable in `lib/payments/subscription-fulfillment.ts:7-53`.
 
 | Layer | Service | Plan |
 |---|---|---|
-| Primary LLM | Groq `llama-3.3-70b-versatile` | Free tier |
-| Fallback LLM | Groq `llama-3.1-8b-instant` | Free tier |
+| Primary LLM | Groq `openai/gpt-oss-120b` | Free tier |
+| Fallback LLM | Groq `openai/gpt-oss-20b` | Free tier |
 | Optional alt LLM | Gemini `gemini-2.0-flash` (OpenAI-compat) | Free tier |
-| Reviewer | Groq `llama-3.1-8b-instant` @T=0 | Free tier |
+| Reviewer | Groq `openai/gpt-oss-20b` @T=0 | Free tier |
 | Embeddings | `gte-small` (384 dim) via `Supabase.ai.Session` | No extra cost |
 | STT | Deepgram `nova-2` | Free tier ($200 credits) |
 | TTS | Deepgram `aura-2-nestor-es` | Same credits |
@@ -229,12 +229,12 @@ On every supervised write (`confirm_booking`, `cancel_booking`, `reschedule_book
 
 | Layer | Actual model | File |
 |---|---|---|
-| Primary voice LLM | `llama-3.3-70b-versatile` | `voice-worker/providers/GroqProvider.ts:36` |
-| Voice fallback | `llama-3.1-8b-instant` | same file:37 |
+| Primary voice LLM | `openai/gpt-oss-120b` | `voice-worker/providers/GroqProvider.ts:36` |
+| Voice fallback | `openai/gpt-oss-20b` | same file:37 |
 | Alt chain | `gemini-2.0-flash` (OpenAI-compat) | `voice-worker/providers/GeminiProvider.ts:32` |
-| WhatsApp ReAct decider | `llama-3.1-8b-instant` (SMALL_MODEL) | `process-whatsapp/groq-client.ts` |
-| WA final synthesis | `llama-3.3-70b-versatile` (skipped via template) | `process-whatsapp/ai-agent.ts:411` |
-| Reviewer | `llama-3.1-8b-instant` @T=0 + json_object | `lib/ai/supervisor/GroqReviewerLlm.ts:11` |
+| WhatsApp ReAct decider | `openai/gpt-oss-20b` (SMALL_MODEL) | `process-whatsapp/groq-client.ts` |
+| WA final synthesis | `openai/gpt-oss-120b` (skipped via template) | `process-whatsapp/ai-agent.ts:411` |
+| Reviewer | `openai/gpt-oss-20b` @T=0 + json_object | `lib/ai/supervisor/GroqReviewerLlm.ts:11` |
 | Embeddings | `gte-small` 384 dim | `supabase/functions/embed-text/index.ts:4` |
 | STT | Deepgram Nova-2 ES | `voice-worker/stt.ts`, `process-whatsapp/ai-agent.ts:519` |
 | TTS | Deepgram Aura-2 `aura-2-nestor-es` | `voice-worker/tts.ts`, `app/api/assistant/proactive/route.ts:34` |
@@ -596,7 +596,7 @@ Detail in `docs/architecture/internals/SEMANTIC_ROUTER.md`.
 
 Detail in `docs/architecture/internals/SUPERVISOR.md`.
 
-- Model: Groq `llama-3.1-8b-instant`, `temperature=0`, `response_format={type:'json_object'}`.
+- Model: Groq `openai/gpt-oss-20b`, `temperature=0`, `response_format={type:'json_object'}`.
 - Timeout 1500ms. Fail-open on timeout, network error, parse fail.
 - Rubric v1 (versioned in code): 6 codes (`TENANT_MISMATCH`, `DUPLICATE_INTENT`, `CONTRADICTS_MEMORY`, `POLICY_VIOLATION`, `AMBIGUOUS_TARGET`, `UNSAFE_ARGS`).
 - Hard rules: explicit utterance overrides any "suspicion by empty memory"; reviewer does NOT validate RLS/SQL/slot conflicts.

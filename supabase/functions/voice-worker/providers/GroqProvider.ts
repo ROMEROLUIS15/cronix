@@ -3,7 +3,7 @@
  *
  * This is INTENTIONALLY a literal port of the previous inline logic in agent.ts.
  * No behavioral changes:
- *   - 70B versatile primary, 8B instant fallback (on any error)
+ *   - gpt-oss-120b primary, gpt-oss-20b fallback (on any error)
  *   - Per-key 429 rotation
  *   - Same temperature, max_tokens
  *   - Same OpenAI-compatible payload shape (Groq uses the OpenAI tool-call schema)
@@ -33,8 +33,8 @@ const GROQ_KEYS = (Deno.env.get('LLM_API_KEY') ?? Deno.env.get('GROQ_API_KEY') ?
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
-const PRIMARY_MODEL  = 'llama-3.3-70b-versatile'
-const FALLBACK_MODEL = 'llama-3.1-8b-instant'
+const PRIMARY_MODEL  = 'openai/gpt-oss-120b'
+const FALLBACK_MODEL = 'openai/gpt-oss-20b'
 
 // ── Groq wire types ──────────────────────────────────────────────────────
 
@@ -185,7 +185,7 @@ export class GroqProvider implements ILLMProvider {
       return body
     }
 
-    // Primary: 70B versatile
+    // Primary: gpt-oss-120b
     try {
       const resp = await callWithKeyRotation(buildBody(PRIMARY_MODEL))
       return toChatResponse(resp, `groq/${PRIMARY_MODEL}`)
@@ -194,7 +194,7 @@ export class GroqProvider implements ILLMProvider {
       console.warn(`[GROQ-PROVIDER] ${PRIMARY_MODEL} failed, falling back to ${FALLBACK_MODEL}: ${reason}`)
     }
 
-    // Fallback: 8B instant
+    // Fallback: gpt-oss-20b
     const resp = await callWithKeyRotation(buildBody(FALLBACK_MODEL))
     return toChatResponse(resp, `groq/${FALLBACK_MODEL}`)
   }

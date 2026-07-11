@@ -97,8 +97,8 @@ export async function safeLLM(
   messages: any[],
   tools: any[],
   apiKey: string,
-  primaryModel: string = 'llama-3.1-8b-instant',
-  fallbackModel: string = 'llama-3.3-70b-versatile',
+  primaryModel: string = 'openai/gpt-oss-20b',
+  fallbackModel: string = 'openai/gpt-oss-120b',
   baseUrl: string = 'https://api.groq.com/openai/v1/chat/completions',
   businessId?: string
 ): Promise<AIResponse<any>> {

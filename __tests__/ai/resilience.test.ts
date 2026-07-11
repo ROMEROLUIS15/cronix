@@ -102,11 +102,11 @@ describe('Resilience — Safe AI Operations', () => {
 
       const messages = [{ role: 'user', content: 'Hola' }]
       const tools = [{ name: 'confirm_booking' }]
-      const result = await safeLLM(messages, tools, 'test-key', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile')
+      const result = await safeLLM(messages, tools, 'test-key', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b')
 
       expect(result.data).toEqual(mockResponse)
       expect(result.error).toBeUndefined()
-      expect(result.modelUsed).toBe('llama-3.1-8b-instant')
+      expect(result.modelUsed).toBe('openai/gpt-oss-20b')
     })
 
     it('[R5] LLM primary failure → fallback to secondary model', async () => {
@@ -126,7 +126,7 @@ describe('Resilience — Safe AI Operations', () => {
       const result = await safeLLM(messages, tools, 'test-key')
 
       expect(result.data).toEqual(fallbackResponse)
-      expect(result.modelUsed).toBe('llama-3.3-70b-versatile')
+      expect(result.modelUsed).toBe('openai/gpt-oss-120b')
     })
 
     it('[R6] All keys exhausted → return error', async () => {

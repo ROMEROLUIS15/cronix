@@ -25,12 +25,12 @@ Cliente (WA) ──► process-whatsapp (Deno Edge)
 
 | Capa | Modelo | Por qué |
 |---|---|---|
-| LLM principal voz | Groq `llama-3.3-70b-versatile` | Tier gratuito Groq + tool-calling robusto |
-| Fallback voz | Groq `llama-3.1-8b-instant` | Misma cuota, otro modelo del mismo proveedor |
+| LLM principal voz | Groq `openai/gpt-oss-120b` | Tier gratuito Groq + tool-calling robusto |
+| Fallback voz | Groq `openai/gpt-oss-20b` | Misma cuota, otro modelo del mismo proveedor |
 | Cadena alterna | Gemini `gemini-2.0-flash` (vía endpoint OpenAI-compat) | Activable por `LLM_PROVIDER` env var (`gemini`, `gemini,groq`) |
-| ReAct decisor WA | Groq `llama-3.1-8b-instant` | Latencia y costo bajos para loops de 3 pasos |
+| ReAct decisor WA | Groq `openai/gpt-oss-20b` | Latencia y costo bajos para loops de 3 pasos |
 | Síntesis WA | — (eliminado) | El final-pass es 100% determinista: template en success, errorCode map en failure, `loopText` del 8B en conversacional. `LARGE_MODEL` está definido en `groq-client.ts` pero **no se llama** desde `ai-agent.ts`. |
-| Supervisor | Groq `llama-3.1-8b-instant` @ T=0 + `response_format json_object` | JSON determinista, fail-open |
+| Supervisor | Groq `openai/gpt-oss-20b` @ T=0 + `response_format json_object` | JSON determinista, fail-open |
 | Embeddings | `gte-small` (384 dim) vía `Supabase.ai.Session` (Edge Function `embed-text`) | Local al edge, sin costo de API externa |
 | STT | Deepgram Nova-2 (`language=es`, keywords-boost con nombres reales) | Free tier amplio + sesgo a nombres propios del negocio |
 | TTS | Deepgram Aura-2 voz `aura-2-nestor-es` | Latencia <500ms, voz masculina ES neutral |

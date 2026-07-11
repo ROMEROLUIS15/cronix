@@ -19,7 +19,7 @@
 - **Doble runtime físico**: Node.js (Next.js 15 App Router en Vercel) + Deno (Edge Functions en Supabase). Cero cross-imports — la lógica compartida se duplica byte-by-byte bajo `supabase/functions/_shared/` con tests de parity que fallan al menor drift.
 - **Aislamiento multi-tenant**: repositorios filtrados (`.eq('business_id', …)` + ownership asserts) → Row Level Security en Postgres (`current_business_id()` del JWT) → `ConstitutionalReviewer` semántico sobre los writes de IA (WhatsApp/voz). El UI del dashboard se aísla por RLS; los canales de IA añaden el reviewer.
 - **10 mecanismos anti-alucinación verificables** en el código: corpus mention guards, fast-paths sin LLM, date-guard determinista, frame-cutoff del corpus, per-turn fingerprint dedup, response bypass, confirmation gate 2-turn, embedded `<function>` recovery, router semántico, constitutional reviewer.
-- **Pipeline de IA cero-costo**: Groq (Llama 3.3-70B + 3.1-8B con key rotation), Gemini 2.0-flash opcional vía endpoint OpenAI-compat, embeddings `gte-small` (384 dim) ejecutándose dentro del Edge runtime de Supabase, Deepgram Nova-2 (STT) y Aura-2 (TTS) en free tier. Stack productivo a $0/mes.
+- **Pipeline de IA cero-costo**: Groq (GPT-OSS 120B + 20B con key rotation), Gemini 2.0-flash opcional vía endpoint OpenAI-compat, embeddings `gte-small` (384 dim) ejecutándose dentro del Edge runtime de Supabase, Deepgram Nova-2 (STT) y Aura-2 (TTS) en free tier. Stack productivo a $0/mes.
 - **Memoria episódica vectorial** (`ai_memories_v2`, pgvector) con recall obligatorio antes de cada escritura supervisada.
 - **Observabilidad estructurada** (`ai_traces`) + **pipeline diario de training-data** (`ai_training_exports`, cron 03:00 UTC, cero PII, JSONL versionado por `schema_version`).
 - **Pagos idempotentes**: PayPal con RPC `fn_finalize_paypal_payment` (FOR UPDATE) + webhook async como red de seguridad; NOWPayments cripto vía QStash queue con back-pressure; manuales con aprobación admin.
@@ -54,8 +54,8 @@ Cronix ataca los 5 simultáneamente.
 | Edge runtime | Supabase Edge Functions (Deno) | voice-worker, process-whatsapp, whatsapp-webhook, whatsapp-service, cron-reminders, push-notify, embed-text, export-ai-traces |
 | Queue | QStash (Upstash) | Webhooks NOWPayments + reintentos LLM rate-limit |
 | Auth | Supabase Auth + WebAuthn (Passkeys) | `@simplewebauthn/server` + `/browser` |
-| LLM principal | Groq `llama-3.3-70b-versatile` | Razonamiento + tool-calling |
-| LLM fallback | Groq `llama-3.1-8b-instant` | Decisor ReAct + reviewer + fallback |
+| LLM principal | Groq `openai/gpt-oss-120b` | Razonamiento + tool-calling |
+| LLM fallback | Groq `openai/gpt-oss-20b` | Decisor ReAct + reviewer + fallback |
 | LLM alterno | Gemini `gemini-2.0-flash` (OpenAI-compat) | Activable por `LLM_PROVIDER` env |
 | STT | Deepgram Nova-2 (`language=es`, keywords boost) | Voz → texto con sesgo a nombres reales |
 | TTS | Deepgram Aura-2 (`aura-2-nestor-es`) | Texto → voz |

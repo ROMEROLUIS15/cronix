@@ -94,7 +94,7 @@ async function stepFetchContext(ctx: WhatsAppPipelineInput) {
 // ── Step 2: Run AI Agent ──────────────────────────────────────────────────────
 
 async function stepRunAgent(ctx: WhatsAppPipelineInput & { context: BusinessRagContext }) {
-  addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'llama-3.1-8b-instant' })
+  addBreadcrumb('Starting ReAct agent loop', 'llm', 'info', { model: 'openai/gpt-oss-20b' })
 
   let agentResult: { text: string; tokens: number; toolCallsTrace: unknown[] }
   try {

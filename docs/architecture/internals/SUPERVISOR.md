@@ -51,10 +51,11 @@ ConstitutionalReviewer.review(request, { timeoutMs=1500 })
 
 ## Modelo y configuración
 
-- **Modelo**: `llama-3.1-8b-instant` vía Groq (`GROQ_ENDPOINT`).
+- **Modelo**: `openai/gpt-oss-20b` vía Groq (`GROQ_ENDPOINT`).
 - **Temperatura**: `0`. Cero creatividad.
 - **`response_format: { type: 'json_object' }`** — JSON estricto, sin prosa.
-- **max_tokens**: 120 (suficiente para `{verdict, code, reason}`).
+- **`reasoning_effort: 'low'`** — gpt-oss es modelo de razonamiento; se minimiza el reasoning para mantener latencia y determinismo.
+- **max_tokens**: 512. gpt-oss cuenta los tokens de razonamiento contra el presupuesto de completion, así que los 120 previos ya no dejaban espacio para el JSON `{verdict, code, reason}`.
 - **Timeout**: 1500ms. Fail-open al expirar.
 - **Header**: `X-Reviewer-Rubric: v1` (versionado en código, no en DB).
 

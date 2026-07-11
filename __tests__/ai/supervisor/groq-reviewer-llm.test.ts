@@ -5,7 +5,7 @@
  *   review — happy path: allow verdict parsed cleanly
  *   review — happy path: block verdict with rejection code
  *   review — request payload includes system prompt + structured user JSON
- *   review — pins model to llama-3.1-8b-instant and forces response_format json_object
+ *   review — pins model to openai/gpt-oss-20b and forces response_format json_object
  *   review — network throw returns Result.ok=false with "network" prefix
  *   review — non-2xx returns Result.ok=false with http status
  *   review — malformed body (no choices) → envelope schema error
@@ -95,7 +95,7 @@ describe('GroqReviewerLlm.review', () => {
     expect(init.headers.Authorization).toBe('Bearer secret-key')
 
     const body = JSON.parse(init.body)
-    expect(body.model).toBe('llama-3.1-8b-instant')
+    expect(body.model).toBe('openai/gpt-oss-20b')
     expect(body.temperature).toBe(0)
     expect(body.response_format).toEqual({ type: 'json_object' })
     expect(body.messages[0]).toEqual({ role: 'system', content: REVIEWER_SYSTEM_PROMPT })

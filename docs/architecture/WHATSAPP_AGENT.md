@@ -56,7 +56,7 @@ process-whatsapp/index.ts → handleMessage()
          │     ├─ tracer.start()
          │     ├─ buildMinimalSystemPrompt(context, customerName, recalled, intent)
          │     │
-         │     └─ ReAct Loop — SMALL_MODEL (llama-3.1-8b-instant), MAX_STEPS=3
+         │     └─ ReAct Loop — SMALL_MODEL (openai/gpt-oss-20b), MAX_STEPS=3
          │           ├─ toolsAllowedThisTurn(history, userText)   ← confirmation-gate
          │           │     TRUE  → activeTools = BOOKING_TOOLS
          │           │     FALSE → activeTools = []  (sin esquemas → sin alucinación)

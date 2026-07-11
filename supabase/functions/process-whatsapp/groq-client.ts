@@ -15,8 +15,8 @@ import {
   reportServiceSuccess,
 } from "./guards.ts"
 
-export const SMALL_MODEL   = 'llama-3.1-8b-instant'         // decision loop + tool calling (fast, literal, free)
-export const LARGE_MODEL   = 'llama-3.3-70b-versatile'      // final empathetic response (only when needed)
+export const SMALL_MODEL   = 'openai/gpt-oss-20b'           // decision loop + tool calling (fast, literal, free)
+export const LARGE_MODEL   = 'openai/gpt-oss-120b'          // final empathetic response (only when needed)
 export const MAX_STEPS     = 3
 // @ts-ignore — Deno runtime global
 const HELICONE_API_KEY = Deno.env.get('HELICONE_API_KEY') ?? ''

@@ -5,7 +5,7 @@ To run a full evaluation suite without tripping 429s, this judge reads a
 comma-separated list of keys from ``GROQ_API_KEYS`` and rotates round-robin to
 the next key whenever a rate-limit is hit, applying exponential backoff.
 
-The model is ``llama-3.3-70b-versatile`` at ``temperature=0`` so the judge is
+The model is ``openai/gpt-oss-120b`` at ``temperature=0`` so the judge is
 as deterministic as the provider allows.
 """
 
@@ -19,7 +19,7 @@ from typing import Any, Iterator
 from deepeval.models.base_model import DeepEvalBaseLLM
 from groq import Groq, RateLimitError
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 _MAX_BACKOFF_SECONDS = 30.0
 
 

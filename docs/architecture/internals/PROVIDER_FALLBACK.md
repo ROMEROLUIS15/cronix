@@ -43,14 +43,14 @@ interface ChatResponse {
   content:    string | null
   toolCalls:  NeutralToolCall[]         // {id, name, arguments}
   tokensUsed: number
-  modelUsed:  string                    // "groq/llama-3.3-70b-versatile" | "gemini/gemini-2.0-flash"
+  modelUsed:  string                    // "groq/openai/gpt-oss-120b" | "gemini/gemini-2.0-flash"
 }
 ```
 
 ## GroqProvider
 
-- **Primary**: `llama-3.3-70b-versatile`.
-- **Fallback interno**: `llama-3.1-8b-instant` cuando el primario lanza.
+- **Primary**: `openai/gpt-oss-120b`.
+- **Fallback interno**: `openai/gpt-oss-20b` cuando el primario lanza.
 - **Key rotation 429**: `LLM_API_KEY` puede ser CSV. Si una key choca 429, se prueba la siguiente sin propagar el error. Solo el 429 final propaga.
 - **Settings**: `temperature=0.1`, `max_tokens=400`, `parallel_tool_calls=false` (previene doble booking).
 

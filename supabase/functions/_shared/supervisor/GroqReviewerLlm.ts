@@ -8,7 +8,7 @@ import type {
 import { REVIEWER_RUBRIC_VERSION, REVIEWER_SYSTEM_PROMPT } from './rubric.ts'
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL    = 'llama-3.1-8b-instant'
+const GROQ_MODEL    = 'openai/gpt-oss-20b'
 
 const REJECTION_CODES = [
   'TENANT_MISMATCH',
@@ -66,7 +66,10 @@ export class GroqReviewerLlm implements IReviewerLlm {
         body: JSON.stringify({
           model:           this.model,
           temperature:     this.temperature,
-          max_tokens:      120,
+          // gpt-oss is a reasoning model: reasoning tokens count against the
+          // completion budget, so 120 no longer leaves room for the JSON verdict.
+          max_tokens:      512,
+          reasoning_effort: 'low',
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: REVIEWER_SYSTEM_PROMPT },

@@ -40,7 +40,7 @@ type VoiceCommandContext = {
  * Parses a natural language voice command into structured appointment data.
  *
  * Uses the 'quality' tier: Cerebras llama-3.3-70b primary (optimal for JSON
- * entity extraction) → Groq llama-3.1-8b-instant fallback.
+ * entity extraction) → Groq openai/gpt-oss-20b fallback.
  * Both paths go through safeLLM (retry) and aiCircuit (circuit breaker).
  */
 export async function parseVoiceCommand(
