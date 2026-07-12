@@ -14,10 +14,13 @@ import { createClient, createAdminClient } from './server'
 //
 // We use `auth.getSession()` (local cookie decode, ~1ms) instead of
 // `auth.getUser()` (network call to Supabase auth, ~100-200ms). The middleware
-// in `lib/middleware/with-session.ts` already invokes `getUser()` and rejects
-// requests whose JWT is invalid or expired, so by the time RSC runs the session
-// is guaranteed authentic. Doing a second network round-trip here just to
-// re-validate the same token wastes ~150ms on every dashboard navigation.
+// in `lib/middleware/with-session.ts` already validates the request's JWT —
+// via `getClaims()`, which cryptographically verifies the ES256 signature and
+// rejects tampered or expired tokens (as authoritative as a `getUser()` network
+// call, just local). So by the time RSC runs the session is guaranteed
+// authentic; re-validating the same token here would only waste latency.
+// (Supabase logs an "insecure getSession()" warning for this line — expected and
+// benign here precisely because the middleware already verified the token.)
 //
 // SECURITY CONTRACT: this accessor does NOT validate the JWT itself — it trusts
 // that the middleware ran first. It is therefore ONLY safe under `/dashboard/**`
@@ -26,7 +29,7 @@ import { createClient, createAdminClient } from './server'
 // which calls `auth.getUser()` and validates the token server-side.
 //
 // Keep these two behaviors in lock-step: if the middleware ever stops
-// revalidating tokens, this must switch to `auth.getUser()`.
+// revalidating tokens (getClaims/getUser), this must switch to `auth.getUser()`.
 export const getCachedSessionUser = cache(async () => {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
