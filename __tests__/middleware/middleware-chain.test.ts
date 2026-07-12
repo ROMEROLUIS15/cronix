@@ -13,6 +13,7 @@ vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid-123' })
 
 // ── Mock Supabase SSR SDK ────────────────────────────────────────────────────
 const mockGetUser = vi.fn()
+const mockGetClaims = vi.fn()
 const mockSignOut = vi.fn()
 const mockFromSelectEqSingle = vi.fn()
 
@@ -26,7 +27,7 @@ vi.mock('@supabase/ssr', () => ({
       }),
     }
     return {
-      auth: { getUser: mockGetUser, signOut: mockSignOut },
+      auth: { getUser: mockGetUser, getClaims: mockGetClaims, signOut: mockSignOut },
       from: () => chain,
       rpc: vi.fn(),
     }
@@ -102,7 +103,7 @@ describe('withSession', () => {
   })
 
   it('redirects unauthenticated user from /dashboard to /login', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+    mockGetClaims.mockResolvedValue({ data: null, error: null })
 
     const req = makeRequest({ pathname: '/dashboard' })
     const handler = compose(withSession)
@@ -114,7 +115,7 @@ describe('withSession', () => {
   })
 
   it('allows unauthenticated user to public pages', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+    mockGetClaims.mockResolvedValue({ data: null, error: null })
 
     const req = makeRequest({ pathname: '/login' })
     const handler = compose(withSession)
@@ -125,8 +126,8 @@ describe('withSession', () => {
   })
 
   it('redirects authenticated user from /login to /dashboard', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: 'user-123' } },
       error: null,
     })
 
@@ -142,8 +143,8 @@ describe('withSession', () => {
   })
 
   it('sets x-user-id header for authenticated requests', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-456' } },
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: 'user-456' } },
       error: null,
     })
 
@@ -223,8 +224,8 @@ describe('withSessionTimeout', () => {
   })
 
   it('allows active session within limits', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: 'user-123' } },
       error: null,
     })
 
@@ -243,8 +244,8 @@ describe('withSessionTimeout', () => {
   })
 
   it('redirects on 30-minute inactivity', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: 'user-123' } },
       error: null,
     })
     mockSignOut.mockResolvedValue({})
@@ -266,8 +267,8 @@ describe('withSessionTimeout', () => {
   })
 
   it('redirects on 12-hour absolute limit', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: 'user-123' } },
       error: null,
     })
     mockSignOut.mockResolvedValue({})
