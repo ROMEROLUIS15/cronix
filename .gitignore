@@ -96,3 +96,6 @@ __pycache__/
 # Deno lockfiles — generados por `deno check`; el repo versiona deno.json, no el lock
 # (el deploy de edge functions lo regenera via --use-api). Se ignoran como artefactos.
 supabase/functions/**/deno.lock
+
+# Backlog de trabajo local (no versionado)
+PENDIENTES.local.md
