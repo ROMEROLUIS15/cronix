@@ -16,14 +16,15 @@ vi.mock('lucide-react', () => ({
 
 describe('PasswordInput Component', () => {
   it('renders with password type initially', () => {
-    render(<PasswordInput />)
-    const input = screen.getByRole('textbox')
+    const { container } = render(<PasswordInput />)
+    // A type="password" input has no "textbox" ARIA role, so query the element.
+    const input = container.querySelector('input')!
     expect(input).toHaveAttribute('type', 'password')
   })
 
   it('toggles password visibility on button click', () => {
-    render(<PasswordInput />)
-    const input = screen.getByRole('textbox')
+    const { container } = render(<PasswordInput />)
+    const input = container.querySelector('input')!
     const toggleButton = screen.getByRole('button')
 
     expect(input).toHaveAttribute('type', 'password')
@@ -55,8 +56,8 @@ describe('PasswordInput Component', () => {
   })
 
   it('accepts standard input props', () => {
-    render(<PasswordInput placeholder="Enter password" name="password" required />)
-    const input = screen.getByRole('textbox')
+    const { container } = render(<PasswordInput placeholder="Enter password" name="password" required />)
+    const input = container.querySelector('input')!
 
     expect(input).toHaveAttribute('placeholder', 'Enter password')
     expect(input).toHaveAttribute('name', 'password')
@@ -64,8 +65,8 @@ describe('PasswordInput Component', () => {
   })
 
   it('can receive and display typed value', () => {
-    render(<PasswordInput />)
-    const input = screen.getByRole('textbox') as HTMLInputElement
+    const { container } = render(<PasswordInput />)
+    const input = container.querySelector('input') as HTMLInputElement
 
     fireEvent.change(input, { target: { value: 'testpassword123' } })
     expect(input.value).toBe('testpassword123')

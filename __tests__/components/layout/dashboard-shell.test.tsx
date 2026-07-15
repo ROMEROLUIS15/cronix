@@ -3,9 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
+
 
 vi.mock('@/i18n/navigation', () => ({
   usePathname: vi.fn(),
@@ -16,10 +14,13 @@ vi.mock('@/components/layout/sidebar', () => ({
 }))
 
 vi.mock('@/components/layout/topbar', () => ({
-  Topbar: ({ title, subtitle }: any) => (
+  // The shell passes LanguageSwitcher via `actions`; render it so the
+  // language-switcher assertion sees it.
+  Topbar: ({ title, subtitle, actions }: any) => (
     <div data-testid="topbar">
       <div>{title}</div>
       {subtitle && <div>{subtitle}</div>}
+      {actions}
     </div>
   ),
 }))
@@ -92,7 +93,7 @@ describe('DashboardShell Component', () => {
       </DashboardShell>
     )
 
-    expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+    expect(screen.getAllByTestId('sidebar').length).toBeGreaterThan(0)
   })
 
   it('renders topbar component', () => {
@@ -126,7 +127,7 @@ describe('DashboardShell Component', () => {
       </DashboardShell>
     )
 
-    expect(screen.getByText('dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 
   it('sets title for appointments page', () => {
@@ -203,7 +204,7 @@ describe('DashboardShell Component', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+      expect(screen.getAllByTestId('sidebar').length).toBeGreaterThan(0)
     })
   })
 

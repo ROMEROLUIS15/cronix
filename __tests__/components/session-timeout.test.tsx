@@ -27,16 +27,11 @@ vi.mock('@/components/hooks/use-session-timeout', () => ({
   })),
 }))
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => {
-    const translations: Record<string, string> = {
-      stillThereTitle: 'Still there?',
-      stillThereDesc: 'Your session is about to expire',
-      expiringTitle: 'Session expiring',
-      expiringDesc: 'Your session is about to expire',
-    }
-    return translations[key] || key
-  },
+vi.mock('next-intl', async () => (await import('@/__tests__/setup/next-intl-mock')).createNextIntlMock({
+  stillThereTitle: 'Still there?',
+  stillThereDesc: 'Your session is about to expire',
+  expiringTitle: 'Session expiring',
+  expiringDesc: 'Your session is about to expire',
 }))
 
 import { useSessionTimeout } from '@/components/hooks/use-session-timeout'
@@ -124,7 +119,7 @@ describe('SessionTimeout Component', () => {
   it('shows 0 seconds when countdown reaches zero', () => {
     vi.mocked(useSessionTimeout).mockReturnValue({
       warning: 'inactivity',
-      warningMsLeft: 100, // ~0 seconds
+      warningMsLeft: 0, // Math.ceil(ms/1000): only exactly 0 renders "0 seg" (100ms → "1 seg")
       onKeepSession: mockOnKeepSession,
       onSignout: mockOnSignout,
     })
@@ -176,9 +171,10 @@ describe('SessionTimeout Component', () => {
 
     const { container } = render(<SessionTimeout />)
 
-    const dialog = container.querySelector('[style*="fixed"]')
+    // The overlay positions via Tailwind classes (fixed inset-0 z-[9999]), not inline style.
+    const dialog = container.querySelector('.fixed.inset-0')
     expect(dialog).toBeInTheDocument()
-    expect(dialog).toHaveStyle({ zIndex: '9999' })
+    expect(dialog).toHaveClass('z-[9999]')
   })
 
   it('pads seconds with zero in countdown display', () => {

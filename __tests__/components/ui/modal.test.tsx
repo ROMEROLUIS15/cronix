@@ -275,7 +275,7 @@ describe('Modal Component', () => {
       </Modal>
     )
 
-    const header = container.querySelector('div[class*="border-b"]')
+    const header = container.querySelector('div.border-b')
     expect(header).not.toBeInTheDocument()
   })
 
@@ -286,7 +286,7 @@ describe('Modal Component', () => {
       </Modal>
     )
 
-    const header = container.querySelector('div[class*="border-b"]')
+    const header = container.querySelector('div.border-b')
     expect(header).toBeInTheDocument()
   })
 

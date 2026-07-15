@@ -41,13 +41,14 @@ npm run typecheck          # tsc --noEmit
 npm run knip               # Detecta dead code / deps sin usar (¡es gate de CI y puede poner "Tests" en rojo!)
 
 # Tests unitarios (Vitest)
-npm test                   # Toda la suite unitaria
+npm test                   # Suite unitaria + repos (jsdom). NO incluye __tests__/components/**
 npm run test:watch         # Modo watch
 npx vitest run <ruta>      # Un solo archivo, p.ej. lib/payments/nowpayments.test.ts
 npx vitest run -t "<nombre parcial del test>"   # Un test por nombre
-npm run test:coverage      # Coverage v8
+npm run test:coverage      # Coverage v8 (umbral 70% líneas sobre domain/repos/ai-core/api)
 
 # Otras suites
+npm run test:components    # Componentes (jsdom + RTL, config aparte — ver nota abajo)
 npm run test:integration   # Integración contra Supabase local (vitest.integration.config.ts)
 npm run test:e2e           # Playwright (todos los specs)
 npm run test:e2e:smoke     # Playwright suite reducida (--project=smoke)
@@ -58,15 +59,25 @@ npx supabase test db       # pgTAP: RLS + funciones RPC + alertas (corre contra 
 # Base de datos / Supabase (requiere Docker)
 npx supabase start                    # Levanta Postgres + Edge + Studio (127.0.0.1:54323)
 npx supabase db reset                 # Reaplica migraciones + seed
-npm run check:spec-drift              # Verifica que specs y código no divergieron
+npm run check:spec-drift              # Verifica que specs y código no divergieron (gate de CI)
+
+# Ejercitar los agentes en local (sin esperar tráfico real)
+npm run sim:whatsapp       # Simula un mensaje entrante de WhatsApp contra process-whatsapp
+npm run trigger:voice      # Dispara el voice-worker
+npm run seed:intents       # Reindexa los embeddings de intents
+npm run e2e:setup          # Siembra los datos que consume la suite E2E
 
 # Loadtest (local, free-tier-safe — nunca contra prod)
 npm run loadtest:seed / :explain / :load
 ```
 
+**El job "Tests" de CI corre**, en este orden: `test:evals:agent` → `npm test` → `test:components` → `lint` → `knip` → `check:spec-drift`. Bloquean todos menos `check:spec-drift` (`continue-on-error`). Que "Tests" salga rojo suele ser knip, no vitest.
+
+**`npm test` NO incluye `__tests__/components/**`** (config aparte: necesitan el transform de JSX vía `@vitejs/plugin-react`). Corre `npm run test:components` — **389 tests, bloqueante**. Dos cosas que muerden si escribes tests de componentes: (1) el mock de i18n compartido está en `__tests__/setup/next-intl-mock.tsx` — resuelve contra `messages/es.json` **real** (asserts en español, no en la key), con override opcional; los componentes usan `useTranslations`/`useLocale` y revientan sin provider, así que no vuelvas a hand-rollear mocks parciales. (2) Nunca mockees un módulo devolviendo un `Proxy` desde una factory `async`: el runtime lo lee como *thenable* (`get(_, 'then')`) y **mata el worker** con "Worker exited unexpectedly". Lista los exports (p.ej. iconos de `lucide-react`) explícitamente.
+
 **Deno / Edge Functions** (`supabase/functions/`) no usan npm ni Vitest: se validan con `deno check` y tests `deno test` propios. Desde Windows, desplegar una Edge Function requiere `supabase functions deploy <name> --use-api` (el bundling con Docker rompe los import maps).
 
-**Quality gates** (Husky): pre-commit corre `eslint --fix` sobre staged; pre-push corre `lint + tsc + vitest + npm audit`. Un fallo cancela el push — no lo bypassees.
+**Quality gates** (Husky): pre-commit corre `eslint --fix` sobre staged; pre-push corre 4 etapas — `lint → tsc → vitest → npm audit` (este último solo `--audit-level=high --omit=dev`, las devDeps no van al bundle). Un fallo cancela el push — no lo bypassees.
 
 ## Arquitectura esencial (lo que no se ve leyendo un solo archivo)
 

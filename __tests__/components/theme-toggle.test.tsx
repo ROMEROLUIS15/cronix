@@ -9,23 +9,27 @@
  */
 
 import React from 'react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { useTheme } from 'next-themes'
 
 // ── Mock next-themes ────────────────────────────────────────────────────────
 const mockSetTheme = vi.fn()
 
+// useTheme is a vi.fn so individual tests can override the active theme.
 vi.mock('next-themes', () => ({
-  useTheme: () => ({
-    theme: 'light',
-    setTheme: mockSetTheme,
-  }),
+  useTheme: vi.fn(),
 }))
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('ThemeToggle Component', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useTheme).mockReturnValue({ theme: 'light', setTheme: mockSetTheme } as any)
+  })
+
   it('renders three theme buttons', () => {
     render(<ThemeToggle />)
 
@@ -44,10 +48,7 @@ describe('ThemeToggle Component', () => {
   })
 
   it('highlights the current theme button', () => {
-    vi.mocked(require('next-themes').useTheme).mockReturnValue({
-      theme: 'dark',
-      setTheme: mockSetTheme,
-    })
+    vi.mocked(useTheme).mockReturnValue({ theme: 'dark', setTheme: mockSetTheme } as any)
 
     render(<ThemeToggle />)
 

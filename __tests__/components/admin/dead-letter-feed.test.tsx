@@ -237,9 +237,11 @@ describe('DeadLetterFeed Component', () => {
   })
 
   it('unsubscribes from channel on unmount', async () => {
+    // subscribe() returns the channel (chain), which the component passes to
+    // removeChannel — so the double must return `this`, not undefined.
     const mockChannel = {
       on: vi.fn().mockReturnThis(),
-      subscribe: vi.fn(),
+      subscribe: vi.fn().mockReturnThis(),
     }
 
     const mockSupabase = {
@@ -321,8 +323,11 @@ describe('DeadLetterFeed Component', () => {
 
     render(<DeadLetterFeed />)
 
+    // Entries render as plain rows (no Card wrapper anymore); assert on the
+    // error text each row shows so the test tracks real output.
     await waitFor(() => {
-      expect(screen.getAllByTestId('card').length).toBeGreaterThan(0)
+      expect(screen.getByText(/connection timeout/i)).toBeInTheDocument()
+      expect(screen.getByText(/invalid format/i)).toBeInTheDocument()
     })
   })
 

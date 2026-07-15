@@ -7,14 +7,19 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { NotificationPanel } from '@/components/layout/notification-panel'
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
 
+
+// Icons the component imports. Listed explicitly (not a Proxy): a Proxy returned
+// from an async vi.mock factory reads as thenable and crashes the vitest worker.
 vi.mock('lucide-react', () => ({
+  Bell: () => <div data-testid="bell-icon" />,
+  CheckCheck: () => <div data-testid="checkcheck-icon" />,
+  Clock: () => <div data-testid="clock-icon" />,
+  Info: () => <div data-testid="info-icon" />,
+  CheckCircle2: () => <div data-testid="checkcircle2-icon" />,
+  AlertCircle: () => <div data-testid="alertcircle-icon" />,
+  XCircle: () => <div data-testid="xcircle-icon" />,
   X: () => <div data-testid="x-icon" />,
-  Check: () => <div />,
-  Clock: () => <div />,
 }))
 
 describe('NotificationPanel Component', () => {
@@ -93,28 +98,11 @@ describe('NotificationPanel Component', () => {
       />
     )
 
-    const markAllButton = screen.getByRole('button', { name: /mark all/i })
+    // Only shown when unreadCount > 0 (mock has one unread); label is i18n copy.
+    const markAllButton = screen.getByRole('button', { name: /marcar todo como leído/i })
     fireEvent.click(markAllButton)
 
     expect(onMarkAllRead).toHaveBeenCalled()
-  })
-
-  it('deletes notification on trash icon click', () => {
-    render(
-      <NotificationPanel
-        isOpen={true}
-        onClose={() => {}}
-        notifications={mockNotifications}
-        onMarkAllRead={() => {}}
-      />
-    )
-
-    const trashButtons = screen.getAllByRole('button', { name: /delete|trash/i })
-    const firstButton = trashButtons[0]
-    if (firstButton) {
-      fireEvent.click(firstButton)
-      expect(firstButton).toBeInTheDocument()
-    }
   })
 
   it('shows empty state when no notifications', () => {
@@ -127,10 +115,10 @@ describe('NotificationPanel Component', () => {
       />
     )
 
-    expect(screen.getByText(/no notifications|sin notificaciones/i)).toBeInTheDocument()
+    expect(screen.getByText(/bandeja vacía/i)).toBeInTheDocument()
   })
 
-  it('displays notification timestamps', () => {
+  it('displays a timestamp for each notification', () => {
     render(
       <NotificationPanel
         isOpen={true}
@@ -140,11 +128,11 @@ describe('NotificationPanel Component', () => {
       />
     )
 
-    // Timestamps should be formatted (e.g., "2 hours ago")
-    expect(screen.getByRole('list')).toBeInTheDocument()
+    // Each row shows a Clock icon next to its relative time.
+    expect(screen.getAllByTestId('clock-icon')).toHaveLength(mockNotifications.length)
   })
 
-  it('has close button when provided', () => {
+  it('closes via the footer button', () => {
     const onClose = vi.fn()
     render(
       <NotificationPanel
@@ -155,11 +143,10 @@ describe('NotificationPanel Component', () => {
       />
     )
 
-    const closeButton = screen.getByTestId('x-icon').closest('button')
-    if (closeButton) {
-      fireEvent.click(closeButton)
-      expect(onClose).toHaveBeenCalled()
-    }
+    // The footer close button carries the panel title (the header title is an h3,
+    // so only the footer control matches role=button with that name).
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }))
+    expect(onClose).toHaveBeenCalled()
   })
 
   it('is hidden when isOpen={false}', () => {

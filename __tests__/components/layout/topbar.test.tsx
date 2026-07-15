@@ -7,9 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Topbar } from '@/components/layout/topbar'
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
+
 
 vi.mock('lucide-react', () => ({
   Menu: () => <div data-testid="menu-icon" />,
@@ -17,9 +15,9 @@ vi.mock('lucide-react', () => ({
 }))
 
 vi.mock('@/components/layout/notification-panel', () => ({
-  NotificationPanel: ({ open, onMarkAllRead }: any) => (
-    open ? <div data-testid="notification-panel">Notifications</div> : null
-  ),
+  // The component drives this with `isOpen`, not `open`.
+  NotificationPanel: ({ isOpen }: any) =>
+    isOpen ? <div data-testid="notification-panel">Notifications</div> : null,
 }))
 
 describe('Topbar Component', () => {
@@ -54,22 +52,33 @@ describe('Topbar Component', () => {
     const onMenuClick = vi.fn()
     render(<Topbar title="Dashboard" onMenuClick={onMenuClick} />)
 
-    const button = screen.getByRole('button', { name: /menu/i })
+    // The menu button's accessible name is the i18n label, so target it via its icon.
+    const button = screen.getByTestId('menu-icon').closest('button')!
     fireEvent.click(button)
     expect(onMenuClick).toHaveBeenCalled()
   })
 
-  it('displays unread notification count', () => {
-    render(
+  it('shows the unread badge dot when there are unread notifications', () => {
+    const { container } = render(
       <Topbar
         title="Dashboard"
         notifications={mockNotifications}
       />
     )
 
-    // Count unread (1)
-    const badge = screen.queryByText('1')
-    expect(badge).toBeTruthy()
+    // The badge is a pulsing dot (no numeric count), shown only when unreadCount > 0.
+    expect(container.querySelector('.animate-sonar')).toBeInTheDocument()
+  })
+
+  it('hides the unread badge dot when all notifications are read', () => {
+    const { container } = render(
+      <Topbar
+        title="Dashboard"
+        notifications={[{ ...mockNotifications[1]! }]}
+      />
+    )
+
+    expect(container.querySelector('.animate-sonar')).toBeNull()
   })
 
   it('toggles notification panel', async () => {

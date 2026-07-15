@@ -22,7 +22,6 @@
   "ignoreDependencies": [
     "@rushstack/eslint-patch",
     "@typescript-eslint/eslint-plugin",
-    "@vitejs/plugin-react",
     "supabase",
     "jimp",
     "@modelcontextprotocol/sdk",

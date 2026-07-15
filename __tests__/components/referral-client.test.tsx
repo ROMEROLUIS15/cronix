@@ -6,7 +6,8 @@ import type { ReferralBusiness, ReferralInvite } from '@/types';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('next-intl', () => ({
+vi.mock('next-intl', async () => ({
+  ...(await import('@/__tests__/setup/next-intl-mock')).createNextIntlMock(),
   useTranslations: (ns?: string) => (key: string, params?: Record<string, unknown>) => {
     const full = ns ? `${ns}.${key}` : key;
     if (params) return `${full}:${JSON.stringify(params)}`;

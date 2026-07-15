@@ -7,15 +7,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 
-vi.mock('next-intl', () => ({
-  useLocale: () => 'es',
-  useTranslations: () => (key: string) => key,
-}))
+vi.mock('next-intl', async () => (await import('@/__tests__/setup/next-intl-mock')).createNextIntlMock())
 
+// The component wires selection via `onSelect` (mode="single"), not onDayClick.
 vi.mock('react-day-picker', () => ({
-  DayPicker: ({ onDayClick }: any) => (
+  DayPicker: ({ onSelect }: any) => (
     <div data-testid="day-picker">
-      <button onClick={() => onDayClick(new Date(2026, 4, 19))}>19</button>
+      <button onClick={() => onSelect?.(new Date(2026, 4, 19))}>19</button>
     </div>
   ),
 }))
@@ -66,20 +64,20 @@ describe('DateTimePicker Component', () => {
 
   it('displays AM/PM selector', () => {
     render(<DateTimePicker value="2026-05-19T10:30" onChange={onChange} />)
-    const button = screen.getByRole('button')
-    fireEvent.click(button)
+    fireEvent.click(screen.getByRole('button'))
 
-    // AM/PM buttons should be rendered
-    expect(screen.getByRole('button', { name: /am/i }) || true).toBeTruthy()
+    // Exact names avoid substring collisions with other button labels.
+    expect(screen.getByRole('button', { name: 'AM' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PM' })).toBeInTheDocument()
   })
 
-  it('calls onChange when date is selected', () => {
+  it('calls onChange when a date is picked and confirmed', () => {
     render(<DateTimePicker value="" onChange={onChange} />)
-    const button = screen.getByRole('button')
-    fireEvent.click(button)
+    fireEvent.click(screen.getByRole('button'))
 
-    const dateButton = screen.getByText('19')
-    fireEvent.click(dateButton)
+    // Picking a day only stages it; onChange fires on Confirmar (handleConfirm).
+    fireEvent.click(screen.getByText('19'))
+    fireEvent.click(screen.getByRole('button', { name: /confirmar/i }))
 
     expect(onChange).toHaveBeenCalled()
   })
@@ -121,8 +119,8 @@ describe('DateTimePicker Component', () => {
     expect(screen.getByTestId('day-picker')).toBeInTheDocument()
   })
 
-  it('supports different locales', () => {
-    vi.mocked(require('next-intl').useLocale).mockReturnValue('en')
+  it('renders regardless of active locale', () => {
+    // Locale only drives date-fns formatting (mocked here); the trigger renders either way.
     render(<DateTimePicker value="" onChange={onChange} />)
     expect(screen.getByRole('button')).toBeInTheDocument()
   })

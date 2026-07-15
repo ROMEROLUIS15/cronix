@@ -69,7 +69,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.queryByRole('button')
+      const button = screen.queryByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       expect(button).toBeInTheDocument()
     })
   })
@@ -90,7 +90,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       fireEvent.click(button)
     })
 
@@ -113,7 +113,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       expect(button).toBeDisabled()
     })
   })
@@ -158,7 +158,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       fireEvent.click(button)
     })
 
@@ -184,7 +184,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       fireEvent.click(button)
     })
 
@@ -212,7 +212,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       fireEvent.click(button)
     })
 
@@ -240,7 +240,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       fireEvent.click(button)
     })
 
@@ -263,7 +263,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })).toBeInTheDocument()
     })
   })
 
@@ -300,7 +300,7 @@ describe('PasskeyLoginButton Component', () => {
     render(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })).toBeInTheDocument()
     })
   })
 
@@ -320,7 +320,7 @@ describe('PasskeyLoginButton Component', () => {
     rerender(<PasskeyLoginButton />)
 
     await waitFor(() => {
-      const button = screen.getByRole('button')
+      const button = screen.getByRole('button', { name: /iniciar sesión con biometría|esperando biometría/i })
       expect(button).toBeDisabled()
     })
   })

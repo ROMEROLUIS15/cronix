@@ -73,8 +73,9 @@ describe('SystemStatusGrid Component', () => {
   })
 
   it('renders loading state initially', () => {
-    render(<SystemStatusGrid />)
-    expect(screen.queryByText(/loading|cargando/i)).toBeTruthy()
+    // The loading state is a skeleton grid (animate-pulse), not a text label.
+    const { container } = render(<SystemStatusGrid />)
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
   })
 
   it('fetches and displays services', async () => {

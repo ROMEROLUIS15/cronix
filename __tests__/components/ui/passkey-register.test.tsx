@@ -3,9 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PasskeyRegister } from '@/components/ui/passkey-register'
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
+
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: vi.fn(),

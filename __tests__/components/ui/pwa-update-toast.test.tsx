@@ -3,9 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PwaUpdateToast } from '@/components/ui/pwa-update-toast'
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
+
 
 vi.mock('@/lib/hooks/use-pwa-update', () => ({
   usePwaUpdate: vi.fn(),
@@ -154,7 +152,7 @@ describe('PwaUpdateToast Component', () => {
 
     render(<PwaUpdateToast />)
 
-    expect(screen.getByText('toastTitle')).toBeInTheDocument()
+    expect(screen.getByText('Nueva versión')).toBeInTheDocument()
   })
 
   it('displays description text', () => {
@@ -165,7 +163,7 @@ describe('PwaUpdateToast Component', () => {
 
     render(<PwaUpdateToast />)
 
-    expect(screen.getByText('toastDesc')).toBeInTheDocument()
+    expect(screen.getByText('Hay una actualización lista.')).toBeInTheDocument()
   })
 
   it('displays button text', () => {
@@ -176,7 +174,7 @@ describe('PwaUpdateToast Component', () => {
 
     render(<PwaUpdateToast />)
 
-    expect(screen.getByText('toastBtn')).toBeInTheDocument()
+    expect(screen.getByText('Actualizar')).toBeInTheDocument()
   })
 
   it('applies dark theme styling', () => {
@@ -199,7 +197,8 @@ describe('PwaUpdateToast Component', () => {
 
     const { container } = render(<PwaUpdateToast />)
 
-    const toastContent = container.querySelector('div[style*="backdropFilter"]')
+    // The serialized style attribute is kebab-case (backdrop-filter), not the JSX camelCase.
+    const toastContent = container.querySelector('div[style*="backdrop-filter"]')
     expect(toastContent).toBeInTheDocument()
   })
 

@@ -10,21 +10,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { LanguageSwitcher } from '@/components/ui/language-switcher'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => {
-    const trans: Record<string, string> = {
-      label: 'Language',
-      es: 'Spanish',
-      en: 'English',
-      pt: 'Portuguese',
-      fr: 'French',
-      de: 'German',
-      it: 'Italian',
-    }
-    return trans[key] || key
-  },
-  useLocale: () => 'es',
-}))
+vi.mock('next-intl', async () => (await import('@/__tests__/setup/next-intl-mock')).createNextIntlMock({
+  label: 'Language',
+  es: 'Spanish',
+  en: 'English',
+  pt: 'Portuguese',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+}, 'es'))
 
 const mockRouterReplace = vi.fn()
 vi.mock('@/i18n/navigation', () => ({

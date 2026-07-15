@@ -26,12 +26,12 @@ describe('ClientSelect Component', () => {
 
   it('renders select dropdown', () => {
     render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
-    expect(screen.getByRole('button', { name: /select client/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /selecciona un cliente/i })).toBeInTheDocument()
   })
 
   it('displays client options when opened', async () => {
     render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
-    const button = screen.getByRole('button', { name: /select client/i })
+    const button = screen.getByRole('button', { name: /selecciona un cliente/i })
     fireEvent.click(button)
 
     await waitFor(() => {
@@ -44,7 +44,7 @@ describe('ClientSelect Component', () => {
     const onChange = vi.fn()
     render(<ClientSelect clients={mockClients} value="" onChange={onChange} />)
 
-    const button = screen.getByRole('button', { name: /select client/i })
+    const button = screen.getByRole('button', { name: /selecciona un cliente/i })
     fireEvent.click(button)
 
     await waitFor(() => {
@@ -61,10 +61,10 @@ describe('ClientSelect Component', () => {
 
   it('filters clients by search query', async () => {
     render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
-    const button = screen.getByRole('button', { name: /select client/i })
+    const button = screen.getByRole('button', { name: /selecciona un cliente/i })
     fireEvent.click(button)
 
-    const searchInput = screen.getByPlaceholderText(/search/i)
+    const searchInput = screen.getByPlaceholderText(/buscar/i)
     fireEvent.change(searchInput, { target: { value: 'Client B' } })
 
     await waitFor(() => {
@@ -74,14 +74,14 @@ describe('ClientSelect Component', () => {
 
   it('shows empty state when no clients match search', async () => {
     render(<ClientSelect clients={mockClients} value="" onChange={() => {}} />)
-    const button = screen.getByRole('button', { name: /select client/i })
+    const button = screen.getByRole('button', { name: /selecciona un cliente/i })
     fireEvent.click(button)
 
-    const searchInput = screen.getByPlaceholderText(/search/i)
+    const searchInput = screen.getByPlaceholderText(/buscar/i)
     fireEvent.change(searchInput, { target: { value: 'nonexistent' } })
 
     await waitFor(() => {
-      expect(screen.getByText(/no clients found/i)).toBeInTheDocument()
+      expect(screen.getByText(/no se encontraron/i)).toBeInTheDocument()
     })
   })
 })

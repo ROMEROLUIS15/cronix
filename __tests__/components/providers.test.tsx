@@ -19,10 +19,17 @@ import {
 } from '@/components/providers'
 
 // ── Mock React Query ────────────────────────────────────────────────────────
+// The component does `new QueryClient({ defaultOptions: {...} })`, so the double
+// must be constructable — an arrow-function mock throws "is not a constructor".
+// It stores the whole options object so the assertions below can read
+// `_defaultOptions.defaultOptions.queries`.
 vi.mock('@tanstack/react-query', () => ({
-  QueryClient: vi.fn((options: any) => ({
-    _defaultOptions: options?.defaultOptions,
-  })),
+  QueryClient: class {
+    _defaultOptions: unknown
+    constructor(options: unknown) {
+      this._defaultOptions = options
+    }
+  },
   QueryClientProvider: ({ children, client }: any) => (
     <div data-testid="query-client-provider" data-client={JSON.stringify(client)}>
       {children}

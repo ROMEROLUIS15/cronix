@@ -10,19 +10,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from '@/components/layout/sidebar'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => {
-    const trans: Record<string, string> = {
-      agenda: 'Schedule',
-      clients: 'Clients',
-      services: 'Services',
-      team: 'Team',
-      finances: 'Finances',
-      reports: 'Reports',
-      settings: 'Settings',
-    }
-    return trans[key] || key
-  },
+vi.mock('next-intl', async () => (await import('@/__tests__/setup/next-intl-mock')).createNextIntlMock({
+  agenda: 'Schedule',
+  clients: 'Clients',
+  services: 'Services',
+  team: 'Team',
+  finances: 'Finances',
+  reports: 'Reports',
+  settings: 'Settings',
 }))
 
 vi.mock('@/i18n/navigation', () => ({
@@ -93,9 +88,10 @@ describe('Sidebar Component', () => {
   it('renders navigation links', () => {
     render(<Sidebar user={mockUser} business={mockBusiness} />)
 
-    expect(screen.getByText(/schedule|agenda/i)).toBeInTheDocument()
-    expect(screen.getByText(/clients/i)).toBeInTheDocument()
-    expect(screen.getByText(/services|servicios/i)).toBeInTheDocument()
+    expect(screen.getByText('Schedule')).toBeInTheDocument()
+    expect(screen.getByText('Clients')).toBeInTheDocument()
+    // Exact: /services/i would also match the "professional_services" category label.
+    expect(screen.getByText('Services')).toBeInTheDocument()
   })
 
   it('hides owner-only items for non-owners', () => {
@@ -140,14 +136,14 @@ describe('Sidebar Component', () => {
   it('has logout button', () => {
     render(<Sidebar user={mockUser} business={mockBusiness} />)
 
-    const logoutButton = screen.queryByText(/logout|salir|sign out/i)
+    const logoutButton = screen.queryByText(/cerrar sesión/i)
     expect(logoutButton).toBeTruthy()
   })
 
   it('handles logout click', () => {
     render(<Sidebar user={mockUser} business={mockBusiness} />)
 
-    const logoutButton = screen.queryByText(/logout|salir|sign out/i)
+    const logoutButton = screen.queryByText(/cerrar sesión/i)
     if (logoutButton) {
       fireEvent.click(logoutButton)
     }

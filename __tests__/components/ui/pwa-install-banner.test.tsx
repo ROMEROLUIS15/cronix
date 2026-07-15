@@ -7,9 +7,7 @@ vi.mock('next/image', () => ({
   default: ({ src, alt, ...props }: any) => <img src={src} alt={alt} {...props} />,
 }))
 
-vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-}))
+
 
 vi.mock('@/lib/hooks/use-pwa-install', () => ({
   usePwaInstall: vi.fn(),
@@ -126,7 +124,8 @@ describe('PwaInstallBanner Component', () => {
     const button = screen.getByRole('button')
     fireEvent.click(button)
 
-    expect(screen.getByText(/share|add to home screen/i)).toBeInTheDocument()
+    // Real es.json copy; the guide title is stable across the hero/navbar markup.
+    expect(screen.getAllByText('Instalar en iPhone / iPad').length).toBeGreaterThan(0)
   })
 
   it('shows fallback instructions on Android without native support', () => {

@@ -52,6 +52,16 @@ jobs:
       - name: Run Unit & Repository Tests (Vitest)
         run: npm test
 
+      # Component tests (jsdom + RTL). Separate config: `npm test` excludes
+      # __tests__/components/** because these need the React JSX transform.
+      # Until 2026-07-14 this suite ran NOWHERE and every file failed to parse
+      # (the config set esbuild.jsx, which Vitest 4 ignores — it transforms via
+      # Rolldown), so the tests rotted against the components they cover. The
+      # whole suite was resurrected and repaired (389 tests, all green), so this
+      # is now BLOCKING — the warning-first backlog is cleared.
+      - name: Component Tests (Vitest, jsdom)
+        run: npm run test:components
+
       - name: Run Lint
         run: npm run lint
 
