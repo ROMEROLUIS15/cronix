@@ -99,3 +99,8 @@ supabase/functions/**/deno.lock
 
 # Backlog de trabajo local (no versionado)
 PENDIENTES.local.md
+
+# Registro de skills del tooling de agentes — autogenerado por `gentle-ai
+# skill-registry refresh`. Indexa skills instaladas en la MAQUINA, con rutas
+# absolutas al home del usuario: no aplica a nadie que clone el repo.
+.atl/
