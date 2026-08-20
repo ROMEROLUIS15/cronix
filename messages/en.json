@@ -1268,7 +1268,8 @@
     "unexpectedError": "Unexpected error. Please try again.",
     "retry": "Retry",
     "selectFromContacts": "Select from contacts",
-    "importFromContacts": "Import from contacts"
+    "importFromContacts": "Import from contacts",
+    "iosContactHint": "On iPhone: tap a field and use “AutoFill Contact” → “Other Contact” above the keyboard."
   },
   "adminPulse": {
     "title": "System Pulse",

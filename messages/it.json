@@ -1232,7 +1232,8 @@
     "unexpectedError": "Errore imprevisto. Riprova.",
     "retry": "Riprova",
     "selectFromContacts": "Seleziona dai contatti",
-    "importFromContacts": "Importa dalla rubrica"
+    "importFromContacts": "Importa dalla rubrica",
+    "iosContactHint": "Su iPhone: tocca un campo e usa «Compila contatto» → «Altro contatto» sopra la tastiera."
   },
   "adminPulse": {
     "title": "Pulse",

@@ -1232,7 +1232,8 @@
     "unexpectedError": "Unerwarteter Fehler. Bitte versuche es erneut.",
     "retry": "Erneut versuchen",
     "selectFromContacts": "Aus Kontakten auswählen",
-    "importFromContacts": "Aus Adressbuch importieren"
+    "importFromContacts": "Aus Adressbuch importieren",
+    "iosContactHint": "Auf dem iPhone: Tippe auf ein Feld und nutze „Kontakt ausfüllen“ → „Anderer Kontakt“ über der Tastatur."
   },
   "adminPulse": {
     "title": "System-Puls",

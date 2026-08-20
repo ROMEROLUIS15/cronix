@@ -23,7 +23,7 @@ export default function ClientEditPage() {
     loading, saving, deleting, confirmDelete, setConfirmDelete,
     legacyPhone, form, setForm, selectedCountry, setSelectedCountry,
     msg, handleSave, handleDelete, toggleTag,
-    pickContact, cpSupported, cpLoading,
+    pickContact, cpSupported, cpIosFallback, cpLoading,
   } = useClientEditForm(clientId)
 
   if (loading) {
@@ -114,6 +114,7 @@ export default function ClientEditPage() {
               onChange={e => setForm({ ...form, name: e.target.value })}
               className="input-base"
               placeholder={t('namePlaceholder')}
+              autoComplete="name"
             />
           </div>
 
@@ -129,6 +130,7 @@ export default function ClientEditPage() {
               onLocalPhoneChange={v => setForm({ ...form, phoneLocal: v })}
               onPickContact={cpSupported ? pickContact : undefined}
               pickContactLoading={cpLoading}
+              showIosContactHint={cpIosFallback}
             />
           </div>
 
@@ -145,6 +147,7 @@ export default function ClientEditPage() {
                 onChange={e => setForm({ ...form, email: e.target.value })}
                 className="input-base pl-9"
                 placeholder="correo@ejemplo.com"
+                autoComplete="email"
               />
             </div>
           </div>

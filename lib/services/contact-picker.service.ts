@@ -26,6 +26,28 @@ export function isContactPickerSupported(): boolean {
 }
 
 /**
+ * Returns true on iOS / iPadOS.
+ *
+ * WebKit gates the Contact Picker API behind an experimental flag that is off
+ * by default, so `isContactPickerSupported()` is false on every iPhone browser.
+ * Safari offers a different route instead — "AutoFill Contact" → "Other
+ * Contact" in the keyboard bar — which the UI can point the user to.
+ *
+ * Kept separate from the unsupported case on purpose: desktop browsers also
+ * lack the API, but have no such keyboard flow to fall back on.
+ */
+export function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false
+
+  const ua = navigator.userAgent
+  // iPadOS 13+ reports itself as "Macintosh"; touch points disambiguate it.
+  return (
+    /iPad|iPhone|iPod/.test(ua) ||
+    (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  )
+}
+
+/**
  * Opens the device's native contact picker and returns the selected contact.
  * Returns null if the user cancels, the API is unsupported, or an error occurs.
  */

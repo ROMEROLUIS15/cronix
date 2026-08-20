@@ -39,6 +39,7 @@ export interface UseClientEditFormReturn {
   toggleTag: (tag: string) => void;
   pickContact: (() => void) | undefined;
   cpSupported: boolean;
+  cpIosFallback: boolean;
   cpLoading: boolean;
 }
 
@@ -63,7 +64,7 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
 
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
 
-  const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
+  const { supported: cpSupported, iosFallback: cpIosFallback, loading: cpLoading, pick: pickContact } = useContactPicker(
     ({ name, phoneLocal, country }) => {
       setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
       setSelectedCountry(country);
@@ -202,6 +203,7 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
     toggleTag,
     pickContact,
     cpSupported,
+    cpIosFallback,
     cpLoading,
   };
 }

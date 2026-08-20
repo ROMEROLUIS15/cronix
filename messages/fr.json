@@ -1232,7 +1232,8 @@
     "unexpectedError": "Erreur inattendue. Veuillez réessayer.",
     "retry": "Réessayer",
     "selectFromContacts": "Sélectionner depuis les contacts",
-    "importFromContacts": "Importer depuis le répertoire"
+    "importFromContacts": "Importer depuis le répertoire",
+    "iosContactHint": "Sur iPhone : touchez un champ et utilisez « Remplir contact » → « Autre contact » au-dessus du clavier."
   },
   "adminPulse": {
     "title": "Pulse Système",

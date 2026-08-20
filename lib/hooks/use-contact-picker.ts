@@ -10,9 +10,9 @@
  *  - Calling onPick with { name, phoneLocal, country } ready to set in form state
  */
 
-import { useState, useEffect }                    from 'react'
-import { pickContact, isContactPickerSupported }  from '@/lib/services/contact-picker.service'
-import { COUNTRIES, Country }                     from '@/components/ui/phone-input-flags'
+import { useState, useEffect }                            from 'react'
+import { pickContact, isContactPickerSupported, isIOS }   from '@/lib/services/contact-picker.service'
+import { COUNTRIES, Country }                             from '@/components/ui/phone-input-flags'
 
 export interface ContactPickResult {
   name:       string
@@ -24,12 +24,16 @@ export interface ContactPickResult {
  * @param onPick - called with parsed contact data when the user selects a contact
  */
 export function useContactPicker(onPick: (result: ContactPickResult) => void) {
-  const [supported, setSupported] = useState(false)
-  const [loading,   setLoading]   = useState(false)
+  const [supported,   setSupported]   = useState(false)
+  const [iosFallback, setIosFallback] = useState(false)
+  const [loading,     setLoading]     = useState(false)
 
-  // Feature detection runs client-side only
+  // Feature detection runs client-side only (UA access would break hydration)
   useEffect(() => {
-    setSupported(isContactPickerSupported())
+    const ok = isContactPickerSupported()
+    setSupported(ok)
+    // On iOS the picker is unavailable, but Safari's keyboard AutoFill is not.
+    setIosFallback(!ok && isIOS())
   }, [])
 
   const pick = async () => {
@@ -58,5 +62,5 @@ export function useContactPicker(onPick: (result: ContactPickResult) => void) {
     }
   }
 
-  return { supported, loading, pick }
+  return { supported, iosFallback, loading, pick }
 }

@@ -1232,7 +1232,8 @@
     "unexpectedError": "Erro inesperado. Por favor, tente novamente.",
     "retry": "Tentar novamente",
     "selectFromContacts": "Selecionar dos contatos",
-    "importFromContacts": "Importar da agenda"
+    "importFromContacts": "Importar da agenda",
+    "iosContactHint": "No iPhone: toque em um campo e use “Preencher contato” → “Outro contato” no teclado."
   },
   "adminPulse": {
     "title": "System Pulse",

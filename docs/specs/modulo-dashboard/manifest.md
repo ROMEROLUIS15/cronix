@@ -133,3 +133,38 @@ Reglas normativas:
 4. **Cotas correctas:** rango half-open `[inicio_mes, inicio_mes_siguiente)`; jamás filtrar "del 1 en adelante" sin cota superior (bug histórico), ni comparar `date` contra timestamp ISO como string (descartaba el gasto del día 1).
 5. Acceso solo vía repo: `finances.getMonthlyMetrics(businessId, monthStart)` (`IFinanceRepository`), que coacciona los `NUMERIC` (strings de PostgREST) a number.
 6. **Aislamiento multi-tenant (constitution §4) — OBLIGATORIO.** `fn_get_monthly_metrics` y `fn_get_dashboard_stats` son `SECURITY DEFINER` (bypasean RLS) y ejecutables por `authenticated`. Por eso DEBEN llamar al guard `fn_assert_business_access(p_business_id)` como primera sentencia: solo pasan `service_role`, el dueño del negocio (`current_business_id()`) o un `platform_admin`; cualquier otro → `42501`. Sin el guard, un usuario podía leer las finanzas de otro negocio enumerando UUIDs (fuga cerrada en `20260622120000`, cubierta por pgTAP en `rls_policies.test.sql §27`). Toda nueva RPC `SECURITY DEFINER` que reciba `business_id` y sea ejecutable por `authenticated` debe usar este mismo guard.
+
+## 9. Importar contactos del teléfono — asimetría Android/iOS (DESCRIPTIVO)
+
+Los formularios de cliente (`clients/new`, `clients/[id]/edit`) ofrecen un botón que abre el selector de contactos nativo del teléfono, vía la **Contact Picker API** del navegador (`navigator.contacts.select`). Cadena: `lib/services/contact-picker.service.ts` (wrapper + feature detection) → `lib/hooks/use-contact-picker.ts` (estado + match de prefijo país) → `components/ui/phone-input-flags.tsx` (render del botón).
+
+**El botón solo existe donde la API existe.** `useContactPicker` expone `supported`, y las páginas pasan `onPickContact={cpSupported ? pickContact : undefined}`; con `undefined` el botón **no se renderiza**. Esto es intencional, no un bug.
+
+| Plataforma | Contact Picker API | Resultado |
+|---|---|---|
+| Chrome Android 80+ | Habilitada por defecto | Botón visible y funcional |
+| Safari iOS 14.5+ | Solo tras activar un **flag experimental** de WebKit (apagado por defecto) | Botón ausente |
+| Safari escritorio / Firefox | No implementada | Botón ausente |
+
+Como iOS obliga a todos los navegadores a usar WebKit, esto aplica también a Chrome/Firefox en iPhone y a la PWA instalada. **No existe código que haga funcionar `navigator.contacts.select()` en iOS.**
+
+**Ruta alternativa en iOS: AutoFill de Contactos.** Safari sí permite importar un contacto **arbitrario** de la agenda: el usuario toca un campo, pulsa **"Autorrellenar contacto"** sobre el teclado, elige **"Otro contacto"** y selecciona la ficha. iOS rellena entonces los campos reconocidos. No es tecleo campo por campo — es un selector de contactos por otra puerta.
+
+Para que Safari ofrezca ese botón, el formulario debe declararse como rellenable vía tokens `autocomplete`. Por eso los tres campos los llevan y **son requisito, no cosmética**:
+
+| Campo | Token | Archivos |
+|---|---|---|
+| Nombre | `name` | `clients/new/page.tsx`, `clients/[id]/edit/page.tsx` |
+| Teléfono | `tel-national` | `components/ui/phone-input-flags.tsx` |
+| Email | `email` | `clients/new/page.tsx`, `clients/[id]/edit/page.tsx` |
+
+**Descubribilidad (obligatoria).** En iOS no hay botón visible, así que la ruta es invisible salvo que se señale. `isIOS()` (en el servicio) alimenta `iosFallback` en el hook, y las páginas lo pasan como `showIosContactHint` a `PhoneInputFlags`, que renderiza el hint `common.iosContactHint` (×6 locales). La detección de iOS se mantiene **separada** de "picker no soportado" a propósito: el escritorio tampoco tiene la API, pero tampoco tiene ese flujo de teclado — mostrarle el hint sería mentirle.
+
+`isIOS()` está cubierto por `lib/services/contact-picker.service.test.ts` (10 casos con UA reales). Los dos que importan y no son obvios:
+
+- **iPadOS 13+ se hace pasar por `Macintosh`.** El UA por sí solo no distingue un iPad de un Mac de escritorio; la única señal es `maxTouchPoints > 1`. Un falso negativo aquí deja al usuario de iPad sin ninguna ruta (ni botón ni hint).
+- **Android debe dar `false`.** Ahí el botón real funciona; un falso positivo pintaría el hint junto a un botón que ya resuelve el problema.
+
+Ambas ramas están verificadas por mutación (romper cada una hace fallar su test), no solo por cobertura.
+
+> **Trade-off (sugerencia del agente + decisión del dueño, 2026-08-20).** Se evaluaron tres salidas para iOS: (a) tokens `autocomplete` + hint, (b) importar `.vcf` por `<input type="file">`, (c) wrapper nativo (Capacitor). Se eligió **(a)**: (b) obliga a exportar el contacto a Archivos antes (3 pasos extra) y (c) implica publicar en App Store — desproporcionado para este hueco. Consecuencia aceptada: **la paridad es funcional pero no idéntica** — en Android es un botón visible a un toque; en iOS son dos toques en la barra del teclado. **Riesgo residual conocido:** que Safari ofrezca "Autorrellenar contacto" depende de la heurística de formularios de Apple, que no publica un contrato duro sobre qué tokens la disparan. Los tokens son la vía documentada, pero **esto no está verificado en dispositivo** — pendiente de prueba en un iPhone real. Si se exigiera paridad idéntica, la opción es (c).

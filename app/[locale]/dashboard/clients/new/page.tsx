@@ -29,7 +29,7 @@ export default function NewClientPage() {
     selectedTags,
   );
 
-  const { supported: cpSupported, loading: cpLoading, pick: pickContact } = useContactPicker(
+  const { supported: cpSupported, iosFallback: cpIosFallback, loading: cpLoading, pick: pickContact } = useContactPicker(
     ({ name, phoneLocal, country }) => {
       setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
       setSelectedCountry(country);
@@ -133,6 +133,7 @@ export default function NewClientPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input-base"
                 placeholder={t('namePlaceholder')}
+                autoComplete="name"
               />
             </div>
 
@@ -151,6 +152,7 @@ export default function NewClientPage() {
                 onLocalPhoneChange={(v) => setForm({ ...form, phoneLocal: v })}
                 onPickContact={cpSupported ? pickContact : undefined}
                 pickContactLoading={cpLoading}
+                showIosContactHint={cpIosFallback}
               />
             </div>
 
@@ -170,6 +172,7 @@ export default function NewClientPage() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="input-base"
                 placeholder="juan@ejemplo.com"
+                autoComplete="email"
               />
             </div>
 
