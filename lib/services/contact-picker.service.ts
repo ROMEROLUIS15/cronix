@@ -28,13 +28,13 @@ export function isContactPickerSupported(): boolean {
 /**
  * Returns true on iOS / iPadOS.
  *
- * WebKit gates the Contact Picker API behind an experimental flag that is off
- * by default, so `isContactPickerSupported()` is false on every iPhone browser.
- * Safari offers a different route instead — "AutoFill Contact" → "Other
- * Contact" in the keyboard bar — which the UI can point the user to.
+ * WebKit does not implement the Contact Picker API, so
+ * `isContactPickerSupported()` is false on every iPhone browser and the .vcf
+ * import is the fallback. This flag does not decide whether that fallback
+ * renders — it only picks the wording of its help text, because exporting a
+ * card from Contacts takes different steps on a phone than on a desktop.
  *
- * Kept separate from the unsupported case on purpose: desktop browsers also
- * lack the API, but have no such keyboard flow to fall back on.
+ * See modulo-dashboard §9.
  */
 export function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false

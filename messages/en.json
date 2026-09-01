@@ -1269,7 +1269,15 @@
     "retry": "Retry",
     "selectFromContacts": "Select from contacts",
     "importFromContacts": "Import from contacts",
-    "iosContactHint": "On iPhone: tap a field and use “AutoFill Contact” → “Other Contact” above the keyboard."
+    "vcardImport": "Import from contact file",
+    "vcardHintIos": "On iPhone: open Contacts, share the card and choose \"Save to Files\". Then select it here.",
+    "vcardHintDesktop": "Choose a .vcf file exported from your address book.",
+    "vcardChoose": "Choose a contact",
+    "vcardNoName": "No name",
+    "vcardNoPhone": "No phone",
+    "vcardErrorEmpty": "The file contains no usable contact.",
+    "vcardErrorTooLarge": "The file is too large (5 MB maximum).",
+    "vcardErrorUnreadable": "The file could not be read."
   },
   "adminPulse": {
     "title": "System Pulse",

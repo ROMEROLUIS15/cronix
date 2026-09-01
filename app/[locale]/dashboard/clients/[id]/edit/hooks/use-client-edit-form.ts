@@ -13,6 +13,7 @@ import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { getBrowserContainer } from '@/lib/browser-container';
 import { parsePhone, buildPhone, isE164Phone, COUNTRIES, Country } from '@/components/ui/phone-input-flags';
 import { useContactPicker } from '@/lib/hooks/use-contact-picker';
+import type { VCardPickResult } from '@/lib/hooks/use-vcard-import';
 
 export interface ClientEditForm {
   name: string;
@@ -39,8 +40,10 @@ export interface UseClientEditFormReturn {
   toggleTag: (tag: string) => void;
   pickContact: (() => void) | undefined;
   cpSupported: boolean;
-  cpIosFallback: boolean;
+  cpIsIos: boolean;
   cpLoading: boolean;
+  /** Fills the form from a contact imported via .vcf (iOS / desktop route). */
+  applyImportedContact: (result: VCardPickResult) => void;
 }
 
 export function useClientEditForm(clientId: string): UseClientEditFormReturn {
@@ -64,11 +67,24 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
 
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
 
-  const { supported: cpSupported, iosFallback: cpIosFallback, loading: cpLoading, pick: pickContact } = useContactPicker(
-    ({ name, phoneLocal, country }) => {
-      setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
+  // Existing fields win: an import fills the blanks, it never overwrites data
+  // the owner already has on the client.
+  const applyImportedContact = useCallback(
+    ({ name, phoneLocal, country, email }: VCardPickResult) => {
+      setForm(prev => ({
+        ...prev,
+        name:  prev.name  || name,
+        email: prev.email || (email ?? ''),
+        phoneLocal,
+      }));
       setSelectedCountry(country);
-    }
+    },
+    [],
+  );
+
+  const { supported: cpSupported, isIos: cpIsIos, loading: cpLoading, pick: pickContact } = useContactPicker(
+    ({ name, phoneLocal, country }) =>
+      applyImportedContact({ name, phoneLocal, country, email: null }),
   );
 
   const showMsg = useCallback((type: 'success' | 'error', text: string) => {
@@ -203,7 +219,8 @@ export function useClientEditForm(clientId: string): UseClientEditFormReturn {
     toggleTag,
     pickContact,
     cpSupported,
-    cpIosFallback,
+    cpIsIos,
     cpLoading,
+    applyImportedContact,
   };
 }

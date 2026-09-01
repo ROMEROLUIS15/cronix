@@ -1233,7 +1233,15 @@
     "retry": "Riprova",
     "selectFromContacts": "Seleziona dai contatti",
     "importFromContacts": "Importa dalla rubrica",
-    "iosContactHint": "Su iPhone: tocca un campo e usa «Compila contatto» → «Altro contatto» sopra la tastiera."
+    "vcardImport": "Importa da file di contatto",
+    "vcardHintIos": "Su iPhone: apri Contatti, condividi la scheda e scegli \"Salva su File\". Poi selezionala qui.",
+    "vcardHintDesktop": "Scegli un file .vcf esportato dalla tua rubrica.",
+    "vcardChoose": "Scegli un contatto",
+    "vcardNoName": "Senza nome",
+    "vcardNoPhone": "Senza telefono",
+    "vcardErrorEmpty": "Il file non contiene alcun contatto utilizzabile.",
+    "vcardErrorTooLarge": "Il file è troppo grande (massimo 5 MB).",
+    "vcardErrorUnreadable": "Impossibile leggere il file."
   },
   "adminPulse": {
     "title": "Pulse",

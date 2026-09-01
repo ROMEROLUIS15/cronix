@@ -1233,7 +1233,15 @@
     "retry": "Erneut versuchen",
     "selectFromContacts": "Aus Kontakten auswählen",
     "importFromContacts": "Aus Adressbuch importieren",
-    "iosContactHint": "Auf dem iPhone: Tippe auf ein Feld und nutze „Kontakt ausfüllen“ → „Anderer Kontakt“ über der Tastatur."
+    "vcardImport": "Aus Kontaktdatei importieren",
+    "vcardHintIos": "Auf dem iPhone: öffne Kontakte, teile die Karte und wähle „In Dateien sichern“. Wähle sie dann hier aus.",
+    "vcardHintDesktop": "Wähle eine .vcf-Datei aus deinem Adressbuch.",
+    "vcardChoose": "Wähle einen Kontakt",
+    "vcardNoName": "Ohne Namen",
+    "vcardNoPhone": "Ohne Telefon",
+    "vcardErrorEmpty": "Die Datei enthält keinen verwendbaren Kontakt.",
+    "vcardErrorTooLarge": "Die Datei ist zu groß (maximal 5 MB).",
+    "vcardErrorUnreadable": "Die Datei konnte nicht gelesen werden."
   },
   "adminPulse": {
     "title": "System-Puls",

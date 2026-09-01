@@ -1233,7 +1233,15 @@
     "retry": "Tentar novamente",
     "selectFromContacts": "Selecionar dos contatos",
     "importFromContacts": "Importar da agenda",
-    "iosContactHint": "No iPhone: toque em um campo e use “Preencher contato” → “Outro contato” no teclado."
+    "vcardImport": "Importar de arquivo de contato",
+    "vcardHintIos": "No iPhone: abra Contatos, compartilhe o cartão e escolha \"Salvar em Arquivos\". Depois selecione-o aqui.",
+    "vcardHintDesktop": "Escolha um arquivo .vcf exportado da sua agenda.",
+    "vcardChoose": "Escolha um contato",
+    "vcardNoName": "Sem nome",
+    "vcardNoPhone": "Sem telefone",
+    "vcardErrorEmpty": "O arquivo não contém nenhum contato utilizável.",
+    "vcardErrorTooLarge": "O arquivo é grande demais (máximo 5 MB).",
+    "vcardErrorUnreadable": "Não foi possível ler o arquivo."
   },
   "adminPulse": {
     "title": "System Pulse",

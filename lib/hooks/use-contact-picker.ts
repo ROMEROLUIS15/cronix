@@ -6,13 +6,18 @@
  * Handles:
  *  - Feature detection (shows button only on supported browsers)
  *  - Loading state while the native picker is open
- *  - Auto-matching the contact's phone country code to the COUNTRIES list
+ *  - Matching the contact's phone country code against the COUNTRIES list
  *  - Calling onPick with { name, phoneLocal, country } ready to set in form state
+ *
+ * The API exists on Chrome for Android and nowhere else that matters. When it
+ * is missing, the .vcf import (`useVCardImport`) is the fallback route — see
+ * modulo-dashboard §9.
  */
 
-import { useState, useEffect }                            from 'react'
-import { pickContact, isContactPickerSupported, isIOS }   from '@/lib/services/contact-picker.service'
-import { COUNTRIES, Country }                             from '@/components/ui/phone-input-flags'
+import { useState, useEffect }                          from 'react'
+import { pickContact, isContactPickerSupported, isIOS } from '@/lib/services/contact-picker.service'
+import { splitContactPhone }                            from '@/lib/hooks/contact-phone'
+import { Country }                                      from '@/components/ui/phone-input-flags'
 
 export interface ContactPickResult {
   name:       string
@@ -24,16 +29,16 @@ export interface ContactPickResult {
  * @param onPick - called with parsed contact data when the user selects a contact
  */
 export function useContactPicker(onPick: (result: ContactPickResult) => void) {
-  const [supported,   setSupported]   = useState(false)
-  const [iosFallback, setIosFallback] = useState(false)
-  const [loading,     setLoading]     = useState(false)
+  const [supported, setSupported] = useState(false)
+  const [isIos,     setIsIos]     = useState(false)
+  const [loading,   setLoading]   = useState(false)
 
   // Feature detection runs client-side only (UA access would break hydration)
   useEffect(() => {
-    const ok = isContactPickerSupported()
-    setSupported(ok)
-    // On iOS the picker is unavailable, but Safari's keyboard AutoFill is not.
-    setIosFallback(!ok && isIOS())
+    setSupported(isContactPickerSupported())
+    // Drives the wording of the fallback's help text, not whether it renders:
+    // exporting a .vcf takes different steps on a phone than on a desktop.
+    setIsIos(isIOS())
   }, [])
 
   const pick = async () => {
@@ -42,25 +47,12 @@ export function useContactPicker(onPick: (result: ContactPickResult) => void) {
       const contact = await pickContact()
       if (!contact) return // user cancelled
 
-      const rawPhone = (contact.phone ?? '').trim()
-
-      // Match country by longest dial prefix
-      const sorted  = [...COUNTRIES].sort((a, b) => b.dial.length - a.dial.length)
-      const matched = sorted.find(c => rawPhone.startsWith(c.dial))
-
-      const country: Country = matched ?? (COUNTRIES[0] as Country)
-      const localRaw = matched
-        ? rawPhone.slice(matched.dial.length).trim()
-        : rawPhone
-
-      // Strip formatting characters from local part
-      const phoneLocal = localRaw.replace(/[-.()\s]+/g, '')
-
+      const { country, phoneLocal } = splitContactPhone(contact.phone ?? '')
       onPick({ name: contact.name, phoneLocal, country })
     } finally {
       setLoading(false)
     }
   }
 
-  return { supported, iosFallback, loading, pick }
+  return { supported, isIos, loading, pick }
 }

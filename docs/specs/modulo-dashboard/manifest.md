@@ -134,23 +134,51 @@ Reglas normativas:
 5. Acceso solo vía repo: `finances.getMonthlyMetrics(businessId, monthStart)` (`IFinanceRepository`), que coacciona los `NUMERIC` (strings de PostgREST) a number.
 6. **Aislamiento multi-tenant (constitution §4) — OBLIGATORIO.** `fn_get_monthly_metrics` y `fn_get_dashboard_stats` son `SECURITY DEFINER` (bypasean RLS) y ejecutables por `authenticated`. Por eso DEBEN llamar al guard `fn_assert_business_access(p_business_id)` como primera sentencia: solo pasan `service_role`, el dueño del negocio (`current_business_id()`) o un `platform_admin`; cualquier otro → `42501`. Sin el guard, un usuario podía leer las finanzas de otro negocio enumerando UUIDs (fuga cerrada en `20260622120000`, cubierta por pgTAP en `rls_policies.test.sql §27`). Toda nueva RPC `SECURITY DEFINER` que reciba `business_id` y sea ejecutable por `authenticated` debe usar este mismo guard.
 
-## 9. Importar contactos del teléfono — asimetría Android/iOS (DESCRIPTIVO)
+## 9. Importar contactos del teléfono — dos rutas según plataforma (NORMATIVO)
 
-Los formularios de cliente (`clients/new`, `clients/[id]/edit`) ofrecen un botón que abre el selector de contactos nativo del teléfono, vía la **Contact Picker API** del navegador (`navigator.contacts.select`). Cadena: `lib/services/contact-picker.service.ts` (wrapper + feature detection) → `lib/hooks/use-contact-picker.ts` (estado + match de prefijo país) → `components/ui/phone-input-flags.tsx` (render del botón).
+Los formularios de cliente (`clients/new`, `clients/[id]/edit`) permiten traer un contacto de la agenda del dispositivo. Existen **dos rutas** y la plataforma decide cuál se ofrece; **nunca se muestran las dos a la vez**.
 
-**El botón solo existe donde la API existe.** `useContactPicker` expone `supported`, y las páginas pasan `onPickContact={cpSupported ? pickContact : undefined}`; con `undefined` el botón **no se renderiza**. Esto es intencional, no un bug.
-
-| Plataforma | Contact Picker API | Resultado |
+| Plataforma | Contact Picker API | Ruta ofrecida |
 |---|---|---|
-| Chrome Android 80+ | Habilitada por defecto | Botón visible y funcional |
-| Safari iOS 14.5+ | Solo tras activar un **flag experimental** de WebKit (apagado por defecto) | Botón ausente |
-| Safari escritorio / Firefox | No implementada | Botón ausente |
+| Chrome Android 80+ | Habilitada por defecto | **A** — botón nativo, un toque |
+| Safari / Chrome / Firefox en iOS y iPadOS | **No implementada por WebKit** | **B** — importar `.vcf` |
+| Safari / Firefox de escritorio | No implementada | **B** — importar `.vcf` |
 
-Como iOS obliga a todos los navegadores a usar WebKit, esto aplica también a Chrome/Firefox en iPhone y a la PWA instalada. **No existe código que haga funcionar `navigator.contacts.select()` en iOS.**
+Como iOS obliga a todos los navegadores a usar WebKit, la fila de iOS aplica también a Chrome/Firefox en iPhone y a la PWA instalada. **No existe código que haga funcionar `navigator.contacts.select()` en iOS, ni lo habrá mientras WebKit no lo implemente.**
 
-**Ruta alternativa en iOS: AutoFill de Contactos.** Safari sí permite importar un contacto **arbitrario** de la agenda: el usuario toca un campo, pulsa **"Autorrellenar contacto"** sobre el teclado, elige **"Otro contacto"** y selecciona la ficha. iOS rellena entonces los campos reconocidos. No es tecleo campo por campo — es un selector de contactos por otra puerta.
+### 9.1 Ruta A — Contact Picker API (Android)
 
-Para que Safari ofrezca ese botón, el formulario debe declararse como rellenable vía tokens `autocomplete`. Por eso los tres campos los llevan y **son requisito, no cosmética**:
+Cadena: `lib/services/contact-picker.service.ts` (wrapper + feature detection) → `lib/hooks/use-contact-picker.ts` (estado + `onPick`) → `components/ui/phone-input-flags.tsx` (render del botón).
+
+`useContactPicker` expone `supported`, y las páginas pasan `onPickContact={cpSupported ? pickContact : undefined}`; con `undefined` el botón **no se renderiza**. Esto es intencional, no un bug.
+
+### 9.2 Ruta B — importar un archivo `.vcf` (iOS y escritorio)
+
+Cadena: `lib/services/vcard.service.ts` (parser puro) → `lib/hooks/use-vcard-import.ts` (lectura del archivo + selección) → `components/ui/vcard-import.tsx` (botón, `<input type="file">` oculto, ayuda y selector).
+
+Flujo en iPhone: Contactos → compartir la ficha → **«Guardar en Archivos»** → en Cronix, *Importar desde archivo de contacto* → elegir el archivo. En escritorio es un `.vcf` exportado de la agenda.
+
+**Es la única ruta que alcanza la agenda del iPhone desde una página web.** El parser acepta las tres formas que aparecen en exports reales: vCard 3.0 (lo que exporta iOS), 2.1 con quoted-printable (Android/Outlook) y 4.0 con valores URI (`tel:`, `mailto:`).
+
+### 9.3 Invariantes (NORMATIVAS)
+
+1. **Una sola ruta visible.** La ruta B se renderiza si y solo si `!cpSupported`. Ofrecer ambas en Android sería ruido sobre un botón que ya resuelve el caso a un toque.
+2. **`isIOS()` no decide si la ruta B se muestra — solo su redacción.** Alimenta `isIos` en `useContactPicker` y de ahí `VCardImport isIos`, que elige entre `common.vcardHintIos` (pasos de exportar desde Contactos) y `common.vcardHintDesktop`. El escritorio también carece de la API pero no exporta igual; darle los pasos del iPhone sería mentirle.
+3. **La importación rellena huecos, no pisa datos.** `name` y `email` solo se escriben si el campo está vacío (`prev.name || name`); el teléfono sí se sobrescribe, porque es el campo que el usuario pidió importar explícitamente. En el formulario de edición esto protege los datos ya guardados del cliente.
+4. **Las dos rutas aterrizan idéntico.** El match de prefijo de país y la limpieza del número viven una sola vez en `splitContactPhone` (`lib/hooks/contact-phone.ts`), compartido por ambos hooks. Duplicar esa lógica haría que un mismo contacto entrara distinto según la puerta (constitution §1.0).
+5. **Preferencia de teléfono: móvil → `PREF` → el primero.** El agente de WhatsApp necesita el móvil, así que `TYPE=CELL` gana aunque venga después del fijo.
+6. **El `accept` del input debe seguir siendo permisivo** (`.vcf,.vcard,text/vcard,text/x-vcard,text/directory`). iOS mapea `accept` a UTIs y un filtro estrecho **grisea el archivo que el usuario acaba de guardar** desde Contactos.
+7. **Prohibido lookbehind en el parser.** Safari solo lo soporta desde 16.4; un `SyntaxError` ahí tumbaría el chunk entero en justo las versiones de iOS que esta función existe para servir. `splitStructured` está escrito como escaneo por eso.
+8. Fichas sin nombre **y** sin teléfono se descartan: no aportan nada al formulario y como opciones solo serían ruido.
+
+### 9.4 Por qué NO se usa el AutoFill de Safari — corrección del 2026-08-20
+
+La versión anterior de esta sección afirmaba que Safari permitía importar un contacto **arbitrario** vía «Autorrellenar contacto» → «Otro contacto», y que los tokens `autocomplete` eran el requisito para que apareciera. **Eso era falso y está retirado.**
+
+- **Desmentido en dispositivo real** (iPhone, 2026-08-31): el flujo no aparece. Era el riesgo residual que la propia sección dejó anotado como *"no verificado en dispositivo"*.
+- **Y no habría servido igual.** El AutoFill de contacto de Safari rellena desde **«Mi info»** — la ficha *del propio usuario*, configurada en Ajustes → Safari → Autorrellenar. El formulario de cliente pide los datos de **otra persona**. Aunque el menú existiera, habría rellenado al dueño del negocio, no a su cliente: el mecanismo apuntaba a un problema distinto del que la función resuelve.
+
+Los tokens `autocomplete` (`name`, `email`, `tel-national`) **se conservan** — son buena práctica de accesibilidad y ayudan al gestor de contraseñas — pero han dejado de ser un requisito de esta función y no deben documentarse como tal.
 
 | Campo | Token | Archivos |
 |---|---|---|
@@ -158,13 +186,13 @@ Para que Safari ofrezca ese botón, el formulario debe declararse como rellenabl
 | Teléfono | `tel-national` | `components/ui/phone-input-flags.tsx` |
 | Email | `email` | `clients/new/page.tsx`, `clients/[id]/edit/page.tsx` |
 
-**Descubribilidad (obligatoria).** En iOS no hay botón visible, así que la ruta es invisible salvo que se señale. `isIOS()` (en el servicio) alimenta `iosFallback` en el hook, y las páginas lo pasan como `showIosContactHint` a `PhoneInputFlags`, que renderiza el hint `common.iosContactHint` (×6 locales). La detección de iOS se mantiene **separada** de "picker no soportado" a propósito: el escritorio tampoco tiene la API, pero tampoco tiene ese flujo de teclado — mostrarle el hint sería mentirle.
+### 9.5 Cobertura
 
-`isIOS()` está cubierto por `lib/services/contact-picker.service.test.ts` (10 casos con UA reales). Los dos que importan y no son obvios:
+`lib/services/vcard.service.test.ts` (18 casos) cubre el parser con formas de export reales: ficha de iOS 17, varias fichas en un archivo, prefijos de grupo `item1.` de Apple, plegado RFC, quoted-printable con acentos (incluido el corte por `=` final), `tel:`/`mailto:` de 4.0, reconstrucción del nombre desde `N`, comas y `;` escapados, y entradas basura.
 
-- **iPadOS 13+ se hace pasar por `Macintosh`.** El UA por sí solo no distingue un iPad de un Mac de escritorio; la única señal es `maxTouchPoints > 1`. Un falso negativo aquí deja al usuario de iPad sin ninguna ruta (ni botón ni hint).
-- **Android debe dar `false`.** Ahí el botón real funciona; un falso positivo pintaría el hint junto a un botón que ya resuelve el problema.
+Dos ramas están **verificadas por mutación** (romperlas hace fallar su test, no solo bajar cobertura):
 
-Ambas ramas están verificadas por mutación (romper cada una hace fallar su test), no solo por cobertura.
+- **El guard de quoted-printable en `unfoldLines`.** Tratar todo `=` final como plegado se come la línea siguiente cuando la ficha trae un `PHOTO` en base64 — y la ficha pierde el teléfono.
+- **La rama de iPadOS 13+ en `isIOS()`** (`lib/services/contact-picker.service.test.ts`, 10 casos con UA reales): iPadOS se hace pasar por `Macintosh` y solo `maxTouchPoints > 1` lo distingue. Un falso negativo le daría al iPad la ayuda de escritorio.
 
-> **Trade-off (sugerencia del agente + decisión del dueño, 2026-08-20).** Se evaluaron tres salidas para iOS: (a) tokens `autocomplete` + hint, (b) importar `.vcf` por `<input type="file">`, (c) wrapper nativo (Capacitor). Se eligió **(a)**: (b) obliga a exportar el contacto a Archivos antes (3 pasos extra) y (c) implica publicar en App Store — desproporcionado para este hueco. Consecuencia aceptada: **la paridad es funcional pero no idéntica** — en Android es un botón visible a un toque; en iOS son dos toques en la barra del teclado. **Riesgo residual conocido:** que Safari ofrezca "Autorrellenar contacto" depende de la heurística de formularios de Apple, que no publica un contrato duro sobre qué tokens la disparan. Los tokens son la vía documentada, pero **esto no está verificado en dispositivo** — pendiente de prueba en un iPhone real. Si se exigiera paridad idéntica, la opción es (c).
+> **Trade-off (sugerencia del agente + decisión del dueño, 2026-08-31).** Con la ruta (a) `autocomplete` + AutoFill desmentida en dispositivo, se re-evaluaron las dos restantes del menú original: **(b) importar `.vcf`** y **(c) wrapper nativo (Capacitor)**. Se eligió **(b)**. El argumento que la descartó en agosto —"3 pasos extra"— dejó de aplicar cuando la alternativa pasó a ser *ninguna ruta*; y (c) sigue implicando publicar en App Store, desproporcionado para este hueco. **Consecuencia aceptada: la paridad es funcional, no idéntica** — Android resuelve en un toque, iOS en cuatro (compartir, guardar en Archivos, abrir el importador, elegir). **Ventaja no prevista:** un `.vcf` puede traer varias fichas, así que iOS y escritorio ganan selección múltiple —`ContactChooser`— que el picker de Android no tiene (`multiple: false`). **Riesgo residual:** la ruta B está verificada por tests unitarios del parser y por el flujo de `<input type="file">`, que es HTML estándar, pero **el flujo completo en un iPhone real sigue sin ejecutarse end-to-end**; si Contactos cambiara el formato de export, lo atraparía el parser, no un test de dispositivo. Se descartó de nuevo el emulador por las razones de agosto (DevTools con UA de iPhone sigue siendo Blink; Playwright WebKit no es Safari iOS; `ios-simulator-mcp` exige macOS+Xcode y el equipo es Windows).

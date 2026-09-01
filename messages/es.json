@@ -1269,7 +1269,15 @@
     "retry": "Reintentar",
     "selectFromContacts": "Seleccionar de contactos",
     "importFromContacts": "Importar desde agenda",
-    "iosContactHint": "En iPhone: toca un campo y usa «Autorrellenar contacto» → «Otro contacto» en el teclado."
+    "vcardImport": "Importar desde archivo de contacto",
+    "vcardHintIos": "En iPhone: abre Contactos, comparte la ficha y elige «Guardar en Archivos». Luego selecciónala aquí.",
+    "vcardHintDesktop": "Selecciona un archivo .vcf exportado de tu agenda.",
+    "vcardChoose": "Elige un contacto",
+    "vcardNoName": "Sin nombre",
+    "vcardNoPhone": "Sin teléfono",
+    "vcardErrorEmpty": "El archivo no contiene ningún contacto utilizable.",
+    "vcardErrorTooLarge": "El archivo es demasiado grande (máximo 5 MB).",
+    "vcardErrorUnreadable": "No se pudo leer el archivo."
   },
   "adminPulse": {
     "title": "Pulso del Sistema",

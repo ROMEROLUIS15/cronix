@@ -1233,7 +1233,15 @@
     "retry": "Réessayer",
     "selectFromContacts": "Sélectionner depuis les contacts",
     "importFromContacts": "Importer depuis le répertoire",
-    "iosContactHint": "Sur iPhone : touchez un champ et utilisez « Remplir contact » → « Autre contact » au-dessus du clavier."
+    "vcardImport": "Importer depuis un fichier de contact",
+    "vcardHintIos": "Sur iPhone : ouvre Contacts, partage la fiche et choisis « Enregistrer dans Fichiers ». Sélectionne-la ensuite ici.",
+    "vcardHintDesktop": "Choisis un fichier .vcf exporté de ton carnet d’adresses.",
+    "vcardChoose": "Choisis un contact",
+    "vcardNoName": "Sans nom",
+    "vcardNoPhone": "Sans téléphone",
+    "vcardErrorEmpty": "Le fichier ne contient aucun contact exploitable.",
+    "vcardErrorTooLarge": "Le fichier est trop volumineux (5 Mo maximum).",
+    "vcardErrorUnreadable": "Le fichier n’a pas pu être lu."
   },
   "adminPulse": {
     "title": "Pulse Système",

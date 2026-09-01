@@ -106,11 +106,6 @@ interface PhoneInputFlagsProps {
   onPickContact?:    () => void
   /** Shows a loading spinner on the contact-picker button */
   pickContactLoading?: boolean
-  /**
-   * iOS has no Contact Picker API, so no button is rendered there. Set this to
-   * point the user at Safari's "AutoFill Contact" keyboard flow instead.
-   */
-  showIosContactHint?: boolean
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -122,7 +117,6 @@ export function PhoneInputFlags({
   showHint = true,
   onPickContact,
   pickContactLoading = false,
-  showIosContactHint = false,
 }: PhoneInputFlagsProps) {
   const t = useTranslations('common')
   const [open,        setOpen]       = useState(false)
@@ -251,13 +245,6 @@ export function PhoneInputFlags({
       {showHint && (
         <p className="text-xs mt-1" style={{ color: '#6A6A72' }}>
           {t('savedAs')}: {country.dial} {localPhone || country.placeholder}
-        </p>
-      )}
-
-      {/* ── iOS: no picker button, point at Safari's keyboard AutoFill ───── */}
-      {showIosContactHint && (
-        <p className="text-xs mt-1" style={{ color: '#6A6A72' }}>
-          {t('iosContactHint')}
         </p>
       )}
     </div>

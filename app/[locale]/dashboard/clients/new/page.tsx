@@ -13,6 +13,7 @@ import {
   Country,
 } from "@/components/ui/phone-input-flags";
 import { useContactPicker } from "@/lib/hooks/use-contact-picker";
+import { VCardImport } from "@/components/ui/vcard-import";
 import { useTranslations } from "next-intl";
 import { useNewClientForm } from "./hooks/use-new-client-form";
 
@@ -29,9 +30,18 @@ export default function NewClientPage() {
     selectedTags,
   );
 
-  const { supported: cpSupported, iosFallback: cpIosFallback, loading: cpLoading, pick: pickContact } = useContactPicker(
+  const applyContact = ({ name, phoneLocal, email }: { name: string; phoneLocal: string; email?: string | null }) => {
+    setForm(prev => ({
+      ...prev,
+      name:  prev.name || name,
+      email: prev.email || (email ?? ''),
+      phoneLocal,
+    }));
+  };
+
+  const { supported: cpSupported, isIos: cpIsIos, loading: cpLoading, pick: pickContact } = useContactPicker(
     ({ name, phoneLocal, country }) => {
-      setForm(prev => ({ ...prev, name: prev.name || name, phoneLocal }));
+      applyContact({ name, phoneLocal });
       setSelectedCountry(country);
     }
   );
@@ -152,8 +162,17 @@ export default function NewClientPage() {
                 onLocalPhoneChange={(v) => setForm({ ...form, phoneLocal: v })}
                 onPickContact={cpSupported ? pickContact : undefined}
                 pickContactLoading={cpLoading}
-                showIosContactHint={cpIosFallback}
               />
+              {/* No native picker here (iOS, desktop) → .vcf is the only route. */}
+              {!cpSupported && (
+                <VCardImport
+                  isIos={cpIsIos}
+                  onPick={({ name, phoneLocal, country, email }) => {
+                    applyContact({ name, phoneLocal, email });
+                    setSelectedCountry(country);
+                  }}
+                />
+              )}
             </div>
 
             {/* Email */}

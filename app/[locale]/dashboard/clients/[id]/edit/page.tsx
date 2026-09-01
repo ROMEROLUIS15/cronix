@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PhoneInputFlags, COUNTRIES, Country } from '@/components/ui/phone-input-flags'
+import { VCardImport } from '@/components/ui/vcard-import'
 import { useTranslations } from 'next-intl'
 import { useClientEditForm } from './hooks/use-client-edit-form'
 
@@ -23,7 +24,7 @@ export default function ClientEditPage() {
     loading, saving, deleting, confirmDelete, setConfirmDelete,
     legacyPhone, form, setForm, selectedCountry, setSelectedCountry,
     msg, handleSave, handleDelete, toggleTag,
-    pickContact, cpSupported, cpIosFallback, cpLoading,
+    pickContact, cpSupported, cpIsIos, cpLoading, applyImportedContact,
   } = useClientEditForm(clientId)
 
   if (loading) {
@@ -130,8 +131,11 @@ export default function ClientEditPage() {
               onLocalPhoneChange={v => setForm({ ...form, phoneLocal: v })}
               onPickContact={cpSupported ? pickContact : undefined}
               pickContactLoading={cpLoading}
-              showIosContactHint={cpIosFallback}
             />
+            {/* No native picker here (iOS, desktop) → .vcf is the only route. */}
+            {!cpSupported && (
+              <VCardImport isIos={cpIsIos} onPick={applyImportedContact} />
+            )}
           </div>
 
           {/* Email */}
