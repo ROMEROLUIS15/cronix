@@ -96,20 +96,15 @@ const nextConfig = {
   turbopack: {
     rules: {},
   },
-  typescript: {
-    // ✅ SECURITY: Build errors are now enforced. Previously ignored 1000+ errors.
-    // Incremental fix plan:
-    //   Sprint 1: Fix type defs (database.types.ts, result.ts, query-types.ts)
-    //   Sprint 2: Fix repository layer (all *Repository.ts files)
-    //   Sprint 3: Fix Server Actions and API routes
-    //   Sprint 4: Fix UI components (props, state, event handlers)
-    // Track progress: run `npm run typecheck` and count remaining errors.
-    // ignoreBuildErrors: true,  // REMOVED — re-enabled after incremental fix
-  },
-  eslint: {
-    // Similarly, lint errors are now enforced via Husky on staged files.
-    // ignoreDuringBuilds: true,  // REMOVED
-  },
+
+  // Type and lint errors are ENFORCED at build time — neither `ignoreBuildErrors`
+  // nor `ignoreDuringBuilds` is set. Both suppressions were removed after the
+  // incremental type cleanup; `npm run typecheck` is the progress check, and
+  // Husky enforces lint on staged files.
+  //
+  // The empty `typescript: {}` / `eslint: {}` blocks that used to hold these
+  // comments are gone: Next 16 rejects the `eslint` key outright ("Unrecognized
+  // key(s) in object: 'eslint'") and both were no-ops anyway.
 };
 
 // ── Sentry webpack plugin options ─────────────────────────────────────────────
