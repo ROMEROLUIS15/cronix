@@ -1234,7 +1234,7 @@
     "selectFromContacts": "Aus Kontakten auswählen",
     "importFromContacts": "Aus Adressbuch importieren",
     "vcardImport": "Aus Kontaktdatei importieren",
-    "vcardHintIos": "Auf dem iPhone: öffne Kontakte, teile die Karte und wähle „In Dateien sichern“. Wähle sie dann hier aus.",
+    "vcardHintIos": "Auf dem iPhone: öffne Kontakte, teile die Karte und wähle „In Dateien sichern“. Dateien zeigt all deine Dokumente an – tippe den Namen des Kontakts in die Suche ein, um sie zu finden.",
     "vcardHintDesktop": "Wähle eine .vcf-Datei aus deinem Adressbuch.",
     "vcardChoose": "Wähle einen Kontakt",
     "vcardNoName": "Ohne Namen",

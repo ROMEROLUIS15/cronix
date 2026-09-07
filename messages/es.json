@@ -1270,7 +1270,7 @@
     "selectFromContacts": "Seleccionar de contactos",
     "importFromContacts": "Importar desde agenda",
     "vcardImport": "Importar desde archivo de contacto",
-    "vcardHintIos": "En iPhone: abre Contactos, comparte la ficha y elige «Guardar en Archivos». Luego selecciónala aquí.",
+    "vcardHintIos": "En iPhone: abre Contactos, comparte la ficha y elige «Guardar en Archivos». Archivos te mostrará todos tus documentos: escribe el nombre del contacto en su buscador para encontrarla.",
     "vcardHintDesktop": "Selecciona un archivo .vcf exportado de tu agenda.",
     "vcardChoose": "Elige un contacto",
     "vcardNoName": "Sin nombre",

@@ -1234,7 +1234,7 @@
     "selectFromContacts": "Seleziona dai contatti",
     "importFromContacts": "Importa dalla rubrica",
     "vcardImport": "Importa da file di contatto",
-    "vcardHintIos": "Su iPhone: apri Contatti, condividi la scheda e scegli \"Salva su File\". Poi selezionala qui.",
+    "vcardHintIos": "Su iPhone: apri Contatti, condividi la scheda e scegli \"Salva su File\". L'app File mostra tutti i tuoi documenti: digita il nome del contatto nella ricerca per trovarla.",
     "vcardHintDesktop": "Scegli un file .vcf esportato dalla tua rubrica.",
     "vcardChoose": "Scegli un contatto",
     "vcardNoName": "Senza nome",

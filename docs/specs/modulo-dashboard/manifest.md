@@ -158,6 +158,8 @@ Cadena: `lib/services/vcard.service.ts` (parser puro) → `lib/hooks/use-vcard-i
 
 Flujo en iPhone: Contactos → compartir la ficha → **«Guardar en Archivos»** → en Cronix, *Importar desde archivo de contacto* → elegir el archivo. En escritorio es un `.vcf` exportado de la agenda.
 
+**El último paso es ruidoso y no hay API que lo arregle.** `<input type="file">` en iOS abre la app Archivos, que se abre en la última carpeta visitada —normalmente *Recientes*, donde se acumulan las descargas de WhatsApp— y **lista todos los documentos del usuario**: `accept` solo puede griséar los que no encajan, nunca ocultarlos, y la carpeta inicial no es controlable desde la web. La única salida es la barra de búsqueda de Archivos, así que **la ayuda de la ruta B debe nombrarla** (`common.vcardHintIos`): decirle al usuario los pasos de exportación sin decirle cómo encontrar la ficha después lo deja justo en el punto donde se atasca (reportado por el dueño, 2026-09-07).
+
 **Es la única ruta que alcanza la agenda del iPhone desde una página web.** El parser acepta las tres formas que aparecen en exports reales: vCard 3.0 (lo que exporta iOS), 2.1 con quoted-printable (Android/Outlook) y 4.0 con valores URI (`tel:`, `mailto:`).
 
 ### 9.3 Invariantes (NORMATIVAS)
@@ -167,7 +169,7 @@ Flujo en iPhone: Contactos → compartir la ficha → **«Guardar en Archivos»*
 3. **La importación rellena huecos, no pisa datos.** `name` y `email` solo se escriben si el campo está vacío (`prev.name || name`); el teléfono sí se sobrescribe, porque es el campo que el usuario pidió importar explícitamente. En el formulario de edición esto protege los datos ya guardados del cliente.
 4. **Las dos rutas aterrizan idéntico.** El match de prefijo de país y la limpieza del número viven una sola vez en `splitContactPhone` (`lib/hooks/contact-phone.ts`), compartido por ambos hooks. Duplicar esa lógica haría que un mismo contacto entrara distinto según la puerta (constitution §1.0).
 5. **Preferencia de teléfono: móvil → `PREF` → el primero.** El agente de WhatsApp necesita el móvil, así que `TYPE=CELL` gana aunque venga después del fijo.
-6. **El `accept` del input debe seguir siendo permisivo** (`.vcf,.vcard,text/vcard,text/x-vcard,text/directory`). iOS mapea `accept` a UTIs y un filtro estrecho **grisea el archivo que el usuario acaba de guardar** desde Contactos.
+6. **El `accept` del input lista solo lo que mapea a `public.vcard`** (`.vcf,.vcard,text/vcard`). iOS traduce `accept` a UTIs; `text/x-vcard` y `text/directory` son MIMEs legacy que no resuelven a ninguna UTI registrada, y **se retiraron el 2026-09-07** para probar si una entrada irresoluble *ensancha* el selector en vez de estrecharlo. **La hipótesis no está verificada en dispositivo** — es reversible en una línea, y la condición de rollback es concreta: si un iPhone real **grisea la ficha recién guardada** desde Contactos, vuelven las dos entradas, porque ese es el miedo contra el que se escribió la lista permisiva original. Nótese que revertir **no** reduciría el ruido descrito en §9.2: el filtro no oculta archivos, solo los deshabilita.
 7. **Prohibido lookbehind en el parser.** Safari solo lo soporta desde 16.4; un `SyntaxError` ahí tumbaría el chunk entero en justo las versiones de iOS que esta función existe para servir. `splitStructured` está escrito como escaneo por eso.
 8. Fichas sin nombre **y** sin teléfono se descartan: no aportan nada al formulario y como opciones solo serían ruido.
 
@@ -190,7 +192,9 @@ Los tokens `autocomplete` (`name`, `email`, `tel-national`) **se conservan** —
 
 `lib/services/vcard.service.test.ts` (18 casos) cubre el parser con formas de export reales: ficha de iOS 17, varias fichas en un archivo, prefijos de grupo `item1.` de Apple, plegado RFC, quoted-printable con acentos (incluido el corte por `=` final), `tel:`/`mailto:` de 4.0, reconstrucción del nombre desde `N`, comas y `;` escapados, y entradas basura.
 
-Dos ramas están **verificadas por mutación** (romperlas hace fallar su test, no solo bajar cobertura):
+`__tests__/components/ui/vcard-import.test.tsx` (12 casos) cubre el cableado, que hasta el 2026-09-07 no tenía ni un test: archivo dentro → contacto con forma de formulario fuera, incluida la partición por prefijo de país que debe aterrizar idéntica a la del picker de Android (invariante 4). Cubre también el `accept` (invariante 6), que la ayuda de iOS nombre el buscador de Archivos (§9.2), el `ContactChooser` de varias fichas y los tres rechazos (sin ficha utilizable, sobre el tope de 5 MB —sin llegar a leer el archivo— e ilegible). **Cinco mutaciones verificadas**: revertir el `accept`, quitarle al `isIos` su copy propia, tumbar el guard de tamaño, dejar de autoseleccionar la ficha única y saltarse `splitContactPhone` hacen fallar su test.
+
+Dos ramas del parser están **verificadas por mutación** (romperlas hace fallar su test, no solo bajar cobertura):
 
 - **El guard de quoted-printable en `unfoldLines`.** Tratar todo `=` final como plegado se come la línea siguiente cuando la ficha trae un `PHOTO` en base64 — y la ficha pierde el teléfono.
 - **La rama de iPadOS 13+ en `isIOS()`** (`lib/services/contact-picker.service.test.ts`, 10 casos con UA reales): iPadOS se hace pasar por `Macintosh` y solo `maxTouchPoints > 1` lo distingue. Un falso negativo le daría al iPad la ayuda de escritorio.

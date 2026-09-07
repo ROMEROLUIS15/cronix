@@ -1234,7 +1234,7 @@
     "selectFromContacts": "Sélectionner depuis les contacts",
     "importFromContacts": "Importer depuis le répertoire",
     "vcardImport": "Importer depuis un fichier de contact",
-    "vcardHintIos": "Sur iPhone : ouvre Contacts, partage la fiche et choisis « Enregistrer dans Fichiers ». Sélectionne-la ensuite ici.",
+    "vcardHintIos": "Sur iPhone : ouvre Contacts, partage la fiche et choisis « Enregistrer dans Fichiers ». Fichiers affiche tous tes documents : tape le nom du contact dans sa barre de recherche pour la retrouver.",
     "vcardHintDesktop": "Choisis un fichier .vcf exporté de ton carnet d’adresses.",
     "vcardChoose": "Choisis un contact",
     "vcardNoName": "Sans nom",

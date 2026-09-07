@@ -1234,7 +1234,7 @@
     "selectFromContacts": "Selecionar dos contatos",
     "importFromContacts": "Importar da agenda",
     "vcardImport": "Importar de arquivo de contato",
-    "vcardHintIos": "No iPhone: abra Contatos, compartilhe o cartão e escolha \"Salvar em Arquivos\". Depois selecione-o aqui.",
+    "vcardHintIos": "No iPhone: abra Contatos, compartilhe o cartão e escolha \"Salvar em Arquivos\". O app Arquivos mostra todos os seus documentos: digite o nome do contato na busca para encontrá-lo.",
     "vcardHintDesktop": "Escolha um arquivo .vcf exportado da sua agenda.",
     "vcardChoose": "Escolha um contato",
     "vcardNoName": "Sem nome",

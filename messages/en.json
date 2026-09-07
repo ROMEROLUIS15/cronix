@@ -1270,7 +1270,7 @@
     "selectFromContacts": "Select from contacts",
     "importFromContacts": "Import from contacts",
     "vcardImport": "Import from contact file",
-    "vcardHintIos": "On iPhone: open Contacts, share the card and choose \"Save to Files\". Then select it here.",
+    "vcardHintIos": "On iPhone: open Contacts, share the card and choose \"Save to Files\". Files lists all your documents, so type the contact's name in its search bar to find it.",
     "vcardHintDesktop": "Choose a .vcf file exported from your address book.",
     "vcardChoose": "Choose a contact",
     "vcardNoName": "No name",

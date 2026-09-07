@@ -16,10 +16,13 @@ import type { VCardPickResult, VCardError } from '@/lib/hooks/use-vcard-import'
 import type { ParsedVCard }              from '@/lib/services/vcard.service'
 
 /**
- * Deliberately permissive: iOS maps `accept` onto UTIs and a narrow filter
- * greys out the very file the user just saved from Contacts.
+ * Only entries that map onto Apple's `public.vcard` UTI. The legacy MIMEs
+ * `text/x-vcard` and `text/directory` resolve to nothing on iOS; dropping them
+ * tests whether an unresolvable entry widens the document picker rather than
+ * narrowing it. Revert if a real iPhone greys out a card saved from Contacts —
+ * that is the fear the permissive list was written against. See §9.3 nº6.
  */
-const ACCEPT = '.vcf,.vcard,text/vcard,text/x-vcard,text/directory'
+const ACCEPT = '.vcf,.vcard,text/vcard'
 
 const ERROR_KEY: Record<VCardError, string> = {
   tooLarge:   'vcardErrorTooLarge',
