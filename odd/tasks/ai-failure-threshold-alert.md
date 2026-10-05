@@ -53,5 +53,12 @@ Mode: not configured in project/session (source: none found, same as `wa-reminde
   Mutation check: the original AC-1 fixture had 1 trace per benign kind (below threshold 3), so a mutant counting `GUARD_REJECTED`/`FAST_PATH_FAILURE` still PASSED. Fixture rewritten (each benign kind ×3, + `REVIEWER_BLOCKED`, `BOOKING_RATE_LIMIT`). Now mutant 1 (guards/fast-path count) → 4/14 fail; mutant 2 (ignore `tool_calls`) → 4/14 fail; restored original → PASS.
   Docs: manifest documents the index and the claim-before-send trade-off (agent proposal, **pending user confirmation**); Slack "never configured" restated as the user's statement (prod job state unverified).
 
+- 2026-10-05 (T7, ops): `cron-ai-alerts` and `voice-worker` deployed. A probe without credentials showed the gateway rejecting (`UNAUTHORIZED_INVALID_JWT_FORMAT`): `supabase/config.toml` was missing `[functions.cron-ai-alerts] verify_jwt = false` (pg_cron sends `Bearer CRON_SECRET`, not a JWT) → every cron call would have died before the handler. Fixed + redeployed; the probe now returns the handler's `{"error":"Unauthorized"}` (AC-4 in prod).
+  Prod migration history: 14 June migrations live under other versions + 1 prod-only (`create_match_ai_memories_v2_fix_search_path`); mapping verified (97 vs 97) and handed to the user as `migration repair` (15 reverted / 14 applied) before `db push`.
+
+- 2026-10-05 (T7, verified in prod): repair (15 reverted / 14 applied) → `db push --dry-run` showed only `20261005120000` → pushed. REST `ai_failure_alerts` → HTTP 200 `[]` (project `psuthbtdvprojdbsimvq`). `POST cron-ai-alerts` with `CRON_SECRET` → HTTP 200 `{"alerts":0}`. Edge `SENTRY_DSN`/`CRON_SECRET` digests == `.env.local`; Sentry project `javascript-nextjs` (id matches DSN).
+  Sentry: the only issue workflow ("Alertas de Errores Whatsapp") fires on `first_seen_event` only (no level/tag filters, legacy notify action, 24h frequency) → the FIRST alert per business notifies; later incidents of the same business (same fingerprint) do NOT notify, even if the issue is resolved (no regression trigger). Pending a user decision.
+  Not verified: Vault `cron_secret` == function `CRON_SECRET` (the pg_cron path) → user checks Invocations in the dashboard.
+
 ## Next step
 Claim-before-send trade-off accepted by the user (2026-10-05). Next: T7 (ops: migration in prod, deploy `cron-ai-alerts`, Sentry alert rule). Commit only when the user asks.
