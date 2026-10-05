@@ -327,6 +327,10 @@ verify_jwt = false
 [functions.cron-imminent-push]
 verify_jwt = false
 
+# Called by pg_cron with `Bearer <CRON_SECRET>` (not a JWT); the handler checks it.
+[functions.cron-ai-alerts]
+verify_jwt = false
+
 [functions.embed-text]
 # Internal embedding endpoint (Supabase.ai gte-small).
 # Called from server-side code (Memory, Router) with the service_role key.
