@@ -3,8 +3,7 @@
 > **Estado:** 🟢 La **infraestructura de trazas y captura de excepciones** está
 > implementada y verificada contra código (2026-06-15). La **alerta de umbral por
 > negocio sobre `ai_traces` (Paso 2)** está **implementada (2026-10-05)** con canal
-> Sentry (§5); lo único pendiente es operativo (aplicar la migración, desplegar la
-> edge function y configurar la regla de alerta en Sentry — ver §5).
+> Sentry (§5), desplegada en prod y con entrega por email verificada (2026-10-05).
 
 Define cómo el sistema **observa a sus agentes IA** (voz y WhatsApp): qué se
 traza, dónde aterriza, cómo se detecta un fallo, y cómo se **alerta activamente**
@@ -257,12 +256,23 @@ la pregunta que responden:
 | Entrega | webhook de Slack (secreto Vault `slack_alerts_webhook_url`) | Sentry |
 | Estado | según el usuario, Slack **nunca se usó** en este repo (el webhook no se configuró). No verificado en prod si el job `ai-agent-error-rate-check` está programado | activo tras el paso operativo |
 
-### Paso operativo pendiente (no es código)
+### Paso operativo (no es código) — hecho 2026-10-05
 
-1. Aplicar la migración en prod y desplegar `cron-ai-alerts` (`supabase functions
-   deploy cron-ai-alerts --use-api`).
-2. El proyecto de Sentry debe tener una **regla de alerta que notifique ante issues
-   nuevos de nivel `error`**; sin ella el evento llega pero nadie es avisado.
+1. Migración aplicada en prod y `cron-ai-alerts` desplegada (`supabase functions
+   deploy cron-ai-alerts --use-api`; requiere `verify_jwt = false` en
+   `supabase/config.toml`, porque pg_cron manda `Bearer CRON_SECRET`, no un JWT).
+2. Sentry (org `cronix-saas`, proyecto `javascript-nextjs`) tiene la Alert
+   **"Agentes IA – fallos por negocio"** (id 6118587): trigger *An event is
+   captured* (`every_event`), filtro `message` contiene
+   `ai_agent_failure_threshold`, acción email al dueño de la cuenta, throttling
+   60 min, todos los entornos.
+   - **No usar "A new issue is created" + regresión:** el fingerprint es uno por
+     negocio y el proyecto no auto-resuelve issues, así que el segundo incidente
+     de un mismo negocio cae en un issue abierto y no dispararía ni *new issue*
+     ni *regression*. El cooldown de 60 min de `fn_claim_ai_failure_alerts()` ya
+     deduplica: cada fila reclamada = un email.
+   - Entrega verificada con *Send Test Notification* (llegó el email). El filtro
+     por `message` todavía no se ha ejercitado con una alerta real.
 
 ---
 
