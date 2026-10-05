@@ -3,7 +3,7 @@
  *
  * Usage in any Edge Function:
  *
- *   import { initSentry, captureException, addBreadcrumb, setSentryTag, flushSentry }
+ *   import { initSentry, captureException, captureMessage, addBreadcrumb, setSentryTag, flushSentry }
  *     from '../_shared/sentry.ts'
  *
  *   initSentry('my-function-name')   // call once at module level (Deno caches it)
@@ -121,6 +121,25 @@ export function captureException(
   } else {
     Sentry.captureException(error)
   }
+}
+
+/**
+ * Captures a non-exception signal: a silent drop or degradation worth pushing to the
+ * operator (e.g. an unrouted message, an owner alert that fell back). Keep `message`
+ * constant so every occurrence groups as one Sentry issue; put variable data in `extra`.
+ */
+export function captureMessage(
+  message: string,
+  level:   SeverityLevel = 'warning',
+  extra?:  Record<string, unknown>,
+): void {
+  if (!DSN || !Sentry) return
+
+  Sentry.withScope((scope: any) => {
+    scope.setLevel(level)
+    if (extra) scope.setExtras(extra)
+    Sentry.captureMessage(message)
+  })
 }
 
 /**

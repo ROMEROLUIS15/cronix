@@ -152,4 +152,11 @@ describe('conversation evals — golden flows (E2E, deterministic)', () => {
       { user: 'sí',                                expect: [/cancelada|Listo/i] },
     ])
   })
+
+  it('reply to the reminder: "no podré asistir" cancels on confirm (operacion-canonica R2)', async () => {
+    await runConversation({ activeAppointments: [APPT_FRI] }, [
+      { user: 'Hola, no podré asistir a mi cita',  expect: [/cancele tu cita de \*Mantenimiento\*/i], notExpect: [/No te entend/i] },
+      { user: 'sí',                                expect: [/cancelada|Listo/i] },
+    ])
+  })
 })

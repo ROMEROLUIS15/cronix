@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { isCancelIntent, isRescheduleIntent, isManageExisting, isBookIntent } from '../intents.ts'
+import { isCancelIntent, isCantAttendIntent, isRescheduleIntent, isManageExisting, isBookIntent } from '../intents.ts'
 
 describe('intents — enclitic + accented forms match (accent-insensitive)', () => {
   it('isRescheduleIntent matches reschedule verbs incl. enclitics/accents', () => {
@@ -28,5 +28,29 @@ describe('intents — enclitic + accented forms match (accent-insensitive)', () 
     expect(isBookIntent('quiero agendar una cita')).toBe(true)
     expect(isBookIntent('nueva cita')).toBe(true)
     expect(isBookIntent('reagéndala')).toBe(false)
+  })
+})
+
+describe('isCantAttendIntent — the natural reply to a reminder', () => {
+  it('matches "cannot attend" phrasings (accent-insensitive)', () => {
+    for (const t of [
+      'No podré asistir', 'no podre asistir a la cita', 'Hola, no puedo ir mañana', 'no puedo asistir',
+      'no voy a poder ir', 'No voy a poder asistir, disculpe', 'no voy a poder', 'Lo siento, no podré.',
+      'no asistiré', 'no iré', 'no podremos ir', 'no vamos a ir', 'no puedo llegar', 'no voy a poder acudir',
+    ]) {
+      expect(isCantAttendIntent(t), t).toBe(true)
+    }
+  })
+  it('does not fire on lateness, other activities or unrelated negations', () => {
+    for (const t of [
+      'no voy a llegar a tiempo', 'no podré pagar en efectivo', 'no puedo pagar por transferencia',
+      'quiero cancelar mi cita', 'sí, ahí estaré', 'no, gracias', 'no sé si pueda', 'irme temprano',
+    ]) {
+      expect(isCantAttendIntent(t), t).toBe(false)
+    }
+  })
+  it('stays independent of the strict manage-existing predicate', () => {
+    expect(isManageExisting('no podré asistir')).toBe(false)
+    expect(isCancelIntent('no podré asistir')).toBe(false)
   })
 })

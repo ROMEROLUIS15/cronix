@@ -92,6 +92,24 @@ Columnas escritas por `PgTraceSink.write()`: `business_id`, `channel`,
 * **Invariante de no-duplicación:** se captura en UN solo punto por cadena de
   error (el catch más externo que tiene `business_id` en scope), no en cada capa
   que re-lanza, para evitar eventos duplicados en Sentry.
+* **Señales de caída silenciosa (`captureMessage`, 2026-10-05):** no todo incidente
+  es una excepción. `_shared/sentry.ts` expone `captureMessage(message, level, extra)`
+  (no-op sin `SENTRY_DSN`, mismo scrubbing de PII) para empujar degradaciones que
+  antes devolvían 200 sin rastro. Mensaje constante por señal → Sentry agrupa todas
+  las ocurrencias en un solo issue; el dato variable va en `extra`.
+  * `wa_unrouted_message` (warning) — un mensaje de WhatsApp que no se pudo asignar a
+    ningún negocio y recibió el landing genérico. Sin contenido (solo tipo, longitud y
+    si traía slug). No puede ir a `ai_traces` porque esa tabla exige `business_id`. Es
+    la señal que habría delatado el incidente 2026-07-29 → 2026-10-05: las respuestas
+    al recordatorio se perdieron durante semanas con el dashboard "limpio".
+  * `owner_wa_template_failed` (warning) — falló la plantilla de aviso al dueño (p.ej.
+    no existe o no está aprobada en la WABA del número); el aviso cae al texto libre, que solo entrega dentro de la
+    ventana de 24h.
+  * `owner_wa_undelivered` (error) — también falló el texto libre: el dueño no recibió
+    WhatsApp (campana y push no se ven afectados).
+* **Limitación conocida:** Meta acepta un texto libre fuera de la ventana de 24h y lo
+  descarta después (llega por el webhook `statuses`, que `whatsapp-webhook` hoy filtra)
+  → esa no-entrega sigue sin ser observable.
 
 ---
 
@@ -194,3 +212,4 @@ recientes. Es señal **pasiva** (pull) — complementa, no reemplaza, la activa.
 | Fecha | Cambio |
 |---|---|
 | 2026-06-15 | Creación. Documenta la infra de trazas dual-sink (PgTraceSink canónico + LangSmith best-effort), la captura de excepciones Sentry en voice-worker (Paso 1, desplegado), el dashboard pasivo, y fija el contrato del **Paso 2** (alerta de umbral sobre `ai_traces`) como diseño 🔴 con decisiones abiertas. |
+| 2026-10-05 | §3: señales de caída silenciosa vía `captureMessage` (`wa_unrouted_message`, `owner_wa_template_failed`, `owner_wa_undelivered`), tras el incidente en que las respuestas al recordatorio se perdieron sin traza (última traza WhatsApp del 2026-07-29). Documentada la limitación de la no-entrega asíncrona de Meta. |

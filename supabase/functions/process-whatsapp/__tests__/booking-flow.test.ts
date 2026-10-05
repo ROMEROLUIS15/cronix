@@ -586,3 +586,64 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
     }
   })
 })
+
+// ── "No podré asistir" (reply to the 20:00 reminder) → cancel flow, operacion-canonica R2.
+describe('resolveBookingTurn — "cannot attend" routes to cancel, only outside sub-dialogues', () => {
+  const APPT = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-25T14:00:00Z' }] // 09:00 Bogota
+  const REMINDER = 'Hola Ana, te recordamos que tienes una cita en *Salón* el día *jueves* a las *9:00 a. m.*.'
+  const base = { services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null }
+
+  it('proposes the cancel confirmation for the reminded appointment', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'No podré asistir', activeAppointments: APPT,
+      history: [{ role: 'assistant', text: REMINDER }],
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).toMatch(/¿Confirmas que cancele tu cita de \*Tarjeta\* del 25 de diciembre/)
+  })
+
+  it('the client "sí" then executes the cancel (end-to-end with the existing confirmation path)', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'sí', activeAppointments: APPT,
+      history: [
+        { role: 'user', text: 'no voy a poder ir' },
+        { role: 'assistant', text: '¿Confirmas que cancele tu cita de *Tarjeta* del 25 de diciembre a las 9:00 am?' },
+      ],
+    })
+    expect(turn?.kind).toBe('executeCancel')
+    if (turn?.kind === 'executeCancel') expect(turn.appointmentId).toBe('apt-1')
+  })
+
+  it('mid new-booking proposal, "ese día no puedo ir" stays in the booking flow (no cancel)', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'ese día no puedo ir', activeAppointments: APPT,
+      history: [
+        { role: 'user', text: 'quiero agendar Tarjeta el 26 de diciembre a las 10 am' },
+        { role: 'assistant', text: '¿Confirmo tu cita de *Tarjeta* para el 26 de diciembre a las 10:00 am?' },
+      ],
+    })
+    if (turn?.kind === 'reply') expect(turn.text).not.toMatch(/cancele tu cita/)
+    expect(turn?.kind).not.toBe('executeCancel')
+  })
+
+  it('mid reschedule sub-dialogue, "ese día no puedo ir" stays in reschedule (no cancel)', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'ese día no puedo ir', activeAppointments: APPT,
+      history: [
+        { role: 'user', text: 'quiero reagendarla' },
+        { role: 'assistant', text: '¿Para qué nueva fecha quieres reagendar tu cita de *Tarjeta*?' },
+      ],
+    })
+    if (turn?.kind === 'reply') expect(turn.text).not.toMatch(/cancele tu cita/)
+    expect(turn?.kind).not.toBe('executeCancel')
+  })
+
+  it('"no puedo ir, ¿lo cambiamos al jueves?" is a reschedule, not a cancel', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'no puedo ir, ¿lo cambiamos al jueves?', activeAppointments: APPT,
+      history: [{ role: 'assistant', text: REMINDER }],
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.text).not.toMatch(/cancele tu cita/)
+  })
+})

@@ -1,4 +1,5 @@
 import { createAdminClient } from "./db.ts";
+import { anchorReminderSession } from "./session-anchor.ts";
 import type { AppointmentWithClient, BusinessRow } from "../types.ts";
 
 interface WhatsAppSendResult {
@@ -79,6 +80,8 @@ export async function sendWhatsAppReminders(
           : "WhatsApp delivery failed",
       }, { onConflict: "appointment_id" });
 
+      // The reply to this reminder carries no #slug: anchor the session so it routes here.
+      if (data.success === true) await anchorReminderSession(client.phone, business.id);
       return data.success === true;
     }),
   );

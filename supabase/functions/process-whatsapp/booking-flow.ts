@@ -19,7 +19,7 @@
 
 import { computeAvailableSlots, type WorkingHours, type BookedSlot } from './availability.ts'
 import { lastAssistantWasConfirmation, isAffirmative } from './confirmation-gate.ts'
-import { isCancelIntent, isRescheduleIntent } from './intents.ts'
+import { isCancelIntent, isCantAttendIntent, isRescheduleIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   OUR_RESCHEDULE_QUESTION_RE, apptLocal, humanDate, listFreeTimes,
@@ -138,7 +138,9 @@ export function resolveBookingTurn(p: {
       userText, history, appts: activeAppointments, services, wh: workingHours, tz: timezone, booked: bookedSlots,
     })
   }
-  if (isCancelIntent(userText)) {
+  // "No podré asistir" (the natural reply to the reminder) cancels too — but only here,
+  // after the booking and reschedule sub-dialogues above have had their say.
+  if (isCancelIntent(userText) || isCantAttendIntent(userText)) {
     return resolveCancelIntent(userText, activeAppointments, timezone)
   }
 

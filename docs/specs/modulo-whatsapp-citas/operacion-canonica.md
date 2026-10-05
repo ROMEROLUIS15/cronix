@@ -256,6 +256,8 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 
 > Detalle (descriptivo): `cron-reminders/` con `fn_get_businesses_at_hour(20)` + rango "mañana" por timezone; el nombre proviene de `clients.name` (de ahí que D5 lo contamine).
 
+> Detalle (descriptivo, 2026-10-05 — restaura R2, ver D6): la respuesta al recordatorio no trae `#slug`, así que `cron-reminders` ancla `wa_sessions` (remitente → negocio) por cada recordatorio enviado con éxito, y el ruteo tiene un nivel de respaldo por teléfono del cliente (manifest §1). Las formas naturales de responder — "no podré asistir", "no puedo ir", "no voy a poder" — se reconocen como cancelación (`isCantAttendIntent`), solo fuera de los sub-diálogos de agendar/reagendar, donde "ese día no puedo ir" significa "ese horario no", no "cancela".
+
 ---
 
 ## 9. Tabla de defectos → invariante → causa raíz → estado
@@ -265,8 +267,9 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 | D1 | Doble mensaje de confirmación al cliente | C1 | Dos rutas escriben al cliente: respuesta del agente + `notifications.ts: sendClientBookingConfirmation` | 🟢 **corregido** — se eliminó el 2º mensaje; el acuse único es la respuesta del agente |
 | D2 | La cita no aparece en calendario/campana al instante | O1 | `_shared/booking-adapter.ts` no invalida la caché del dashboard | 🟢 **corregido** — `tool-executor.ts` invalida la caché tras toda escritura WA exitosa |
 | D3 | El dueño no recibe notificación de reagendamiento | O2 | Reagendar dependía del 8B y no se ejecutaba de forma fiable → no se emitía el evento | 🟢 **corregido** — ruta determinista de reagendar/cancelar (§3.3); el reagendamiento ahora se ejecuta por código y emite el evento (DB/campana/push). El canal **WhatsApp** al dueño sigue sujeto a D4 |
-| D4 | Notif por evento al dueño no llega fuera de 24h | O1/O2 | La notif por evento usaba texto libre directo a Meta (sin plantilla) → fuera de la ventana de 24h no se entrega | 🟢 **implementado (código)** — `sendOwnerWhatsApp` ahora va por `whatsapp-service` con **plantilla-primero + fallback a texto libre** (igual que el resumen diario). Nombre de plantilla configurable por secret `OWNER_EVENT_TEMPLATE` (4 vars: estado/cliente/servicio/fecha-hora). **Pendiente externo:** aprobar la plantilla en Meta — la creación programática vía MCP fue auto-rechazada por el WABA (requiere revisión manual en Business Manager). Mientras tanto el fallback entrega in-window; campana/push siempre OK |
+| D4 | Notif por evento al dueño no llega fuera de 24h | O1/O2 | La notif por evento usaba texto libre directo a Meta (sin plantilla) → fuera de la ventana de 24h no se entrega | 🟢 **implementado (código)** — `sendOwnerWhatsApp` ahora va por `whatsapp-service` con **plantilla-primero + fallback a texto libre** (igual que el resumen diario). Nombre de plantilla configurable por secret `OWNER_EVENT_TEMPLATE` (4 vars: estado/cliente/servicio/fecha-hora). **Pendiente externo:** aprobar la plantilla en Meta — la creación programática vía MCP fue auto-rechazada por el WABA (requiere revisión manual en Business Manager). Mientras tanto el fallback entrega in-window; campana/push siempre OK. **Estado 2026-10-05 (corregido):** no verificable con el token local. `WHATSAPP_BUSINESS_ACCOUNT_ID` (local y prod) apunta a la *Test WhatsApp Business Account*, que no contiene el número de producción; las plantillas REJECTED que lista son de esa cuenta de prueba, no de la del número de prod — una primera lectura las tomó como estado de prod por error. Cada degradación ahora se empuja a Sentry (`owner_wa_template_failed` / `owner_wa_undelivered`); un texto libre que Meta acepta fuera de ventana se descarta de forma asíncrona y sigue sin ser observable |
 | D5 | Notificaciones/recordatorio sin nombre real ("Cliente 6589") | N1, R3 | `tool-executor.ts` no pasa `customerName`; `booking-adapter.ts` llama RPC con `p_client_name=null` | 🟢 **corregido** — se propaga el nombre real del perfil WA hasta la RPC |
+| D6 | Las respuestas al recordatorio ("no podré asistir") no llegaban al agente; nada se cancelaba y el dueño no se enteraba | R2 (y O1 por consecuencia) | `cron-reminders` no anclaba `wa_sessions` → la respuesta sin `#slug` caía al landing genérico con HTTP 200 y **sin traza** (prod 2026-10-05: 0 de 14 clientes recordados tenían sesión; última traza WA del 2026-07-29). Además `CANCEL_RE` no reconocía "no podré asistir" | 🟢 **corregido (código, pendiente de deploy)** — anclaje de sesión al enviar el recordatorio + nivel 3 de ruteo por teléfono del cliente + `isCantAttendIntent` en la rama de cancelación + señal Sentry `wa_unrouted_message` |
 
 ---
 
@@ -287,10 +290,10 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 - **AC-CACHE:** Tras agendar por WhatsApp, la cita aparece en el calendario del dashboard **sin esperar expiración de caché** (invalidación inmediata).
 - **AC-N1:** Un cliente nuevo creado por WhatsApp queda con su nombre de perfil real; el recordatorio y las notificaciones lo usan (no `Cliente <n>`).
 - **AC-R1:** Para un negocio en una timezone dada, el recordatorio se dispara a las 20:00 locales de ESE negocio; un negocio en otra timezone se dispara a su propia 20:00.
-- **AC-R2:** Si el cliente responde "reagendar/cancelar" al recordatorio, el agente ejecuta el flujo determinista correspondiente y emite §5 y §6.
+- **AC-R2:** Si el cliente responde "reagendar/cancelar" (o "no podré asistir" / "no puedo ir") al recordatorio — sin `#slug` y aunque nunca haya escrito antes al número —, el agente ejecuta el flujo determinista correspondiente y emite §5 y §6.
 
 ---
 
 ## 11. Trazabilidad
 
-Este documento gobierna las correcciones de D1–D5. Cada PR que toque la superficie WhatsApp de cara al cliente/dueño debe citar la invariante concreta (C1/O1/O2/N1/R1–R3) que respeta o restaura.
+Este documento gobierna las correcciones de D1–D6. Cada PR que toque la superficie WhatsApp de cara al cliente/dueño debe citar la invariante concreta (C1/O1/O2/N1/R1–R3) que respeta o restaura.
