@@ -14,7 +14,8 @@ import { transcribeAudio, LlmRateLimitError, CircuitBreakerError } from "./ai-ag
 import { sendWhatsAppMessage, downloadMediaBuffer }                 from "./whatsapp.ts"
 import type { MetaWebhookPayload, WaBusinessSettings }              from "./types.ts"
 import { checkMessageRateLimit, checkBusinessUsageLimit, checkTokenQuota, trackTokenUsage } from "./guards.ts"
-import { getBusinessBySlug, verifyBusinessPhone, getSessionBusiness, upsertSession }        from "./business-router.ts"
+import { getBusinessBySlug, verifyBusinessPhone, upsertSession }        from "./business-router.ts"
+import { resolveTenant, replyUnrouted }                                from "./tenant-routing.ts"
 import { verifyQStash, sanitizeMessage } from "./security.ts"
 import { isOptOutRequest, markRetentionOptOut } from "./retention-optout.ts"
 import { captureException, addBreadcrumb, setSentryTag, flushSentry } from "../_shared/sentry.ts"
@@ -196,26 +197,10 @@ export async function handleMessage(req: Request): Promise<Response> {
 
     addBreadcrumb('Message sanitized', 'security', 'info', { length: text.length })
 
-    // 3-tier tenant routing
-    let business = slug ? await getBusinessBySlug(slug) : null
-
-    if (business && slug) {
-      await upsertSession(sender, business.id)
-      addBreadcrumb('Business resolved by slug', 'tenant', 'info', { slug })
-    }
-
+    // 4-tier tenant routing (manifest §1): slug → session → client phone → landing
+    const business = await resolveTenant(sender, slug)
     if (!business) {
-      business = await getSessionBusiness(sender)
-      if (business) addBreadcrumb('Business resolved by session', 'tenant', 'info')
-    }
-
-    if (!business) {
-      await sendWhatsAppMessage(sender,
-        '¡Hola! 👋 Soy el asistente virtual de reservas de *Cronix*.\n\n' +
-        'Para comunicarte con un negocio y agendar una cita, necesitas usar su enlace directo de WhatsApp.\n\n' +
-        '🔗 Encuentra todos los negocios disponibles en:\nhttps://cronix-app.vercel.app\n\n' +
-        '¡Te esperamos!'
-      )
+      await replyUnrouted(sender, { messageType: msg.type ?? 'unknown', textLength: text.length, hadSlug: slug !== null })
       await flushSentry()
       return json({ success: true, message: 'No business routed — landing sent' })
     }

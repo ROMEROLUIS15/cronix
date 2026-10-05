@@ -2,11 +2,13 @@
  * notif-channels.ts — The side-effect channels for an AppointmentEvent.
  *
  * DB persistence (source of truth + idempotency), Realtime broadcast, owner WhatsApp
- * (template-first, free-text fallback) and owner web push. Each fails silently — the
- * booking is already committed, so notifications are best-effort.
+ * (template-first, free-text fallback) and owner web push. Each is best-effort and never
+ * throws — the booking is already committed — but an owner-WhatsApp degradation is pushed
+ * to Sentry instead of being swallowed.
  */
 
 import { supabase } from "./db-client.ts"
+import { captureMessage } from "../_shared/sentry.ts"
 import { formatLocalTime } from "./prompt-builder.ts"
 import {
   type AppointmentEvent,
@@ -86,6 +88,42 @@ export async function pushToRealtime(event: AppointmentEvent): Promise<void> {
 // @ts-ignore — Deno runtime globals
 const OWNER_EVENT_TEMPLATE = Deno.env.get('OWNER_EVENT_TEMPLATE') ?? 'owner_event_notification'
 
+/** Outcome of one whatsapp-service call — the error string surfaces instead of a bare boolean. */
+interface SendOutcome { ok: boolean; error: string | null }
+
+async function postWhatsAppService(
+  url: string, secret: string, payload: Record<string, unknown>,
+): Promise<SendOutcome> {
+  try {
+    const res  = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+      body:    JSON.stringify(payload),
+    })
+    const data = await res.json().catch(() => null) as { success?: boolean; error?: string } | null
+    if (data?.success === true) return { ok: true, error: null }
+    return { ok: false, error: data?.error ?? `HTTP ${res.status}` }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * Pushes an owner-alert degradation to Sentry. Template failure → warning: the alert now
+ * depends on the owner's 24h window (Meta accepting free text does NOT prove delivery —
+ * outside the window it is dropped asynchronously). Text failure too → error: the owner
+ * got no WhatsApp at all. Bell + push are unaffected.
+ */
+function reportOwnerSendFailure(step: 'template' | 'text', event: AppointmentEvent, error: string | null): void {
+  const extra = { event_type: event.type, business_id: event.businessId, error }
+  if (step === 'template') {
+    captureMessage('Owner WhatsApp template send failed — falling back to free text', 'warning',
+      { stage: 'owner_wa_template_failed', template: OWNER_EVENT_TEMPLATE, ...extra })
+  } else {
+    captureMessage('Owner WhatsApp notification undelivered', 'error', { stage: 'owner_wa_undelivered', ...extra })
+  }
+}
+
 /**
  * Owner WhatsApp via the whatsapp-service edge function (single WA transport point).
  * Template first — it delivers OUTSIDE the 24h window, the whole point of per-event
@@ -99,8 +137,12 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
     const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
 
     // Owner's verified WhatsApp is stored in businesses.phone (set via VINCULAR-slug).
-    const { data: bData } = await supabase
+    const { data: bData, error: bError } = await supabase
       .from('businesses').select('phone').eq('id', event.businessId).maybeSingle()
+    if (bError) {
+      console.warn('[NOTIFICATION-WA] Owner phone lookup failed — WA notification skipped:', bError.message)
+      return
+    }
 
     const rawPhone = (bData as { phone?: string | null })?.phone
     if (!rawPhone) {
@@ -115,28 +157,22 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
     const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
     const prettyTime  = /^\d{2}:\d{2}$/.test(event.time) ? formatLocalTime(event.time) : event.time
     const whenHuman   = `${formatDateHuman(event.date)} a las ${prettyTime}`
-
-    const post = (payload: Record<string, unknown>): Promise<boolean> =>
-      fetch(whatsappUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-secret': cronSecret },
-        body:    JSON.stringify({ to: rawPhone, ...payload }),
-      })
-        .then((r) => r.json().catch(() => ({ success: false })))
-        .then((d: { success?: boolean }) => d.success === true)
-        .catch(() => false)
+    const send = (payload: Record<string, unknown>): Promise<SendOutcome> =>
+      postWhatsAppService(whatsappUrl, cronSecret, { to: rawPhone, ...payload })
 
     // 1) Template first (delivers outside the 24h window).
-    const sentViaTemplate = await post({
+    const viaTemplate = await send({
       type:         'template',
       template:     OWNER_EVENT_TEMPLATE,
       languageCode: 'es',
       parameters:   [buildTitle(event.type), event.clientName, event.serviceName, whenHuman],
     })
-    if (sentViaTemplate) return
+    if (viaTemplate.ok) return
+    reportOwnerSendFailure('template', event, viaTemplate.error)
 
     // 2) Free-text fallback (works while the owner's 24h window is open).
-    await post({ type: 'text', message: buildOwnerWhatsAppMessage(event) })
+    const viaText = await send({ type: 'text', message: buildOwnerWhatsAppMessage(event) })
+    if (!viaText.ok) reportOwnerSendFailure('text', event, viaText.error)
   } catch (err) {
     console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
   }

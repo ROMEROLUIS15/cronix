@@ -118,7 +118,7 @@ export interface BookingResult {
 // ── Meta Webhook Types ───────────────────────────────────────────────────────
 
 export interface MetaContact  { profile?: { name?: string } }
-export interface MetaMessage  { from: string; text?: { body: string }; audio?: { id: string; mime_type?: string } }
+export interface MetaMessage  { from: string; type?: string; text?: { body: string }; audio?: { id: string; mime_type?: string } }
 export interface MetaMetadata { phone_number_id?: string; display_phone_number?: string }
 export interface MetaValue    { messages?: MetaMessage[]; contacts?: MetaContact[]; metadata?: MetaMetadata }
 export interface MetaEntry    { changes?: Array<{ value?: MetaValue }> }
