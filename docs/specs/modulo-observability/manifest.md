@@ -103,7 +103,7 @@ Columnas escritas por `PgTraceSink.write()`: `business_id`, `channel`,
     la señal que habría delatado el incidente 2026-07-29 → 2026-10-05: las respuestas
     al recordatorio se perdieron durante semanas con el dashboard "limpio".
   * `owner_wa_template_failed` (warning) — falló la plantilla de aviso al dueño (p.ej.
-    REJECTED en Meta); el aviso cae al texto libre, que solo entrega dentro de la
+    no existe o no está aprobada en la WABA del número); el aviso cae al texto libre, que solo entrega dentro de la
     ventana de 24h.
   * `owner_wa_undelivered` (error) — también falló el texto libre: el dueño no recibió
     WhatsApp (campana y push no se ven afectados).

@@ -7,7 +7,7 @@ Client replies to the 20:00 reminder ("no podré asistir") must reach the WhatsA
 - Last WhatsApp row in `ai_traces` / `wa_audit_logs`: 2026-07-29 19:30 UTC. QStash keeps delivering replies to `process-whatsapp` (HTTP 200) minutes after each reminder.
 - `cron-reminders` never anchors `wa_sessions`; 0/14 reminded clients had a session (table has 3 rows). Replies without `#slug` fall to the generic landing (`message-handler.ts:212-220`) with no trace. Violates operacion-canonica **R2 / AC-R2**.
 - `CANCEL_RE` (`intents.ts:21`) only knows `cancel*/anul*/borr*`; "no podré asistir" never reaches the cancel flow.
-- Owner WA templates are REJECTED in Meta; `sendOwnerWhatsApp` records nothing when it degrades to the 24h-window free-text fallback.
+- `sendOwnerWhatsApp` records nothing when it degrades to the 24h-window free-text fallback. (An initial claim that the owner templates were REJECTED was wrong — see Correction below.)
 
 ## Scope (authorized by user 2026-10-05: points 1–3)
 1. Routing: anchor session on reminder send + fallback routing by client phone.
@@ -50,6 +50,10 @@ Mode: not configured in project/session (source: none found) → ordinary functi
 - Final checks: `npm test` 140 files / 1684 tests green (+25); `npm run test:evals:agent` 8/8; `npm run typecheck` clean; `npm run lint` 0 errors (2 pre-existing warnings, other files); `npm run knip` exit 0 (no findings in new files); `npm run check:spec-drift` OK; `deno check process-whatsapp/index.ts` clean; cron see T2.
 
 - Parent verification: RDD off → `gentle-ai review assess` = **medium** (writer on full model → self-verification + spot check). Spot check `npx vitest run` over wa-phone / client-phone-routing / intents / booking-flow / conversation-evals: 5 files, 77 tests green. Diff readback OK; `appointment_status` enum confirmed to include `pending`/`confirmed`. Residual (unverified): Sentry signals emitted from the `void emitBookingEvent` chain may be cut if the isolate ends before flush (pre-existing pattern, constitution §3).
+
+- 2026-10-05: committed `e8f02c4` (develop, not pushed). User deployed `process-whatsapp` and `cron-reminders` with `--use-api` (CLI confirmed "Deployed Functions" for both; new modules in the uploaded asset list).
+
+- **Correction (2026-10-05, user challenged it):** the "owner templates REJECTED" finding queried the WABA in `WHATSAPP_BUSINESS_ACCOUNT_ID`, which is the *Test WhatsApp Business Account* (only a test number; owner business "Tienda IGM"). The prod number (*Cronix*) lives in another WABA the local token cannot enumerate. Local WABA/phone/app-secret/verify-token digests match prod secrets; the access token differs. Docs corrected (INDEX, operacion-canonica D4, observability §3, WA manifest §4).
 
 ## Next step
 Deploy `process-whatsapp` + `cron-reminders` (`--use-api` from Windows) — user decision. External: get an owner-event template approved in Meta (D4). Engram mirror still pending.

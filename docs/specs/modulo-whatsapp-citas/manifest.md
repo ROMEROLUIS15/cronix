@@ -104,7 +104,7 @@ Toda mutación exitosa sobre el estado de una cita (`CONFIRMED`, `RESCHEDULED`, 
 El pipeline ejecuta los canales en el siguiente orden jerárquico:
 1.  **Base de Datos (fuente de verdad):** Se persiste la notificación en la tabla `notifications` enlazada al `business_id`. Si este paso falla, se aborta el pipeline.
 2.  **Tiempo Real (Dashboard):** El backend emite el evento a través de los canales de Supabase Realtime para incrementar dinámicamente la campana de alertas del dueño. Falla silenciosamente sin afectar el booking.
-3.  **WhatsApp al Dueño:** Se despacha una plantilla de alerta al número vinculado del dueño del negocio (vía Meta Graph API directa). Falla silenciosamente.
+3.  **WhatsApp al Dueño:** Se despacha al número vinculado del dueño vía `whatsapp-service` (plantilla primero, fallback a texto libre en ventana 24h). Nunca rompe el turno; la degradación va a Sentry (ver `modulo-notificaciones` §4).
 4.  **Web Push al PWA del Dueño:** Se envía una notificación push al PWA instalado del dueño vía la edge function `push-notify`. Falla silenciosamente.
 
 **Acuse ÚNICO al cliente (invariante C1).** El cliente recibe **exactamente un** mensaje de resultado: la respuesta conversacional del propio agente (`renderBookingSuccessTemplate`). **No** se envía un segundo mensaje "formal" en paralelo — eso causaba la doble confirmación (defecto D1) y se eliminó (`sendClientBookingConfirmation`/`buildClientWhatsAppMessage` fueron borradas como código muerto). Ver `operacion-canonica.md` invariante C1.
