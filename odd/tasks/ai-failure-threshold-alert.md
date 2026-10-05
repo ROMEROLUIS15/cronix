@@ -27,7 +27,8 @@ Push a Sentry alert to the operator when a business accumulates real AI-agent fa
 - [x] T4 Edge Function `cron-ai-alerts` (testable handler + `index.ts`) + Vitest (AC-4 auth, one Sentry message per claimed alert).
 - [x] T5 `types/database.types.ts`: table + RPC.
 - [x] T6 Docs: observability manifest §2/§5/§6 + header + Historial, INDEX Historial + coverage, cross-reference in `docs/operations/AI_AGENT_ALERTS.md`.
-- [ ] T7 Ops (user, after merge): apply migration in prod, deploy `cron-ai-alerts` (`--use-api`), check the Sentry alert rule notifies on new `error` issues.
+- [x] T7 Ops (user, after merge): apply migration in prod, deploy `cron-ai-alerts` (`--use-api`), pg_cron path at 200.
+- [x] T8 Sentry delivery (user's account): the only workflow uses the legacy "all legacy integrations" action with no target (0 integrations); the user believes its last trigger (2026-10-05 00:50 UTC) sent no email. Replace it with an explicit email action and confirm with "Send test notification". Split out of T7 (2026-10-05): T7 was ticked on the rule's existence, not on observed delivery.
 
 ## Acceptance criteria
 Spec §6 AC-1..AC-4 (rewritten to the real codes) + only the allowlist counts + per-business isolation + traces outside the window are ignored.
@@ -60,5 +61,14 @@ Mode: not configured in project/session (source: none found, same as `wa-reminde
   Sentry: the only issue workflow ("Alertas de Errores Whatsapp") fires on `first_seen_event` only (no level/tag filters, legacy notify action, 24h frequency) → the FIRST alert per business notifies; later incidents of the same business (same fingerprint) do NOT notify, even if the issue is resolved (no regression trigger). Pending a user decision.
   Not verified: Vault `cron_secret` == function `CRON_SECRET` (the pg_cron path) → user checks Invocations in the dashboard.
 
+- 2026-10-05 (T7, pg_cron path verified via Supabase MCP, read-only): job 18 `cron-ai-alerts` (`*/10 * * * *`, active) ran at 16:40 and 16:50 UTC, both `succeeded`; `net._http_response` → HTTP 200 `{"alerts":0}` for both, no 401 → Vault `cron_secret` == function `CRON_SECRET`. T7 closed. Still open (user decision, their Sentry account): add a regression trigger so repeat incidents of an already-alerted business notify.
+
+- 2026-10-05 (T8, Sentry MCP, user approved both changes): project auto-resolve is off, so `regression_event` would only fire after a manual resolve → dropped in favor of `every_event` + message filter (the DB cooldown already dedupes).
+  Created workflow **6118587** "Agentes IA – fallos por negocio": `every_event`, action filter `message co ai_agent_failure_threshold`, email → account owner, frequency 60, all envs, source issue stream 6898739 (`javascript-nextjs`). Readback from the create response matches.
+  Legacy `plugin` action on 3252024 replaced with email → account owner (readback from the update response matches).
+  The user renamed the Sentry org `ibime` → `cronix-saas`; `.env.local` `SENTRY_ORG` updated, Vercel `SENTRY_ORG` pending (user).
+  T8 stays open until an email is observed ("Send Test Notification" on 6118587 and on 3252024, or a real alert).
+- 2026-10-05 (T8 closed): the user ran "Send Test Notification" on 6118587 and 3252024 → **two "Test Issue" emails received**. Delivery observed. Not yet exercised: the `message` filter of 6118587 (only a real `ai_agent_failure_threshold` event proves it). Manifest §5 "Paso operativo" rewritten to the real rule config (and why not new-issue + regression); `check:spec-drift` OK.
+
 ## Next step
-Claim-before-send trade-off accepted by the user (2026-10-05). Next: T7 (ops: migration in prod, deploy `cron-ai-alerts`, Sentry alert rule). Commit only when the user asks.
+Feature done. Open, outside this feature: Vercel `SENTRY_ORG` → `cronix-saas` (user); follow-ups (voice TTS leaks raw `error.message`; dead-man's switch for trace absence, not accepted yet). Commit only when the user asks.
