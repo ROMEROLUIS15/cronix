@@ -66,7 +66,7 @@ export async function executeClientAppointments(
     .limit(MAX_LISTED)
 
   if (error) {
-    return { success: false, result: `Error al consultar las citas de ${client.name}: ${error.message}` }
+    return { success: false, result: `Error al consultar las citas de ${client.name}: ${error.message}`, error: 'DB_ERROR' }
   }
   if (!data?.length) {
     return { success: true, result: `${client.name} no tiene citas próximas.` }

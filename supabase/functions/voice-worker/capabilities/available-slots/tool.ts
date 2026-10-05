@@ -49,7 +49,7 @@ export async function executeAvailableSlots(
     .lte('start_at', dayEndISO)
     .order('start_at')
 
-  if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}` }
+  if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}`, error: 'DB_ERROR' }
 
   const free: string[] = []
   const [oh, om] = open.split(':').map(Number)

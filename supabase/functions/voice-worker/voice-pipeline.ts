@@ -10,6 +10,7 @@ import { Pipeline } from "../_shared/pipeline/index.ts"
 import { shortHash } from "../_shared/observability/index.ts"
 import { buildAppointmentEventId } from "../_shared/notifications/event-id.ts"
 import type { ToolContext } from './core/tool-context.ts'
+import { toolErrorCode } from './core/tool-error-code.ts'
 import type { NeutralMessage, NeutralTool } from './providers/ILLMProvider.ts'
 import type { AgentInput, AgentOutput, AppointmentNotification, NotificationType } from './types.ts'
 import {
@@ -263,9 +264,7 @@ async function stepLlmLoop(ctx: VoiceLlmContext): Promise<VoiceLlmResult> {
         // false-positive rate) is unmeasurable in /dashboard/observability.
         errorCode: result.success
           ? undefined
-          : (result.error === 'GUARD_REJECTED' || result.error === 'REVIEWER_BLOCKED'
-              ? result.error
-              : 'TOOL_FAILURE'),
+          : toolErrorCode(result.error, 'TOOL_FAILURE'),
       })
       messages.push({
         role: 'tool', tool_call_id: tc.id, name: tc.name,

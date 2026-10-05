@@ -307,6 +307,7 @@ Vea [`docs/internal/TESTING.md`](./docs/internal/TESTING.md) para descripción c
 - `supabase/tests/rls_policies.test.sql` — 86 asserts de Row-Level Security
 - `supabase/tests/critical_functions.test.sql` — 43 asserts de funciones RPC críticas
 - `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente
+- `supabase/tests/ai_failure_alerts.test.sql` — 14 asserts de la alerta de fallos por negocio (Sentry)
 
 Ejecutar: `npx supabase test db`
 

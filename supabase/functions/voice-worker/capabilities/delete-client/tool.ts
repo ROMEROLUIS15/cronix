@@ -139,7 +139,7 @@ export async function executeDeleteClient(
     .eq('business_id', ctx.businessId)
     .is('deleted_at', null)
 
-  if (error) return { success: false, result: `No pude eliminar: ${error.message}` }
+  if (error) return { success: false, result: `No pude eliminar: ${error.message}`, error: 'DB_ERROR' }
   const phoneSuffix = target.phone ? ` (teléfono ${target.phone})` : ''
   return { success: true, result: `Cliente ${target.name}${phoneSuffix} eliminado.` }
 }

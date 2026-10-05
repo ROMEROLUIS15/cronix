@@ -41,7 +41,7 @@ export async function executeCreateClient(
     if (msg.includes('idx_clients_business_email_norm')) {
       return { success: false, result: 'Ya tienes un cliente activo con ese correo.' }
     }
-    return { success: false, result: `No se pudo registrar: ${msg}` }
+    return { success: false, result: `No se pudo registrar: ${msg}`, error: 'DB_ERROR' }
   }
   return { success: true, result: `Cliente "${(data as { name: string }).name}" registrado.` }
 }

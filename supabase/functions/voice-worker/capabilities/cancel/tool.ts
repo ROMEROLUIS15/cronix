@@ -93,7 +93,7 @@ export async function executeCancel(
     .eq('id', apt.id)
     .eq('business_id', ctx.businessId)
 
-  if (error) return { success: false, result: `No pude cancelar: ${error.message}` }
+  if (error) return { success: false, result: `No pude cancelar: ${error.message}`, error: 'DB_ERROR' }
 
   const data: BookingEventData = {
     appointmentId: apt.id,

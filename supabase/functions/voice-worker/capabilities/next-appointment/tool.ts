@@ -71,7 +71,7 @@ export async function executeNextAppointment(
     .limit(1)
 
   if (error) {
-    return { success: false, result: `Error al consultar tu próxima cita: ${error.message}` }
+    return { success: false, result: `Error al consultar tu próxima cita: ${error.message}`, error: 'DB_ERROR' }
   }
   if (!data?.length) {
     return { success: true, result: 'No tienes citas próximas programadas.' }

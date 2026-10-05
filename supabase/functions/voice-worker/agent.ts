@@ -12,6 +12,7 @@
 
 import { buildSystemPrompt } from './prompt.ts'
 import type { ToolContext }  from './core/tool-context.ts'
+import { toolErrorCode }     from './core/tool-error-code.ts'
 import { getProvider }       from './providers/registry.ts'
 import type { AgentInput, AgentOutput, AppointmentNotification, ToolResult } from './types.ts'
 import {
@@ -160,9 +161,7 @@ export async function runAgent(
       argsFingerprint: await shortHash(JSON.stringify(registryHit.args)),
       errorCode:       result.success
         ? undefined
-        : (result.error === 'GUARD_REJECTED' || result.error === 'REVIEWER_BLOCKED'
-            ? result.error
-            : 'FAST_PATH_FAILURE'),
+        : toolErrorCode(result.error, 'FAST_PATH_FAILURE'),
     })
     if (result.fallthroughToLLM) {
       console.log(`[VOICE-WORKER-AGENT] FAST PATH (${registryHit.capability.name}) → falling through to LLM (not_found)`)

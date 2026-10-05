@@ -103,3 +103,12 @@ Issue Alert — no code:
   not covered here by design — global aggregate catches systemic issues. If a
   single-tenant alert becomes necessary, add a `GROUP BY business_id` variant
   with its own cooldown keyed by business.
+
+---
+
+## See also
+
+- **Per-business failure alert (Sentry):** a separate, additive alert that fires
+  when one business accumulates real agent failures (3 failed turns in 10 min,
+  60 min cooldown). It does not replace Path A. Contract and differences:
+  `docs/specs/modulo-observability/manifest.md` §5.

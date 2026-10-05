@@ -170,6 +170,7 @@ npm test && npm run test:integration && npm run test:e2e && npx supabase test db
 - `supabase/tests/rls_policies.test.sql` — 86 asserts validando Row-Level Security
 - `supabase/tests/critical_functions.test.sql` — 43 asserts validando funciones RPC críticas
 - `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente de IA
+- `supabase/tests/ai_failure_alerts.test.sql` — 14 asserts de la alerta de fallos por negocio (Sentry)
 
 ### 4.1 RLS Policies (86 asserts)
 

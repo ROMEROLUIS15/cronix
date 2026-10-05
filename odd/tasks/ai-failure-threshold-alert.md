@@ -1,0 +1,57 @@
+# AI agent failure threshold alert (observability Paso 2) → Sentry
+
+## Objective
+Push a Sentry alert to the operator when a business accumulates real AI-agent failures (voice or WhatsApp) in a short window, so a degradation is never discovered by opening a dashboard. Implements `docs/specs/modulo-observability/manifest.md` §5 (Paso 2), corrected to the real shape of `ai_traces`.
+
+## Problem
+- §5 was 🔴 "design, not implemented". Its query (`error_code IN ('LLM_EXCEPTION','rate_limited','TOOL_FAILURE','FAST_PATH_FAILURE')`) does not match the data:
+  - `TOOL_FAILURE` / `FAST_PATH_FAILURE` / `GUARD_REJECTED` only live in `tool_calls[].errorCode` (jsonb), never in the `error_code` column.
+  - Voice tools return `success:false` without a code both for real DB errors (`available-slots/tool.ts:52`) and for normal clarification turns (`cancel/tool.ts:52`) → `TOOL_FAILURE`/`FAST_PATH_FAILURE` are not a failure signal.
+  - `rate_limited` comes from guards (voice 30 req/min per user, `voice-worker/index.ts:297`; WA `BOOKING_RATE_LIMIT`), not provider quota → counting it = false alarms.
+  - Literal spec query would only catch voice `LLM_EXCEPTION`, already captured by Sentry (Paso 1).
+- A forgotten global Slack alert exists (`supabase/migrations/20260605120000_ai_agent_error_alerts.sql`, from commit `efe9802`), never configured.
+
+## Decisions (agent proposal accepted by user, 2026-10-05)
+- Channel: **Sentry** (spec open decision #1).
+- **Slack alert stays untouched** (user: "no elimines slack"). Both coexist; the manifest documents the difference.
+- "Real failure" = allowlist, read from BOTH the `error_code` column and `tool_calls[].errorCode`, normalized by the prefix before `:`: `LLM_EXCEPTION`, `DB_ERROR`, `TOOL_EXECUTION_ERROR`; plus `outcome = 'error'`. Everything else (guards, `rate_limited`, `SLOT_CONFLICT`, `APPOINTMENT_NOT_FOUND`, `STT_NOISE`, `INVALID_ARGS`…) does not count.
+- Voice tools mark Supabase errors with `error: 'DB_ERROR'` so voice is not blind.
+- Host: pg_cron → Edge Function `cron-ai-alerts` (Bearer `CRON_SECRET` from Vault), same pattern as `cron-imminent-push`; it reuses `_shared/sentry.ts`.
+- Values (spec defaults, calibrate later): window 10 min, threshold 3 failed turns per business, cooldown 60 min. One trace counts once.
+- Cooldown + audit in a new table `ai_failure_alerts` (not the Slack table); one Sentry issue per business via fingerprint.
+
+## Tasks
+- [x] T1 Voice: `DB_ERROR` on Supabase errors in capabilities + single mapping helper for the trace tool-call `errorCode` (agent.ts fast path + voice-pipeline.ts) + tests.
+- [x] T2 `_shared/sentry.ts`: `captureMessage` accepts an optional fingerprint.
+- [x] T3 Migration: `ai_failure_alerts` table + `fn_claim_ai_failure_alerts()` (SECURITY DEFINER, service_role only) + `idx_ai_traces_created_at` + pg_cron schedule every 10 min + pgTAP (AC-1..AC-3, isolation, window, grants).
+- [x] T4 Edge Function `cron-ai-alerts` (testable handler + `index.ts`) + Vitest (AC-4 auth, one Sentry message per claimed alert).
+- [x] T5 `types/database.types.ts`: table + RPC.
+- [x] T6 Docs: observability manifest §2/§5/§6 + header + Historial, INDEX Historial + coverage, cross-reference in `docs/operations/AI_AGENT_ALERTS.md`.
+- [ ] T7 Ops (user, after merge): apply migration in prod, deploy `cron-ai-alerts` (`--use-api`), check the Sentry alert rule notifies on new `error` issues.
+
+## Acceptance criteria
+Spec §6 AC-1..AC-4 (rewritten to the real codes) + only the allowlist counts + per-business isolation + traces outside the window are ignored.
+
+## TDD
+Mode: not configured in project/session (source: none found, same as `wa-reminder-reply-routing.md`) → ordinary functional checks; new behavior ships with tests. Runners: Vitest for edge-function TS (`supabase/functions/**/__tests__`), pgTAP (`npx supabase test db`) for SQL, `deno check` for edge type-checking.
+
+## Checks
+- `npx vitest run supabase/functions/`
+- `deno check` on `voice-worker/index.ts`, `cron-ai-alerts/index.ts` (with `DENO_NO_PACKAGE_JSON=1`)
+- `npx supabase test db` (needs local Supabase; run `npx supabase migration up --local` first if the DB volume already existed)
+- `npm test`, `npm run typecheck`, `npm run lint`, `npm run knip`, `npm run check:spec-drift`
+
+## Progress
+- 2026-10-05: exploration and decisions done; document created. Engram mirror: **pending** (Engram tools unavailable this session).
+
+- 2026-10-05 (writer): T1, T2, T4, T5, T6 done and checked. T3 (migration + pgTAP file) is written but left UNTICKED: pgTAP was not run (no local Supabase) — run `npx supabase test db` (expect 14 asserts in `ai_failure_alerts.test.sql`), then tick T3.
+  Evidence: `npx vitest run supabase/functions/` 46 files/798 tests -> 49 files/814 tests, all green; `deno check` voice-worker 13 errors before and after (no new), cron-ai-alerts clean; `npm test` 143 files/1700 tests green; typecheck clean; lint 0 errors (2 pre-existing warnings); knip exit 0; spec-drift OK.
+  Follow-up: voice `result` strings on DB errors leak raw `error.message` to TTS.
+
+- 2026-10-05 (parent review): risk assessment `medium` → writer self-verification + parent spot check (`npx vitest run` cron-ai-alerts + voice core + db-error-code: 11 files / 232 tests green).
+  T3: added `idx_ai_traces_created_at` (the claim is a cross-tenant time-window scan; all prior `ai_traces` indexes lead with `business_id` and the table has no retention). `npx supabase migration up --local` + `npx supabase test db`: 4 files / 161 tests PASS (14 new).
+  Mutation check: the original AC-1 fixture had 1 trace per benign kind (below threshold 3), so a mutant counting `GUARD_REJECTED`/`FAST_PATH_FAILURE` still PASSED. Fixture rewritten (each benign kind ×3, + `REVIEWER_BLOCKED`, `BOOKING_RATE_LIMIT`). Now mutant 1 (guards/fast-path count) → 4/14 fail; mutant 2 (ignore `tool_calls`) → 4/14 fail; restored original → PASS.
+  Docs: manifest documents the index and the claim-before-send trade-off (agent proposal, **pending user confirmation**); Slack "never configured" restated as the user's statement (prod job state unverified).
+
+## Next step
+Claim-before-send trade-off accepted by the user (2026-10-05). Next: T7 (ops: migration in prod, deploy `cron-ai-alerts`, Sentry alert rule). Commit only when the user asks.
