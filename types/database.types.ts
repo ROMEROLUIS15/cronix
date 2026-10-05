@@ -67,6 +67,41 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_failure_alerts: {
+        Row: {
+          breakdown: Json
+          business_id: string
+          created_at: string
+          failure_count: number
+          id: string
+          window_min: number
+        }
+        Insert: {
+          breakdown?: Json
+          business_id: string
+          created_at?: string
+          failure_count: number
+          id?: string
+          window_min: number
+        }
+        Update: {
+          breakdown?: Json
+          business_id?: string
+          created_at?: string
+          failure_count?: number
+          id?: string
+          window_min?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_failure_alerts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_memories: {
         Row: {
           business_id: string | null
@@ -1636,6 +1671,14 @@ export type Database = {
           p_email: string
         }
         Returns: Json
+      }
+      fn_claim_ai_failure_alerts: {
+        Args: never
+        Returns: {
+          breakdown: Json
+          business_id: string
+          failure_count: number
+        }[]
       }
       fn_clean_phone: { Args: { p_phone: string }; Returns: string }
       fn_create_business_and_link_owner:

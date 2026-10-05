@@ -141,9 +141,9 @@ export async function executeSchedule(
       .select('id, name, phone')
       .single()
     if (error || !created) {
-      return { success: false, result: `No pude registrar a ${client_name}: ${error?.message ?? 'error desconocido'}` }
+      return { success: false, result: `No pude registrar a ${client_name}: ${error?.message ?? 'error desconocido'}`, error: 'DB_ERROR' }
     }
-    client = created as ClientRow
+client = created as ClientRow
   } else {
     return {
       success: false,
@@ -212,7 +212,7 @@ export async function executeSchedule(
     .single()
 
   if (error || !created) {
-    return { success: false, result: `No pude crear la cita: ${error?.message ?? 'error desconocido'}` }
+    return { success: false, result: `No pude crear la cita: ${error?.message ?? 'error desconocido'}`, error: 'DB_ERROR' }
   }
 
   const data: BookingEventData = {

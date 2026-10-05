@@ -127,17 +127,22 @@ export function captureException(
  * Captures a non-exception signal: a silent drop or degradation worth pushing to the
  * operator (e.g. an unrouted message, an owner alert that fell back). Keep `message`
  * constant so every occurrence groups as one Sentry issue; put variable data in `extra`.
+ *
+ * Pass `fingerprint` to override the default grouping (e.g. one issue per business for
+ * the same message): it replaces Sentry's default grouping for this event.
  */
 export function captureMessage(
-  message: string,
-  level:   SeverityLevel = 'warning',
-  extra?:  Record<string, unknown>,
+  message:      string,
+  level:        SeverityLevel = 'warning',
+  extra?:       Record<string, unknown>,
+  fingerprint?: readonly string[],
 ): void {
   if (!DSN || !Sentry) return
 
   Sentry.withScope((scope: any) => {
     scope.setLevel(level)
     if (extra) scope.setExtras(extra)
+    if (fingerprint) scope.setFingerprint([...fingerprint])
     Sentry.captureMessage(message)
   })
 }

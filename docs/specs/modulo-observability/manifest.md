@@ -1,10 +1,10 @@
 # 📋 Manifiesto de Dominio: Observabilidad de Agentes IA
 
-> **Estado:** 🟡 Mixto. La **infraestructura de trazas y captura de excepciones**
-> está implementada y verificada contra código (2026-06-15) → 🟢. La **alerta de
-> umbral sobre `ai_traces` (Paso 2)** es **diseño aún NO implementado** → 🔴; vive
-> aquí para fijar el contrato antes de codear (Ley Cero: zona sin spec requiere
-> confirmación). Las decisiones abiertas están marcadas explícitamente.
+> **Estado:** 🟢 La **infraestructura de trazas y captura de excepciones** está
+> implementada y verificada contra código (2026-06-15). La **alerta de umbral por
+> negocio sobre `ai_traces` (Paso 2)** está **implementada (2026-10-05)** con canal
+> Sentry (§5); lo único pendiente es operativo (aplicar la migración, desplegar la
+> edge function y configurar la regla de alerta en Sentry — ver §5).
 
 Define cómo el sistema **observa a sus agentes IA** (voz y WhatsApp): qué se
 traza, dónde aterriza, cómo se detecta un fallo, y cómo se **alerta activamente**
@@ -60,19 +60,45 @@ Columnas escritas por `PgTraceSink.write()`: `business_id`, `channel`,
 `TraceOutcome` (`contracts.ts`): `success` | `failure` | `no_action` |
 `rate_limited` | `error`.
 
-| `error_code` | Significado | ¿Es fuego? |
+**Dónde vive cada código (corregido 2026-10-05 contra datos reales).** Un código
+puede aparecer en dos sitios y la alerta lee **ambos**:
+
+* **Columna `ai_traces.error_code`:** la escribe el tracer al cerrar el turno
+  (`LLM_EXCEPTION`, `STT_NOISE`, `rate_limited`…). En WhatsApp el valor es
+  **texto libre `CODIGO: detalle`** (p.ej. `TOOL_EXECUTION_ERROR: error interno…`),
+  por eso se normaliza por el prefijo antes de `:`.
+* **`ai_traces.tool_calls[].errorCode`** (jsonb, clave camelCase): el código de
+  cada herramienta ejecutada en el turno. `GUARD_REJECTED`, `REVIEWER_BLOCKED`,
+  `TOOL_FAILURE`, `FAST_PATH_FAILURE` y `DB_ERROR` **solo** viven aquí, nunca en la
+  columna.
+
+| Código | Significado | ¿Cuenta como fallo real? |
 |---|---|---|
-| `STT_NOISE` | Audio/texto ininteligible; guard determinista responde 422 | **NO** (benigno, esperado) |
 | `LLM_EXCEPTION` | Excepción no controlada del pipeline LLM (p.ej. Groq caído) | **SÍ** |
-| `rate_limited` | Cuota/límite de proveedor agotado | **SÍ** |
-| `TOOL_FAILURE` / `FAST_PATH_FAILURE` | Una herramienta falló en ejecución | **SÍ** (tendencia) |
+| `DB_ERROR` | Una consulta Supabase de una herramienta de voz devolvió `error` (nuevo 2026-10-05; todas las capabilities de voz lo marcan) | **SÍ** |
+| `TOOL_EXECUTION_ERROR` | Fallo interno de ejecución de una herramienta de WhatsApp (formato `CODIGO: detalle`) | **SÍ** |
+| `outcome = 'error'` | El turno terminó en error (cualquier código o ninguno) | **SÍ** |
+| `TOOL_FAILURE` / `FAST_PATH_FAILURE` | Fallback genérico de voz (`voice-pipeline.ts` / `agent.ts`). **Mezcla** errores reales con turnos de aclaración/validación (p.ej. "¿a qué hora?") → no distingue | **NO** |
+| `rate_limited` (columna y `outcome`) | Lo emiten los **guards**: voz 30 req/min por usuario y `BOOKING_RATE_LIMIT` de WhatsApp. **No** es cuota del proveedor | **NO** |
+| `STT_NOISE` | Audio/texto ininteligible; guard determinista responde 422 | **NO** |
 | `GUARD_REJECTED` | Un mention-guard/umbral bloqueó una acción insegura | **NO** (el guard FUNCIONANDO) |
 | `REVIEWER_BLOCKED` | El reviewer constitucional vetó/degradó (voz: solo `delete_client` hard-block) | **NO** (señal de calidad, no fallo) |
+| `SLOT_CONFLICT`, `APPOINTMENT_NOT_FOUND`, `UNAUTHORIZED`, `INVALID_ARGS`, `INVALID_ARGUMENTS`, `DUPLICATE_CALL` | Resultados de negocio/validación esperados | **NO** |
 
-> **Invariante de clasificación:** `STT_NOISE` y los códigos de **guard**
-> (`GUARD_REJECTED`, `REVIEWER_BLOCKED`) NUNCA cuentan como fallo para efectos de
-> alerta — son mecanismos de seguridad operando como se diseñó. Confundirlos con
-> fallos genera alarma falsa y erosiona la confianza en las alertas.
+> **Invariante de clasificación:** solo la **lista de permitidos** de la tabla
+> (`LLM_EXCEPTION`, `DB_ERROR`, `TOOL_EXECUTION_ERROR` y `outcome='error'`) cuenta
+> como fallo para efectos de alerta. `STT_NOISE`, los códigos de **guard**
+> (`GUARD_REJECTED`, `REVIEWER_BLOCKED`), los límites de tasa y los resultados de
+> negocio NUNCA cuentan — son mecanismos de seguridad o flujo normal operando como
+> se diseñó. Confundirlos con fallos genera alarma falsa y erosiona la confianza en
+> las alertas.
+
+> **Mapeo del código de herramienta de voz (2026-10-05):** `supabase/functions/voice-worker/core/tool-error-code.ts`
+> (`toolErrorCode`) convierte `ToolResult.error` en el `errorCode` de la traza:
+> deja pasar `GUARD_REJECTED`, `REVIEWER_BLOCKED` y `DB_ERROR`; cualquier otro valor
+> cae al fallback del llamador (`FAST_PATH_FAILURE` en `agent.ts`, `TOOL_FAILURE` en
+> `voice-pipeline.ts`). Antes había dos ternarios duplicados que descartaban todo lo
+> demás.
 
 ---
 
@@ -93,8 +119,9 @@ Columnas escritas por `PgTraceSink.write()`: `business_id`, `channel`,
   error (el catch más externo que tiene `business_id` en scope), no en cada capa
   que re-lanza, para evitar eventos duplicados en Sentry.
 * **Señales de caída silenciosa (`captureMessage`, 2026-10-05):** no todo incidente
-  es una excepción. `_shared/sentry.ts` expone `captureMessage(message, level, extra)`
-  (no-op sin `SENTRY_DSN`, mismo scrubbing de PII) para empujar degradaciones que
+  es una excepción. `_shared/sentry.ts` expone `captureMessage(message, level, extra,
+  fingerprint?)` (no-op sin `SENTRY_DSN`, mismo scrubbing de PII; el `fingerprint`
+  opcional fija el agrupamiento, usado por el Paso 2 para un issue por negocio) para empujar degradaciones que
   antes devolvían 200 sin rastro. Mensaje constante por señal → Sentry agrupa todas
   las ocurrencias en un solo issue; el dato variable va en `extra`.
   * `wa_unrouted_message` (warning) — un mensaje de WhatsApp que no se pudo asignar a
@@ -122,78 +149,167 @@ recientes. Es señal **pasiva** (pull) — complementa, no reemplaza, la activa.
 
 ---
 
-## 5. Paso 2 — Alerta de Umbral sobre `ai_traces` — 🔴 DISEÑO (NO implementado)
+## 5. Paso 2 — Alerta de Umbral por Negocio sobre `ai_traces` → Sentry — 🟢 implementado (2026-10-05)
 
-> **Justificación de prioridad (diferido conscientemente):** el Paso 1 (Sentry)
-> ya cubre el caso crítico —el fallo silencioso por `LLM_EXCEPTION`—. El Paso 2
-> aporta señal sobre **tendencias de negocio** que Sentry no ve (picos de
-> herramientas fallando, `rate_limited` sostenido, regresión de p95). NO es
-> urgente. Este §5 fija el contrato para cuando se retome.
+> **Por qué existe:** el Paso 1 (§3) solo ve **excepciones**; un turno que falla sin
+> lanzar (el agente nunca lanza ante un turno fallido: el tracer escribe `outcome`)
+> es invisible para Sentry. Este paso mira `ai_traces` por negocio y **empuja** la
+> señal al operador. El contrato original (query sobre
+> `LLM_EXCEPTION|rate_limited|TOOL_FAILURE|FAST_PATH_FAILURE`) no coincidía con la
+> forma real de los datos (ver §2) y se corrigió antes de implementar.
 
-### Contrato propuesto
+### Contrato implementado
 
-* **Trigger:** `pg_cron` cada **10 min** dispara un endpoint protegido (Next route
-  `/api/cron/observability-alert` **o** edge function), auth `Bearer CRON_SECRET`
-  leído desde Supabase Vault (mismo patrón que `cron-retention` /
-  `cron-imminent-push`; el secreto nunca vive en código).
-* **Consulta:** sobre `ai_traces`, ventana últimos **10 min**, agrupada por
-  `business_id`, contar filas donde `error_code IN ('LLM_EXCEPTION',
-  'rate_limited','TOOL_FAILURE','FAST_PATH_FAILURE')`.
-* **Disparo:** si el conteo de una ventana ≥ `alertThreshold` (default **3**),
-  emitir alerta.
-* **Multi-tenant:** la evaluación es **por negocio** (un fuego en un salón no
-  debe diluirse en el agregado), pero el destinatario de la alerta v1 es el
-  **operador (founder)**, no el dueño del salón.
+* **Trigger:** `pg_cron` `cron-ai-alerts` cada **10 min** (migración
+  `supabase/migrations/20261005120000_ai_failure_alerts.sql`) → `net.http_post` a la
+  edge function `supabase/functions/cron-ai-alerts/` con `Authorization: Bearer
+  <cron_secret>` leído de Vault (mismo patrón que `cron-imminent-push`).
+* **Evaluación en Postgres:** `fn_claim_ai_failure_alerts()` (`SECURITY DEFINER`,
+  `EXECUTE` solo a `service_role`) toma un `pg_advisory_xact_lock` (dos ticks
+  solapados no reclaman dos veces), clasifica las trazas de la ventana, agrupa por
+  `business_id`, aplica umbral y cooldown, **inserta** los reclamos en
+  `ai_failure_alerts` y los **devuelve**. No envía nada y **no escribe en
+  `ai_traces`** (el cron no se cuenta a sí mismo).
+* **Entrega:** el handler (`supabase/functions/cron-ai-alerts/handler.ts`, puro y
+  testeable; cableado en `index.ts`) emite por cada reclamo un
+  `captureMessage('ai_agent_failure_threshold', 'error', { business_id,
+  failure_count, breakdown, window_min }, ['ai_agent_failure_threshold',
+  business_id])` y hace `flushSentry()` antes de responder. El **fingerprint por
+  negocio** da un issue de Sentry por tenant: un segundo negocio en llamas es un
+  issue nuevo, no una ocurrencia más. `captureMessage` (`_shared/sentry.ts`) acepta
+  el parámetro opcional `fingerprint` (retrocompatible).
+* **Destinatario:** el **operador (founder)**, no el dueño del salón.
+
+### Qué es un "fallo real" (NORMATIVO)
+
+Por **traza** (= un turno; una traza cuenta **como máximo una vez**), es fallo si
+cumple **cualquiera** de:
+
+1. `outcome = 'error'`;
+2. el `error_code` de la **columna**, normalizado, está en la lista de permitidos;
+3. algún elemento de `tool_calls` tiene `errorCode`, normalizado, en la lista.
+
+* **Lista de permitidos:** `LLM_EXCEPTION`, `DB_ERROR`, `TOOL_EXECUTION_ERROR`.
+* **Normalizar:** `split_part(code, ':', 1)` recortado (WhatsApp guarda
+  `'CODIGO: detalle'`).
+* Todo lo demás NO cuenta (ver tabla de §2): guards, `STT_NOISE`, `rate_limited`,
+  `SLOT_CONFLICT`, `TOOL_FAILURE`, `FAST_PATH_FAILURE`, etc.
+* `breakdown` = objeto `código → nº de trazas fallidas` (clave `outcome:error` para
+  el caso 1). Una traza puede aportar a varios códigos del breakdown pero suma **1**
+  a `failure_count`.
+
+### Valores (constantes al inicio de la función SQL)
+
+Ventana **10 min**, umbral **3 turnos fallidos por negocio**, cooldown **60 min por
+negocio**. Valores de la propuesta original, a calibrar con volumen real (hoy muy
+bajo).
+
+### Cooldown y auditoría
+
+Tabla `ai_failure_alerts` (`business_id`, `created_at`, `window_min`,
+`failure_count`, `breakdown`; índice `(business_id, created_at DESC)`; RLS activa
+**sin** políticas para `anon`/`authenticated`: dato de operador, solo
+`service_role`). Es la fuente de verdad del cooldown y el registro de auditoría.
+Es **independiente** de `ai_agent_alerts` (la del Slack).
+
+* **Índice de ventana:** la migración crea `idx_ai_traces_created_at`. La consulta es
+  cross-tenant por ventana de tiempo, y todos los índices previos de `ai_traces`
+  empiezan por `business_id`; sin este índice cada corrida recorrería la tabla
+  entera, que no tiene política de retención.
+* **Trade-off de entrega (propuesto por el agente y aceptado por el usuario, 2026-10-05):** la alerta se reclama (fila insertada) antes de
+  enviarla a Sentry. Si el envío falla o falta `SENTRY_DSN`, esa alerta se pierde y
+  el negocio queda en cooldown 60 min. Se prefirió a reintentar y arriesgar avisos
+  duplicados; la fila queda como rastro auditable.
 
 ### Invariantes normativas del Paso 2
 
-* **Exclusión de benignos (CRÍTICO):** la consulta NUNCA cuenta `STT_NOISE` ni los
-  códigos de guard (`GUARD_REJECTED`, `REVIEWER_BLOCKED`). Ver §2.
-* **Cooldown anti-spam:** máximo **1 alerta por `business_id` por ventana de
-  incidente** (sugerido: silenciar 60 min tras una alerta del mismo negocio), para
-  no repetir la misma falla cada 10 min. Sin esto, un incidente de 1h genera 6
-  alertas idénticas y se vuelve ruido.
-* **Idempotencia / no auto-alerta:** el propio cron de alerta no debe trazar a
-  `ai_traces` de forma que se cuente a sí mismo.
-* **Aislamiento (constitution §4):** toda consulta filtra/ agrupa por
-  `business_id`.
+* **Exclusión de benignos (CRÍTICO):** solo cuenta la lista de permitidos; ver §2.
+* **Cooldown anti-spam:** máximo **1 alerta por `business_id` cada 60 min**.
+* **No auto-alerta:** `fn_claim_ai_failure_alerts` jamás escribe en `ai_traces`.
+* **Aislamiento (constitution §4):** el conteo se agrupa por `business_id`; nunca se
+  suman fallos de negocios distintos. La función es operador-global a propósito
+  (job cross-tenant) y por eso solo la ejecuta `service_role`.
+* **Auth:** sin `Bearer CRON_SECRET` válido → 401 y no se consulta nada.
 
-### ⚠️ Decisiones abiertas (requieren confirmación del operador antes de codear)
+### Decisiones resueltas (propuesta del agente aceptada por el usuario, 2026-10-05)
 
-1. **Canal de la alerta:** ¿reusar **Sentry** (entonces el Paso 2 es casi
-   redundante con el Paso 1 para `LLM_EXCEPTION`, y solo aporta para
-   `TOOL_FAILURE`/`rate_limited`)? ¿o canal aparte (email vía el proveedor ya
-   usado / push)? **Esta decisión define si el Paso 2 vale la pena.**
-2. **Valores concretos:** `alertThreshold` (default propuesto 3), ventana (10 min),
-   cooldown (60 min) — a calibrar con el volumen real (hoy muy bajo: 1 incidente
-   en ~48h).
-3. **Host del cron:** Next route (como `cron-retention`) vs edge function (como
-   `cron-reminders`). Preferencia: Next route si el canal es email (reusa infra
-   de la app).
+1. **Canal:** **Sentry** (no email/push). Se aceptó que las alertas del Paso 2
+   convivan con las excepciones del Paso 1 en el mismo proyecto.
+2. **Valores:** ventana 10 min / umbral 3 / cooldown 60 min.
+3. **Host:** edge function (como `cron-imminent-push`), no Next route.
+4. **Lista de permitidos y lectura de ambos niveles** (columna + `tool_calls`), con
+   normalización por prefijo, en lugar de la consulta literal del diseño original.
+5. **Voz marca `DB_ERROR`** en sus capabilities (ver §2) para no quedar ciega.
+
+### Coexistencia con la alerta de Slack (decisión del usuario: "no elimines slack")
+
+La alerta global de `20260605120000_ai_agent_error_alerts.sql`
+(`check_ai_agent_error_rate`, tabla `ai_agent_alerts`, doc
+`docs/operations/AI_AGENT_ALERTS.md`) **sigue intacta**. Ambas conviven; difieren en
+la pregunta que responden:
+
+| | Slack (`check_ai_agent_error_rate`) | Sentry (`fn_claim_ai_failure_alerts`) |
+|---|---|---|
+| Alcance | **Global** (todos los negocios agregados) | **Por negocio** |
+| Disparo | tasa de error > **5 %** en 60 min con ≥ **20 turnos** | ≥ **3** turnos fallidos en 10 min |
+| Qué cuenta | `outcome IN ('failure','error')`, incluidos los rechazos de guard de voz; excluye `rate_limited` | lista de permitidos (§ arriba); los guards **no** cuentan |
+| Cooldown | 60 min global | 60 min por negocio |
+| Entrega | webhook de Slack (secreto Vault `slack_alerts_webhook_url`) | Sentry |
+| Estado | según el usuario, Slack **nunca se usó** en este repo (el webhook no se configuró). No verificado en prod si el job `ai-agent-error-rate-check` está programado | activo tras el paso operativo |
+
+### Paso operativo pendiente (no es código)
+
+1. Aplicar la migración en prod y desplegar `cron-ai-alerts` (`supabase functions
+   deploy cron-ai-alerts --use-api`).
+2. El proyecto de Sentry debe tener una **regla de alerta que notifique ante issues
+   nuevos de nivel `error`**; sin ella el evento llega pero nadie es avisado.
 
 ---
 
-## 6. Criterios de Aceptación (Paso 2 — para cuando se implemente)
+## 6. Criterios de Aceptación (Paso 2)
+
+Verificados por `supabase/tests/ai_failure_alerts.test.sql` (pgTAP, `npx supabase
+test db`) y `supabase/functions/cron-ai-alerts/__tests__/handler.test.ts` (Vitest);
+el mapeo de voz por `supabase/functions/voice-worker/__tests__/db-error-code.test.ts`
+y `supabase/functions/voice-worker/core/__tests__/tool-error-code.test.ts`.
 
 ### AC-1 — Sólo cuenta fallos reales
-- DADO una ventana de 10 min con 5 trazas `STT_NOISE` y 1 `GUARD_REJECTED`,
-- CUANDO corre el cron de alerta,
-- ENTONCES el conteo de fallos es **0** y NO se emite alerta.
+- DADO una ventana de 10 min con trazas `STT_NOISE`, `GUARD_REJECTED` (en
+  `tool_calls`), `outcome='rate_limited'`, `SLOT_CONFLICT` y `FAST_PATH_FAILURE`,
+- CUANDO se ejecuta `fn_claim_ai_failure_alerts()`,
+- ENTONCES el conteo de fallos es **0** y NO se reclama ninguna alerta.
 
 ### AC-2 — Umbral por negocio dispara alerta
-- DADO un `business_id` con `alertThreshold=3` y 3 trazas `LLM_EXCEPTION` en la ventana,
-- CUANDO corre el cron,
-- ENTONCES se emite exactamente **1** alerta para ese negocio.
+- DADO un negocio con 3 trazas fallidas en la ventana (una con `LLM_EXCEPTION` en
+  la columna, una con `DB_ERROR` dentro de `tool_calls`, una con
+  `'TOOL_EXECUTION_ERROR: …'`),
+- CUANDO corre el claim,
+- ENTONCES se reclama exactamente **1** alerta con `failure_count = 3`; una traza
+  con dos tool calls fallidas cuenta **una** vez.
+- Y los fallos de negocios distintos no se suman (2 + 2 → ninguna alerta), y las
+  trazas con más de 10 min se ignoran.
 
 ### AC-3 — Cooldown evita repetición
-- DADO un negocio que ya recibió una alerta hace 20 min y sigue fallando,
-- CUANDO corre el cron de nuevo dentro del cooldown (60 min),
-- ENTONCES **no** se emite una segunda alerta.
+- DADO un negocio que ya fue reclamado y sigue fallando,
+- CUANDO el claim vuelve a correr dentro de los 60 min,
+- ENTONCES **no** se reclama una segunda alerta.
 
 ### AC-4 — Auth obligatoria
-- DADO un `POST` al endpoint sin `Bearer CRON_SECRET` válido,
+- DADO un `POST` a `cron-ai-alerts` sin `Bearer CRON_SECRET` válido (cabecera
+  ausente, secreto incorrecto o `CRON_SECRET` sin configurar),
 - CUANDO se procesa,
-- ENTONCES retorna 401 y no ejecuta la consulta.
+- ENTONCES retorna 401 y **no** ejecuta el claim.
+
+### AC-5 — Una señal de Sentry por alerta reclamada
+- DADO N alertas reclamadas,
+- CUANDO responde el handler,
+- ENTONCES emite N `captureMessage` de nivel `error`, cada uno con fingerprint
+  `['ai_agent_failure_threshold', business_id]`, hace flush y responde
+  `{ alerts: N }`; si el RPC falla, captura la excepción, hace flush y responde 500.
+
+### AC-6 — Privilegios
+- `authenticated` y `anon` **no** pueden ejecutar `fn_claim_ai_failure_alerts`;
+  `service_role` sí.
 
 ---
 
@@ -213,3 +329,4 @@ recientes. Es señal **pasiva** (pull) — complementa, no reemplaza, la activa.
 |---|---|
 | 2026-06-15 | Creación. Documenta la infra de trazas dual-sink (PgTraceSink canónico + LangSmith best-effort), la captura de excepciones Sentry en voice-worker (Paso 1, desplegado), el dashboard pasivo, y fija el contrato del **Paso 2** (alerta de umbral sobre `ai_traces`) como diseño 🔴 con decisiones abiertas. |
 | 2026-10-05 | §3: señales de caída silenciosa vía `captureMessage` (`wa_unrouted_message`, `owner_wa_template_failed`, `owner_wa_undelivered`), tras el incidente en que las respuestas al recordatorio se perdieron sin traza (última traza WhatsApp del 2026-07-29). Documentada la limitación de la no-entrega asíncrona de Meta. |
+| 2026-10-05 | **Paso 2 implementado (🔴 → 🟢): alerta de fallos por negocio → Sentry.** El contrato original no coincidía con los datos reales: `TOOL_FAILURE`/`FAST_PATH_FAILURE`/`GUARD_REJECTED` solo viven en `tool_calls[].errorCode` (nunca en la columna), en voz mezclan errores reales con turnos de aclaración, y `rate_limited` lo emiten los guards (voz 30 req/min por usuario, `BOOKING_RATE_LIMIT` de WhatsApp), no la cuota del proveedor. §2 corregido; fallo real = lista de permitidos (`LLM_EXCEPTION`, `DB_ERROR`, `TOOL_EXECUTION_ERROR`) + `outcome='error'`, leída de columna **y** `tool_calls`, normalizada por el prefijo antes de `:`. Voz ahora marca `DB_ERROR` en todas las capabilities y un único helper (`toolErrorCode`) reemplaza dos ternarios duplicados. Nueva tabla `ai_failure_alerts` (cooldown + auditoría, solo `service_role`), `fn_claim_ai_failure_alerts()` (advisory lock, ventana 10 min / umbral 3 / cooldown 60 min por negocio), `pg_cron` `cron-ai-alerts` → edge function homónima → `captureMessage` con fingerprint por negocio (parámetro nuevo y opcional en `_shared/sentry.ts`). La alerta global de Slack **se mantiene** por decisión del usuario; §5 documenta la diferencia. Decisiones propuestas por el agente y aceptadas por el usuario el 2026-10-05. **Pendiente operativo:** aplicar la migración, desplegar `cron-ai-alerts` (`--use-api`) y verificar en Sentry una regla que notifique issues nuevos de nivel `error`. **pgTAP:** `supabase/tests/ai_failure_alerts.test.sql` 14 asserts, `supabase test db` local PASS (161 en total), verificado por mutación (contar guards/`FAST_PATH_FAILURE` como fallo, o ignorar `tool_calls` → 4/14 fallan en cada caso). Índice nuevo `idx_ai_traces_created_at`. **Seguimiento:** los `result` de voz de los errores de BD filtran `error.message` crudo al TTS (fuera de alcance aquí). |

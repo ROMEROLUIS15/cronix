@@ -104,7 +104,7 @@ export async function executeLastVisit(
     .order('start_at', { ascending: false })
     .limit(1)
 
-  if (error) return { success: false, result: `Error al consultar la última visita: ${error.message}` }
+  if (error) return { success: false, result: `Error al consultar la última visita: ${error.message}`, error: 'DB_ERROR' }
   if (!data?.length) {
     // Distinguish "no past appointments at all" from "all past were cancelled".
     // A second cheap query tells us which message to use without breaking the

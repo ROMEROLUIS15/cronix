@@ -53,7 +53,7 @@ export async function executeListAppointments(
     .order('start_at')
 
   console.log(`[VOICE-WORKER-LIST-APPTS] date=${args.date} tz=${ctx.timezone} found=${data?.length ?? 0}`)
-  if (error) return { success: false, result: `Error al consultar citas: ${error.message}` }
+  if (error) return { success: false, result: `Error al consultar citas: ${error.message}`, error: 'DB_ERROR' }
 
   const dateLabel = humanizeDate(args.date, ctx.timezone)
   if (!data?.length) return { success: true, result: `No hay citas para el ${dateLabel}.` }
