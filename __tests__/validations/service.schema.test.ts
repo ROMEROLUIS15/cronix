@@ -52,6 +52,11 @@ describe('UpdateServiceSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('no debe reactivar el servicio: el default is_active de creación no aplica al update', () => {
+    const result = UpdateServiceSchema.safeParse({ price: 30000 })
+    expect(result.success && result.data).toEqual({ price: 30000 })
+  })
+
   it('debe rechazar precio negativo en update parcial', () => {
     const result = UpdateServiceSchema.safeParse({ price: -10 })
     expect(result.success).toBe(false)

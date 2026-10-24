@@ -41,7 +41,7 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
   })
 
   if (!profileParsed.success) {
-    return { error: profileParsed.error.errors[0]?.message ?? 'Datos inválidos' }
+    return { error: profileParsed.error.issues[0]?.message ?? 'Datos inválidos' }
   }
 
   const { name, phone } = profileParsed.data
@@ -57,7 +57,7 @@ export async function updateProfile(formData: FormData): Promise<ProfileResult> 
     })
 
     if (!pwParsed.success) {
-      return { error: pwParsed.error.errors[0]?.message ?? 'Error en la contraseña' }
+      return { error: pwParsed.error.issues[0]?.message ?? 'Error en la contraseña' }
     }
   }
 

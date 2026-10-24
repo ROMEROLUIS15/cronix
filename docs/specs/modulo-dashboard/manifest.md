@@ -72,7 +72,8 @@ El dashboard monta un **Floating Action Button (FAB)** de voz (`components/dashb
 
 - **Endpoint**: llama a `supabase/functions/v1/voice-worker` directamente
 - **Autenticación**: envía el JWT del usuario (`Authorization: Bearer <access_token>`)
-- **Input**: audio vía Web Speech API (desktop Chrome/Edge) o MediaRecorder + STT server-side del `voice-worker` (Deepgram Nova-2) en mobile/fallback; o texto si falla STT
+- **Input**: audio grabado con MediaRecorder en **todas** las plataformas (desktop y mobile) → STT server-side del `voice-worker` (Deepgram Nova-2), enviado como multipart. La grabación termina con 600 ms de silencio tras detectar voz (VAD), con un toque del usuario o con el tope duro de **10 s**
+- **Trade-off — Web Speech API retirada (2026-10-23)**: hasta esta fecha desktop Chrome/Edge transcribía en el navegador. En Edge casi no funcionaba y en Chrome el reconocimiento terminaba a menudo sin resultado ni error ("No pude reconocer tu voz"): el pedido nunca salía del navegador, así que el fallo no quedaba en `ai_traces` ni en Sentry. Costo aceptado: una transcripción de Deepgram por turno también en desktop, la latencia de subir el audio y el corte por VAD tras 600 ms de pausa (Chrome toleraba pausas más largas). Propuesto por el agente, aceptado por el usuario
 - **Response**: recibe `{ text, audioUrl, actionPerformed, transcription }`
 - **Invalidación post-acción**: si `actionPerformed=true`, invalida las queries de React Query para `appointments`, `dashboard-stats`, `clients` y `notifications`
 - **Persistencia de historial**: guarda los últimos 15 turnos en `sessionStorage`

@@ -191,7 +191,7 @@ export async function registerClientPayment(
   // 1. Validate with Zod
   const parsed = RegisterPaymentSchema.safeParse(formData)
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0]?.message ?? 'Datos inválidos'
+    const firstError = parsed.error.issues[0]?.message ?? 'Datos inválidos'
     throw new Error(firstError)
   }
 
@@ -320,7 +320,7 @@ export async function registerOtherIncome(
 ): Promise<{ success: true }> {
   const parsed = RegisterOtherIncomeSchema.safeParse(formData)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Datos inválidos')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Datos inválidos')
   }
   const validData = parsed.data
 

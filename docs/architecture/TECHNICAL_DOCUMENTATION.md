@@ -441,7 +441,7 @@ so the reviewer does not apply there.
 4. **Rate-limit 30/min per user** via Redis (`redis.ts:checkRateLimit`).
 5. **Parse payload**:
    - Multipart with `audio` + `timezone` + `history?` → Deepgram STT with keyword boost.
-   - JSON `{text, timezone, history?}` (Web Speech API on desktop) → direct.
+   - JSON `{text, timezone, history?}` (scripts such as `trigger-voice`; the dashboard FAB always sends audio) → direct.
 6. **Parallel load**:
    - `transcribe(audio, {keywords})` (Deepgram Nova-2).
    - `loadBusinessContext(businessId, tz)` (services, clients, today's appointments, working hours, aiRules).

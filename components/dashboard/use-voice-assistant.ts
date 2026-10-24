@@ -25,8 +25,8 @@ export interface VoiceAssistant {
 }
 
 /**
- * useVoiceAssistant — the FAB's voice state machine: recording (Web Speech API
- * on desktop, MediaRecorder + server STT on mobile/Firefox), the one-shot
+ * useVoiceAssistant — the FAB's voice state machine: recording (MediaRecorder +
+ * server-side STT in the voice-worker, on every platform), the one-shot
  * voice-worker call, audio playback with mobile-autoplay unlocking, and the
  * silence-failure telemetry beacon.
  *
@@ -61,8 +61,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   const audioChunksRef     = useRef<Blob[]>([])
   const audioUnlockedRef   = useRef<boolean>(false)
   const unlockPrimerRef    = useRef<HTMLAudioElement | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef     = useRef<any>(null)
   // AbortController for the in-flight Edge Function request — lets us cancel
   // when the user taps to interrupt while we're waiting for the response.
   const inflightAbortRef   = useRef<AbortController | null>(null)
@@ -273,12 +271,12 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
   /**
    * One-shot synchronous call to the voice-worker Edge Function.
-   * Sends either an audio Blob (multipart) or plain text (JSON), waits for the
-   * full pipeline (STT → LLM → TTS), then plays the resulting audio.
+   * Sends the recorded audio Blob (multipart), waits for the full pipeline
+   * (STT → LLM → TTS), then plays the resulting audio.
    *
    * No polling, no jobs — the Edge Function returns the final result directly.
    */
-  const callVoiceWorker = async (input: { audio: Blob } | { text: string }) => {
+  const callVoiceWorker = async (audio: Blob) => {
     // Cancel any prior in-flight request before starting a new one
     inflightAbortRef.current?.abort()
     const ctrl = new AbortController()
@@ -294,31 +292,21 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       }
 
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const headers: Record<string, string> = { Authorization: `Bearer ${jwt}` }
-      let body: BodyInit
 
       // Send the locally-persisted chat history as a fallback. The edge
       // function prefers Redis-stored session if Upstash is configured, but
       // falls back to this when Redis isn't available — without it,
       // anaphoric references like "borra al duplicado" lose context and
       // the LLM hallucinates technical-sounding text.
-      const historyJson = JSON.stringify(chatHistory)
-
-      if ('audio' in input) {
-        const form = new FormData()
-        form.append('audio',    input.audio, 'audio.webm')
-        form.append('timezone', timezone)
-        form.append('history',  historyJson)
-        body = form
-      } else {
-        headers['Content-Type'] = 'application/json'
-        body = JSON.stringify({ text: input.text, timezone, history: chatHistory })
-      }
+      const form = new FormData()
+      form.append('audio',    audio, 'audio.webm')
+      form.append('timezone', timezone)
+      form.append('history',  JSON.stringify(chatHistory))
 
       const res = await fetch(VOICE_WORKER_URL, {
         method:  'POST',
-        headers,
-        body,
+        headers: { Authorization: `Bearer ${jwt}` },
+        body:    form,
         signal:  ctrl.signal,
       })
 
@@ -351,7 +339,7 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       // Append both turns to the in-memory chat history for context across taps
       setChatHistory(prev => [
         ...prev,
-        { role: 'user',      content: data.transcription || (('text' in input) ? input.text : '') },
+        { role: 'user',      content: data.transcription },
         { role: 'assistant', content: data.text },
       ].slice(-15))
 
@@ -381,135 +369,10 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   const startRecording = async () => {
     unlockAudioPlayback()
 
-    // Mobile Android Chrome PWA: Web Speech API conflicts with parallel getUserMedia
-    // (volume monitor) and returns empty transcripts — silent failure, the button
-    // never enters "processing" state and goes straight back to idle.
-    // On mobile we force the MediaRecorder + server-side STT (Deepgram) path which always works.
-    const isMobile = typeof navigator !== 'undefined'
-      && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-
-    // ── Web Speech API path (desktop Chrome/Edge only) ─────────────────────
-    const SpeechRecognitionAPI = !isMobile
-      ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
-      : null
-    if (SpeechRecognitionAPI) {
-      setState('listening')
-      setVolume(0)
-
-      const recognition = new SpeechRecognitionAPI()
-      recognitionRef.current = recognition
-      recognition.lang             = 'es-ES'
-      recognition.continuous       = false
-      recognition.interimResults   = false
-      recognition.maxAlternatives  = 1
-
-      // Open a parallel mic stream for volume monitoring.
-      // Web Speech API doesn't expose the raw MediaStream, so we open an independent
-      // getUserMedia() alongside it. Both can access the mic without conflict.
-      let monitorStream: MediaStream | null = null
-      const stopMonitor = () => {
-        if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null }
-        monitorStream?.getTracks().forEach(t => t.stop())
-        monitorStream = null
-        analyserRef.current = null
-        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-          audioContextRef.current.close().catch(() => {/* ignore */})
-          audioContextRef.current = null
-        }
-      }
-
-      navigator.mediaDevices?.getUserMedia({ audio: true }).then(stream => {
-        monitorStream = stream
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-        audioContextRef.current = ctx
-        const analyser = ctx.createAnalyser()
-        analyser.fftSize = 256
-        analyser.smoothingTimeConstant = 0.6
-        ctx.createMediaStreamSource(stream).connect(analyser)
-        analyserRef.current = analyser
-        const tdArray = new Uint8Array(analyser.fftSize)
-        const monitorLoop = () => {
-          if (!analyserRef.current) return
-          analyserRef.current.getByteTimeDomainData(tdArray)
-          const rms = Math.sqrt(tdArray.reduce((s, v) => s + (v - 128) ** 2, 0) / tdArray.length)
-          setVolume(Math.min((rms / 128) * 5, 1))
-          rafIdRef.current = requestAnimationFrame(monitorLoop)
-        }
-        rafIdRef.current = requestAnimationFrame(monitorLoop)
-      }).catch(() => { /* no volume display if permission denied */ })
-
-      // Track whether onresult ever fired so we can detect "silent" recognition
-      // (onend fires without onresult/onerror) — common cause of "desktop no
-      // me responde nada".
-      let resultFired = false
-
-      recognition.onresult = (event: any) => {
-        resultFired = true
-        recognitionRef.current = null
-        stopMonitor()
-        const transcript = Array.from(event.results as any[])
-          .map((r: any) => r[0].transcript)
-          .join('')
-          .trim()
-        logger.info('VoiceAssistantFab', 'Speech recognition onresult', { transcript, length: transcript.length })
-        if (transcript) {
-          setState('processing')
-          void callVoiceWorker({ text: transcript })
-        } else {
-          // Empty transcript — give the user audio feedback so they know
-          // the system is alive but didn't catch their voice.
-          vocalizeSilentFailsafe('No te escuché bien, intenta de nuevo.')
-          setState('idle')
-        }
-      }
-
-      recognition.onerror = (event: any) => {
-        resultFired = true
-        recognitionRef.current = null
-        stopMonitor()
-        logger.warn('VoiceAssistantFab', 'Speech recognition onerror', { error: event.error })
-        if (event.error === 'no-speech') {
-          // Audio feedback so the user knows we're alive but heard nothing.
-          vocalizeSilentFailsafe('No te escuché, ¿puedes repetir más fuerte?')
-          return
-        }
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          vocalizeSilentFailsafe('Necesito permiso para el micrófono. Actívalo en la configuración del navegador.')
-        } else {
-          vocalizeSilentFailsafe('No pude escucharte. Intenta de nuevo.')
-        }
-        setState('idle')
-      }
-
-      recognition.onend = () => {
-        recognitionRef.current = null
-        stopMonitor()
-        // If onend fires WITHOUT onresult or onerror, the recognition silently
-        // failed (Chrome desktop bug, often when network or speech service is
-        // unavailable). Surface this to the user with audio feedback instead
-        // of just resetting silently.
-        if (!resultFired) {
-          logger.warn('VoiceAssistantFab', 'Speech recognition ended without result/error — silent failure')
-          vocalizeSilentFailsafe('No pude reconocer tu voz. Intenta de nuevo en unos segundos.')
-          return
-        }
-        setState((s: AssistantState) => s === 'listening' ? 'idle' : s)
-      }
-
-      try {
-        recognition.start()
-        logger.info('VoiceAssistantFab', 'Speech recognition started (desktop Web Speech API)')
-      } catch (err) {
-        recognitionRef.current = null
-        stopMonitor()
-        logger.error('VoiceAssistantFab', 'Speech recognition start threw', err)
-        vocalizeSilentFailsafe('No se pudo iniciar el reconocimiento de voz.')
-        setState('idle')
-      }
-      return
-    }
-
-    // ── MediaRecorder fallback (Firefox / non-Chromium) ────────────────────
+    // Every platform records audio for the voice-worker's server-side STT
+    // (Deepgram). The browser Web Speech API was dropped: Edge barely works with
+    // it, and Chrome often ends recognition with neither a result nor an error —
+    // a failure that never reached the server, so ai_traces and Sentry missed it.
     if (!navigator.mediaDevices?.getUserMedia) {
       vocalizeSilentFailsafe('Micrófono no disponible en este navegador.')
       return
@@ -579,7 +442,7 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
           return
         }
 
-        await callVoiceWorker({ audio: new Blob(audioChunksRef.current, { type: mimeType }) })
+        await callVoiceWorker(new Blob(audioChunksRef.current, { type: mimeType }))
       }
 
       mediaRecorder.start(250)
@@ -591,7 +454,7 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       // Hard cap ensures we always send the captured audio, even if VAD failed.
       const MIN_RMS_FLOOR    = 5
       const SILENCE_DURATION = 600
-      const MAX_RECORD_MS    = 6000   // Hard cap on recording duration
+      const MAX_RECORD_MS    = 10_000 // Hard cap on recording duration — room for a full name in the question
       const startTime        = Date.now()
       const tdArray          = new Uint8Array(analyser.fftSize)
 
@@ -655,10 +518,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   }
 
   const stopRecording = () => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch { /* ignore */ }
-      recognitionRef.current = null
-    }
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
     if (rafIdRef.current)        { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
