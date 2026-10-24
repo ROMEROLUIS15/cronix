@@ -138,20 +138,48 @@ describe('useVoiceAssistant — recording', () => {
     expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer jwt-123' })
   })
 
-  it('keeps recording past 6 s and stops at the 10 s hard cap when VAD never detects speech', async () => {
-    const start = now
+  // CI 2026-10-24 (second cause): the recorder was only created after awaiting
+  // AudioContext.resume(), which never settles without an audio device (headless CI) or
+  // outside a user gesture (iOS) — the FAB stayed "listening" and nothing was recorded.
+  it('starts recording and arms the hard cap even when AudioContext.resume() never settles', async () => {
+    class StuckAudioContext extends FakeAudioContext {
+      override state: AudioContextState = 'suspended'
+      override resume = vi.fn(() => new Promise<void>(() => {}))
+    }
+    vi.stubGlobal('AudioContext', StuckAudioContext)
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+    await startListening(DESKTOP_EDGE_UA)
+
+    expect(FakeMediaRecorder.instances[0]!.state).toBe('recording')
+    expect(setTimeoutSpy.mock.calls.some(([, ms]) => ms === 10_000)).toBe(true)
+  })
+
+  // CI 2026-10-24: the FAB went "listening" and never stopped — the cap lived inside the
+  // rAF loop, and rAF pauses in a background tab or a throttled headless browser.
+  it('stops at the 10 s hard cap from its own timer, even when no animation frame runs', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
     await startListening(DESKTOP_EDGE_UA)
     const recorder = FakeMediaRecorder.instances[0]!
 
-    now = start + 300     // noise-floor calibration window (200 ms) elapses
-    runFrame()
-    now = start + 7_000
-    runFrame()
+    const cap = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 10_000)
+    expect(cap, 'a 10 s hard-cap timer is armed when recording starts').toBeDefined()
     expect(recorder.state).toBe('recording')
 
-    now = start + 10_000
-    runFrame()
+    act(() => { (cap![0] as () => void)() })
     expect(recorder.state).toBe('inactive')
+  })
+
+  it('a tap that stops the recording first disarms the hard cap', async () => {
+    const setTimeoutSpy  = vi.spyOn(globalThis, 'setTimeout')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const { result } = await startListening(DESKTOP_EDGE_UA)
+    const capIndex = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 10_000)
+    expect(capIndex).toBeGreaterThanOrEqual(0)
+    const capId = setTimeoutSpy.mock.results[capIndex]!.value
+
+    act(() => result.current.handleClick())
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(capId)
   })
 })
 

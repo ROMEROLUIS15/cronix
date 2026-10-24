@@ -55,6 +55,7 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   const audioContextRef    = useRef<AudioContext | null>(null)
   const analyserRef        = useRef<AnalyserNode | null>(null)
   const silenceTimerRef    = useRef<NodeJS.Timeout | null>(null)
+  const capTimerRef        = useRef<NodeJS.Timeout | null>(null)
   const rafIdRef           = useRef<number | null>(null)
   const hasSpokenRef       = useRef<boolean>(false)
   const currentAudioRef    = useRef<HTMLAudioElement | null>(null)
@@ -438,18 +439,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
     }
 
     try {
-      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-        audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-      }
-      const audioContext = audioContextRef.current
-      if (audioContext.state === 'suspended') await audioContext.resume()
-
-      const analyser = audioContext.createAnalyser()
-      analyser.fftSize              = 512
-      analyser.smoothingTimeConstant = 0.2
-      audioContext.createMediaStreamSource(stream).connect(analyser)
-      analyserRef.current = analyser
-
       const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
 
@@ -478,15 +467,48 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       }
 
       mediaRecorder.start(250)
+    } catch (err: unknown) {
+      logger.error('VoiceAssistantFab', 'Recording setup failed', err)
+      stream.getTracks().forEach(t => t.stop())
+      setState('idle')
+      vocalizeSilentFailsafe('Error al iniciar la grabación.')
+      return
+    }
 
-      // VAD — RMS-based voice activity detection with adaptive noise floor.
-      // MAX_RECORD_MS is a hard cap: after this, send what we have (no more waiting).
-      // Mobile users tap-and-talk immediately; calibration races with their voice
-      // and noise_floor gets set too high, so VAD speech detection is unreliable.
-      // Hard cap ensures we always send the captured audio, even if VAD failed.
+    // Hard cap on recording duration (room for a full name in the question): after
+    // it, send what we have. It runs on its OWN timer, not inside the VAD loop:
+    // rAF pauses in a background tab (and in a throttled headless browser), so a cap
+    // checked only per frame could leave the mic recording forever.
+    const MAX_RECORD_MS = 10_000
+    capTimerRef.current = setTimeout(stopRecording, MAX_RECORD_MS)
+
+    startVoiceActivityDetection(stream)
+  }
+
+  // Volume meter + end-of-speech detection (RMS with an adaptive noise floor). An extra:
+  // it runs AFTER the recorder and the hard cap are armed and never blocks them. It used
+  // to await AudioContext.resume() first, which never settles without an audio device
+  // (headless CI) or outside a user gesture (iOS) — the FAB stayed "listening" with no
+  // recorder at all. Without it, the hard cap or a tap ends the recording.
+  const startVoiceActivityDetection = (stream: MediaStream) => {
+    try {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      }
+      const audioContext = audioContextRef.current
+      if (audioContext.state === 'suspended') void audioContext.resume().catch(() => { /* VAD reads silence */ })
+
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize              = 512
+      analyser.smoothingTimeConstant = 0.2
+      audioContext.createMediaStreamSource(stream).connect(analyser)
+      analyserRef.current = analyser
+
+      // Mobile users tap-and-talk immediately; calibration races with their voice and
+      // noise_floor gets set too high, so speech detection is unreliable — the hard cap
+      // always sends the captured audio, even if VAD failed.
       const MIN_RMS_FLOOR    = 5
       const SILENCE_DURATION = 600
-      const MAX_RECORD_MS    = 10_000 // Hard cap on recording duration — room for a full name in the question
       const startTime        = Date.now()
       const tdArray          = new Uint8Array(analyser.fftSize)
 
@@ -503,13 +525,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
         const elapsed = Date.now() - startTime
 
-        // Hard cap — always honored, regardless of VAD state.
-        // Sends whatever audio was captured to the server-side STT for handling.
-        if (elapsed >= MAX_RECORD_MS) {
-          stopRecording()
-          return
-        }
-
         if (!calibrated) {
           noiseFloorSamples.push(rms)
           if (elapsed >= 200) {  // 200ms ≈ 12 samples at 60fps — sufficient for noise floor
@@ -525,7 +540,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
           if (rms > noiseFloor) {
             hasSpokenRef.current = true
           }
-          // Removed the MAX_WAIT_MS branch — the hard cap above handles all timeouts.
         } else {
           if (rms < noiseFloor * 0.7) {
             if (!silenceTimerRef.current) {
@@ -540,16 +554,13 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
         rafIdRef.current = requestAnimationFrame(monitor)
       }
       monitor()
-
     } catch (err: unknown) {
-      logger.error('VoiceAssistantFab', 'Recording setup failed', err)
-      stream.getTracks().forEach(t => t.stop())
-      setState('idle')
-      vocalizeSilentFailsafe('Error al iniciar la grabación.')
+      logger.warn('VoiceAssistantFab', 'Voice activity detection unavailable — the hard cap or a tap ends the recording', err)
     }
   }
 
   const stopRecording = () => {
+    if (capTimerRef.current)     { clearTimeout(capTimerRef.current);     capTimerRef.current = null }
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
     if (rafIdRef.current)        { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -584,11 +595,12 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
     if (state === 'listening') stopRecording()
   }
 
-  // Cleanup on unmount: cancel any in-flight request.
+  // Cleanup on unmount: cancel any in-flight request and the recording hard cap.
   useEffect(() => {
     return () => {
       inflightAbortRef.current?.abort()
       inflightAbortRef.current = null
+      if (capTimerRef.current) clearTimeout(capTimerRef.current)
     }
   }, [])
 
