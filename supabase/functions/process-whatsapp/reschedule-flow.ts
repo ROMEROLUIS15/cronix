@@ -12,6 +12,7 @@ import { parseDateTime, extractTime } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from './availability.ts'
 import { isRescheduleIntent } from './intents.ts'
+import type { ChangeRequest } from './notif-contracts.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, apptLocal, humanDate, listFreeTimes, matchAppointments, listActiveAppointments,
@@ -69,11 +70,21 @@ export function resolveRescheduleTurn(p: {
     if (!newTime && dt.time) newTime = dt.time
     if (newDate && newTime) break
   }
-  if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = apptLocal(target, tz).time
+  const { date: origDate, time: origTime } = apptLocal(target, tz)
+  if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = origTime
 
-  if (!newDate) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
-  if (newDate < todayInTimezone(tz)) {
-    return { kind: 'reply', text: `El ${humanDate(newDate)} ya pasó 🗓️. ¿Para qué fecha de hoy en adelante reagendamos tu cita de *${target.service_name}*?` }
+  // Every reply from here on belongs to a request on THIS appointment → the owner is
+  // alerted before the client confirms (operacion-canonica O3; deduped by event_id).
+  const today = todayInTimezone(tz)
+  const changeRequest: ChangeRequest = {
+    type: 'reschedule', appointmentId: target.id, serviceName: target.service_name,
+    date: origDate, time: origTime, requestedDate: newDate && newDate >= today ? newDate : null,
+  }
+  const reply = (text: string): BookingTurn => ({ kind: 'reply', text, changeRequest })
+
+  if (!newDate) return reply(`¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?`)
+  if (newDate < today) {
+    return reply(`El ${humanDate(newDate)} ya pasó 🗓️. ¿Para qué fecha de hoy en adelante reagendamos tu cita de *${target.service_name}*?`)
   }
 
   // Validate the day is OPEN as soon as the date is known — before asking the time — so a
@@ -84,20 +95,19 @@ export function resolveRescheduleTurn(p: {
   const when = humanDate(newDate)
   if (!open) {
     const sugg = suggestOpenDays(wh, newDate)
-    return { kind: 'reply', text: `El ${when} el negocio no abre 😕. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?${sugg ? ` Por ejemplo, ${sugg}.` : ''}` }
+    return reply(`El ${when} el negocio no abre 😕. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?${sugg ? ` Por ejemplo, ${sugg}.` : ''}`)
   }
   if (slots.length === 0) {
-    return { kind: 'reply', text: `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?` }
+    return reply(`Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?`)
   }
   if (!newTime) {
     const { list, note } = freeTimesFor(slots, dayPartFrom(texts))
-    return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? ${note}Para reagendar tengo: ${list}.` }
+    return reply(`¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? ${note}Para reagendar tengo: ${list}.`)
   }
   if (!slots.includes(newTime)) {
-    return { kind: 'reply', text: `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?` }
+    return reply(`A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?`)
   }
-  const origDate = apptLocal(target, tz).date
-  return { kind: 'reply', text: `¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?` }
+  return reply(`¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?`)
 }
 
 /** Recovers the appointment + validated new slot from OUR reschedule proposal. */

@@ -31,4 +31,11 @@ describe('buildAppointmentEventId — unified notification contract', () => {
     expect(buildAppointmentEventId('cancelled', 'B', 'A', '2026-12-31', '23:45'))
       .toBe('cancelled:B:A:2026-12-31:23:45')
   })
+
+  it('supports the pending-request actions with the same format (operacion-canonica O3)', () => {
+    expect(buildAppointmentEventId('reschedule_requested', 'B', 'A', '2026-12-31', '23:45'))
+      .toBe('reschedule_requested:B:A:2026-12-31:23:45')
+    expect(buildAppointmentEventId('cancel_requested', 'B', 'A', '2026-12-31', '23:45'))
+      .toBe('cancel_requested:B:A:2026-12-31:23:45')
+  })
 })

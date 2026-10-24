@@ -716,3 +716,58 @@ describe('resolveBookingTurn — weekday + part of day', () => {
   })
 })
 
+// ── Owner alert for unfinished requests (operacion-canonica O3) ──────────────────────
+// As soon as a request targets ONE appointment, the turn carries a changeRequest so the
+// pipeline can alert the owner before the client confirms; nothing is written yet.
+describe('resolveBookingTurn — changeRequest for the owner alert', () => {
+  const APPT_THU = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-24T14:00:00Z' }] // Thu 09:00 Bogota
+  const base = { services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [] as Array<{ start_at: string; end_at: string }> }
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-12-23T15:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('a reschedule request carries the appointment and the date asked for', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'cancela mi cita y reagendame para el martes en la mañana', history: [], activeAppointments: APPT_THU, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.changeRequest).toEqual({
+        type: 'reschedule', appointmentId: 'apt-1', serviceName: 'Tarjeta', date: '2026-12-24', time: '09:00', requestedDate: '2026-12-29',
+      })
+    }
+  })
+
+  it('a follow-up turn of the same reschedule still carries it (deduped downstream by event_id)', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'a las 10',
+      history: [
+        { role: 'user', text: 'reagéndala para el martes' },
+        { role: 'assistant', text: '¿A qué hora quieres tu cita de *Tarjeta* el 29 de diciembre? Para reagendar tengo: 9:00 am.' },
+      ],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toMatchObject({ type: 'reschedule', appointmentId: 'apt-1', requestedDate: '2026-12-29' })
+  })
+
+  it('a cancel request carries the appointment, with no new date', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'no podré asistir a mi cita', history: [], activeAppointments: APPT_THU, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.changeRequest).toEqual({
+        type: 'cancel', appointmentId: 'apt-1', serviceName: 'Tarjeta', date: '2026-12-24', time: '09:00', requestedDate: null,
+      })
+    }
+  })
+
+  it('no changeRequest while the appointment is still ambiguous', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-26T14:00:00Z' }]
+    const turn = resolveBookingTurn({ ...base, userText: 'quiero cancelar mi cita', history: [], activeAppointments: two, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toBeUndefined()
+  })
+
+  it('a new booking never carries a changeRequest', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'quiero agendar tarjeta el martes', history: [], activeAppointments: [], intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toBeUndefined()
+  })
+})

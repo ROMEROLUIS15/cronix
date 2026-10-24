@@ -16,6 +16,7 @@ import { buildLocationResponse, buildHoursResponse } from "./business-info.ts"
 import { serviceNamedIn } from "./booking-shared.ts"
 import { isBookIntent, isManageExisting } from "./intents.ts"
 import { executeDeterministicWrite } from "./deterministic-write.ts"
+import { emitChangeRequestedEvent } from "./notifications.ts"
 import { BOOKING_PROPOSAL_DETECT_RE } from "./output-sanitizer.ts"
 import type { TurnContext, TurnResult } from "./turn-context.ts"
 
@@ -49,9 +50,12 @@ export async function layerBooking(tc: TurnContext): Promise<TurnResult | null> 
   })
   if (bookingTurn?.kind === 'reply') {
     addBreadcrumb('Deterministic booking/cancel/reschedule proposal (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
+    // A request on one appointment alerts the owner now, before the client confirms (O3).
+    if (bookingTurn.changeRequest) emitChangeRequestedEvent(business, customerName, bookingTurn.changeRequest)
     await tc.quickTrace(bookingTurn.text, 'deterministic_booking', {
       isProposal: BOOKING_PROPOSAL_DETECT_RE.test(bookingTurn.text),
       intent: intent?.intent ?? null,
+      changeRequest: bookingTurn.changeRequest?.type ?? null,
     })
     return { text: bookingTurn.text, tokens: 0, toolCallsTrace: [] }
   }

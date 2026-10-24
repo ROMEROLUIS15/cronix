@@ -12,14 +12,17 @@
  *
  *   {action}:{businessId}:{appointmentId}:{date}:{time}
  *
- * - action:        'created' | 'rescheduled' | 'cancelled'
+ * - action:        'created' | 'rescheduled' | 'cancelled' | 'reschedule_requested' | 'cancel_requested'
  * - businessId:    tenant UUID
  * - appointmentId: appointment UUID
  * - date:          YYYY-MM-DD in the business timezone
  * - time:          HH:mm (24h)  in the business timezone
  */
 
-export type AppointmentAction = 'created' | 'rescheduled' | 'cancelled'
+export type AppointmentAction =
+  | 'created' | 'rescheduled' | 'cancelled'
+  // A client request not confirmed yet (operacion-canonica O3): alerts the owner once.
+  | 'reschedule_requested' | 'cancel_requested'
 
 export function buildAppointmentEventId(
   action:        AppointmentAction,

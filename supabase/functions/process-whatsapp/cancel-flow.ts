@@ -26,7 +26,12 @@ export function resolveCancelIntent(
   if (cands.length === 1) {
     const a = cands[0]!
     const { date, time } = apptLocal(a, tz)
-    return { kind: 'reply', text: `¿Confirmas que cancele tu cita de *${a.service_name}* del ${humanDate(date)} a las ${formatLocalTime(time)}?` }
+    return {
+      kind: 'reply',
+      text: `¿Confirmas que cancele tu cita de *${a.service_name}* del ${humanDate(date)} a las ${formatLocalTime(time)}?`,
+      // The owner is alerted before the client confirms (operacion-canonica O3).
+      changeRequest: { type: 'cancel', appointmentId: a.id, serviceName: a.service_name, date, time, requestedDate: null },
+    }
   }
   return { kind: 'reply', text: listActiveAppointments(cands, tz, 'cancelar') }
 }

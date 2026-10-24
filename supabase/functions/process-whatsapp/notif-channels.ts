@@ -12,7 +12,7 @@ import { captureMessage } from "../_shared/sentry.ts"
 import { formatLocalTime } from "./prompt-builder.ts"
 import {
   type AppointmentEvent,
-  buildTitle, buildContent, buildOwnerWhatsAppMessage, formatDateHuman,
+  buildTitle, buildContent, buildOwnerWhatsAppMessage, formatDateHuman, notificationKind,
 } from "./notif-contracts.ts"
 
 /** Idempotency: true when this eventId already has a notification row. */
@@ -34,7 +34,7 @@ export async function saveNotificationToDB(event: AppointmentEvent): Promise<boo
       business_id: event.businessId,
       title:       buildTitle(event.type),
       content:     buildContent(event),
-      type:        event.type === 'appointment.cancelled' ? 'warning' : 'success',
+      type:        notificationKind(event.type),
       is_read:     false,
       event_id:    event.eventId,
       metadata: {
@@ -43,6 +43,7 @@ export async function saveNotificationToDB(event: AppointmentEvent): Promise<boo
         serviceName: event.serviceName,
         date:        event.date,
         time:        event.time,
+        ...(event.requestedDate ? { requestedDate: event.requestedDate } : {}),
         channel:     event.channel,
         userId:      event.userId,
       },

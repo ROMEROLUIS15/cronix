@@ -9,12 +9,15 @@ import { extractDayPart, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { todayInTimezone, nextOpenDates, type WorkingHours } from './availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
+import type { ChangeRequest } from './notif-contracts.ts'
 
 export type ServiceLite    = { id: string; name: string; duration_min: number }
 export type ActiveApptLite = { id: string; service_name: string; start_at: string }
 
 export type BookingTurn =
-  | { kind: 'reply';   text: string }
+  // `changeRequest`: the reply belongs to a cancel/reschedule request on ONE appointment,
+  // so the owner is alerted before the client confirms (operacion-canonica O3).
+  | { kind: 'reply';   text: string; changeRequest?: ChangeRequest }
   | { kind: 'execute';           serviceId: string;     serviceName: string; date: string;    time: string }
   | { kind: 'executeCancel';     appointmentId: string; serviceName: string; date: string;    time: string }
   | { kind: 'executeReschedule'; appointmentId: string; serviceName: string; newDate: string; newTime: string }

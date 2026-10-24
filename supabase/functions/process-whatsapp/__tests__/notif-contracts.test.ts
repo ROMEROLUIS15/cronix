@@ -1,0 +1,72 @@
+/**
+ * notif-contracts.test.ts — Owner alert for a request the client has not confirmed yet
+ * (operacion-canonica O3). The appointment is untouched; the owner just needs to know.
+ */
+
+import { describe, it, expect } from 'vitest'
+import {
+  buildChangeRequestEvent, buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind,
+} from '../notif-contracts.ts'
+
+const BUSINESS = { id: 'biz-1', name: 'RS STUDIO' }
+const RESCHEDULE = {
+  type: 'reschedule' as const, appointmentId: 'apt-1', serviceName: 'Pestañas',
+  date: '2026-10-24', time: '09:00', requestedDate: '2026-10-27',
+}
+const CANCEL = { ...RESCHEDULE, type: 'cancel' as const, requestedDate: null }
+
+describe('buildChangeRequestEvent', () => {
+  it('builds an idempotent reschedule-request event for the appointment slot', () => {
+    expect(buildChangeRequestEvent(BUSINESS, 'Valeria', RESCHEDULE)).toEqual({
+      eventId:       'reschedule_requested:biz-1:apt-1:2026-10-24:09:00',
+      type:          'appointment.reschedule_requested',
+      businessId:    'biz-1',
+      businessName:  'RS STUDIO',
+      clientName:    'Valeria',
+      serviceName:   'Pestañas',
+      date:          '2026-10-24',
+      time:          '09:00',
+      requestedDate: '2026-10-27',
+      userId:        'whatsapp-agent',
+      channel:       'whatsapp',
+    })
+  })
+
+  it('builds a cancel-request event with its own id', () => {
+    const event = buildChangeRequestEvent(BUSINESS, 'Valeria', CANCEL)
+    expect(event.eventId).toBe('cancel_requested:biz-1:apt-1:2026-10-24:09:00')
+    expect(event.type).toBe('appointment.cancel_requested')
+    expect(event.requestedDate).toBeNull()
+  })
+})
+
+describe('owner-facing texts for a pending request', () => {
+  const reschedule = buildChangeRequestEvent(BUSINESS, 'Valeria', RESCHEDULE)
+  const cancel     = buildChangeRequestEvent(BUSINESS, 'Valeria', CANCEL)
+
+  it('titles say it is pending', () => {
+    expect(buildTitle(reschedule.type)).toBe('Pidió reagendar (pendiente)')
+    expect(buildTitle(cancel.type)).toBe('Pidió cancelar (pendiente)')
+  })
+
+  it('bell content names the appointment, the date asked for, and that it is not confirmed', () => {
+    expect(buildContent(reschedule)).toBe('Pidió reagendar: Valeria — Pestañas el 2026-10-24 a las 09:00. Quiere el 2026-10-27. Aún no confirma.')
+    expect(buildContent(cancel)).toBe('Pidió cancelar: Valeria — Pestañas el 2026-10-24 a las 09:00. Aún no confirma.')
+  })
+
+  it('the WhatsApp fallback tells the owner the appointment still stands', () => {
+    const msg = buildOwnerWhatsAppMessage(reschedule)
+    expect(msg).toContain('*Valeria* pidió reagendar su cita de *Pestañas*')
+    expect(msg).toContain('Quiere: *2026-10-27*')
+    expect(msg).toContain('la cita sigue en pie')
+    expect(buildOwnerWhatsAppMessage(cancel)).toContain('*Valeria* pidió cancelar su cita de *Pestañas*')
+  })
+
+  it('a cancel request is a warning, a reschedule request is info', () => {
+    expect(notificationKind('appointment.cancel_requested')).toBe('warning')
+    expect(notificationKind('appointment.reschedule_requested')).toBe('info')
+    expect(notificationKind('appointment.cancelled')).toBe('warning')   // unchanged
+    expect(notificationKind('appointment.created')).toBe('success')     // unchanged
+    expect(notificationKind('appointment.rescheduled')).toBe('success') // unchanged
+  })
+})
