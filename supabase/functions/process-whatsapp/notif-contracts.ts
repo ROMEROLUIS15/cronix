@@ -136,6 +136,18 @@ export function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
   }
 }
 
+/**
+ * The "fecha y hora" variable of the owner WhatsApp template. The template has 4 fixed
+ * slots, so a reschedule request appends the date the client asked for here.
+ */
+export function ownerWhenText(event: AppointmentEvent): string {
+  const prettyTime = /^\d{2}:\d{2}$/.test(event.time) ? formatLocalTime(event.time) : event.time
+  const when = `${formatDateHuman(event.date)} a las ${prettyTime}`
+  return event.type === 'appointment.reschedule_requested' && event.requestedDate
+    ? `${when} · quiere el ${formatDateHuman(event.requestedDate)}`
+    : when
+}
+
 export function formatDateHuman(date: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
   const [y, m, d] = date.split('-').map(Number) as [number, number, number]

@@ -55,11 +55,6 @@ export function resolveRescheduleTurn(p: {
     return { kind: 'reply', text: 'No veo ninguna cita activa para reagendar. ¿Quieres agendar una nueva?' }
   }
   const texts = rescheduleSubDialogueTexts(userText, history)
-  const cands = appts.length === 1 ? [...appts] : matchAppointments(texts.join(' '), appts, tz)
-  if (cands.length !== 1) {
-    return { kind: 'reply', text: listActiveAppointments(cands, tz, 'reagendar') }
-  }
-  const target = cands[0]!
 
   // Gather the NEW date/time from the client's reschedule turns (most recent wins).
   let newDate: string | null = null
@@ -70,6 +65,14 @@ export function resolveRescheduleTurn(p: {
     if (!newTime && dt.time) newTime = dt.time
     if (newDate && newTime) break
   }
+
+  // The new date says where to go, never which appointment to move (with an appointment
+  // tomorrow and another on Tuesday, "reagéndame para el martes" must ask which).
+  const cands = appts.length === 1 ? [...appts] : matchAppointments(texts.join(' '), appts, tz, { ignoreDate: newDate })
+  if (cands.length !== 1) {
+    return { kind: 'reply', text: listActiveAppointments(cands, tz, 'reagendar') }
+  }
+  const target = cands[0]!
   const { date: origDate, time: origTime } = apptLocal(target, tz)
   if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = origTime
 

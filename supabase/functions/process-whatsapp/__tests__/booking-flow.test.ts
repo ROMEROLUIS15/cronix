@@ -765,6 +765,30 @@ describe('resolveBookingTurn — changeRequest for the owner alert', () => {
     if (turn?.kind === 'reply') expect(turn.changeRequest).toBeUndefined()
   })
 
+  it('with two appointments, the new date asked for never picks the one to move (it asks which)', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-29T14:00:00Z' }] // Tue 29 09:00
+    const turn = resolveBookingTurn({ ...base, userText: 'cancela mi cita.. y reagendame para el día martes en la mañana', history: [], activeAppointments: two, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Cuál deseas reagendar?/)
+      expect(turn.changeRequest).toBeUndefined()
+    }
+  })
+
+  it('once the client names the appointment, it moves that one to the date asked for', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-29T14:00:00Z' }]
+    const turn = resolveBookingTurn({
+      ...base, userText: 'la de tarjeta',
+      history: [
+        { role: 'user', text: 'cancela mi cita.. y reagendame para el día martes en la mañana' },
+        { role: 'assistant', text: 'Tienes varias citas activas:\n\n1. *Tarjeta* — 24 de diciembre a las 9:00 am\n2. *Corte* — 29 de diciembre a las 9:00 am\n\n¿Cuál deseas reagendar?' },
+      ],
+      activeAppointments: two, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toMatchObject({ appointmentId: 'apt-1', requestedDate: '2026-12-29' })
+  })
+
   it('a new booking never carries a changeRequest', () => {
     const turn = resolveBookingTurn({ ...base, userText: 'quiero agendar tarjeta el martes', history: [], activeAppointments: [], intent: null })
     expect(turn?.kind).toBe('reply')

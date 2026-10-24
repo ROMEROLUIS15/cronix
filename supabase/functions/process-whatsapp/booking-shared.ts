@@ -69,14 +69,20 @@ export function apptLocal(a: ActiveApptLite, tz: string): { date: string; time: 
   return utcToLocalParts(a.start_at, tz)
 }
 
-/** Narrows active appointments by the service and/or date named in the text. */
+/**
+ * Narrows active appointments by the service and/or date named in the text.
+ * `ignoreDate` is the NEW date of a reschedule request: it names where the client wants
+ * to go, not which appointment to move, so it never selects one.
+ */
 export function matchAppointments(
   text: string, appts: ReadonlyArray<ActiveApptLite>, tz: string,
+  opts: { ignoreDate?: string | null } = {},
 ): ActiveApptLite[] {
   const t = text.toLowerCase()
   const byService = appts.filter((a) => a.service_name && t.includes(a.service_name.toLowerCase()))
   const parsed    = parseDateExpression(text, todayInTimezone(tz), 'nearest')
-  const byDate    = parsed ? appts.filter((a) => apptLocal(a, tz).date === parsed.date) : []
+  const usable    = parsed && parsed.date !== opts.ignoreDate ? parsed : null
+  const byDate    = usable ? appts.filter((a) => apptLocal(a, tz).date === usable.date) : []
 
   if (byService.length && byDate.length) {
     const both = byService.filter((a) => byDate.includes(a))

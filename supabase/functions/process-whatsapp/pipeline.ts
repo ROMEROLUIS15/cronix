@@ -51,7 +51,8 @@ export async function layerBooking(tc: TurnContext): Promise<TurnResult | null> 
   if (bookingTurn?.kind === 'reply') {
     addBreadcrumb('Deterministic booking/cancel/reschedule proposal (0 tokens)', 'agent', 'info', { intent: intent?.intent ?? 'unknown' })
     // A request on one appointment alerts the owner now, before the client confirms (O3).
-    if (bookingTurn.changeRequest) emitChangeRequestedEvent(business, customerName, bookingTurn.changeRequest)
+    // Same name as the O1 alerts: the registered client, else the WhatsApp profile (N1).
+    if (bookingTurn.changeRequest) emitChangeRequestedEvent(business, context.client?.name ?? customerName, bookingTurn.changeRequest)
     await tc.quickTrace(bookingTurn.text, 'deterministic_booking', {
       isProposal: BOOKING_PROPOSAL_DETECT_RE.test(bookingTurn.text),
       intent: intent?.intent ?? null,

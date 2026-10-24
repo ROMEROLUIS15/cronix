@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  buildChangeRequestEvent, buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind,
+  buildChangeRequestEvent, buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind, ownerWhenText,
 } from '../notif-contracts.ts'
 
 const BUSINESS = { id: 'biz-1', name: 'RS STUDIO' }
@@ -60,6 +60,12 @@ describe('owner-facing texts for a pending request', () => {
     expect(msg).toContain('Quiere: *2026-10-27*')
     expect(msg).toContain('la cita sigue en pie')
     expect(buildOwnerWhatsAppMessage(cancel)).toContain('*Valeria* pidió cancelar su cita de *Pestañas*')
+  })
+
+  it('the date parameter of the WhatsApp template carries the date asked for (it has only 4 fixed slots)', () => {
+    expect(ownerWhenText(reschedule)).toBe('24 de octubre a las 9:00 am · quiere el 27 de octubre')
+    expect(ownerWhenText(cancel)).toBe('24 de octubre a las 9:00 am')
+    expect(ownerWhenText({ ...reschedule, type: 'appointment.created', requestedDate: undefined })).toBe('24 de octubre a las 9:00 am') // unchanged for O1
   })
 
   it('a cancel request is a warning, a reschedule request is info', () => {

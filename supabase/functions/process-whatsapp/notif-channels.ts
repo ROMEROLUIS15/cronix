@@ -9,10 +9,9 @@
 
 import { supabase } from "./db-client.ts"
 import { captureMessage } from "../_shared/sentry.ts"
-import { formatLocalTime } from "./prompt-builder.ts"
 import {
   type AppointmentEvent,
-  buildTitle, buildContent, buildOwnerWhatsAppMessage, formatDateHuman, notificationKind,
+  buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind, ownerWhenText,
 } from "./notif-contracts.ts"
 
 /** Idempotency: true when this eventId already has a notification row. */
@@ -156,9 +155,8 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
     }
 
     const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
-    const prettyTime  = /^\d{2}:\d{2}$/.test(event.time) ? formatLocalTime(event.time) : event.time
-    const whenHuman   = `${formatDateHuman(event.date)} a las ${prettyTime}`
-    const send = (payload: Record<string, unknown>): Promise<SendOutcome> =>
+    const whenHuman   = ownerWhenText(event)
+    const send =(payload: Record<string, unknown>): Promise<SendOutcome> =>
       postWhatsAppService(whatsappUrl, cronSecret, { to: rawPhone, ...payload })
 
     // 1) Template first (delivers outside the 24h window).

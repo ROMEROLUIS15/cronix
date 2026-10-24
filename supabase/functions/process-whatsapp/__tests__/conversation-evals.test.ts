@@ -188,7 +188,8 @@ describe('conversation evals — reminder reply "cancela y reagéndame el martes
   afterEach(() => { vi.useRealTimers() })
 
   it('offers Tuesday morning, alerts the owner at once, and reschedules on confirm', async () => {
-    await runConversation({ activeAppointments: [APPT_TOMORROW] }, [
+    // The registered client name (N1), not the WhatsApp profile name the turn arrives with.
+    await runConversation({ activeAppointments: [APPT_TOMORROW], client: { id: 'cli-1', name: 'Valeria' } }, [
       { user: '😭 buenas noches cancela mi cita.. y reagendame para el día martes en la mañana 🙏🏻el niño tiene juego y no puedo faltar🙈',
         intent: { intent: 'cancel_appointment', confidence: 0.9 },
         expect: [/el 29 de diciembre/, /Para reagendar tengo: 9:00 am/], notExpect: [/24 de diciembre\?/, /pm/] },
@@ -205,7 +206,7 @@ describe('conversation evals — reminder reply "cancela y reagéndame el martes
     }
     expect(notify.changeRequested).toHaveBeenCalledTimes(2)
     for (const call of notify.changeRequested.mock.calls) {
-      expect(call[1]).toBe('Luis')
+      expect(call[1]).toBe('Valeria')
       expect(call[2]).toEqual(request)
     }
     // O1: once confirmed, the reschedule itself notifies the owner.
