@@ -44,6 +44,36 @@ test('four turns in a row, one with the answer dismissed, are recorded intact an
   // aloud and any failed request — and print them in full when the test fails
   // (the list reporter truncates attachments).
   const diagnostics: string[] = []
+  // Probes on the browser audio APIs the FAB awaits, so a stuck step names itself.
+  await page.addInitScript(() => {
+    const log = (m: string) => console.log(`[probe] ${m}`)
+    const media = navigator.mediaDevices
+    if (media?.getUserMedia) {
+      const getUserMedia = media.getUserMedia.bind(media)
+      media.getUserMedia = (c) => {
+        log('getUserMedia called')
+        return getUserMedia(c).then(
+          (s) => { log('getUserMedia resolved'); return s },
+          (e: unknown) => { log(`getUserMedia rejected: ${(e as Error)?.name}`); throw e },
+        )
+      }
+    }
+    const resume = AudioContext.prototype.resume
+    AudioContext.prototype.resume = function (this: AudioContext) {
+      log(`AudioContext.resume (state=${this.state})`)
+      return resume.call(this).then(() => log('AudioContext resumed'))
+    }
+    const start = MediaRecorder.prototype.start
+    MediaRecorder.prototype.start = function (this: MediaRecorder, timeslice?: number) {
+      log('MediaRecorder.start')
+      return start.call(this, timeslice)
+    }
+    const stop = MediaRecorder.prototype.stop
+    MediaRecorder.prototype.stop = function (this: MediaRecorder) {
+      log(`MediaRecorder.stop (state=${this.state})`)
+      return stop.call(this)
+    }
+  })
   await page.addInitScript(() => {
     document.addEventListener('DOMContentLoaded', () => {
       new MutationObserver((records) => {

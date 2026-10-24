@@ -138,6 +138,23 @@ describe('useVoiceAssistant — recording', () => {
     expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer jwt-123' })
   })
 
+  // CI 2026-10-24 (second cause): the recorder was only created after awaiting
+  // AudioContext.resume(), which never settles without an audio device (headless CI) or
+  // outside a user gesture (iOS) — the FAB stayed "listening" and nothing was recorded.
+  it('starts recording and arms the hard cap even when AudioContext.resume() never settles', async () => {
+    class StuckAudioContext extends FakeAudioContext {
+      override state: AudioContextState = 'suspended'
+      override resume = vi.fn(() => new Promise<void>(() => {}))
+    }
+    vi.stubGlobal('AudioContext', StuckAudioContext)
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+    await startListening(DESKTOP_EDGE_UA)
+
+    expect(FakeMediaRecorder.instances[0]!.state).toBe('recording')
+    expect(setTimeoutSpy.mock.calls.some(([, ms]) => ms === 10_000)).toBe(true)
+  })
+
   // CI 2026-10-24: the FAB went "listening" and never stopped — the cap lived inside the
   // rAF loop, and rAF pauses in a background tab or a throttled headless browser.
   it('stops at the 10 s hard cap from its own timer, even when no animation frame runs', async () => {
