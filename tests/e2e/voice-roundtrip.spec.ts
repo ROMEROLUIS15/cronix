@@ -39,16 +39,35 @@ async function askAndGetAnswer(page: Page) {
 test('four turns in a row, one with the answer dismissed, are recorded intact and transcribed', async ({ page }, testInfo) => {
   test.setTimeout(180_000)
 
-  // On failure, attach what the FAB logged and what it tried to say aloud: a
-  // turn that ends without reaching the voice-worker leaves no trace elsewhere.
+  // A turn that ends without reaching the voice-worker leaves no trace anywhere
+  // else, so record the FAB's state transitions, its logs, what it tried to say
+  // aloud and any failed request — and print them in full when the test fails
+  // (the list reporter truncates attachments).
   const diagnostics: string[] = []
-  page.on('console', (msg) => diagnostics.push(`[console.${msg.type()}] ${msg.text()}`))
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      new MutationObserver((records) => {
+        for (const r of records) {
+          const el = r.target as HTMLElement
+          if (el.dataset?.testid === 'voice-assistant-fab') console.log(`[fab-state] ${el.dataset.state}`)
+        }
+      }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-state'] })
+    }, { once: true })
+  })
+  page.on('console', (msg) => {
+    if (!msg.text().startsWith('[PWA]')) diagnostics.push(`[console.${msg.type()}] ${msg.text()}`)
+  })
+  page.on('pageerror', (err) => diagnostics.push(`[pageerror] ${err.message}`))
+  page.on('requestfailed', (req) => diagnostics.push(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText ?? ''}`))
   page.on('request', (req) => {
     const url = new URL(req.url())
     if (url.pathname === '/api/assistant/tts') diagnostics.push(`[tts] ${url.searchParams.get('t')}`)
   })
   try {
     await runTurns(page)
+  } catch (err) {
+    console.log(`--- FAB diagnostics ---\n${diagnostics.join('\n')}\n-----------------------`)
+    throw err
   } finally {
     await testInfo.attach('fab-diagnostics', { body: diagnostics.join('\n'), contentType: 'text/plain' })
   }
