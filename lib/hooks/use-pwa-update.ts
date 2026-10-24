@@ -69,8 +69,13 @@ export function usePwaUpdate(): PwaUpdateState {
 
         registration.addEventListener('updatefound', onUpdateFound)
 
-        // Case 3: SW activates (after SKIP_WAITING) → reload to get new assets
+        // Case 3: SW activates (after SKIP_WAITING) → reload to get new assets.
+        // Only when a worker already controlled the page: the first install also
+        // fires controllerchange (clientsClaim), and reloading there wiped what a
+        // first-time visitor was doing about a minute after landing.
+        const hadController = !!navigator.serviceWorker.controller
         function onControllerChange() {
+          if (!hadController) return
           window.location.reload()
         }
 

@@ -272,6 +272,7 @@ Los tests de componentes (`__tests__/components/dashboard/use-voice-assistant.te
   - el tope de 10 s que vivía dentro del loop de `requestAnimationFrame`;
   - la grabadora que esperaba un `AudioContext.resume()` que nunca termina sin dispositivo de audio;
   - el cambio de imagen del runner.
+  - la recarga automática de la PWA en la primera visita: el service worker recién instalado toma el control (`clientsClaim`) y `use-pwa-update.ts` recargaba la página en cada `controllerchange`. Contra `localhost` la instalación tarda segundos, así que la recarga caía después del clic y la grabación moría (el diagnóstico mostraba `MediaRecorder.start` y nunca `stop`). Ahora solo recarga si la página ya tenía un service worker.
 - Un deploy hecho a mano (`npx supabase functions deploy … --use-api`) **no** dispara `voice-check.yml`. Después de desplegar el `voice-worker`, corré `npm run check:voice`.
 
 ### Contra qué corre y qué deja
