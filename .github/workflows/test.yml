@@ -198,6 +198,13 @@ jobs:
     name: E2E Voice (real audio, Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # One run at a time across branches: every run drives the same E2E user,
+    # its Redis history and its rate limit. On 2026-10-24 the only two red runs
+    # were the two that overlapped (a develop push and its main merge); every
+    # run that ran alone passed.
+    concurrency:
+      group: e2e-voice-fixture-user
+      cancel-in-progress: false
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
     needs: [unit, build]
 

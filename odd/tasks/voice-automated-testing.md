@@ -14,7 +14,7 @@ Engram mirror: pending — the Engram tools are not available in this session.
 | T0 | prerequisite: recorder race fix + early-exit traces (validated by S1) | inline | done | af82d41 |
 | T1 | S1 | inline | done — 4/4 green locally against the deployed voice-worker (2026-10-24) | e3e5e48 (+ retry 732071f) |
 | T2 | S2 | inline | done — `check:voice` green against prod, before and after the deploy | 431b565 |
-| T3 | S3 | inline | pending | |
+| T3 | S3 | inline | done — Sentry rule 6222257 created (2026-10-24) | (docs commit) |
 
 ## Log
 - L1 (2026-10-23, user, verbatim): "como hacemos para que todo eso sea probado por ti o de que otra manera para que sea probado automaticamente?"
@@ -25,4 +25,5 @@ Engram mirror: pending — the Engram tools are not available in this session.
 - L6 (2026-10-23): local runs. (1) Port 3000 was taken by another app, so Playwright reused it and the login landed on a foreign page → run with `PORT=3100`. (2) `postDataBuffer()` is null for multipart with files → dropped the header assertion; a corrupt upload surfaces as a 400 anyway. (3) Turn 3 failed twice with intact audio: Deepgram HTTP/2 reset in the edge runtime → retry added (732071f). It does not reproduce from local Deno (8/8 OK), so it is validated after the deploy. (4) Keyword boost turned "citas" into "E2E" → transcription checked as 2 of 4 words (`fixtures/voice/question.ts`).
 - L7 (2026-10-23): `check:voice` → 200, transcription "¿Qué E2E luego hoy?", non-empty reply → pass. `DEEPGRAM_AURA_API_KEY` is not a GitHub secret yet (needed by the `E2E Voice` job).
 - L8 (2026-10-24): the user deployed `voice-worker` (payload-failure + network-retry). `check:voice` → 200. The `voice` E2E → 4/4 in 1.8 min, all uploads with the EBML header. The HTTP/2 reset did not recur in this run (no "retrying once" log), so the retry is covered by its unit tests only. Native review of af82d41..431b565 (risk/resilience/reliability): approved and acknowledged (lineage review-491c33bfc123a11d, authority burned). The `DEEPGRAM_AURA_API_KEY` secret is still missing, so CI `E2E Voice` stays red until it is added.
-- Next: push develop + main → T3 (Sentry alert for client voice errors).
+- L9 (2026-10-24): pushed develop (775879f) and merged to main (57f189e); the pre-push gate passed 4/4 on both. T3: the existing rule "Alertas de Errores Whatsapp" (3252024) only fires on `first_seen_event`, which is why the May issue 1M never re-alerted. Created "Asistente de voz – errores recurrentes" (6222257): `every_event` trigger, two action groups (tag `tag=VoiceAssistantFab` | `stacktrace.filename` contains `voice-worker`), each requiring ≥3 events/1h on the issue, emailing the same recipient as the existing rules, at most once per hour.
+- Pending (user): add the `DEEPGRAM_AURA_API_KEY` GitHub secret; until then CI `E2E Voice` is red. Follow-ups: keyword-boost word replacement; the stale 30 s playback timer in `playOnUnlockedElement`; the `.husky/pre-push:189` regex; 1 moderate Dependabot advisory.
