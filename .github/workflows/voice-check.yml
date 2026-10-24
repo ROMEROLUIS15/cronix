@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Same E2E user as the `E2E Voice` job in test.yml — never run both at once.
+    concurrency:
+      group: e2e-voice-fixture-user
+      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v5
