@@ -6,6 +6,11 @@ import * as dotenv from 'dotenv'
 // are available in all test files — Playwright doesn't load this automatically.
 dotenv.config({ path: path.resolve(__dirname, '.env.local') })
 
+// The real-audio voice test needs Chromium's fake microphone, so it runs only in
+// the `voice` project; every other project must skip it.
+const VOICE_ROUNDTRIP = /voice-roundtrip\.spec\.ts/
+const VOICE_FIXTURE   = path.join(__dirname, 'tests/e2e/fixtures/voice/que-citas-tengo-hoy.wav')
+
 /**
  * Playwright config — E2E + Visual tests.
  * Auth is handled via a one-time setup project (auth.setup.ts).
@@ -45,7 +50,7 @@ export default defineConfig({
         storageState: path.join(__dirname, 'playwright/.auth/user.json'),
       },
       dependencies: ['setup'],
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: [/auth\.setup\.ts/, VOICE_ROUNDTRIP],
     },
 
     // ── 3. Firefox — catch Firefox-specific rendering/behavior issues ──────
@@ -56,7 +61,7 @@ export default defineConfig({
         storageState: path.join(__dirname, 'playwright/.auth/user.json'),
       },
       dependencies: ['setup'],
-      testIgnore: [/auth\.setup\.ts/],
+      testIgnore: [/auth\.setup\.ts/, VOICE_ROUNDTRIP],
     },
 
     // ── 4. WebKit (Safari engine) — catch Safari compatibility issues ──────
@@ -67,7 +72,7 @@ export default defineConfig({
         storageState: path.join(__dirname, 'playwright/.auth/user.json'),
       },
       dependencies: ['setup'],
-      testIgnore: [/auth\.setup\.ts/],
+      testIgnore: [/auth\.setup\.ts/, VOICE_ROUNDTRIP],
     },
 
     // ── 5. Mobile Chrome — test responsive layout ──────────────────────────
@@ -78,7 +83,7 @@ export default defineConfig({
         storageState: path.join(__dirname, 'playwright/.auth/user.json'),
       },
       dependencies: ['setup'],
-      testIgnore: [/auth\.setup\.ts/],
+      testIgnore: [/auth\.setup\.ts/, VOICE_ROUNDTRIP],
     },
 
     // ── 6. Unauthenticated smoke tests — no auth dependency ──────────────────
@@ -86,6 +91,27 @@ export default defineConfig({
       name: 'smoke',
       use: { ...devices['Desktop Chrome'] },
       testMatch: /smoke\.spec\.ts/,
+    },
+
+    // ── 7. Real-audio voice round trip — Chromium's fake microphone loops a
+    //       recorded question, so the FAB records, uploads and transcribes it
+    {
+      name: 'voice',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: path.join(__dirname, 'playwright/.auth/user.json'),
+        permissions:  ['microphone'],
+        launchOptions: {
+          args: [
+            '--use-fake-ui-for-media-stream',
+            '--use-fake-device-for-media-stream',
+            `--use-file-for-fake-audio-capture=${VOICE_FIXTURE}`,
+            '--autoplay-policy=no-user-gesture-required',
+          ],
+        },
+      },
+      dependencies: ['setup'],
+      testMatch: VOICE_ROUNDTRIP,
     },
   ],
 

@@ -55,6 +55,7 @@ export const VoiceAssistantFab = React.memo(function VoiceAssistantFab() {
           whileTap={{ scale: 0.9 }}
           type="button"
           data-testid="voice-assistant-fab-mobile"
+          data-state={state}
           aria-label={t('openAria')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={handleClick}
@@ -91,6 +92,7 @@ export const VoiceAssistantFab = React.memo(function VoiceAssistantFab() {
         <button
           type="button"
           data-testid="voice-assistant-fab"
+          data-state={state}
           aria-label={t('openAria')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={handleClick}

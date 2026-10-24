@@ -188,6 +188,63 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # ── Job 3b: Real-audio voice round trip (push to main/develop) ───────────────
+  # Chromium's fake microphone plays a recorded question; the FAB records it and
+  # the deployed voice-worker transcribes and answers it (tests/e2e/voice-roundtrip.spec.ts).
+  # Runs against production Supabase with the E2E fixture user, so it only writes
+  # ai_traces rows for that business. NOT continue-on-error: a red run must notify.
+  # DEEPGRAM_AURA_API_KEY feeds /api/assistant/tts, which speaks the answer.
+  e2e-voice:
+    name: E2E Voice (real audio, Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
+    needs: [unit, build]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Copy standalone static assets
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+
+      - name: Create auth directory
+        run: mkdir -p playwright/.auth
+
+      - name: Run voice round trip
+        run: npx playwright test --project=voice --reporter=list
+        env:
+          CI: 'true'
+          PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+          DEEPGRAM_AURA_API_KEY: ${{ secrets.DEEPGRAM_AURA_API_KEY }}
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report-voice
+          path: playwright-report/
+          retention-days: 7
+
   # ── Job 4: Full authenticated E2E (manual only — workflow_dispatch) ──────────
   # Run from the Actions tab when the Supabase test-env state is provisioned.
   # webServer uses `node .next/standalone/server.js` (see playwright.config.ts).
