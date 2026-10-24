@@ -6,7 +6,7 @@
  * code-derived args, replies deterministically, or defers to the LLM (null).
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { resolveBookingTurn, extractTime } from '../booking-flow.ts'
 
 const TZ = 'America/Bogota'
@@ -645,5 +645,153 @@ describe('resolveBookingTurn — "cannot attend" routes to cancel, only outside 
     })
     expect(turn?.kind).toBe('reply')
     if (turn?.kind === 'reply') expect(turn.text).not.toMatch(/cancele tu cita/)
+  })
+})
+
+// ── Prod 2026-10-24: "cancela mi cita y reagéndame para el martes en la mañana" ─────────
+// The weekday was lost to "la mañana" (read as tomorrow) and the client was offered times
+// on the very day she wanted to cancel. Today is pinned to Wed 2026-12-23 (Bogota).
+describe('resolveBookingTurn — weekday + part of day', () => {
+  const APPT_THU = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-24T14:00:00Z' }] // Thu 09:00 Bogota
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-12-23T15:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('reschedules to the weekday asked for and offers only morning times', () => {
+    const turn = resolveBookingTurn({
+      userText: '😭 buenas noches cancela mi cita.. y reagendame para el día martes en la mañana 🙏🏻el niño tiene juego y no puedo faltar🙈',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT_THU, intent: 'cancel_appointment',
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/el 29 de diciembre/)
+      expect(turn.text).not.toMatch(/24 de diciembre/)
+      expect(turn.text).toContain('9:00 am')
+      expect(turn.text).toContain('11:30 am')
+      expect(turn.text).not.toMatch(/pm/)
+    }
+  })
+
+  it('"en la tarde" offers only afternoon times', () => {
+    const turn = resolveBookingTurn({
+      userText: 'reagéndala para el martes en la tarde',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/el 29 de diciembre/)
+      expect(turn.text).toContain('12:00 pm')
+      expect(turn.text).not.toMatch(/\bam\b/)
+    }
+  })
+
+  it('says so when the asked part of the day is full, then lists the rest', () => {
+    // 09:00–12:00 Bogota (14:00–17:00 UTC) is taken, so no morning time is left.
+    const turn = resolveBookingTurn({
+      userText: 'reagéndala para el martes en la mañana',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ,
+      bookedSlots: [{ start_at: '2026-12-29T14:00:00Z', end_at: '2026-12-29T17:00:00Z' }],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/en la mañana ya no me queda/i)
+      expect(turn.text).toContain('12:00 pm')
+    }
+  })
+
+  it('a new booking "el martes en la tarde" lists afternoon times', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero agendar tarjeta el martes en la tarde',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/29 de diciembre/)
+      expect(turn.text).toContain('12:00 pm')
+      expect(turn.text).not.toMatch(/\bam\b/)
+    }
+  })
+})
+
+// ── Owner alert for unfinished requests (operacion-canonica O3) ──────────────────────
+// As soon as a request targets ONE appointment, the turn carries a changeRequest so the
+// pipeline can alert the owner before the client confirms; nothing is written yet.
+describe('resolveBookingTurn — changeRequest for the owner alert', () => {
+  const APPT_THU = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-24T14:00:00Z' }] // Thu 09:00 Bogota
+  const base = { services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [] as Array<{ start_at: string; end_at: string }> }
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-12-23T15:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('a reschedule request carries the appointment and the date asked for', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'cancela mi cita y reagendame para el martes en la mañana', history: [], activeAppointments: APPT_THU, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.changeRequest).toEqual({
+        type: 'reschedule', appointmentId: 'apt-1', serviceName: 'Tarjeta', date: '2026-12-24', time: '09:00', requestedDate: '2026-12-29',
+      })
+    }
+  })
+
+  it('a follow-up turn of the same reschedule still carries it (deduped downstream by event_id)', () => {
+    const turn = resolveBookingTurn({
+      ...base, userText: 'a las 10',
+      history: [
+        { role: 'user', text: 'reagéndala para el martes' },
+        { role: 'assistant', text: '¿A qué hora quieres tu cita de *Tarjeta* el 29 de diciembre? Para reagendar tengo: 9:00 am.' },
+      ],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toMatchObject({ type: 'reschedule', appointmentId: 'apt-1', requestedDate: '2026-12-29' })
+  })
+
+  it('a cancel request carries the appointment, with no new date', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'no podré asistir a mi cita', history: [], activeAppointments: APPT_THU, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.changeRequest).toEqual({
+        type: 'cancel', appointmentId: 'apt-1', serviceName: 'Tarjeta', date: '2026-12-24', time: '09:00', requestedDate: null,
+      })
+    }
+  })
+
+  it('no changeRequest while the appointment is still ambiguous', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-26T14:00:00Z' }]
+    const turn = resolveBookingTurn({ ...base, userText: 'quiero cancelar mi cita', history: [], activeAppointments: two, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toBeUndefined()
+  })
+
+  it('with two appointments, the new date asked for never picks the one to move (it asks which)', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-29T14:00:00Z' }] // Tue 29 09:00
+    const turn = resolveBookingTurn({ ...base, userText: 'cancela mi cita.. y reagendame para el día martes en la mañana', history: [], activeAppointments: two, intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/¿Cuál deseas reagendar?/)
+      expect(turn.changeRequest).toBeUndefined()
+    }
+  })
+
+  it('once the client names the appointment, it moves that one to the date asked for', () => {
+    const two = [...APPT_THU, { id: 'apt-2', service_name: 'Corte', start_at: '2026-12-29T14:00:00Z' }]
+    const turn = resolveBookingTurn({
+      ...base, userText: 'la de tarjeta',
+      history: [
+        { role: 'user', text: 'cancela mi cita.. y reagendame para el día martes en la mañana' },
+        { role: 'assistant', text: 'Tienes varias citas activas:\n\n1. *Tarjeta* — 24 de diciembre a las 9:00 am\n2. *Corte* — 29 de diciembre a las 9:00 am\n\n¿Cuál deseas reagendar?' },
+      ],
+      activeAppointments: two, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toMatchObject({ appointmentId: 'apt-1', requestedDate: '2026-12-29' })
+  })
+
+  it('a new booking never carries a changeRequest', () => {
+    const turn = resolveBookingTurn({ ...base, userText: 'quiero agendar tarjeta el martes', history: [], activeAppointments: [], intent: null })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') expect(turn.changeRequest).toBeUndefined()
   })
 })

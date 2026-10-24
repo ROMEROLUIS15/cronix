@@ -5,9 +5,38 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { parseDateTime, extractTime } from '../datetime-nlu.ts'
+import { parseDateTime, extractTime, extractDayPart } from '../datetime-nlu.ts'
 
 const TODAY = '2026-06-19' // Friday
+
+// Prod 2026-10-24: "reagendame para el día martes en la mañana" resolved to TOMORROW,
+// because "la mañana" (the morning) matched "mañana" (tomorrow) before the weekday.
+describe('parseDateTime — a weekday plus "en/por la mañana" is that weekday', () => {
+  it.each([
+    ['reagendame para el martes en la mañana', '2026-06-23'],
+    ['para el martes por la mañana',           '2026-06-23'],
+    ['el lunes en la tarde',                   '2026-06-22'],
+    ['😭 buenas noches cancela mi cita.. y reagendame para el día martes en la mañana 🙏🏻el niño tiene juego y no puedo faltar🙈', '2026-06-23'],
+    ['mañana en la mañana',                    '2026-06-20'], // tomorrow morning is still tomorrow
+    ['mañana',                                 '2026-06-20'],
+  ])('"%s" → %s', (input, date) => {
+    expect(parseDateTime(input, TODAY).date).toBe(date)
+  })
+})
+
+describe('extractDayPart', () => {
+  it.each([
+    ['reagendame para el martes en la mañana', 'morning'],
+    ['mañana por la mañana',                   'morning'],
+    ['el lunes en la tarde',                   'afternoon'],
+    ['por la tarde',                           'afternoon'],
+    ['mañana',                                 null],      // tomorrow, not a part of the day
+    ['a las 9 de la mañana',                   null],      // a clock time, handled by extractTime
+    ['el martes',                              null],
+  ])('"%s" → %s', (input, part) => {
+    expect(extractDayPart(input)).toBe(part)
+  })
+})
 
 describe('parseDateTime — grammar from the spec', () => {
   it.each([

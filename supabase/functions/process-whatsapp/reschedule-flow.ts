@@ -12,10 +12,11 @@ import { parseDateTime, extractTime } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from './availability.ts'
 import { isRescheduleIntent } from './intents.ts'
+import type { ChangeRequest } from './notif-contracts.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, apptLocal, humanDate, listFreeTimes, matchAppointments, listActiveAppointments,
-  suggestOpenDays, cutoffHint,
+  suggestOpenDays, cutoffHint, dayPartFrom, freeTimesFor,
 } from './booking-shared.ts'
 
 // "a la misma hora" / "el mismo horario" → keep the appointment's current time.
@@ -54,11 +55,6 @@ export function resolveRescheduleTurn(p: {
     return { kind: 'reply', text: 'No veo ninguna cita activa para reagendar. ¿Quieres agendar una nueva?' }
   }
   const texts = rescheduleSubDialogueTexts(userText, history)
-  const cands = appts.length === 1 ? [...appts] : matchAppointments(texts.join(' '), appts, tz)
-  if (cands.length !== 1) {
-    return { kind: 'reply', text: listActiveAppointments(cands, tz, 'reagendar') }
-  }
-  const target = cands[0]!
 
   // Gather the NEW date/time from the client's reschedule turns (most recent wins).
   let newDate: string | null = null
@@ -69,11 +65,29 @@ export function resolveRescheduleTurn(p: {
     if (!newTime && dt.time) newTime = dt.time
     if (newDate && newTime) break
   }
-  if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = apptLocal(target, tz).time
 
-  if (!newDate) return { kind: 'reply', text: `¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?` }
-  if (newDate < todayInTimezone(tz)) {
-    return { kind: 'reply', text: `El ${humanDate(newDate)} ya pasó 🗓️. ¿Para qué fecha de hoy en adelante reagendamos tu cita de *${target.service_name}*?` }
+  // The new date says where to go, never which appointment to move (with an appointment
+  // tomorrow and another on Tuesday, "reagéndame para el martes" must ask which).
+  const cands = appts.length === 1 ? [...appts] : matchAppointments(texts.join(' '), appts, tz, { ignoreDate: newDate })
+  if (cands.length !== 1) {
+    return { kind: 'reply', text: listActiveAppointments(cands, tz, 'reagendar') }
+  }
+  const target = cands[0]!
+  const { date: origDate, time: origTime } = apptLocal(target, tz)
+  if (!newTime && texts.some((t) => SAME_HOUR_RE.test(t))) newTime = origTime
+
+  // Every reply from here on belongs to a request on THIS appointment → the owner is
+  // alerted before the client confirms (operacion-canonica O3; deduped by event_id).
+  const today = todayInTimezone(tz)
+  const changeRequest: ChangeRequest = {
+    type: 'reschedule', appointmentId: target.id, serviceName: target.service_name,
+    date: origDate, time: origTime, requestedDate: newDate && newDate >= today ? newDate : null,
+  }
+  const reply = (text: string): BookingTurn => ({ kind: 'reply', text, changeRequest })
+
+  if (!newDate) return reply(`¿Para qué nueva fecha quieres reagendar tu cita de *${target.service_name}*?`)
+  if (newDate < today) {
+    return reply(`El ${humanDate(newDate)} ya pasó 🗓️. ¿Para qué fecha de hoy en adelante reagendamos tu cita de *${target.service_name}*?`)
   }
 
   // Validate the day is OPEN as soon as the date is known — before asking the time — so a
@@ -84,19 +98,19 @@ export function resolveRescheduleTurn(p: {
   const when = humanDate(newDate)
   if (!open) {
     const sugg = suggestOpenDays(wh, newDate)
-    return { kind: 'reply', text: `El ${when} el negocio no abre 😕. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?${sugg ? ` Por ejemplo, ${sugg}.` : ''}` }
+    return reply(`El ${when} el negocio no abre 😕. ¿Para qué otra fecha reagendamos tu cita de *${target.service_name}*?${sugg ? ` Por ejemplo, ${sugg}.` : ''}`)
   }
   if (slots.length === 0) {
-    return { kind: 'reply', text: `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?` }
+    return reply(`Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?`)
   }
   if (!newTime) {
-    return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? Para reagendar tengo: ${listFreeTimes(slots)}.` }
+    const { list, note } = freeTimesFor(slots, dayPartFrom(texts))
+    return reply(`¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? ${note}Para reagendar tengo: ${list}.`)
   }
   if (!slots.includes(newTime)) {
-    return { kind: 'reply', text: `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?` }
+    return reply(`A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?`)
   }
-  const origDate = apptLocal(target, tz).date
-  return { kind: 'reply', text: `¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?` }
+  return reply(`¿Reagendo tu cita de *${target.service_name}* del ${humanDate(origDate)} al ${when} a las ${formatLocalTime(newTime)}?`)
 }
 
 /** Recovers the appointment + validated new slot from OUR reschedule proposal. */

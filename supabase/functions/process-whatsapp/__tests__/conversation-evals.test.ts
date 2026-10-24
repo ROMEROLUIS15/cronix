@@ -9,7 +9,7 @@
  * vitest `unit` job). It locks every flow hardened this session against regression.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { BusinessRagContext, ChatHistoryItem } from '../types.ts'
 
 vi.hoisted(() => { (globalThis as unknown as { Deno: unknown }).Deno = { env: { get: () => undefined } } })
@@ -45,6 +45,17 @@ vi.mock('../../_shared/sentry.ts', () => ({ addBreadcrumb: () => {}, captureExce
 vi.mock('../../_shared/observability/index.ts', () => ({ shortHash: async () => 'hash', createTracer: () => ({ start: () => ({ recordToolCall() {}, recordLlmStep() {}, finish: async () => {} }) }) }))
 vi.mock('../../_shared/supervisor/index.ts', () => ({ reviewWriteOrFailOpen: async () => ({ allowed: true }), createConstitutionalReviewer: () => null }))
 vi.mock('../../_shared/cache-invalidation.ts', () => ({ invalidateDashboardCache: async () => {} }))
+// Owner notifications are observed, not sent: the evals assert WHICH alert fires and when.
+const notify = vi.hoisted(() => ({
+  changeRequested: vi.fn(), created: vi.fn(), rescheduled: vi.fn(), cancelled: vi.fn(),
+}))
+vi.mock('../notifications.ts', () => ({
+  emitBookingEvent:         async () => {},
+  emitChangeRequestedEvent: notify.changeRequested,
+  emitCreatedEvent:         notify.created,
+  emitRescheduledEvent:     notify.rescheduled,
+  emitCancelledEvent:       notify.cancelled,
+}))
 // Adapter returns SUCCESS so propose→sí→write renders the real success template.
 vi.mock('../../_shared/booking-adapter.ts', () => ({
   WhatsAppBookingAdapter: class {
@@ -94,7 +105,10 @@ async function runConversation(ctxOver: Partial<BusinessRagContext>, turns: Turn
 
 const APPT_FRI = { id: 'apt-1', service_name: 'Mantenimiento', start_at: '2026-12-25T19:00:00Z', end_at: '2026-12-25T21:00:00Z', status: 'confirmed' } // 15:00 Caracas, Fri
 
-beforeEach(() => { h.intent = null })
+beforeEach(() => {
+  h.intent = null
+  for (const spy of Object.values(notify)) spy.mockClear()
+})
 
 describe('conversation evals — golden flows (E2E, deterministic)', () => {
   it('happy booking: service → date+time → confirm → booked', async () => {
@@ -158,5 +172,44 @@ describe('conversation evals — golden flows (E2E, deterministic)', () => {
       { user: 'Hola, no podré asistir a mi cita',  expect: [/cancele tu cita de \*Mantenimiento\*/i], notExpect: [/No te entend/i] },
       { user: 'sí',                                expect: [/cancelada|Listo/i] },
     ])
+    // The owner learned at the request, then again when it was done (O3 + O1).
+    expect(notify.changeRequested).toHaveBeenCalledTimes(1)
+    expect(notify.changeRequested.mock.calls[0]![2]).toMatchObject({ type: 'cancel', appointmentId: 'apt-1' })
+    expect(notify.cancelled).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Prod 2026-10-24 00:06 UTC, verbatim. The reminder for tomorrow's 09:00 appointment went out
+// at 20:00; the client answered asking to cancel and move it to Tuesday morning. The bot
+// offered times for the very next day, nothing was written and the owner never knew.
+describe('conversation evals — reminder reply "cancela y reagéndame el martes en la mañana"', () => {
+  const APPT_TOMORROW = { id: 'apt-thu', service_name: 'Mantenimiento', start_at: '2026-12-24T13:00:00Z', end_at: '2026-12-24T15:00:00Z', status: 'pending' } // Thu 09:00 Caracas
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-12-24T00:06:00Z')) }) // Wed 20:06 Caracas
+  afterEach(() => { vi.useRealTimers() })
+
+  it('offers Tuesday morning, alerts the owner at once, and reschedules on confirm', async () => {
+    // The registered client name (N1), not the WhatsApp profile name the turn arrives with.
+    await runConversation({ activeAppointments: [APPT_TOMORROW], client: { id: 'cli-1', name: 'Valeria' } }, [
+      { user: '😭 buenas noches cancela mi cita.. y reagendame para el día martes en la mañana 🙏🏻el niño tiene juego y no puedo faltar🙈',
+        intent: { intent: 'cancel_appointment', confidence: 0.9 },
+        expect: [/el 29 de diciembre/, /Para reagendar tengo: 9:00 am/], notExpect: [/24 de diciembre\?/, /pm/] },
+      { user: 'a las 10',
+        expect: [/¿Reagendo tu cita de \*Mantenimiento\* del 24 de diciembre al 29 de diciembre a las 10:00 am\?/] },
+      { user: 'sí', expect: [/reagendada|Listo/i] },
+    ])
+    // O3: the owner is alerted from the very first turn. Both request turns (the "sí" turn
+    // executes instead) carry the same appointment slot, so they share one event_id and
+    // the owner receives a single alert (dedup proven in notif-contracts.test).
+    const request = {
+      type: 'reschedule', appointmentId: 'apt-thu', serviceName: 'Mantenimiento',
+      date: '2026-12-24', time: '09:00', requestedDate: '2026-12-29',
+    }
+    expect(notify.changeRequested).toHaveBeenCalledTimes(2)
+    for (const call of notify.changeRequested.mock.calls) {
+      expect(call[1]).toBe('Valeria')
+      expect(call[2]).toEqual(request)
+    }
+    // O1: once confirmed, the reschedule itself notifies the owner.
+    expect(notify.rescheduled).toHaveBeenCalledTimes(1)
   })
 })

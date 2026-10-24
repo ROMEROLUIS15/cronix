@@ -43,7 +43,11 @@ export function useRealtimeDashboardSync(
     // Broadcast bridge: the edge functions send these events on this exact channel.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bcChannel = (supabase as any).channel(`notifications:${businessId}`)
-    for (const ev of ['appointment.created', 'appointment.rescheduled', 'appointment.cancelled']) {
+    for (const ev of [
+      'appointment.created', 'appointment.rescheduled', 'appointment.cancelled',
+      // Client requests not confirmed yet (operacion-canonica O3) — refresh the bell now.
+      'appointment.reschedule_requested', 'appointment.cancel_requested',
+    ]) {
       bcChannel.on('broadcast', { event: ev }, refreshAll)
     }
     bcChannel.subscribe()

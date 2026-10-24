@@ -5,15 +5,19 @@
  */
 
 import { parseDateExpression } from './date-parser.ts'
+import { extractDayPart, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { todayInTimezone, nextOpenDates, type WorkingHours } from './availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
+import type { ChangeRequest } from './notif-contracts.ts'
 
 export type ServiceLite    = { id: string; name: string; duration_min: number }
 export type ActiveApptLite = { id: string; service_name: string; start_at: string }
 
 export type BookingTurn =
-  | { kind: 'reply';   text: string }
+  // `changeRequest`: the reply belongs to a cancel/reschedule request on ONE appointment,
+  // so the owner is alerted before the client confirms (operacion-canonica O3).
+  | { kind: 'reply';   text: string; changeRequest?: ChangeRequest }
   | { kind: 'execute';           serviceId: string;     serviceName: string; date: string;    time: string }
   | { kind: 'executeCancel';     appointmentId: string; serviceName: string; date: string;    time: string }
   | { kind: 'executeReschedule'; appointmentId: string; serviceName: string; newDate: string; newTime: string }
@@ -42,18 +46,43 @@ export function listFreeTimes(slots: string[]): string {
   return slots.length > MAX_LISTED ? `${list}, entre otros` : list
 }
 
+/** The part of the day asked for in the client's turns (newest first), or null. */
+export function dayPartFrom(texts: ReadonlyArray<string>): DayPart | null {
+  for (const t of texts) {
+    const part = extractDayPart(t)
+    if (part) return part
+  }
+  return null
+}
+
+/**
+ * Free times for the part of the day asked for. When that part is full it says so and
+ * lists the rest, so the client is never told there is no time while the other half is open.
+ */
+export function freeTimesFor(slots: string[], part: DayPart | null): { list: string; note: string } {
+  const inPart = part ? slots.filter((s) => (part === 'morning' ? s < '12:00' : s >= '12:00')) : slots
+  if (!part || inPart.length > 0) return { list: listFreeTimes(inPart), note: '' }
+  return { list: listFreeTimes(slots), note: `${part === 'morning' ? 'En la mañana' : 'En la tarde'} ya no me queda horario. ` }
+}
+
 export function apptLocal(a: ActiveApptLite, tz: string): { date: string; time: string } {
   return utcToLocalParts(a.start_at, tz)
 }
 
-/** Narrows active appointments by the service and/or date named in the text. */
+/**
+ * Narrows active appointments by the service and/or date named in the text.
+ * `ignoreDate` is the NEW date of a reschedule request: it names where the client wants
+ * to go, not which appointment to move, so it never selects one.
+ */
 export function matchAppointments(
   text: string, appts: ReadonlyArray<ActiveApptLite>, tz: string,
+  opts: { ignoreDate?: string | null } = {},
 ): ActiveApptLite[] {
   const t = text.toLowerCase()
   const byService = appts.filter((a) => a.service_name && t.includes(a.service_name.toLowerCase()))
   const parsed    = parseDateExpression(text, todayInTimezone(tz), 'nearest')
-  const byDate    = parsed ? appts.filter((a) => apptLocal(a, tz).date === parsed.date) : []
+  const usable    = parsed && parsed.date !== opts.ignoreDate ? parsed : null
+  const byDate    = usable ? appts.filter((a) => apptLocal(a, tz).date === usable.date) : []
 
   if (byService.length && byDate.length) {
     const both = byService.filter((a) => byDate.includes(a))

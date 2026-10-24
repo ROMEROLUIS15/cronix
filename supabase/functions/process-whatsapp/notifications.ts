@@ -19,7 +19,7 @@ import { captureException } from "../_shared/sentry.ts"
 import { utcToLocalParts } from "./time-utils.ts"
 import { buildAppointmentEventId } from "../_shared/notifications/event-id.ts"
 import type { BusinessRagContext } from "./types.ts"
-import type { AppointmentEvent } from "./notif-contracts.ts"
+import { type AppointmentEvent, type ChangeRequest, buildChangeRequestEvent } from "./notif-contracts.ts"
 import {
   checkEventExists, saveNotificationToDB, pushToRealtime, sendOwnerWhatsApp, sendOwnerWebPush,
 } from "./notif-channels.ts"
@@ -84,6 +84,20 @@ export function emitRescheduledEvent(
     userId:       'whatsapp-agent',
     channel:      'whatsapp',
   })
+}
+
+/**
+ * A client asked to cancel/reschedule an appointment but has not confirmed (operacion-
+ * canonica O3): the owner learns now, even if the client never finishes. Called from the
+ * deterministic booking layer on every turn that targets one appointment; the event id
+ * is keyed on the appointment slot, so only the first turn reaches the owner.
+ */
+export function emitChangeRequestedEvent(
+  business:   BusinessRagContext['business'],
+  clientName: string,
+  request:    ChangeRequest,
+): void {
+  void emitBookingEvent(buildChangeRequestEvent(business, clientName, request))
 }
 
 export function emitCancelledEvent(
