@@ -52,6 +52,8 @@ npm run test:components    # Componentes (jsdom + RTL, config aparte — ver not
 npm run test:integration   # Integración contra Supabase local (vitest.integration.config.ts)
 npm run test:e2e           # Playwright (todos los specs)
 npm run test:e2e:smoke     # Playwright suite reducida (--project=smoke)
+npx playwright test --project=voice   # Voz con audio real: micrófono falso de Chromium → FAB → voice-worker de prod (usuario E2E)
+npm run check:voice        # Chequeo sintético: sube un WebM real al voice-worker desplegado (también diario en CI)
 npm run test:evals:agent   # Evals E2E del agente WhatsApp (conversaciones golden, BLOQUEANTE en CI)
 npm run test:evals         # Evals Python/DeepEval (necesita evals/.venv)
 npx supabase test db       # pgTAP: RLS + funciones RPC + alertas (corre contra Supabase local)
@@ -71,7 +73,7 @@ npm run e2e:setup          # Siembra los datos que consume la suite E2E
 npm run loadtest:seed / :explain / :load
 ```
 
-**El job "Tests" de CI corre**, en este orden: `test:evals:agent` → `npm test` → `test:components` → `lint` → `knip` → `check:spec-drift`. Bloquean todos menos `check:spec-drift` (`continue-on-error`). Que "Tests" salga rojo suele ser knip, no vitest.
+**El job "Tests" de CI corre**, en este orden: `test:evals:agent` → `npm test` → `test:components` → `lint` → `knip` → `check:spec-drift`. Bloquean todos menos `check:spec-drift` (`continue-on-error`). Que "Tests" salga rojo suele ser knip, no vitest. En push a `main`/`develop` corre además **`E2E Voice`** (`--project=voice`, audio real contra el `voice-worker` de prod; no es `continue-on-error`, así que un rojo notifica) — necesita el secret `DEEPGRAM_AURA_API_KEY`. Si corrés el proyecto `voice` en local y el puerto 3000 está ocupado por otra app, Playwright la reutiliza: usá `PORT=3100` + `PLAYWRIGHT_BASE_URL=http://localhost:3100`.
 
 **`npm test` NO incluye `__tests__/components/**`** (config aparte: necesitan el transform de JSX vía `@vitejs/plugin-react`). Corre `npm run test:components` — **389 tests, bloqueante**. Dos cosas que muerden si escribes tests de componentes: (1) el mock de i18n compartido está en `__tests__/setup/next-intl-mock.tsx` — resuelve contra `messages/es.json` **real** (asserts en español, no en la key), con override opcional; los componentes usan `useTranslations`/`useLocale` y revientan sin provider, así que no vuelvas a hand-rollear mocks parciales. (2) Nunca mockees un módulo devolviendo un `Proxy` desde una factory `async`: el runtime lo lee como *thenable* (`get(_, 'then')`) y **mata el worker** con "Worker exited unexpectedly". Lista los exports (p.ej. iconos de `lucide-react`) explícitamente.
 

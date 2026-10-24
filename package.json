@@ -27,6 +27,7 @@
     "e2e:setup": "tsx scripts/setup-e2e-data.ts",
     "sim:whatsapp": "tsx scripts/sim-whatsapp.ts",
     "trigger:voice": "tsx scripts/trigger-voice.ts",
+    "check:voice": "tsx scripts/check-voice.ts",
     "seed:intents": "tsx scripts/seed-intent-embeddings.ts",
     "prepare": "husky"
   },

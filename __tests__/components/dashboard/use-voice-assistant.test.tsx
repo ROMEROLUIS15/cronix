@@ -43,6 +43,13 @@ const queryClient = { invalidateQueries: vi.fn() } as unknown as QueryClient
 
 let frames: FrameRequestCallback[] = []
 const runFrame = () => act(() => { frames.shift()?.(0) })
+let playedEls: HTMLMediaElement[] = []
+
+const VOICE_WORKER_OK = {
+  ok: true, status: 200,
+  json: async () => ({ text: 'María vino el 3 de octubre.', audioUrl: null, actionPerformed: false, transcription: 'cuándo vino María' }),
+}
+const voiceWorkerCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('/functions/v1/voice-worker'))
 
 const getUserMedia = vi.fn()
 const speechRecognitionCtor = vi.fn()
@@ -63,10 +70,16 @@ const startListening = async (ua: string) => {
 beforeEach(() => {
   FakeMediaRecorder.instances = []
   frames = []
+  playedEls = []
   now = 1_000_000
   vi.spyOn(Date, 'now').mockImplementation(() => now)
-  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+    playedEls.push(this)
+    return Promise.resolve()
+  })
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  URL.createObjectURL = vi.fn(() => 'blob:tts')
+  URL.revokeObjectURL = vi.fn()
 
   getUserMedia.mockReset().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] })
   Object.defineProperty(window.navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true })
@@ -82,7 +95,7 @@ beforeEach(() => {
 
   fetchMock.mockReset().mockImplementation(async (url: string) =>
     url.includes('/functions/v1/voice-worker')
-      ? { ok: true, status: 200, json: async () => ({ text: 'María vino el 3 de octubre.', audioUrl: null, actionPerformed: false, transcription: 'cuándo vino María' }) }
+      ? VOICE_WORKER_OK
       : { ok: false, status: 503, json: async () => ({}) },
   )
   vi.stubGlobal('fetch', fetchMock)
@@ -139,5 +152,73 @@ describe('useVoiceAssistant — recording', () => {
     now = start + 10_000
     runFrame()
     expect(recorder.state).toBe('inactive')
+  })
+})
+
+describe('useVoiceAssistant — one recording at a time', () => {
+  it('a late "answer finished" from the previous turn does not flip a live recording to idle, and the next tap stops it', async () => {
+    let resolveTts: (res: unknown) => void = () => {}
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/functions/v1/voice-worker')) return VOICE_WORKER_OK
+      if (url.startsWith('/api/assistant/tts?')) return new Promise((r) => { resolveTts = r })
+      return { ok: true, status: 204, json: async () => ({}) }
+    })
+    const { result } = await startListening(DESKTOP_EDGE_UA)
+    FakeMediaRecorder.instances[0]!.ondataavailable?.({ data: new Blob(['turn-1']) })
+
+    act(() => result.current.handleClick())                     // stop turn 1 → answer is being synthesised
+    await waitFor(() => expect(result.current.state).toBe('speaking'))
+    act(() => result.current.handleClick())                     // dismiss the answer before it plays
+    act(() => result.current.handleClick())                     // ask the next question
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(2))
+    const second = FakeMediaRecorder.instances[1]!
+
+    await act(async () => { resolveTts({ ok: true, status: 200, blob: async () => new Blob(['mp3']) }) })
+    await act(async () => { for (const el of playedEls) el.onended?.(new Event('ended')) })
+    expect(result.current.state).toBe('listening')
+
+    act(() => result.current.handleClick())
+    expect(FakeMediaRecorder.instances).toHaveLength(2)
+    expect(second.state).toBe('inactive')
+  })
+
+  it('a request cancelled while its error body is still being read does not speak over the next recording', async () => {
+    let resolveErrorBody: (body: unknown) => void = () => {}
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/functions/v1/voice-worker')
+        ? { ok: false, status: 400, json: () => new Promise((r) => { resolveErrorBody = r }) }
+        : { ok: false, status: 503, json: async () => ({}) },
+    )
+    const { result } = await startListening(DESKTOP_EDGE_UA)
+    FakeMediaRecorder.instances[0]!.ondataavailable?.({ data: new Blob(['turn-1']) })
+
+    act(() => result.current.handleClick())                     // stop → request in flight
+    await waitFor(() => expect(voiceWorkerCalls()).toHaveLength(1))
+    await waitFor(() => expect(result.current.state).toBe('processing'))
+    act(() => result.current.handleClick())                     // cancel it
+    act(() => result.current.handleClick())                     // ask again
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(2))
+
+    await act(async () => { resolveErrorBody({ error: 'No pude procesar el audio, ¿puedes repetir?' }) })
+    expect(result.current.state).toBe('listening')
+  })
+
+  it('sends only the audio of the current recording, never chunks emitted by a previous recorder', async () => {
+    const { result } = await startListening(DESKTOP_EDGE_UA)
+    const first = FakeMediaRecorder.instances[0]!
+    first.ondataavailable?.({ data: new Blob(['first']) })
+    act(() => result.current.handleClick())
+    await waitFor(() => expect(result.current.state).toBe('idle'))
+
+    act(() => result.current.handleClick())
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(2))
+    const second = FakeMediaRecorder.instances[1]!
+    first.ondataavailable?.({ data: new Blob(['stray']) })
+    second.ondataavailable?.({ data: new Blob(['second']) })
+    act(() => result.current.handleClick())
+
+    await waitFor(() => expect(voiceWorkerCalls()).toHaveLength(2))
+    const audio = ((voiceWorkerCalls()[1]![1] as RequestInit).body as FormData).get('audio') as Blob
+    expect(await audio.text()).toBe('second')
   })
 })

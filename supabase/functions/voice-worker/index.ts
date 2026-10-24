@@ -29,6 +29,7 @@ import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
 import { buildUserCorpus }       from './core/conversation/frame.ts'
 import { localToUTC }            from './core/time-format.ts'
+import { classifyPayloadFailure, tagStage } from './core/payload-failure.ts'
 import { createTracer, shortHash } from '../_shared/observability/index.ts'
 import { initSentry, captureException, setSentryTag, flushSentry } from '../_shared/sentry.ts'
 import type { TraceOutcome }     from '../_shared/observability/contracts.ts'
@@ -302,8 +303,8 @@ async function handleRequest(req: Request): Promise<Response> {
   // For the audio path: STT (Deepgram Nova-2, ~300–700ms) and business context
   // loading (2 Supabase queries, ~100–200ms) run in parallel via Promise.all.
   // The two are independent — context only needs businessId (resolved above).
-  // Text path (Web Speech API, desktop): context loads immediately since there
-  // is no STT roundtrip to overlap with.
+  // Text path (scripts such as trigger-voice; the dashboard FAB always sends
+  // audio): context loads immediately since there is no STT roundtrip.
   let inputText     = ''
   let timezone      = 'UTC'
   let transcription = ''
@@ -316,7 +317,7 @@ async function handleRequest(req: Request): Promise<Response> {
   const contentType = req.headers.get('content-type') ?? ''
   try {
     if (contentType.includes('application/json')) {
-      // ── Text path (Web Speech API / desktop) ──────────────────────────────
+      // ── Text path (scripts / tests) ───────────────────────────────────────
       // No STT roundtrip — parse body first, then load context.
       const body = await req.json() as {
         text?:     string
@@ -338,17 +339,17 @@ async function handleRequest(req: Request): Promise<Response> {
       console.log(`[VOICE-WORKER] Request (text): user=${userCtx.userId.slice(0, 8)} biz=${userCtx.businessId.slice(0, 8)} tz=${timezone} text="${inputText.slice(0, 80)}"`)
 
       // Load context sequentially — nothing to parallelize in the text path.
-      const [ctx, sessionResult] = await Promise.all([
+      const [ctx, sessionResult] = await tagStage('CONTEXT_FAILED', Promise.all([
         loadBusinessContext(supabase, userCtx.businessId, timezone),
         loadSession(userCtx.userId, clientHistory),
-      ])
+      ]))
       context        = ctx
       history        = sessionResult.session.messages
       sessionLastRef = sessionResult.session.lastRef ?? null
       console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '∅'}`)
 
     } else {
-      // ── Audio path (MediaRecorder / mobile) ───────────────────────────────
+      // ── Audio path (MediaRecorder — the dashboard FAB on every platform) ──
       // STT (Deepgram, 300–700ms) and context loading (Supabase, ~100–200ms)
       // are independent — run them in parallel for a free ~300–700ms gain.
       const form    = await req.formData()
@@ -360,7 +361,7 @@ async function handleRequest(req: Request): Promise<Response> {
           clientHistory = sanitiseClientHistory(JSON.parse(histRaw))
         } catch { clientHistory = [] }
       }
-      if (!audio) return jsonResponse({ error: 'No audio provided' }, 400)
+      if (!audio) throw new Error('No audio provided')
 
       // Fire STT, context load AND keyword-boost roster simultaneously.
       // The boost roster is a small query (~50ms) that biases Deepgram toward
@@ -368,13 +369,13 @@ async function handleRequest(req: Request): Promise<Response> {
       // depends on it. Running it in parallel preserves the existing parallel
       // gain and adds negligible latency.
       const [transcript, [ctx, sessionResult]] = await Promise.all([
-        getClientFirstNamesForBoost(supabase, userCtx.businessId)
+        tagStage('STT_FAILED', getClientFirstNamesForBoost(supabase, userCtx.businessId)
           .catch(() => [] as string[])
-          .then(keywords => transcribe(audio, { keywords })),
-        Promise.all([
+          .then(keywords => transcribe(audio, { keywords }))),
+        tagStage('CONTEXT_FAILED', Promise.all([
           loadBusinessContext(supabase, userCtx.businessId, timezone),
           loadSession(userCtx.userId, clientHistory),
-        ]),
+        ])),
       ])
 
       inputText     = transcript
@@ -394,10 +395,14 @@ async function handleRequest(req: Request): Promise<Response> {
       console.log(`[VOICE-WORKER] history source=${sessionResult.source} length=${history.length} lastRef=${sessionLastRef ? sessionLastRef.clientName : '\u2205'}`)
     }
   } catch (err) {
-    console.error('[VOICE-WORKER] Payload parse or context load failed', err)
-    captureException(err, { stage: 'payload_or_context', businessId: userCtx.businessId })
-    await flushSentry()
-    return jsonResponse({ error: 'Payload inválido o error de contexto' }, 400)
+    const failure = classifyPayloadFailure(err)
+    console.error(`[VOICE-WORKER] ${failure.code}`, failure.cause)
+    captureException(failure.cause, { stage: 'payload_or_context', errorCode: failure.code, businessId: userCtx.businessId })
+    await Promise.all([
+      flushSentry(),
+      recordEarlyExitTrace(userCtx, timezone, inputText, 'error', failure.code),
+    ])
+    return jsonResponse({ error: failure.message }, 400)
   }
 
   // 5. Run the agent

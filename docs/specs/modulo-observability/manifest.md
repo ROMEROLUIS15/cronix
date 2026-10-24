@@ -80,6 +80,7 @@ puede aparecer en dos sitios y la alerta lee **ambos**:
 | `TOOL_FAILURE` / `FAST_PATH_FAILURE` | Fallback genérico de voz (`voice-pipeline.ts` / `agent.ts`). **Mezcla** errores reales con turnos de aclaración/validación (p.ej. "¿a qué hora?") → no distingue | **NO** |
 | `rate_limited` (columna y `outcome`) | Lo emiten los **guards**: voz 30 req/min por usuario y `BOOKING_RATE_LIMIT` de WhatsApp. **No** es cuota del proveedor | **NO** |
 | `STT_NOISE` | Audio/texto ininteligible; guard determinista responde 422 | **NO** |
+| `STT_FAILED` / `CONTEXT_FAILED` / `PAYLOAD_INVALID` | Salida temprana del `voice-worker` antes del agente (nuevo 2026-10-23): Deepgram rechazó el audio, falló la carga de contexto del negocio, o el cuerpo no se pudo leer. Se graban con `outcome='error'` (`core/payload-failure.ts`); antes ese `catch` respondía 400 sin dejar traza | **SÍ** (vía `outcome='error'`) |
 | `GUARD_REJECTED` | Un mention-guard/umbral bloqueó una acción insegura | **NO** (el guard FUNCIONANDO) |
 | `REVIEWER_BLOCKED` | El reviewer constitucional vetó/degradó (voz: solo `delete_client` hard-block) | **NO** (señal de calidad, no fallo) |
 | `SLOT_CONFLICT`, `APPOINTMENT_NOT_FOUND`, `UNAUTHORIZED`, `INVALID_ARGS`, `INVALID_ARGUMENTS`, `DUPLICATE_CALL` | Resultados de negocio/validación esperados | **NO** |
@@ -145,6 +146,14 @@ puede aparecer en dos sitios y la alerta lee **ambos**:
 `ai_traces` vía `ObservabilityRepo` (ventana 24h): resumen (total, éxito, fallos,
 no_action, tokens, **p50/p95** de latencia), top de `error_code`, y trazas
 recientes. Es señal **pasiva** (pull) — complementa, no reemplaza, la activa.
+
+### Pruebas activas del agente de voz — 🟢 implementado (2026-10-23)
+
+Señales que no esperan a que un usuario falle:
+
+* **E2E con audio real** (`tests/e2e/voice-roundtrip.spec.ts`, proyecto Playwright `voice`, job CI `E2E Voice` en push a `main`/`develop`): el micrófono falso de Chromium reproduce `tests/e2e/fixtures/voice/que-citas-tengo-hoy.wav`; 4 turnos seguidos, uno descartando la respuesta mientras suena, cada uno debe volver 200 con la pregunta transcrita. Detectó en su primera corrida un corte HTTP/2 transitorio entre el `voice-worker` y Deepgram, ahora reintentado (`voice-worker/core/network-retry.ts`).
+* **Chequeo sintético** (`npm run check:voice`, workflow `voice-check.yml`: diario 12:00 UTC, tras el workflow de deploy de funciones y manual): sube `tests/e2e/fixtures/voice/que-citas-tengo-hoy.webm` como el usuario E2E al `voice-worker` desplegado; falla si no hay 200, transcripción de la pregunta y respuesta no vacía.
+* Ambas corren contra producción con el usuario E2E: solo escriben `ai_traces` del negocio de prueba. La transcripción se valida por palabras (2 de 4), porque el *keyword boost* de nombres de clientes puede reemplazar palabras comunes (en el negocio de prueba "citas" sale como "E2E").
 
 ---
 

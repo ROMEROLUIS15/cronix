@@ -7,8 +7,9 @@
  * to voice-worker — exercising the live agent loop: auth → rate-limit →
  * business-context load → runAgent → tool execution → bell notifications.
  *
- * The text path is the desktop/Web-Speech path (index.ts §"Text path"), so no
- * audio/STT is needed — pass the utterance directly.
+ * The text path (index.ts §"Text path") skips audio/STT — pass the utterance
+ * directly. The dashboard FAB always sends audio; `npm run check:voice` covers
+ * that path end to end.
  *
  *   npx tsx scripts/trigger-voice.ts "qué citas tengo mañana"
  *   npx tsx scripts/trigger-voice.ts "recuérdame mi próxima cita" --tz America/Caracas
