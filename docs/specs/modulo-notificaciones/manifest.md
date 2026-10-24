@@ -14,12 +14,14 @@ Todo evento que ingrese al pipeline debe conformar la siguiente estructura:
 interface AppointmentEvent {
   eventId:      string   // ID determinista — ver §3
   type:         'appointment.created' | 'appointment.rescheduled' | 'appointment.cancelled'
+              | 'appointment.reschedule_requested' | 'appointment.cancel_requested' // pedido sin confirmar (WA, operacion-canonica O3)
   businessId:   string   // UUID del tenant — obligatorio para aislamiento
   businessName: string
   clientName:   string
   serviceName:  string
   date:         string   // YYYY-MM-DD en zona horaria LOCAL del negocio
   time:         string   // HH:mm 24h en zona horaria LOCAL del negocio
+  requestedDate?: string | null // solo *_requested: la nueva fecha pedida, si el cliente la dijo
   userId:       string   // 'whatsapp-agent' | UUID del usuario del dashboard
   channel:      'whatsapp' | 'dashboard' | 'system'
 }
@@ -35,6 +37,8 @@ Todo evento se identifica por un ID determinista generado por `buildAppointmentE
 formato: {action}:{businessId}:{appointmentId}:{date}:{time}
 ejemplo: "created:uuid-negocio:uuid-cita:2026-06-15:10:00"
 ```
+
+`action` ∈ `created | rescheduled | cancelled | reschedule_requested | cancel_requested`. Las dos últimas (2026-10-24) avisan al dueño de un pedido de WhatsApp **antes** de que el cliente confirme; usan la fecha/hora **actual** de la cita, así todos los turnos del mismo pedido comparten un `eventId` y el dueño recibe un solo aviso. Tipo de la campana: `cancel_requested` → `warning`, `reschedule_requested` → `info`.
 
 **Garantía:** El mismo evento lógico (misma acción + misma cita + misma fecha/hora) produce el mismo `eventId`. La columna `notifications.event_id` tiene restricción `UNIQUE`. Si QStash reintenta o el pipeline se ejecuta dos veces, la segunda inserción falla silenciosamente con `409 conflict` — ningún canal secundario se ejecuta.
 
