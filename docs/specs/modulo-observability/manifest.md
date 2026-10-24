@@ -147,6 +147,14 @@ puede aparecer en dos sitios y la alerta lee **ambos**:
 no_action, tokens, **p50/p95** de latencia), top de `error_code`, y trazas
 recientes. Es señal **pasiva** (pull) — complementa, no reemplaza, la activa.
 
+### Pruebas activas del agente de voz — 🟢 implementado (2026-10-23)
+
+Señales que no esperan a que un usuario falle:
+
+* **E2E con audio real** (`tests/e2e/voice-roundtrip.spec.ts`, proyecto Playwright `voice`, job CI `E2E Voice` en push a `main`/`develop`): el micrófono falso de Chromium reproduce `tests/e2e/fixtures/voice/que-citas-tengo-hoy.wav`; 4 turnos seguidos, uno descartando la respuesta mientras suena, cada uno debe volver 200 con la pregunta transcrita. Detectó en su primera corrida un corte HTTP/2 transitorio entre el `voice-worker` y Deepgram, ahora reintentado (`voice-worker/core/network-retry.ts`).
+* **Chequeo sintético** (`npm run check:voice`, workflow `voice-check.yml`: diario 12:00 UTC, tras el workflow de deploy de funciones y manual): sube `tests/e2e/fixtures/voice/que-citas-tengo-hoy.webm` como el usuario E2E al `voice-worker` desplegado; falla si no hay 200, transcripción de la pregunta y respuesta no vacía.
+* Ambas corren contra producción con el usuario E2E: solo escriben `ai_traces` del negocio de prueba. La transcripción se valida por palabras (2 de 4), porque el *keyword boost* de nombres de clientes puede reemplazar palabras comunes (en el negocio de prueba "citas" sale como "E2E").
+
 ---
 
 ## 5. Paso 2 — Alerta de Umbral por Negocio sobre `ai_traces` → Sentry — 🟢 implementado (2026-10-05)

@@ -45,6 +45,8 @@ npm run test:integration  # vitest.integration.config.ts (requiere `npx supabase
 # E2E Tests (Playwright)
 npm run test:e2e          # playwright test (16 specs)
 npm run test:e2e:smoke    # playwright project=smoke (suite rápida)
+npx playwright test --project=voice  # voz con audio real (fixtures/voice/*.wav vía micrófono falso de Chromium)
+npm run check:voice       # chequeo sintético del voice-worker desplegado (WebM real; diario en CI)
 npm run e2e:setup         # tsx scripts/setup-e2e-data.ts (seed datos E2E)
 
 # pgTAP Tests (PostgreSQL native, requiere Supabase local)
