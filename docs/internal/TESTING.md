@@ -265,7 +265,13 @@ Los tests de componentes (`__tests__/components/dashboard/use-voice-assistant.te
 | E2E de voz | `Tests` (`test.yml`) → **`E2E Voice (real audio, Playwright)`** | Cada push a `develop` o `main` | **No** es `continue-on-error`: el workflow sale rojo y GitHub avisa por email |
 | Chequeo sintético | **`Voice Check (deployed voice-worker)`** (`voice-check.yml`) | Diario a las 12:00 UTC (8:00 en Caracas), después del workflow "Deploy Supabase Edge Functions" y a mano | El workflow sale rojo y GitHub avisa por email |
 
-- Los dos comparten el grupo de concurrencia `e2e-voice-fixture-user`: nunca corren a la vez, porque usan el mismo usuario, su historial en Redis y su límite de pedidos. El 2026-10-24 las únicas corridas rojas del E2E fueron las dos que se superpusieron.
+- Los dos comparten el grupo de concurrencia `e2e-voice-fixture-user`: nunca corren a la vez, porque usan el mismo usuario, su historial en Redis y su límite de pedidos.
+- **Runner fijado a `ubuntu-24.04`** en los 4 jobs con Playwright (`e2e`, `e2e-voice`, `e2e-full`, `e2e-auth`). El 2026-10-24, `ubuntu-latest` pasó a Ubuntu 26.04, donde Playwright 1.59.1 no puede instalar Chromium (`Playwright does not support chromium on ubuntu26.04-x64`). Para volver a `ubuntu-latest` hay que subir Playwright (la 1.64.1 ya existe), y es un cambio de dependencias aparte.
+- **Rojos del 2026-10-24, ya corregidos:**
+  - dos corridas superpuestas con el mismo usuario (de ahí el grupo de concurrencia);
+  - el tope de 10 s que vivía dentro del loop de `requestAnimationFrame`;
+  - la grabadora que esperaba un `AudioContext.resume()` que nunca termina sin dispositivo de audio;
+  - el cambio de imagen del runner.
 - Un deploy hecho a mano (`npx supabase functions deploy … --use-api`) **no** dispara `voice-check.yml`. Después de desplegar el `voice-worker`, corré `npm run check:voice`.
 
 ### Contra qué corre y qué deja
