@@ -17,6 +17,8 @@
  * Returns trimmed transcript, or empty string for unintelligible/silent audio.
  */
 
+import { fetchWithNetworkRetry } from './core/network-retry.ts'
+
 const DEEPGRAM_KEY = Deno.env.get('DEEPGRAM_AURA_API_KEY')
   ?? Deno.env.get('DEEPGRAM_API_KEY')
   ?? ''
@@ -92,14 +94,14 @@ export async function transcribe(audio: Blob, options: TranscribeOptions = {}): 
   }
 
   const url = buildDeepgramUrl(keywords)
-  const res = await fetch(url, {
+  const res = await fetchWithNetworkRetry(() => fetch(url, {
     method:  'POST',
     headers: {
       Authorization:  `Token ${DEEPGRAM_KEY}`,
       'Content-Type': mime,
     },
     body: buf,
-  })
+  }))
 
   if (!res.ok) {
     const errText = (await res.text()).slice(0, 300)
