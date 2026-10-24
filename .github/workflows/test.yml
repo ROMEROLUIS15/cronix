@@ -142,7 +142,8 @@ jobs:
   # continue-on-error keeps it non-blocking; timeout-minutes caps any hang.
   e2e:
     name: E2E Smoke Tests (Playwright)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.59 cannot install Chromium.
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 15
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
@@ -196,7 +197,8 @@ jobs:
   # DEEPGRAM_AURA_API_KEY feeds /api/assistant/tts, which speaks the answer.
   e2e-voice:
     name: E2E Voice (real audio, Playwright)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.59 cannot install Chromium.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # One run at a time across branches: every run drives the same E2E user,
     # its Redis history and its rate limit. On 2026-10-24 the only two red runs
@@ -258,7 +260,8 @@ jobs:
   # Static assets are copied into the standalone bundle in the step below.
   e2e-full:
     name: E2E Full Suite (Playwright, manual)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.59 cannot install Chromium.
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'
@@ -328,7 +331,8 @@ jobs:
   # switch `if:` to pull_request and mark "E2E Auth" a required check (blocking).
   e2e-auth:
     name: E2E Auth (ephemeral Supabase)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.59 cannot install Chromium.
+    runs-on: ubuntu-24.04
     continue-on-error: true
     timeout-minutes: 20
     if: github.event_name == 'workflow_dispatch'
