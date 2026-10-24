@@ -11,6 +11,7 @@
 | **Integration Tests** | Vitest + Supabase local | `tests/integration/` | — | 7 | Flujos con datos reales (RLS, multi-tenant) |
 | **pgTAP Tests** | SQL + TAP | `supabase/tests/` | 138 | 3 | RLS policies, funciones RPC, alertas de IA |
 | **Voice-worker unit** | Vitest (Deno-style) | `supabase/functions/voice-worker/**/__tests__/` | 50+ | 5 | Capacidades de asistente de voz |
+| **Voz con audio real** | Playwright (micrófono falso de Chromium) + script `tsx` | `tests/e2e/voice-roundtrip.spec.ts`, `scripts/check-voice.ts` | 1 spec (4 turnos) + 1 chequeo | 2 | Asistente de voz de punta a punta contra producción, en CI — ver §4-bis |
 
 **Reproducible**: 1.410 unit (Vitest) + 16 specs E2E (Playwright) + 138 asserts pgTAP. (+ integración Supabase local y tests Deno de Edge Functions.)
 
@@ -234,6 +235,64 @@ npx supabase test db
 
 ---
 
+## 4-bis. Asistente de voz con audio real (E2E + chequeo sintético)
+
+### Por qué existe
+Los tests de componentes (`__tests__/components/dashboard/use-voice-assistant.test.tsx`) prueban la lógica del botón con un micrófono simulado: no ven el audio real, ni la grabación del navegador, ni el `voice-worker`, ni Deepgram. El 2026-10-23 llegaron a producción dos fallas que ninguna prueba vio: audio WebM corrupto después de varios turnos (una grabadora huérfana metía fragmentos sin cabecera) y cortes HTTP/2 entre el `voice-worker` y Deepgram. Este tipo de prueba recorre el camino completo con audio real. En su primera corrida detectó el segundo bug y reprodujo el primero.
+
+### E2E con micrófono falso (navegador → servidor)
+- **Spec:** `tests/e2e/voice-roundtrip.spec.ts`, en el proyecto Playwright `voice` (`playwright.config.ts`). Chromium arranca con `--use-fake-ui-for-media-stream`, `--use-fake-device-for-media-stream`, `--use-file-for-fake-audio-capture=<wav>` y `--autoplay-policy=no-user-gesture-required`: el navegador "escucha" un WAV en loop como si fuera el micrófono. Los demás proyectos (`chromium`, `firefox`, `webkit`, `Mobile Chrome`) ignoran este spec porque necesita ese micrófono.
+- **Audio:** `tests/e2e/fixtures/voice/que-citas-tengo-hoy.wav`, que dura 4,3 s: 0,5 s de silencio, la pregunta "¿Qué citas tengo hoy?" y 2 s de silencio, a 16 kHz. Se eligió una pregunta que no depende de los datos del negocio.
+- **Flujo:** el proyecto `setup` hace el login del usuario E2E. Después vienen 4 turnos seguidos, cada uno: tocar el botón, grabar, el botón corta solo (por silencio o en el tope de 10 s), subir al `voice-worker` **desplegado**, Deepgram, agente. En el turno 2 se descarta la respuesta mientras suena y se pregunta enseguida: es la secuencia que rompió producción.
+- **Qué verifica en cada turno:**
+  - el `voice-worker` responde **HTTP 200** (si el audio sale corrupto, Deepgram lo rechaza y el `voice-worker` devuelve 400, así que el test falla);
+  - la transcripción contiene al menos 2 de las 4 palabras de la pregunta (`tests/e2e/fixtures/voice/question.ts`);
+  - el botón vuelve a reposo.
+
+  **No** compara el texto de la respuesta, porque el LLM varía.
+- **Estado del botón:** el botón expone `data-state` (`idle`, `listening`, `processing` o `speaking`) para que el test siga la máquina de estados.
+- **Diagnóstico cuando falla:** imprime en el log del job, completos, los cambios de estado del botón (`[fab-state]`), la consola, los textos enviados a hablar (`[tts]`), los errores de página y los pedidos de red fallidos. Además los adjunta al reporte de Playwright.
+
+### Chequeo sintético (solo servidor)
+- `npm run check:voice` (`scripts/check-voice.ts`) hace el login del usuario E2E y sube `tests/e2e/fixtures/voice/que-citas-tengo-hoy.webm` (el mismo contenedor WebM/Opus que manda el botón) al `voice-worker` desplegado.
+- Pasa solo con **200**, una transcripción de la pregunta y una respuesta no vacía. Reintenta una vez ante un 5xx. Si falla, sale con código 1.
+- Detecta lo que el E2E no ve entre pushes: una clave de Deepgram o Groq vencida, o un deploy roto.
+
+### Dónde corre en CI
+
+| Qué | Workflow → job | Cuándo | Si falla |
+|---|---|---|---|
+| E2E de voz | `Tests` (`test.yml`) → **`E2E Voice (real audio, Playwright)`** | Cada push a `develop` o `main` | **No** es `continue-on-error`: el workflow sale rojo y GitHub avisa por email |
+| Chequeo sintético | **`Voice Check (deployed voice-worker)`** (`voice-check.yml`) | Diario a las 12:00 UTC (8:00 en Caracas), después del workflow "Deploy Supabase Edge Functions" y a mano | El workflow sale rojo y GitHub avisa por email |
+
+- Los dos comparten el grupo de concurrencia `e2e-voice-fixture-user`: nunca corren a la vez, porque usan el mismo usuario, su historial en Redis y su límite de pedidos. El 2026-10-24 las únicas corridas rojas del E2E fueron las dos que se superpusieron.
+- Un deploy hecho a mano (`npx supabase functions deploy … --use-api`) **no** dispara `voice-check.yml`. Después de desplegar el `voice-worker`, corré `npm run check:voice`.
+
+### Contra qué corre y qué deja
+- Corre contra **producción** (Supabase y el `voice-worker` desplegado) con el usuario E2E (`E2E_TEST_EMAIL` / `E2E_TEST_PASSWORD`).
+- Escribe trazas en `ai_traces` solo para el negocio de prueba. Cuesta centavos de Deepgram y Groq por corrida.
+- El E2E de un push prueba el código del **navegador** de ese push contra el servidor que ya está desplegado. Un cambio del `voice-worker` recién queda probado cuando se despliega.
+
+### Secrets de GitHub
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `E2E_TEST_EMAIL` y `E2E_TEST_PASSWORD` ya están cargados.
+- **`DEEPGRAM_AURA_API_KEY` todavía no está cargado** (verificado el 2026-10-24). Lo usa `/api/assistant/tts` del servidor Next del job para decir la respuesta en voz alta. Sin él el E2E igual pasó, pero el turno que descarta la respuesta depende de una ventana muy corta en estado `speaking`. Para cargarlo desde `.env.local` sin mostrarlo:
+  `$env:GH_TOKEN = gh auth token --user ROMEROLUIS15; ((Select-String -Path .env.local -Pattern '^DEEPGRAM_AURA_API_KEY=(.+)$').Matches[0].Groups[1].Value.Trim().Trim('"')) | gh secret set DEEPGRAM_AURA_API_KEY --repo ROMEROLUIS15/cronix`
+
+### Correrlo en local
+```bash
+npx playwright install chromium        # una sola vez
+npm run build && npx next start -p 3100   # en otra terminal
+PLAYWRIGHT_BASE_URL=http://localhost:3100 npx playwright test --project=voice
+npm run check:voice
+```
+- **Si el puerto 3000 lo ocupa otra app,** Playwright la reutiliza (`reuseExistingServer`) y el login termina en una página ajena. Por eso se usa el puerto 3100.
+- **Si el servidor lo levanta Playwright** (`npm run build && npm run start`), puede superar su límite de 180 s mientras compila. Conviene compilar y levantarlo aparte, como arriba.
+
+### Limitaciones y mantenimiento
+- Prueba una sola pregunta, sin nombres propios ni frases largas.
+- **Keyword boost:** el `voice-worker` le pasa a Deepgram los nombres de los clientes y eso puede reemplazar palabras comunes. En el negocio de prueba, "citas" se transcribe "E2E". Por eso se exigen 2 de 4 palabras y no la frase exacta.
+- **Regenerar los fixtures:** los comandos están en la cabecera del spec (TTS de Deepgram `aura-2-nestor-es` y ffmpeg). El JSON de Deepgram se manda como UTF-8; Git Bash rompe los acentos si se pasa en línea.
+
 ## 5. Quality gates
 
 | Hook | Acción | Status |
@@ -241,6 +300,7 @@ npx supabase test db
 | Pre-commit (Husky + lint-staged) | `eslint --fix` sobre archivos staged | ✅ Active |
 | Pre-push | `npm run lint && npm run typecheck && npm test && npm audit` | ✅ Active |
 | CI/CD (GitHub Actions) | Lint + TypeCheck + Unit + Integration + E2E | ✅ Ready |
+| CI — voz con audio real | `E2E Voice (real audio, Playwright)` en cada push a `develop`/`main` + `Voice Check` diario (§4-bis) | ✅ Active |
 
 Si cualquiera falla, el push se cancela. No usar `--no-verify`.
 
