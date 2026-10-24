@@ -58,7 +58,10 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   const rafIdRef           = useRef<number | null>(null)
   const hasSpokenRef       = useRef<boolean>(false)
   const currentAudioRef    = useRef<HTMLAudioElement | null>(null)
-  const audioChunksRef     = useRef<Blob[]>([])
+  // Bumped on every new interaction (dismissing an answer, starting to record).
+  // Playback callbacks from an older turn see a different value and stand down,
+  // so a late "answer finished" can never flip a live recording back to idle.
+  const turnRef            = useRef(0)
   const audioUnlockedRef   = useRef<boolean>(false)
   const unlockPrimerRef    = useRef<HTMLAudioElement | null>(null)
   // AbortController for the in-flight Edge Function request — lets us cancel
@@ -225,9 +228,17 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
   // can await the full turn. Any failure here means the user heard nothing:
   //   fetch-failed|http=<status> → endpoint problem (auth / Deepgram / key)
   //   never-started|http=200     → autoplay/decode block on a local blob
+  // A stale turn (the user moved on) neither touches the state nor reports a
+  // failure: an interrupted answer is not silence the user didn't ask for.
   const speakTtsText = (msg: string): Promise<void> => new Promise((resolve) => {
+    const turn = turnRef.current
     setState('speaking')
     void fetchTtsObjectUrl(msg).then((fetched) => {
+      if (turn !== turnRef.current) {
+        if (fetched.ok) URL.revokeObjectURL(fetched.url)
+        resolve()
+        return
+      }
       if (!fetched.ok) {
         setState('idle')
         reportTtsFailure(msg, `fetch-failed|http=${fetched.status}`)
@@ -237,13 +248,15 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       playOnUnlockedElement(fetched.url, {
         onEnd: () => {
           URL.revokeObjectURL(fetched.url)
-          setState('idle')
+          if (turn === turnRef.current) setState('idle')
           resolve()
         },
         onError: (kind) => {
           URL.revokeObjectURL(fetched.url)
-          setState('idle')
-          reportTtsFailure(msg, `${kind}|http=200`)
+          if (turn === turnRef.current) {
+            setState('idle')
+            reportTtsFailure(msg, `${kind}|http=200`)
+          }
           resolve()
         },
       })
@@ -254,14 +267,24 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
   // ── Play a data: audio URL — on failure, re-speak the text via TTS ───────
   const playAudio = async (src: string, fallbackText?: string) => {
+    const turn = turnRef.current
     return new Promise<void>((resolve) => {
       playOnUnlockedElement(src, {
-        onEnd:   () => { setState('idle'); resolve() },
+        onEnd:   () => { if (turn === turnRef.current) setState('idle'); resolve() },
         onError: () => {
+          if (turn !== turnRef.current) { resolve(); return }
           void speakTtsText(fallbackText ?? 'No te entendí bien, ¿puedes repetir?').then(resolve)
         },
       })
     })
+  }
+
+  // Ends whatever the assistant is saying (or about to say) and invalidates the
+  // pending callbacks of that turn.
+  const interruptPlayback = () => {
+    turnRef.current += 1
+    currentAudioRef.current?.pause()
+    currentAudioRef.current = null
   }
 
   // ── Edge Function URL ──────────────────────────────────────────────────────
@@ -285,6 +308,9 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
     try {
       // Get the user's JWT — the Edge Function has verify_jwt=true
       const { data: sessionData } = await supabase.auth.getSession()
+      // A cancelled request must stay silent: the user may already be recording
+      // the next question, and speaking now would flip that recording's state.
+      if (ctrl.signal.aborted) return
       const jwt = sessionData.session?.access_token
       if (!jwt) {
         vocalizeSilentFailsafe('Sesión expirada. Recarga la página.')
@@ -312,6 +338,7 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
+        if (ctrl.signal.aborted) return
         const status  = res.status
         logger.error('VoiceAssistantFab', `Edge Function error ${status}`, errData)
         const msg = status === 401 ? 'Sin acceso al asistente.'
@@ -367,6 +394,8 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
   // ── Recording ─────────────────────────────────────────────────────────────
   const startRecording = async () => {
+    if (mediaRecorderRef.current?.state === 'recording') return
+    interruptPlayback()
     unlockAudioPlayback()
 
     // Every platform records audio for the voice-worker's server-side STT
@@ -385,7 +414,6 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
 
     setState('listening')
     setVolume(0)
-    audioChunksRef.current = []
     hasSpokenRef.current   = false
 
     let stream: MediaStream
@@ -425,8 +453,12 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
       const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
 
+      // Each recording owns its chunks. With a shared buffer, a recorder left
+      // running interleaved its header-less chunks into the next recording and
+      // Deepgram rejected the audio as corrupt.
+      const chunks: Blob[] = []
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+        if (e.data.size > 0) chunks.push(e.data)
       }
 
       mediaRecorder.onstop = async () => {
@@ -437,12 +469,12 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
         // gate (`hasSpokenRef`) was discarding valid audio on mobile because the
         // noise-floor calibration races with the user starting to speak immediately
         // after tapping. The server-side STT has its own empty-audio guard.
-        if (audioChunksRef.current.length === 0) {
+        if (chunks.length === 0) {
           setState('idle')
           return
         }
 
-        await callVoiceWorker(new Blob(audioChunksRef.current, { type: mimeType }))
+        await callVoiceWorker(new Blob(chunks, { type: mimeType }))
       }
 
       mediaRecorder.start(250)
@@ -530,9 +562,14 @@ export function useVoiceAssistant(supabase: SupabaseClient, queryClient: QueryCl
     // so the deferred result audio (arriving long after the gesture) can play.
     unlockAudioPlayback()
 
+    // Decide by the recorder itself, not the UI state: a tap while recording
+    // always stops it, so a second recorder is never opened over a live one.
+    if (mediaRecorderRef.current?.state === 'recording') {
+      stopRecording()
+      return
+    }
     if (state === 'speaking') {
-      currentAudioRef.current?.pause()
-      currentAudioRef.current = null
+      interruptPlayback()
       setState('idle')
       return
     }

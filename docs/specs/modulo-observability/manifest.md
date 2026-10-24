@@ -80,6 +80,7 @@ puede aparecer en dos sitios y la alerta lee **ambos**:
 | `TOOL_FAILURE` / `FAST_PATH_FAILURE` | Fallback genérico de voz (`voice-pipeline.ts` / `agent.ts`). **Mezcla** errores reales con turnos de aclaración/validación (p.ej. "¿a qué hora?") → no distingue | **NO** |
 | `rate_limited` (columna y `outcome`) | Lo emiten los **guards**: voz 30 req/min por usuario y `BOOKING_RATE_LIMIT` de WhatsApp. **No** es cuota del proveedor | **NO** |
 | `STT_NOISE` | Audio/texto ininteligible; guard determinista responde 422 | **NO** |
+| `STT_FAILED` / `CONTEXT_FAILED` / `PAYLOAD_INVALID` | Salida temprana del `voice-worker` antes del agente (nuevo 2026-10-23): Deepgram rechazó el audio, falló la carga de contexto del negocio, o el cuerpo no se pudo leer. Se graban con `outcome='error'` (`core/payload-failure.ts`); antes ese `catch` respondía 400 sin dejar traza | **SÍ** (vía `outcome='error'`) |
 | `GUARD_REJECTED` | Un mention-guard/umbral bloqueó una acción insegura | **NO** (el guard FUNCIONANDO) |
 | `REVIEWER_BLOCKED` | El reviewer constitucional vetó/degradó (voz: solo `delete_client` hard-block) | **NO** (señal de calidad, no fallo) |
 | `SLOT_CONFLICT`, `APPOINTMENT_NOT_FOUND`, `UNAUTHORIZED`, `INVALID_ARGS`, `INVALID_ARGUMENTS`, `DUPLICATE_CALL` | Resultados de negocio/validación esperados | **NO** |
