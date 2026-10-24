@@ -58,7 +58,11 @@ test('four turns in a row, one with the answer dismissed, are recorded intact an
     if (!msg.text().startsWith('[PWA]')) diagnostics.push(`[console.${msg.type()}] ${msg.text()}`)
   })
   page.on('pageerror', (err) => diagnostics.push(`[pageerror] ${err.message}`))
-  page.on('requestfailed', (req) => diagnostics.push(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText ?? ''}`))
+  page.on('requestfailed', (req) => {
+    // Next aborts its route prefetches (?_rsc=) on navigation — noise, not a failure.
+    if (req.url().includes('_rsc=')) return
+    diagnostics.push(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText ?? ''}`)
+  })
   page.on('request', (req) => {
     const url = new URL(req.url())
     if (url.pathname === '/api/assistant/tts') diagnostics.push(`[tts] ${url.searchParams.get('t')}`)
