@@ -850,6 +850,7 @@ When an appointment is created/cancelled/rescheduled via the WA channel, the bot
   - Push notifications.
   - Offline fallback for `/dashboard`.
 - Installable on mobile and desktop.
+- Updates: `skipWaiting` is off, so a new version waits until the user taps the update toast (`use-pwa-update.ts`), which reloads the page on `controllerchange`. The first install also fires `controllerchange` (`clientsClaim`), so the hook only reloads when a worker already controlled the page.
 
 ## 22. Authentication, session and Passkeys
 
