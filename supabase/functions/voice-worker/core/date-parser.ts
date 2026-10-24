@@ -116,7 +116,9 @@ export function parseDateExpression(
   prefer: 'future' | 'nearest' = 'future',
 ): ParsedDate | null {
   const raw = text.toLowerCase()
-  const t   = stripAccents(raw)
+  // "en/por/de/a la mañana" is the MORNING, not tomorrow: strip it so "el martes en la
+  // mañana" resolves to Tuesday, while "mañana en la mañana" still resolves to tomorrow.
+  const t   = stripAccents(raw).replace(/\b(?:en|por|de|a)\s+la\s+manana\b/g, ' ')
 
   // ── 1. Discrete keywords (highest priority) ──────────────────────────────
   // Order matters: "pasado mañana" before "mañana", "anteayer" before "ayer".

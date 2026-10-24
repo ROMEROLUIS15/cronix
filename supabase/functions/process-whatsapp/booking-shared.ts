@@ -5,6 +5,7 @@
  */
 
 import { parseDateExpression } from './date-parser.ts'
+import { extractDayPart, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { todayInTimezone, nextOpenDates, type WorkingHours } from './availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
@@ -40,6 +41,25 @@ export function humanDate(dateISO: string): string {
 export function listFreeTimes(slots: string[]): string {
   const list = slots.slice(0, MAX_LISTED).map(formatLocalTime).join(', ')
   return slots.length > MAX_LISTED ? `${list}, entre otros` : list
+}
+
+/** The part of the day asked for in the client's turns (newest first), or null. */
+export function dayPartFrom(texts: ReadonlyArray<string>): DayPart | null {
+  for (const t of texts) {
+    const part = extractDayPart(t)
+    if (part) return part
+  }
+  return null
+}
+
+/**
+ * Free times for the part of the day asked for. When that part is full it says so and
+ * lists the rest, so the client is never told there is no time while the other half is open.
+ */
+export function freeTimesFor(slots: string[], part: DayPart | null): { list: string; note: string } {
+  const inPart = part ? slots.filter((s) => (part === 'morning' ? s < '12:00' : s >= '12:00')) : slots
+  if (!part || inPart.length > 0) return { list: listFreeTimes(inPart), note: '' }
+  return { list: listFreeTimes(slots), note: `${part === 'morning' ? 'En la mañana' : 'En la tarde'} ya no me queda horario. ` }
 }
 
 export function apptLocal(a: ActiveApptLite, tz: string): { date: string; time: string } {

@@ -70,6 +70,19 @@ export function extractTime(text: string): string | null {
   return extractTimeSpan(text)?.time ?? null
 }
 
+export type DayPart = 'morning' | 'afternoon'
+
+/**
+ * The part of the day the client asked for ("en/por la mañana", "en/por la tarde"), or
+ * null. "mañana" alone is tomorrow, and "9 de la mañana" is a clock time (extractTime).
+ */
+export function extractDayPart(text: string): DayPart | null {
+  const t = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  if (/\b(?:en|por)\s+la\s+manana\b/.test(t)) return 'morning'
+  if (/\b(?:en|por)\s+la\s+tarde\b/.test(t))  return 'afternoon'
+  return null
+}
+
 /**
  * Combined date+time understanding. Parses the time, removes its span from the text,
  * then parses the date from the remainder so a bare day ("21") is never mistaken for

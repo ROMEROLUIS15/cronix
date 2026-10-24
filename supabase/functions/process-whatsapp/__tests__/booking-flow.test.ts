@@ -6,7 +6,7 @@
  * code-derived args, replies deterministically, or defers to the LLM (null).
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { resolveBookingTurn, extractTime } from '../booking-flow.ts'
 
 const TZ = 'America/Bogota'
@@ -647,3 +647,72 @@ describe('resolveBookingTurn — "cannot attend" routes to cancel, only outside 
     if (turn?.kind === 'reply') expect(turn.text).not.toMatch(/cancele tu cita/)
   })
 })
+
+// ── Prod 2026-10-24: "cancela mi cita y reagéndame para el martes en la mañana" ─────────
+// The weekday was lost to "la mañana" (read as tomorrow) and the client was offered times
+// on the very day she wanted to cancel. Today is pinned to Wed 2026-12-23 (Bogota).
+describe('resolveBookingTurn — weekday + part of day', () => {
+  const APPT_THU = [{ id: 'apt-1', service_name: 'Tarjeta', start_at: '2026-12-24T14:00:00Z' }] // Thu 09:00 Bogota
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-12-23T15:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('reschedules to the weekday asked for and offers only morning times', () => {
+    const turn = resolveBookingTurn({
+      userText: '😭 buenas noches cancela mi cita.. y reagendame para el día martes en la mañana 🙏🏻el niño tiene juego y no puedo faltar🙈',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT_THU, intent: 'cancel_appointment',
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/el 29 de diciembre/)
+      expect(turn.text).not.toMatch(/24 de diciembre/)
+      expect(turn.text).toContain('9:00 am')
+      expect(turn.text).toContain('11:30 am')
+      expect(turn.text).not.toMatch(/pm/)
+    }
+  })
+
+  it('"en la tarde" offers only afternoon times', () => {
+    const turn = resolveBookingTurn({
+      userText: 'reagéndala para el martes en la tarde',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/el 29 de diciembre/)
+      expect(turn.text).toContain('12:00 pm')
+      expect(turn.text).not.toMatch(/\bam\b/)
+    }
+  })
+
+  it('says so when the asked part of the day is full, then lists the rest', () => {
+    // 09:00–12:00 Bogota (14:00–17:00 UTC) is taken, so no morning time is left.
+    const turn = resolveBookingTurn({
+      userText: 'reagéndala para el martes en la mañana',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ,
+      bookedSlots: [{ start_at: '2026-12-29T14:00:00Z', end_at: '2026-12-29T17:00:00Z' }],
+      activeAppointments: APPT_THU, intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/en la mañana ya no me queda/i)
+      expect(turn.text).toContain('12:00 pm')
+    }
+  })
+
+  it('a new booking "el martes en la tarde" lists afternoon times', () => {
+    const turn = resolveBookingTurn({
+      userText: 'quiero agendar tarjeta el martes en la tarde',
+      history: [], services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [],
+      activeAppointments: [], intent: null,
+    })
+    expect(turn?.kind).toBe('reply')
+    if (turn?.kind === 'reply') {
+      expect(turn.text).toMatch(/29 de diciembre/)
+      expect(turn.text).toContain('12:00 pm')
+      expect(turn.text).not.toMatch(/\bam\b/)
+    }
+  })
+})
+

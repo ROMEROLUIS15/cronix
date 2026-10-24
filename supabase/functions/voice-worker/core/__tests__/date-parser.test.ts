@@ -26,6 +26,18 @@ describe('parseDateExpression — discrete keywords', () => {
   })
 })
 
+describe('parseDateExpression — a weekday plus "en/por la mañana" is that weekday', () => {
+  it('"el viernes en la mañana" → Friday, not tomorrow', () => {
+    expect(parseDateExpression('agéndame el viernes en la mañana', TODAY)?.date).toBe('2026-05-15')
+  })
+  it('"el martes por la mañana" → next Tuesday', () => {
+    expect(parseDateExpression('el martes por la mañana', TODAY)?.date).toBe('2026-05-19')
+  })
+  it('"mañana en la mañana" → still tomorrow', () => {
+    expect(parseDateExpression('mañana en la mañana', TODAY)?.date).toBe('2026-05-14')
+  })
+})
+
 describe('parseDateExpression — prefer nearest (agenda queries)', () => {
   // Bug repro: "qué citas tuve el 9 de mayo" on May 13 must resolve to THIS
   // year's May 9 (4 days ago), not roll into next year and return "no hay".

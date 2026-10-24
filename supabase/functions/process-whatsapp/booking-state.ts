@@ -8,14 +8,14 @@
  */
 
 import { parseDateExpression } from './date-parser.ts'
-import { parseDateTime, extractTime } from './datetime-nlu.ts'
+import { parseDateTime, extractTime, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from './availability.ts'
 import { isManageExisting, isBookIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, OUR_RESCHEDULE_QUESTION_RE, humanDate, listFreeTimes,
-  suggestOpenDays, cutoffHint, serviceNamedIn,
+  suggestOpenDays, cutoffHint, serviceNamedIn, dayPartFrom, freeTimesFor,
 } from './booking-shared.ts'
 
 // A proposal WE generate always opens with this shape, so the confirmation turn can
@@ -65,7 +65,7 @@ export function gatherBookingState(
   services: ReadonlyArray<ServiceLite>,
   timezone: string,
   expecting: 'time' | 'date' | null = null,
-): { service: ServiceLite | null; date: string | null; time: string | null } {
+): { service: ServiceLite | null; date: string | null; time: string | null; dayPart: DayPart | null } {
   const today = todayInTimezone(timezone)
   // Gather ONLY from the CURRENT sub-dialogue: walk back and STOP at a prior completed
   // booking (assistant BOOKING_DONE) or the turn where THIS booking started (user
@@ -96,7 +96,7 @@ export function gatherBookingState(
     if (date && time) break
   }
 
-  return { service, date, time }
+  return { service, date, time, dayPart: dayPartFrom(userTexts) }
 }
 
 /** True when this turn belongs to a NEW-booking sub-dialogue the deterministic flow owns. */
@@ -195,8 +195,9 @@ export function resolveNewBookingTurn(p: {
     if (askedTime && hasContent && !saidNow.time && !saidNow.date && slots.length > 0) {
       return { kind: 'reply', text: `No te entendí la hora 🙏. Puedes decir *a las 3*, *11 am* o *15:30*. Para el ${when} tengo: ${listFreeTimes(slots)}. ¿A qué hora?` }
     }
+    const { list, note } = freeTimesFor(slots, st.dayPart)
     return { kind: 'reply', text: slots.length > 0
-      ? `Para el ${when} tengo estos horarios libres para *${st.service.name}*: ${listFreeTimes(slots)}. ¿A qué hora te viene bien?`
+      ? `${note}Para el ${when} tengo estos horarios libres para *${st.service.name}*: ${list}. ¿A qué hora te viene bien?`
       : `Para el ${when} no me queda ningún horario libre para *${st.service.name}*. ¿Probamos con otro día?` }
   }
   if (!slots.includes(st.time)) {

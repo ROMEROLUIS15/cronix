@@ -15,7 +15,7 @@ import { isRescheduleIntent } from './intents.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, apptLocal, humanDate, listFreeTimes, matchAppointments, listActiveAppointments,
-  suggestOpenDays, cutoffHint,
+  suggestOpenDays, cutoffHint, dayPartFrom, freeTimesFor,
 } from './booking-shared.ts'
 
 // "a la misma hora" / "el mismo horario" → keep the appointment's current time.
@@ -90,7 +90,8 @@ export function resolveRescheduleTurn(p: {
     return { kind: 'reply', text: `Para el ${when} no me queda horario libre para reagendar. ¿Probamos con otra fecha?` }
   }
   if (!newTime) {
-    return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? Para reagendar tengo: ${listFreeTimes(slots)}.` }
+    const { list, note } = freeTimesFor(slots, dayPartFrom(texts))
+    return { kind: 'reply', text: `¿A qué hora quieres tu cita de *${target.service_name}* el ${when}? ${note}Para reagendar tengo: ${list}.` }
   }
   if (!slots.includes(newTime)) {
     return { kind: 'reply', text: `A las ${formatLocalTime(newTime)} no tengo disponible el ${when}.${cutoffHint(newTime, slots)} Para reagendar tengo: ${listFreeTimes(slots)}. ¿Cuál prefieres?` }
