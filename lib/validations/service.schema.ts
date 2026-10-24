@@ -11,7 +11,12 @@ export const CreateServiceSchema = z.object({
   is_active:     z.boolean().default(true),
 })
 
-export const UpdateServiceSchema = CreateServiceSchema.partial().omit({ business_id: true })
+// Updates must not inherit create-time defaults: zod 4 applies .default() inside
+// .partial(), so every update would carry is_active: true and reactivate the service.
+export const UpdateServiceSchema = CreateServiceSchema
+  .extend({ is_active: z.boolean() })
+  .partial()
+  .omit({ business_id: true })
 
 export type CreateServiceInput = z.infer<typeof CreateServiceSchema>
 export type UpdateServiceInput = z.infer<typeof UpdateServiceSchema>

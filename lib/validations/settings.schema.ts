@@ -6,6 +6,7 @@ import { z } from 'zod'
  */
 export const BusinessSettingsSchema = z.object({
   workingHours: z.record(
+    z.string(),
     z.union([
       z.tuple([z.string(), z.string()]),
       z.null(),
@@ -19,7 +20,9 @@ export const BusinessSettingsSchema = z.object({
     email:          z.boolean().default(false),
     reminderHours:  z.array(z.number()).optional(),  // legacy — no longer editable in UI
   }).optional(),
-  maxDailyBookingsPerClient: z.number().int().positive().default(2).optional(),
+  // No .default(2): zod 4 applies defaults inside .optional(), which would inject
+  // the field into every parsed settings object (zod 3 never applied it here).
+  maxDailyBookingsPerClient: z.number().int().positive().optional(),
 })
 
 export type BusinessSettingsInput = z.infer<typeof BusinessSettingsSchema>

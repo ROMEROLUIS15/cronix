@@ -32,6 +32,11 @@ describe('Settings Validation Schema', () => {
       expect(result.success).toBe(true)
     })
 
+    it('does not inject fields absent from the input', () => {
+      const result = BusinessSettingsSchema.safeParse({})
+      expect(result.success && result.data).toEqual({})
+    })
+
     it('accepts partial settings', () => {
       const result = BusinessSettingsSchema.safeParse({
         notifications: { whatsapp: true },

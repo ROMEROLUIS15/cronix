@@ -94,6 +94,11 @@ describe('UpdateClientSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('does not inject the create-time tags default into an update', () => {
+    const result = UpdateClientSchema.safeParse({ name: 'New Name' })
+    expect(result.success && result.data).toEqual({ name: 'New Name' })
+  })
+
   it('rejects short name in partial update', () => {
     const result = UpdateClientSchema.safeParse({ name: 'X' })
     expect(result.success).toBe(false)
