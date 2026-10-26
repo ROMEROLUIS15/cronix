@@ -23,7 +23,9 @@
 import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
 import { getBusinessesAt8PM, getTomorrowRange }         from './modules/business-scheduler.ts'
-import { getTomorrowAppointments, getSkippedReminderIds } from './modules/appointment-fetcher.ts'
+import { getTomorrowAppointments }                     from './modules/appointment-fetcher.ts'
+import { getSkippedReminderIds }                       from './modules/reminder-status.ts'
+import { createAdminClient }                           from './modules/db.ts'
 import { sendWhatsAppReminders, sendOwnerWhatsAppSummary }    from './modules/whatsapp-sender.ts'
 import { buildReminderNotification, buildWhatsAppFailureNotification,
          insertNotification, sendPushNotification }     from './modules/notification-builder.ts'
@@ -112,9 +114,15 @@ Deno.serve(async (req: Request) => {
       count: apts.length,
     })
 
-    // ── Get skipped reminders (cancelled OR already sent) ─────────────────
+    // ── Get skipped reminders (cancelled OR already sent tonight) ─────────
     const aptIds = apts.map(a => a.id)
-    const skippedAptIds = await getSkippedReminderIds(aptIds)
+    let skippedAptIds = new Set<string>()
+    try {
+      skippedAptIds = await getSkippedReminderIds(createAdminClient(), biz.id, aptIds)
+    } catch (err) {
+      // Same as before: without the list, remind everyone rather than no one.
+      captureException(err, { stage: 'fetch_skipped_reminders', business_id: biz.id })
+    }
 
     // ── 1. Send WhatsApp reminders ────────────────────────────────────────
     const waResult = await sendWhatsAppReminders(biz, apts, skippedAptIds, cronSecret)

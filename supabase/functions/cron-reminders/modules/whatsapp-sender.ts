@@ -1,5 +1,7 @@
 import { createAdminClient } from "./db.ts";
 import { anchorReminderSession } from "./session-anchor.ts";
+import { recordReminderOutcome } from "./reminder-status.ts";
+import { captureException } from "../../_shared/sentry.ts";
 import type { AppointmentWithClient, BusinessRow } from "../types.ts";
 
 interface WhatsAppSendResult {
@@ -65,20 +67,19 @@ export async function sendWhatsAppReminders(
       const data = await res.json().catch(() => ({ success: false })) as {
         success?: boolean;
       };
-      const now = new Date().toISOString();
-
-      const supabase = createAdminClient();
-      await supabase.from("appointment_reminders").upsert({
-        appointment_id: apt.id,
-        business_id: business.id,
-        remind_at: now,
-        status: data.success === true ? "sent" : "failed",
-        channel: "whatsapp",
-        sent_at: data.success === true ? now : null,
-        error_message: data.success === true
-          ? null
-          : "WhatsApp delivery failed",
-      }, { onConflict: "appointment_id" });
+      const recorded = await recordReminderOutcome(createAdminClient(), {
+        appointmentId: apt.id,
+        businessId: business.id,
+        delivered: data.success === true,
+        now: new Date().toISOString(),
+      });
+      if (!recorded.success) {
+        console.warn("[cron-reminders] reminder status not recorded:", recorded.error);
+        captureException(new Error(recorded.error), {
+          stage: "record_reminder_outcome",
+          business_id: business.id,
+        });
+      }
 
       // The reply to this reminder carries no #slug: anchor the session so it routes here.
       if (data.success === true) await anchorReminderSession(client.phone, business.id);
