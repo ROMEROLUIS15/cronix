@@ -261,6 +261,8 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 
 > Detalle (descriptivo, 2026-10-05 — restaura R2, ver D6): la respuesta al recordatorio no trae `#slug`, así que `cron-reminders` ancla `wa_sessions` (remitente → negocio) por cada recordatorio enviado con éxito, y el ruteo tiene un nivel de respaldo por teléfono del cliente (manifest §1). Las formas naturales de responder — "no podré asistir", "no puedo ir", "no voy a poder" — se reconocen como cancelación (`isCantAttendIntent`), solo fuera de los sub-diálogos de agendar/reagendar, donde "ese día no puedo ir" significa "ese horario no", no "cancela".
 
+> Detalle (descriptivo, 2026-10-26): `cron-reminders` registra en `appointment_reminders` si cada recordatorio llegó (`sent`/`failed`, `modules/reminder-status.ts`), sobre la fila que agendó el dashboard o en una nueva. Una cita se saltea si su recordatorio está `cancelled` o si ya recibió el de WhatsApp **esa misma noche** (ventana de 12 h: pg_cron puede dispararse dos veces en la hora). Un `sent` más viejo no cuenta: era de otra fecha y nada lo borra al reagendar, así que la cita reagendada después de su recordatorio (R2) recibe el de su fecha nueva.
+
 ---
 
 ## 9. Tabla de defectos → invariante → causa raíz → estado
