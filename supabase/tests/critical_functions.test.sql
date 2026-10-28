@@ -11,7 +11,7 @@
 
 BEGIN;
 
-SELECT plan(43);
+SELECT plan(46);
 
 -- ── Setup: Test fixtures ──────────────────────────────────────────────────────
 
@@ -346,6 +346,47 @@ SELECT ok(
    WHERE business_id = 'ffffffff-1111-1111-1111-111111111111'
      AND start_at > NOW()),
   'appointment created or exists via fn_book_appointment_wa'
+);
+
+-- 2.2 Test: a booking holds its business's lock until the transaction ends, so a
+-- concurrent booking of the same business waits and sees it before checking overlap
+SELECT ok(
+  EXISTS(
+    SELECT 1 FROM pg_locks
+    WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND granted
+  ),
+  'fn_book_appointment_wa holds the business booking lock until commit'
+);
+
+-- 2.3 Test: booking over an active appointment answers SLOT_CONFLICT (the fixture
+-- appointment starts in 2 days and lasts 30 minutes)
+SELECT is(
+  (public.fn_book_appointment_wa(
+    'ffffffff-1111-1111-1111-111111111111',
+    '+58414-7654321',
+    'Overlapping Client',
+    'ffffffff-4444-4444-4444-444444444444',
+    (SELECT start_at FROM public.appointments
+     WHERE id = 'ffffffff-6666-6666-6666-666666666666') + INTERVAL '10 minutes'
+  ))->>'error',
+  'SLOT_CONFLICT',
+  'fn_book_appointment_wa answers SLOT_CONFLICT on an overlap'
+);
+
+-- 2.4 Test: rescheduling over another active appointment answers SLOT_CONFLICT
+SELECT is(
+  (public.fn_reschedule_appointment_wa(
+    (SELECT id FROM public.appointments
+     WHERE business_id = 'ffffffff-1111-1111-1111-111111111111'
+       AND id <> 'ffffffff-6666-6666-6666-666666666666'
+       AND status NOT IN ('cancelled', 'no_show')
+     ORDER BY start_at LIMIT 1),
+    'ffffffff-1111-1111-1111-111111111111',
+    (SELECT start_at FROM public.appointments
+     WHERE id = 'ffffffff-6666-6666-6666-666666666666')
+  ))->>'error',
+  'SLOT_CONFLICT',
+  'fn_reschedule_appointment_wa answers SLOT_CONFLICT on an overlap'
 );
 
 -- ────────────────────────────────────────────────────────────────────────────
