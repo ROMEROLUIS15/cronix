@@ -9,7 +9,7 @@
 import { parseDateExpression } from './date-parser.ts'
 import { extractTime } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
-import { todayInTimezone } from './availability.ts'
+import { todayInTimezone } from '../_shared/availability.ts'
 import {
   type ActiveApptLite, type BookingTurn,
   apptLocal, humanDate, matchAppointments, listActiveAppointments,

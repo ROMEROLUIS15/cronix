@@ -8,7 +8,7 @@
  */
 
 import { formatLocalTime } from './prompt-builder.ts'
-import type { WorkingHours } from './availability.ts'
+import type { WorkingHours } from '../_shared/availability.ts'
 
 type BusinessLite = { name: string; address: string | null }
 

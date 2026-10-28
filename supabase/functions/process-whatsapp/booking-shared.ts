@@ -7,7 +7,7 @@
 import { parseDateExpression } from './date-parser.ts'
 import { extractDayPart, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
-import { todayInTimezone, nextOpenDates, type WorkingHours } from './availability.ts'
+import { todayInTimezone, nextOpenDates, type WorkingHours } from '../_shared/availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
 import type { ChangeRequest } from './notif-contracts.ts'
 

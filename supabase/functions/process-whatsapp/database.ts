@@ -10,7 +10,7 @@
  *   business-router.ts ← getBusinessBySlug, getSessionBusiness, upsertSession,
  *                         getBusinessByPhone, verifyBusinessPhone
  *   context-fetcher.ts ← getBusinessServices, getClientByPhone, getActiveAppointments,
- *                         getConversationHistory, getBookedSlots, getAvailableSlots
+ *                         getConversationHistory, getBookedSlots
  *   appointment-repo.ts← createAppointment, getAppointmentDetails,
  *                         rescheduleAppointment, cancelAppointmentById
  *   audit.ts           ← logInteraction, createInternalNotification
