@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PRICE_CURRENCIES } from '@/lib/constants/business'
 
 /**
  * Schema for the JSON `settings` column in `businesses` table.
@@ -15,6 +16,8 @@ export const BusinessSettingsSchema = z.object({
   // True once the owner explicitly set their schedule (setup form or Settings save).
   // Absent/false = system default seeded at signup → dashboard nudges them to confirm.
   workingHoursConfirmed: z.boolean().optional(),
+  // Currency of the services' prices (ISO 4217); absent = USD.
+  currency: z.enum(PRICE_CURRENCIES).optional(),
   notifications: z.object({
     whatsapp:       z.boolean().default(false),
     email:          z.boolean().default(false),

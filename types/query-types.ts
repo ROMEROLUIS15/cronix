@@ -128,6 +128,8 @@ export interface BusinessSettingsJson {
   workingHours?: Record<string, [string, string] | null>
   /** True once the owner explicitly confirmed their schedule (setup/Settings). */
   workingHoursConfirmed?: boolean
+  /** ISO 4217 code of the services' prices (PRICE_CURRENCIES); absent = USD. */
+  currency?: string
   notifications?: {
     whatsapp: boolean
     reminderHours?: number[]  // legacy
