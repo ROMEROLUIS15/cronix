@@ -2,6 +2,7 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 import { localToUTC, humanizeDate, formatTimeFromISO } from '../../core/time-format.ts'
 import { computeAvailableSlots, type WorkingHours } from '../../../_shared/availability.ts'
+import { bookedSlotsOnDay } from '../../../_shared/booked-slots.ts'
 
 export interface AvailableSlotsArgs extends Record<string, unknown> {
   date:         string
@@ -42,31 +43,15 @@ export async function executeAvailableSlots(
     return { success: true, result: `El negocio está cerrado el ${humanizeDate(args.date, ctx.timezone)}.` }
   }
 
-  // Bound the booked-set query by the LOCAL day converted to UTC — start_at is
-  // stored in UTC, so naive `${date}T00:00:00` strings would query a UTC day
-  // that's offset from the business's local day. In tz ≠ UTC that dropped
-  // evening appointments from the conflict set and offered already-booked slots
-  // as free. Mirror list-appointments' boundary handling.
-  const dayStartISO = localToUTC(args.date, '00:00', ctx.timezone)
-  const dayEndISO   = localToUTC(args.date, '23:59', ctx.timezone)
-
-  const { data: booked, error } = await ctx.supabase
-    .from('appointments')
-    .select('start_at, end_at')
-    .eq('business_id', ctx.businessId)
-    .in('status', ['pending', 'confirmed', 'completed'])
-    .gte('start_at', dayStartISO)
-    .lte('start_at', dayEndISO)
-    .order('start_at')
-
-  if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}`, error: 'DB_ERROR' }
+  const booked = await bookedSlotsOnDay(ctx.supabase, ctx.businessId, args.date, ctx.timezone)
+  if (booked.error) return { success: false, result: `Error al consultar disponibilidad: ${booked.error}`, error: 'DB_ERROR' }
 
   const { slots } = computeAvailableSlots({
     workingHours: storedWorkingHours(ctx.workingHours),
     date:         args.date,
     timezone:     ctx.timezone,
     durationMin:  args.duration_min,
-    bookedSlots:  booked ?? [],
+    bookedSlots:  booked.slots,
   })
   // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
   // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.

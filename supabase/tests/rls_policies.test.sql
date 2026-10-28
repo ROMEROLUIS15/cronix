@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(95);
+SELECT plan(101);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -974,6 +974,32 @@ SELECT ok(
   ),
   'match_ai_memories_v2 exists (migration drift closed)'
 );
+
+-- ── Phone agent: lines and call records are the service's only ───────────────
+-- The voice call agent reaches them through phone-agent-api with the service role;
+-- no dashboard user nor anon may read which line is whose nor any call record.
+
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'phone_agent_lines' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on phone_agent_lines'
+);
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'phone_agent_calls' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on phone_agent_calls'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($q$ SELECT * FROM public.phone_agent_lines $q$, '42501', NULL, 'authenticated cannot read phone_agent_lines');
+SELECT throws_ok($q$ SELECT * FROM public.phone_agent_calls $q$, '42501', NULL, 'authenticated cannot read phone_agent_calls');
+RESET ROLE;
+
+SET LOCAL ROLE anon;
+SELECT throws_ok(
+  $q$ INSERT INTO public.phone_agent_lines (phone_digits, business_id) VALUES ('13055550100', gen_random_uuid()) $q$,
+  '42501', NULL, 'anon cannot add a phone line'
+);
+SELECT throws_ok($q$ SELECT * FROM public.phone_agent_calls $q$, '42501', NULL, 'anon cannot read phone_agent_calls');
+RESET ROLE;
 
 SELECT * FROM finish();
 
