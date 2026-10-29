@@ -44,6 +44,13 @@ describe('Settings Validation Schema', () => {
       expect(result.success).toBe(true)
     })
 
+    it('accepts a price currency from the list and rejects any other code', () => {
+      expect(BusinessSettingsSchema.safeParse({ currency: 'VES' }).success).toBe(true)
+      expect(BusinessSettingsSchema.safeParse({}).success).toBe(true) // absent = USD
+      expect(BusinessSettingsSchema.safeParse({ currency: 'usd' }).success).toBe(false)
+      expect(BusinessSettingsSchema.safeParse({ currency: 'XYZ' }).success).toBe(false)
+    })
+
     it('rejects invalid working hours format', () => {
       const result = BusinessSettingsSchema.safeParse({
         workingHours: { monday: 'invalid' },

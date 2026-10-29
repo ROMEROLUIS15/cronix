@@ -25,6 +25,15 @@ export const BUSINESS_CATEGORIES = [
 
 export type BusinessCategory = typeof BUSINESS_CATEGORIES[number]
 
+// ── Price currency ────────────────────────────────────────────────────────────
+// ISO 4217 codes an owner can choose for the prices of their services, stored in
+// businesses.settings.currency. Absent means USD, what the reports already assume.
+export const PRICE_CURRENCIES = ['USD', 'VES', 'EUR', 'COP', 'MXN'] as const
+
+export type PriceCurrency = typeof PRICE_CURRENCIES[number]
+
+export const DEFAULT_PRICE_CURRENCY: PriceCurrency = 'USD'
+
 // Maps DB value → translation key in messages/*.json 'businessCategories' namespace
 export const BUSINESS_CATEGORY_TRANSLATION_KEYS: Record<BusinessCategory, string> = {
   "Barbería":              "barbershop",
