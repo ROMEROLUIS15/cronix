@@ -1748,28 +1748,6 @@ export type Database = {
           match_type: string
         }[]
       }
-      fn_get_available_slots:
-        | {
-            Args: {
-              p_business_id: string
-              p_date: string
-              p_service_id: string
-            }
-            Returns: {
-              slot_time: string
-            }[]
-          }
-        | {
-            Args: {
-              p_business_id: string
-              p_date: string
-              p_service_id: string
-              p_timezone?: string
-            }
-            Returns: {
-              slot_time: string
-            }[]
-          }
       fn_get_business_by_phone: {
         Args: { p_wa_phone_id: string }
         Returns: {

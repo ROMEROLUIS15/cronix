@@ -1,5 +1,6 @@
 /**
- * availability.ts — Deterministic slot resolver for the WhatsApp agent.
+ * availability.ts — Deterministic slot resolver, the one every channel uses: the
+ * WhatsApp agent, the dashboard's voice agent and the phone agent's endpoints.
  *
  * Purpose: kill the "invented time" hallucination. When the client gives a date
  * but no time, the 8B used to fabricate one (e.g. "3:00 PM"). Instead we compute
@@ -9,8 +10,8 @@
  *   - 1 free  → propose that exact slot as a confirmation question,
  *   - many    → list them and ask which one — never guessing.
  *
- * `computeAvailableSlots` mirrors voice-worker/capabilities/available-slots but
- * operates on the bookedSlots already in BusinessRagContext (no extra query).
+ * Callers pass the appointments that block a slot: every status except
+ * 'cancelled' and 'no_show', the same rule fn_book_appointment_wa applies.
  */
 
 /**

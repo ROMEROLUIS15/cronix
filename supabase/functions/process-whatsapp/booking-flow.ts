@@ -17,7 +17,7 @@
  *   (C) Cancel / reschedule of an EXISTING appointment.
  */
 
-import { computeAvailableSlots, type WorkingHours, type BookedSlot } from './availability.ts'
+import { computeAvailableSlots, type WorkingHours, type BookedSlot } from '../_shared/availability.ts'
 import { lastAssistantWasConfirmation, isAffirmative } from './confirmation-gate.ts'
 import { isCancelIntent, isCantAttendIntent, isRescheduleIntent } from './intents.ts'
 import {

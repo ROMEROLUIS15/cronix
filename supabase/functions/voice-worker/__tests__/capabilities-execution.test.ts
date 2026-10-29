@@ -406,7 +406,7 @@ describe('voice-worker capability execution', () => {
     })
     const res = await executeAvailableSlots(
       ctxWith(m, { workingHours: allDaysOpen }),
-      { date: '2026-06-15', duration_min: 30 },
+      { date: '2030-06-17', duration_min: 30 },
     )
 
     expect(res.success).toBe(true)
@@ -414,9 +414,11 @@ describe('voice-worker capability execution', () => {
     expect(res.result).toContain('9 de la mañana')
     // F1 regression: booked-set window must use localToUTC, not naive date strings.
     const sel = m.opsFor('appointments')[0]
-    expect(sel.gte?.[1]).toBe(localToUTC('2026-06-15', '00:00', TZ))
-    expect(sel.lte?.[1]).toBe(localToUTC('2026-06-15', '23:59', TZ))
-    expect(sel.gte?.[1]).not.toBe('2026-06-15T00:00:00')
+    expect(sel.gte?.[1]).toBe(localToUTC('2030-06-17', '00:00', TZ))
+    expect(sel.lte?.[1]).toBe(localToUTC('2030-06-17', '23:59', TZ))
+    expect(sel.gte?.[1]).not.toBe('2030-06-17T00:00:00')
+    // Same blocking statuses as fn_book_appointment_wa: all but cancelled and no_show.
+    expect(sel.in).toContainEqual(['status', ['pending', 'confirmed', 'completed']])
   })
 })
 
@@ -583,7 +585,7 @@ describe('voice-worker capability execution — edge & safety paths', () => {
     })
     const res = await executeAvailableSlots(
       ctxWith(m, { workingHours: allDaysOpen }),
-      { date: '2026-06-15', duration_min: 30 },
+      { date: '2030-06-17', duration_min: 30 },
     )
 
     expect(res.success).toBe(true)
@@ -603,7 +605,7 @@ describe('voice-worker capability execution — edge & safety paths', () => {
     })
     const res = await executeAvailableSlots(
       ctxWith(m, { workingHours: allDaysOpen }),
-      { date: '2026-06-15', duration_min: 90 },
+      { date: '2030-06-17', duration_min: 90 },
     )
 
     expect(res.success).toBe(true)
@@ -643,7 +645,7 @@ describe('voice-worker capability execution — edge & safety paths', () => {
     const m = createMockSupabase(() => ({ data: null }))
     const res = await executeAvailableSlots(
       ctxWith(m, { workingHours: allClosed }),
-      { date: '2026-06-15', duration_min: 30 },
+      { date: '2030-06-17', duration_min: 30 },
     )
 
     expect(res.success).toBe(true)

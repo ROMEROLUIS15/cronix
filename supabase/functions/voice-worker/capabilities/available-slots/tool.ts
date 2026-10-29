@@ -1,13 +1,26 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
-import { localToUTC, buildEndISO, humanizeDate, formatTimeFromISO } from '../../core/time-format.ts'
+import { localToUTC, humanizeDate, formatTimeFromISO } from '../../core/time-format.ts'
+import { computeAvailableSlots, type WorkingHours } from '../../../_shared/availability.ts'
 
 export interface AvailableSlotsArgs extends Record<string, unknown> {
   date:         string
   duration_min: number
 }
 
-const SLOT_INTERVAL = 30
+// The voice agent's context names days in full ({ monday: { open, close } }); the
+// shared resolver reads the dashboard's stored shape ({ mon: [open, close] }).
+const STORED_DAY_KEY: Record<string, string> = {
+  monday: 'mon', tuesday: 'tue', wednesday: 'wed', thursday: 'thu',
+  friday: 'fri', saturday: 'sat', sunday: 'sun',
+}
+
+function storedWorkingHours(hours: ToolContext['workingHours']): WorkingHours {
+  if (!hours) return undefined
+  return Object.fromEntries(
+    Object.entries(hours).map(([day, h]) => [STORED_DAY_KEY[day] ?? day, h ? [h.open, h.close] : null]),
+  ) as WorkingHours
+}
 
 export async function executeAvailableSlots(
   ctx:  ToolContext,
@@ -29,9 +42,6 @@ export async function executeAvailableSlots(
     return { success: true, result: `El negocio está cerrado el ${humanizeDate(args.date, ctx.timezone)}.` }
   }
 
-  const open  = wh?.open  ?? '09:00'
-  const close = wh?.close ?? '18:00'
-
   // Bound the booked-set query by the LOCAL day converted to UTC — start_at is
   // stored in UTC, so naive `${date}T00:00:00` strings would query a UTC day
   // that's offset from the business's local day. In tz ≠ UTC that dropped
@@ -44,35 +54,23 @@ export async function executeAvailableSlots(
     .from('appointments')
     .select('start_at, end_at')
     .eq('business_id', ctx.businessId)
-    .in('status', ['pending', 'confirmed'])
+    .in('status', ['pending', 'confirmed', 'completed'])
     .gte('start_at', dayStartISO)
     .lte('start_at', dayEndISO)
     .order('start_at')
 
   if (error) return { success: false, result: `Error al consultar disponibilidad: ${error.message}`, error: 'DB_ERROR' }
 
-  const free: string[] = []
-  const [oh, om] = open.split(':').map(Number)
-  const [ch, cm] = close.split(':').map(Number)
-
-  // Minute-based walk with the invariant: the service must END by closing
-  // time. The previous hour-based loop (h < ch) silently dropped the last
-  // half-hour when close was fractional (close 18:30 never offered 18:00)
-  // and never checked duration against close at all — a 120-min service at
-  // 17:30 with close 18:00 was offered even though it ends 19:30.
-  const openMin  = oh! * 60 + om!
-  const closeMin = ch! * 60 + cm!
-  for (let t = openMin; t + args.duration_min <= closeMin; t += SLOT_INTERVAL) {
-    const candidateTime = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
-    const startISO = localToUTC(args.date, candidateTime, ctx.timezone)
-    const endISO   = buildEndISO(startISO, args.duration_min)
-    const conflict = (booked ?? []).some((b: { start_at: string; end_at: string }) =>
-      new Date(b.start_at) < new Date(endISO) && new Date(b.end_at) > new Date(startISO)
-    )
-    // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
-    // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.
-    if (!conflict) free.push(formatTimeFromISO(startISO, ctx.timezone))
-  }
+  const { slots } = computeAvailableSlots({
+    workingHours: storedWorkingHours(ctx.workingHours),
+    date:         args.date,
+    timezone:     ctx.timezone,
+    durationMin:  args.duration_min,
+    bookedSlots:  booked ?? [],
+  })
+  // Spoken time ("9 de la mañana") instead of raw 24h — the result text is
+  // read aloud verbatim (bypassLLM), so "09:00" would be mispronounced.
+  const free = slots.map((slot) => formatTimeFromISO(localToUTC(args.date, slot, ctx.timezone), ctx.timezone))
 
   const dateLabel = humanizeDate(args.date, ctx.timezone)
   if (!free.length) return { success: true, result: `No hay horarios libres el ${dateLabel}.` }

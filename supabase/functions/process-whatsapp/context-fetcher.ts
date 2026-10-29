@@ -142,20 +142,3 @@ export async function getBookedSlots(
     }),
   }))
 }
-
-export async function getAvailableSlots(
-  businessId: string,
-  date:       string,
-  serviceId:  string,
-  timezone  = 'UTC'
-): Promise<string[]> {
-  const { data, error } = await supabase.rpc('fn_get_available_slots', {
-    p_business_id: businessId,
-    p_date:        date,
-    p_service_id:  serviceId,
-    p_timezone:    timezone,
-  })
-
-  if (error) return []
-  return (data as { slot_time: string }[]).map(d => d.slot_time)
-}

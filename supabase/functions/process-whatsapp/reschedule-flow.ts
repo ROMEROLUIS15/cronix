@@ -10,7 +10,7 @@
 import { parseDateExpression } from './date-parser.ts'
 import { parseDateTime, extractTime } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
-import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from './availability.ts'
+import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from '../_shared/availability.ts'
 import { isRescheduleIntent } from './intents.ts'
 import type { ChangeRequest } from './notif-contracts.ts'
 import {
