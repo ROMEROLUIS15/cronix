@@ -53,6 +53,9 @@ export async function startCall(supabase: SupabaseClient, body: Partial<CallStar
   return {
     success: true,
     business: {
+      // For the agent's call trace only: no endpoint accepts it back (the business comes
+      // from the call record).
+      id:       businessId,
       name:     biz.name,
       timezone: biz.timezone ?? 'UTC',
       currency: typeof settings.currency === 'string' ? settings.currency : DEFAULT_PRICE_CURRENCY,

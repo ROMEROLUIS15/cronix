@@ -13,7 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface CapturedOp {
   table:          string
-  type:           'select' | 'insert' | 'update' | 'upsert'
+  type:           'select' | 'insert' | 'update' | 'upsert' | 'rpc'
   selectArg?:     string
   selectOpts?:    Record<string, unknown>
   insertPayload?: Record<string, unknown>
@@ -80,8 +80,17 @@ export function createMockSupabase(responder: Responder): MockHandle {
     return builder
   }
 
+  // A database function call is recorded as table `rpc:<name>` with its arguments.
+  const rpc = (fn: string, args: Record<string, unknown>) => {
+    const op: CapturedOp = {
+      table: `rpc:${fn}`, type: 'rpc', insertPayload: args, eq: [], neq: [], in: [], is: [], order: [], single: false,
+    }
+    ops.push(op)
+    return Promise.resolve(responder(op))
+  }
+
   return {
-    supabase: { from } as unknown as SupabaseClient,
+    supabase: { from, rpc } as unknown as SupabaseClient,
     ops,
     opsFor: (table: string) => ops.filter(o => o.table === table),
   }

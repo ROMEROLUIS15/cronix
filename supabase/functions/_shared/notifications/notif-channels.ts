@@ -7,12 +7,19 @@
  * to Sentry instead of being swallowed.
  */
 
-import { supabase } from "./db-client.ts"
-import { captureMessage } from "../_shared/sentry.ts"
+import type { SupabaseClient } from "@supabase/supabase-js"
+import { getAdminClient } from "../supabase.ts"
+import { captureMessage } from "../sentry.ts"
 import {
   type AppointmentEvent,
   buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind, ownerWhenText,
 } from "./notif-contracts.ts"
+
+let client: SupabaseClient | null = null
+/** The service-role client, created on first use (every caller runs with its env). */
+function db(): SupabaseClient {
+  return (client ??= getAdminClient())
+}
 
 /** Idempotency: true when this eventId already has a notification row. */
 export async function checkEventExists(eventId: string): Promise<boolean> {
@@ -29,7 +36,7 @@ export async function checkEventExists(eventId: string): Promise<boolean> {
 /** Persists the notification row (source of truth). Returns false on any failure. */
 export async function saveNotificationToDB(event: AppointmentEvent): Promise<boolean> {
   try {
-    const { error } = await supabase.from('notifications').insert({
+    const { error } = await db().from('notifications').insert({
       business_id: event.businessId,
       title:       buildTitle(event.type),
       content:     buildContent(event),
@@ -61,7 +68,7 @@ export async function saveNotificationToDB(event: AppointmentEvent): Promise<boo
 /** Realtime broadcast to the dashboard bell (RLS-independent). Non-critical. */
 export async function pushToRealtime(event: AppointmentEvent): Promise<void> {
   try {
-    const channel = supabase.channel(`notifications:${event.businessId}`)
+    const channel = db().channel(`notifications:${event.businessId}`)
     await channel.send({
       type:    'broadcast',
       event:   event.type,
@@ -75,7 +82,7 @@ export async function pushToRealtime(event: AppointmentEvent): Promise<void> {
         time:        event.time,
       },
     })
-    await supabase.removeChannel(channel)
+    await db().removeChannel(channel)
   } catch (err) {
     console.warn('[NOTIFICATION-WA] pushToRealtime failed (non-critical):', err)
   }

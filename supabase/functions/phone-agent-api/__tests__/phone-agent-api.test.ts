@@ -10,6 +10,7 @@ import { isSignedByTheAgent, MAX_CLOCK_SKEW_S } from '../signature.ts'
 // Sentry's Deno SDK is not loadable in vitest; the other function tests stub it the same way.
 vi.mock('../../_shared/sentry.ts', () => ({ initSentry: () => {}, captureException: () => {} }))
 vi.mock('../../_shared/supabase.ts', () => ({ getAdminClient: () => ({}) }))
+vi.mock('../../_shared/notifications/emit-booking-event.ts', () => ({ emitBookingEvent: async () => {} }))
 
 const SECRET = 'test-signing-secret'
 const BIZ = 'b0000000-0000-0000-0000-000000000001'
@@ -79,7 +80,7 @@ describe('calls/start', () => {
     const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'twilio', to: '+13055550100', from: '+584121234567' }), SECRET, m.supabase)
     const body = await res.json()
     expect(body.success).toBe(true)
-    expect(body.business).toEqual({ name: 'Barbería Prueba', timezone: 'America/Caracas', currency: 'USD' })
+    expect(body.business).toEqual({ id: BIZ, name: 'Barbería Prueba', timezone: 'America/Caracas', currency: 'USD' })
     expect(body.working_hours).toEqual(OPEN_MONDAYS)
     expect(body.known_client).toBeNull() // the phone line never names the caller
     const record = m.opsFor('phone_agent_calls')[0]!
@@ -136,5 +137,20 @@ describe('calls/end', () => {
     expect(m.opsFor('phone_agent_calls')[0]?.updatePayload).toMatchObject({ outcome: 'booked' })
     const bad = await handle(await signed('POST', '/v1/calls/CA1/end', { outcome: 'whatever' }), SECRET, m.supabase)
     expect(await bad.json()).toEqual({ success: false, error: 'INVALID_ARGS' })
+  })
+})
+
+describe('server timing', () => {
+  it('times each step of a signed request and says nothing to an unsigned one', async () => {
+    const start = await handle(await signed('POST', '/v1/calls/start', {
+      call_sid: 'CA1', channel: 'twilio', to: '+13055550101', from: '+584121234567',
+    }), SECRET, backend())
+    const steps = (start.headers.get('server-timing') ?? '').split(', ').map((step) => step.split(';')[0])
+    expect(steps).toEqual(['signature', 'client', 'route', 'total'])
+    expect(start.headers.get('server-timing')).toMatch(/^signature;dur=\d+\.\d/)
+
+    const refused = await handle(await signed('POST', '/v1/calls/start', {}, 'another-secret'), SECRET, backend())
+    expect(refused.status).toBe(401)
+    expect(refused.headers.get('server-timing')).toBeNull()
   })
 })
