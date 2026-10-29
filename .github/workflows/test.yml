@@ -114,10 +114,23 @@ jobs:
           ls -la .next/
 
   # ── Job 2: Integration Tests (only on push — not on every PR draft) ────────
+  # Against an EPHEMERAL Supabase (CLI + Docker, the repo's migrations + seed.sql
+  # + the E2E fixture), never production: these tests create and delete clients,
+  # appointments, notifications and reminders. On 2026-10-29 two overlapping runs
+  # (a develop push and its main merge) slowed the production database for every
+  # user for about ten minutes, and timed out the tests themselves.
   integration:
     name: Integration Tests (AI → DB)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'push'
+
+    # Override the workflow-level prod secrets: this job talks ONLY to the
+    # local ephemeral Supabase.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ''
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ''
+      SUPABASE_SERVICE_ROLE_KEY: ''
 
     steps:
       - uses: actions/checkout@v5
@@ -131,8 +144,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start ephemeral Supabase (applies migrations + seed.sql)
+        run: supabase start
+
+      - name: Export local Supabase URL + keys (overrides prod)
+        run: |
+          STATUS=$(supabase status -o json)
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | jq -r '.API_URL')"              >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | jq -r '.ANON_KEY')"        >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')"    >> "$GITHUB_ENV"
+
+      - name: Refuse anything but the local Supabase
+        run: |
+          case "$NEXT_PUBLIC_SUPABASE_URL" in
+            http://127.0.0.1:*|http://localhost:*) echo "Local Supabase: $NEXT_PUBLIC_SUPABASE_URL" ;;
+            *) echo "::error::Integration tests must run against the ephemeral Supabase"; exit 1 ;;
+          esac
+
+      - name: Seed E2E fixture data
+        run: npm run e2e:setup
+
       - name: Run Integration Tests (Vitest Node)
         run: npx vitest run --config vitest.integration.config.ts
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop || true
 
   # ── Job 3: Smoke E2E (push to main/develop) — fast, unauthenticated ──────────
   # Only the smoke project runs on push: it needs no auth/test-data and finishes
