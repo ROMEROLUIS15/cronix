@@ -9,7 +9,7 @@ import { extractDayPart, type DayPart } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { todayInTimezone, nextOpenDates, type WorkingHours } from '../_shared/availability.ts'
 import { utcToLocalParts } from './time-utils.ts'
-import type { ChangeRequest } from './notif-contracts.ts'
+import type { ChangeRequest } from '../_shared/notifications/notif-contracts.ts'
 
 export type ServiceLite    = { id: string; name: string; duration_min: number }
 export type ActiveApptLite = { id: string; service_name: string; start_at: string }

@@ -1,45 +1,18 @@
 /**
- * notifications.ts — Facade for emitting appointment events (WhatsApp pipeline).
+ * notifications.ts — The WhatsApp agent's appointment events.
  *
- * The only entry point is emitBookingEvent() (+ the typed convenience builders called
- * from tool-executor.ts). It replicates the NotificationService contract inside the Deno
- * runtime (can't import Next.js modules):
- *   1. Idempotency check (event_id in DB)
- *   2. Persist to notifications table (source of truth)
- *   3. Realtime broadcast (dashboard bell)
- *   4. WhatsApp to owner (template-first, free-text fallback)
- *   5. Web push to the owner's PWA
- *
- * Order: DB → Realtime → WhatsApp → push (WA/push only if DB succeeded). Fire-and-forget
- * safe: never throws to the caller; the booking is already committed. The contract/message
- * builders live in notif-contracts.ts and the side-effect channels in notif-channels.ts.
+ * Typed convenience builders called from tool-executor.ts over the shared pipeline
+ * (_shared/notifications/emit-booking-event.ts), which the phone line uses too. The
+ * contract/message builders live in _shared/notifications/notif-contracts.ts.
  */
 
-import { captureException } from "../_shared/sentry.ts"
 import { utcToLocalParts } from "./time-utils.ts"
 import { buildAppointmentEventId } from "../_shared/notifications/event-id.ts"
 import type { BusinessRagContext } from "./types.ts"
-import { type AppointmentEvent, type ChangeRequest, buildChangeRequestEvent } from "./notif-contracts.ts"
-import {
-  checkEventExists, saveNotificationToDB, pushToRealtime, sendOwnerWhatsApp, sendOwnerWebPush,
-} from "./notif-channels.ts"
+import { type ChangeRequest, buildChangeRequestEvent } from "../_shared/notifications/notif-contracts.ts"
+import { emitBookingEvent } from "../_shared/notifications/emit-booking-event.ts"
 
-/** Emits an AppointmentEvent through the full notification pipeline (fire-and-forget safe). */
-export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
-  try {
-    if (await checkEventExists(event.eventId)) {
-      console.info('[NOTIFICATION-WA] Event already processed — skipping', event.eventId)
-      return
-    }
-    // DB is the source of truth — must succeed before the other channels.
-    if (!(await saveNotificationToDB(event))) return
-    await pushToRealtime(event)
-    await sendOwnerWhatsApp(event)
-    await sendOwnerWebPush(event)
-  } catch (err) {
-    captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })
-  }
-}
+export { emitBookingEvent }
 
 // ── Convenience builders (called from tool-executor.ts) ───────────────────────
 // Each constructs a typed AppointmentEvent and fires emitBookingEvent. Deterministic

@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT plan(101);
+SELECT plan(103);
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 -- ... (rest of helpers trimmed for brevity)
@@ -999,6 +999,14 @@ SELECT throws_ok(
   '42501', NULL, 'anon cannot add a phone line'
 );
 SELECT throws_ok($q$ SELECT * FROM public.phone_agent_calls $q$, '42501', NULL, 'anon cannot read phone_agent_calls');
+RESET ROLE;
+
+SELECT ok(
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'phone_agent_requests' AND relnamespace = 'public'::regnamespace),
+  'RLS enabled on phone_agent_requests'
+);
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($q$ SELECT * FROM public.phone_agent_requests $q$, '42501', NULL, 'authenticated cannot read stored phone requests');
 RESET ROLE;
 
 SELECT * FROM finish();

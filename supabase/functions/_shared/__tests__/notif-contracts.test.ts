@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildChangeRequestEvent, buildTitle, buildContent, buildOwnerWhatsAppMessage, notificationKind, ownerWhenText,
-} from '../notif-contracts.ts'
+} from '../notifications/notif-contracts.ts'
 
 const BUSINESS = { id: 'biz-1', name: 'RS STUDIO' }
 const RESCHEDULE = {
@@ -74,5 +74,16 @@ describe('owner-facing texts for a pending request', () => {
     expect(notificationKind('appointment.cancelled')).toBe('warning')   // unchanged
     expect(notificationKind('appointment.created')).toBe('success')     // unchanged
     expect(notificationKind('appointment.rescheduled')).toBe('success') // unchanged
+  })
+})
+
+describe('owner message for a created appointment', () => {
+  it('says the channel the appointment was made through', () => {
+    const created = {
+      eventId: 'e1', type: 'appointment.created' as const, businessId: 'b1', businessName: 'Barbería',
+      clientName: 'Ana', serviceName: 'Corte', date: '2030-06-17', time: '10:00', userId: 'phone-agent',
+    }
+    expect(buildOwnerWhatsAppMessage({ ...created, channel: 'phone' })).toContain('¡Reserva confirmada por teléfono!')
+    expect(buildOwnerWhatsAppMessage({ ...created, channel: 'whatsapp' })).toContain('¡Reserva confirmada vía WhatsApp!')
   })
 })
