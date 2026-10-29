@@ -342,6 +342,8 @@ verify_jwt = false
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+import_map = "./functions/whatsapp-webhook/deno.json"
+entrypoint = "./functions/whatsapp-webhook/index.ts"
 
 [functions.voice-worker]
 enabled = true
