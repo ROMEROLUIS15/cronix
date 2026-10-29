@@ -342,6 +342,8 @@ verify_jwt = false
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+import_map = "./functions/whatsapp-webhook/deno.json"
+entrypoint = "./functions/whatsapp-webhook/index.ts"
 
 [functions.voice-worker]
 enabled = true
@@ -350,3 +352,10 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/voice-worker/deno.json"
 entrypoint = "./functions/voice-worker/index.ts"
+
+[functions.phone-agent-api]
+enabled = true
+# The voice call agent signs each request (HMAC, contract §2); there is no user JWT.
+verify_jwt = false
+import_map = "./functions/phone-agent-api/deno.json"
+entrypoint = "./functions/phone-agent-api/index.ts"

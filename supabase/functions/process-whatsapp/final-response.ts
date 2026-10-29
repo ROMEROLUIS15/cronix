@@ -32,7 +32,7 @@ export function selectFinalResponse(
 
   if (actionPerformed && lastToolParsed?.success === false) {
     const errorCode = String(lastToolParsed?.error ?? '')
-    if (errorCode.includes('SLOT_CONFLICT') || errorCode.includes('Slot no disponible')) {
+    if (errorCode.includes('SLOT_CONFLICT')) {
       return '⚠️ Ese horario ya está ocupado. ¿Te gustaría intentar con otra fecha u hora disponible?'
     }
     if (errorCode.includes('BOOKING_RATE_LIMIT')) {

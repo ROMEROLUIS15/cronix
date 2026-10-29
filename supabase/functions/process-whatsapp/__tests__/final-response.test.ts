@@ -107,17 +107,6 @@ describe('B — tool failed → deterministic error message', () => {
     expect(result).toContain('horario ya está ocupado')
   })
 
-  it('"Slot no disponible" → same slot conflict message', () => {
-    const result = selectFinalResponse(
-      true,
-      { success: false, error: 'Slot no disponible en esa hora' },
-      '',
-      { tool: 'confirm_booking' },
-      TZ,
-    )
-    expect(result).toContain('horario ya está ocupado')
-  })
-
   it('BOOKING_RATE_LIMIT → rate limit message', () => {
     const result = selectFinalResponse(
       true,

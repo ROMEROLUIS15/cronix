@@ -27,12 +27,13 @@ import { Modal } from "@/components/ui/modal";
 import { canAccessRetention } from "@/lib/plans/plan-limits";
 import type { Business, BusinessSettingsJson } from "@/types";
 import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
-import { BUSINESS_CATEGORIES } from "@/lib/constants/business";
-import { useTranslations } from "next-intl";
+import { BUSINESS_CATEGORIES, PRICE_CURRENCIES } from "@/lib/constants/business";
+import { useLocale, useTranslations } from "next-intl";
 import { useSettingsForm, type DayHours } from "./hooks/use-settings-form";
 
 export default function SettingsPage() {
   const t = useTranslations("settings");
+  const currencyNames = new Intl.DisplayNames([useLocale()], { type: "currency" });
   const {
     biz,
     loading,
@@ -47,6 +48,8 @@ export default function SettingsPage() {
     setSelectedCountry,
     hours,
     setHours,
+    currency,
+    setCurrency,
     notifSettings,
     setNotifSettings,
     retentionEnabled,
@@ -407,6 +410,27 @@ export default function SettingsPage() {
               </div>
             );
           })}
+
+          <div className="pt-4">
+            <label
+              className="block text-sm font-medium mb-1.5"
+              style={{ color: "#F2F2F2" }}
+            >
+              {t('currency')}
+            </label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="input-base"
+              style={{ backgroundColor: "#212125" }}
+            >
+              {PRICE_CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {currencyNames.of(code)} ({code})
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex justify-end pt-4">
             <Button

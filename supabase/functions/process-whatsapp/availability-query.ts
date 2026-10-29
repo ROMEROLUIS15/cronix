@@ -7,7 +7,7 @@
  */
 
 import { parseDateExpression } from './date-parser.ts'
-import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from './availability.ts'
+import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from '../_shared/availability.ts'
 import { type ServiceLite, humanDate, listFreeTimes } from './booking-shared.ts'
 
 export function resolveAvailabilityQuery(p: {

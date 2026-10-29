@@ -197,7 +197,7 @@ export class WhatsAppBookingAdapter {
 
     const result = data as { success: boolean; error?: string; appointment_id?: string }
     if (!result.success) {
-      if (result.error?.includes('SLOT_CONFLICT') || result.error?.includes('ocupado')) {
+      if (result.error?.includes('SLOT_CONFLICT')) {
         return { success: false, error: 'SLOT_CONFLICT', message: `El horario ${normalizedTime} del ${date} ya está ocupado. ¿Quieres otro horario?` }
       }
       if (result.error?.includes('BOOKING_RATE_LIMIT')) {

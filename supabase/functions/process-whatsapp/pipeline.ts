@@ -8,7 +8,7 @@
 
 import { addBreadcrumb } from "../_shared/sentry.ts"
 import { resolveBookingTurn } from "./booking-flow.ts"
-import type { WorkingHours } from "./availability.ts"
+import type { WorkingHours } from "../_shared/availability.ts"
 import { isListAppointmentsQuery, buildAppointmentsListResponse, isServicesQuery, isAvailabilityQuery, isLocationQuery, isHoursQuery } from "./read-intents.ts"
 import { FAQ_INTENTS, buildFaqResponse, buildServicesResponse } from "./faq-responses.ts"
 import { resolveAvailabilityQuery } from "./availability-query.ts"

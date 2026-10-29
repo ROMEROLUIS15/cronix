@@ -931,6 +931,7 @@
     "from": "From",
     "to": "To",
     "saveHoursBtn": "Save hours",
+    "currency": "Price currency",
     "adminNotifTitle": "Admin notifications",
     "adminNotifSub": "Receive alerts about your business",
     "waBiz": "WhatsApp Business",

@@ -1,5 +1,5 @@
 /**
- * Minimal chainable Supabase mock for capability execution tests.
+ * Minimal chainable Supabase mock for Edge Function tests (voice-worker, phone-agent-api).
  *
  * The real supabase-js builder is a thenable that returns `this` from every
  * filter method until a terminal (`.single()` or `await`). This mock records
@@ -13,11 +13,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface CapturedOp {
   table:          string
-  type:           'select' | 'insert' | 'update'
+  type:           'select' | 'insert' | 'update' | 'upsert'
   selectArg?:     string
   selectOpts?:    Record<string, unknown>
   insertPayload?: Record<string, unknown>
   updatePayload?: Record<string, unknown>
+  upsertOpts?:    Record<string, unknown>
   eq:             Array<[string, unknown]>
   neq:            Array<[string, unknown]>
   in:             Array<[string, unknown[]]>
@@ -61,6 +62,7 @@ export function createMockSupabase(responder: Responder): MockHandle {
       select: (arg?: string, opts?: Record<string, unknown>) => { op.selectArg = arg; if (opts) op.selectOpts = opts; return builder },
       insert: (p: Record<string, unknown>) => { op.type = 'insert'; op.insertPayload = p; return builder },
       update: (p: Record<string, unknown>) => { op.type = 'update'; op.updatePayload = p; return builder },
+      upsert: (p: Record<string, unknown>, o?: Record<string, unknown>) => { op.type = 'upsert'; op.insertPayload = p; if (o) op.upsertOpts = o; return builder },
       eq:  (c: string, v: unknown)  => { op.eq.push([c, v]);  return builder },
       neq: (c: string, v: unknown)  => { op.neq.push([c, v]); return builder },
       in:  (c: string, v: unknown[]) => { op.in.push([c, v]); return builder },

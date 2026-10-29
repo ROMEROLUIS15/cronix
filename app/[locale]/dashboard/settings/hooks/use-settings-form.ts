@@ -13,6 +13,7 @@ import { parsePhone, buildPhone, COUNTRIES, Country } from '@/components/ui/phon
 import { getBrowserContainer } from '@/lib/browser-container';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
+import { DEFAULT_PRICE_CURRENCY } from '@/lib/constants/business';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type DayKey = typeof DAYS[number];
@@ -55,6 +56,8 @@ export interface SettingsFormReturn {
   setSelectedCountry: React.Dispatch<React.SetStateAction<Country>>;
   hours: Record<string, DayHours>;
   setHours: React.Dispatch<React.SetStateAction<Record<string, DayHours>>>;
+  currency: string;
+  setCurrency: React.Dispatch<React.SetStateAction<string>>;
   notifSettings: { whatsapp: boolean };
   setNotifSettings: React.Dispatch<React.SetStateAction<{ whatsapp: boolean }>>;
   retentionEnabled: boolean;
@@ -97,6 +100,7 @@ export function useSettingsForm(): SettingsFormReturn {
   });
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0] as Country);
   const [hours, setHours] = useState<Record<string, DayHours>>(buildDefaultHours);
+  const [currency, setCurrency] = useState<string>(DEFAULT_PRICE_CURRENCY);
   const [notifSettings, setNotifSettings] = useState<{ whatsapp: boolean }>({ whatsapp: false });
   const [showLuisFab, setShowLuisFab] = useState(true);
   const [savingFab, setSavingFab] = useState(false);
@@ -152,6 +156,7 @@ export function useSettingsForm(): SettingsFormReturn {
           }
         }
         setHours(loaded);
+        setCurrency((business.settings as unknown as BusinessSettingsJson)?.currency ?? DEFAULT_PRICE_CURRENCY);
         const notifData = (business.settings as unknown as BusinessSettingsJson)?.notifications;
         if (notifData) {
           setNotifSettings({
@@ -208,7 +213,7 @@ export function useSettingsForm(): SettingsFormReturn {
 
     // Saving here = the owner explicitly set their real schedule → confirm it so the
     // "confirm your hours" nudge stops showing.
-    const newSettings = { ...currentSettings, workingHours, workingHoursConfirmed: true };
+    const newSettings = { ...currentSettings, workingHours, workingHoursConfirmed: true, currency };
     const result = await container.businesses.updateSettings(bizId, newSettings);
 
     setSavingHours(false);
@@ -222,7 +227,7 @@ export function useSettingsForm(): SettingsFormReturn {
     result.error
       ? showMsg('error', 'saveHoursError')
       : showMsg('success', 'saveHoursSuccess');
-  }, [bizId, biz, hours, showMsg]);
+  }, [bizId, biz, hours, currency, showMsg]);
 
   const updateHour = useCallback(
     (key: string, field: keyof DayHours, value: string | boolean) => {
@@ -419,6 +424,8 @@ export function useSettingsForm(): SettingsFormReturn {
     setSelectedCountry,
     hours,
     setHours,
+    currency,
+    setCurrency,
     notifSettings,
     setNotifSettings,
     retentionEnabled,

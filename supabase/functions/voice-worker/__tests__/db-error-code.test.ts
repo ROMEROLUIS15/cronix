@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ToolContext } from '../core/tool-context.ts'
-import { createMockSupabase, type MockHandle } from './_mock-supabase.ts'
+import { createMockSupabase, type MockHandle } from '../../_shared/__tests__/_mock-supabase.ts'
 import { executeAvailableSlots }   from '../capabilities/available-slots/tool.ts'
 import { executeListAppointments } from '../capabilities/list-appointments/tool.ts'
 import { executeCreateClient }     from '../capabilities/create-client/tool.ts'
