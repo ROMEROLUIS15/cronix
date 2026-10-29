@@ -139,3 +139,18 @@ describe('calls/end', () => {
     expect(await bad.json()).toEqual({ success: false, error: 'INVALID_ARGS' })
   })
 })
+
+describe('server timing', () => {
+  it('times each step of a signed request and says nothing to an unsigned one', async () => {
+    const start = await handle(await signed('POST', '/v1/calls/start', {
+      call_sid: 'CA1', channel: 'twilio', to: '+13055550101', from: '+584121234567',
+    }), SECRET, backend())
+    const steps = (start.headers.get('server-timing') ?? '').split(', ').map((step) => step.split(';')[0])
+    expect(steps).toEqual(['signature', 'client', 'route', 'total'])
+    expect(start.headers.get('server-timing')).toMatch(/^signature;dur=\d+\.\d/)
+
+    const refused = await handle(await signed('POST', '/v1/calls/start', {}, 'another-secret'), SECRET, backend())
+    expect(refused.status).toBe(401)
+    expect(refused.headers.get('server-timing')).toBeNull()
+  })
+})
