@@ -43,6 +43,12 @@ function json(status: number, body: ApiResult | null, extra: Record<string, stri
 
 const FUNCTION_PATH = '/phone-agent-api'
 
+/**
+ * One database client per instance, not per request: measured from `sa-east-1` (2026-10-29), a
+ * client per request had the same median (~140 ms) but tails up to 2 s, a reused one up to 470 ms.
+ */
+let adminClient: SupabaseClient | null = null
+
 /** The path after the function's name (`/v1/...`), whether or not `/functions/v1` precedes it. */
 function pathOf(url: URL): string {
   const at = url.pathname.indexOf(`${FUNCTION_PATH}/`)
@@ -68,7 +74,7 @@ export async function handle(
   }, secret)
   if (!signed) return json(401, null)
   timer.mark('signature')
-  const db = supabase ?? getAdminClient()
+  const db = supabase ?? (adminClient ??= getAdminClient())
   timer.mark('client')
   const response = await respond(req, url, body, db, notify)
   timer.mark('route')
