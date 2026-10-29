@@ -80,7 +80,7 @@ describe('calls/start', () => {
     const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'twilio', to: '+13055550100', from: '+584121234567' }), SECRET, m.supabase)
     const body = await res.json()
     expect(body.success).toBe(true)
-    expect(body.business).toEqual({ name: 'Barbería Prueba', timezone: 'America/Caracas', currency: 'USD' })
+    expect(body.business).toEqual({ id: BIZ, name: 'Barbería Prueba', timezone: 'America/Caracas', currency: 'USD' })
     expect(body.working_hours).toEqual(OPEN_MONDAYS)
     expect(body.known_client).toBeNull() // the phone line never names the caller
     const record = m.opsFor('phone_agent_calls')[0]!
