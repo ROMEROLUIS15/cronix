@@ -8,7 +8,10 @@
  *
  * HTTP: a business outcome answers 200 with `{ success: false, error }`; a bad signature
  * 401 with no body; a database failure 503, which the agent retries once (contract §6).
+ * Every signed response carries `Server-Timing` with the time of each step (server-timing.ts).
  */
+
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { getAdminClient } from '../_shared/supabase.ts'
 import { captureException, initSentry } from '../_shared/sentry.ts'
@@ -17,6 +20,7 @@ import { endCall, startCall } from './calls.ts'
 import { availability } from './availability-route.ts'
 import { book } from './booking.ts'
 import type { ApiResult } from './results.ts'
+import { StepTimer } from './server-timing.ts'
 import { emitBookingEvent } from '../_shared/notifications/emit-booking-event.ts'
 import type { AppointmentEvent } from '../_shared/notifications/notif-contracts.ts'
 
@@ -51,8 +55,9 @@ export function routeOf(url: URL): string {
 }
 
 export async function handle(
-  req: Request, secret: string, supabase = getAdminClient(), notify: Notify = emitBookingEvent,
+  req: Request, secret: string, supabase?: SupabaseClient, notify: Notify = emitBookingEvent,
 ): Promise<Response> {
+  const timer = new StepTimer()
   const url = new URL(req.url)
   const route = routeOf(url)
   const body = req.method === 'GET' ? '' : await req.text()
@@ -62,7 +67,18 @@ export async function handle(
     signature: req.headers.get('x-cronix-signature'),
   }, secret)
   if (!signed) return json(401, null)
+  timer.mark('signature')
+  const db = supabase ?? getAdminClient()
+  timer.mark('client')
+  const response = await respond(req, url, body, db, notify)
+  timer.mark('route')
+  response.headers.set('Server-Timing', timer.header())
+  return response
+}
 
+async function respond(
+  req: Request, url: URL, body: string, supabase: SupabaseClient, notify: Notify,
+): Promise<Response> {
   let parsed: Record<string, unknown> = {}
   if (body) {
     try { parsed = JSON.parse(body) } catch { return json(200, { success: false, error: 'INVALID_ARGS' }) }
