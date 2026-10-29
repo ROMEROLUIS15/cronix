@@ -5,8 +5,17 @@
  * builders, with no side effects — shared by the channels and the facade.
  */
 
-import { formatLocalTime } from "./prompt-builder.ts"
-import { buildAppointmentEventId } from "../_shared/notifications/event-id.ts"
+import { buildAppointmentEventId } from "./event-id.ts"
+
+/** HH:mm (24h) → "3:00 pm". */
+export function formatLocalTime(time: string): string {
+  const [h, m] = time.split(':') as [string, string]
+  let hour     = parseInt(h, 10)
+  const ampm   = hour >= 12 ? 'pm' : 'am'
+  hour         = hour % 12
+  hour         = hour ? hour : 12
+  return `${hour}:${m} ${ampm}`
+}
 
 export type AppointmentEventType =
   | 'appointment.created'
@@ -28,7 +37,8 @@ export interface AppointmentEvent {
   /** Reschedule request: the new date the client asked for, when stated. */
   requestedDate?: string | null
   userId:       string
-  channel:      'whatsapp'
+  /** Where the appointment was made: the owner's message says it. */
+  channel:      'whatsapp' | 'phone'
 }
 
 /** A client's request to cancel/reschedule ONE appointment, before they confirm it. */
@@ -107,7 +117,7 @@ export function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
         `¡Hola! 👋🤖\n\n` +
         `Ha sido agendada una cita para *${event.clientName}* el día *${event.date}* a las *${prettyTime}*\n` +
         `Servicio: *${event.serviceName}*\n\n` +
-        `¡Reserva confirmada vía WhatsApp! 💪🚀`
+        `¡Reserva confirmada ${event.channel === 'phone' ? 'por teléfono' : 'vía WhatsApp'}! 💪🚀`
       )
     case 'appointment.rescheduled':
       return (

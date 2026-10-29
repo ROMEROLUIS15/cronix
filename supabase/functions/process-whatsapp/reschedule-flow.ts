@@ -12,7 +12,7 @@ import { parseDateTime, extractTime } from './datetime-nlu.ts'
 import { formatLocalTime } from './prompt-builder.ts'
 import { computeAvailableSlots, todayInTimezone, type WorkingHours, type BookedSlot } from '../_shared/availability.ts'
 import { isRescheduleIntent } from './intents.ts'
-import type { ChangeRequest } from './notif-contracts.ts'
+import type { ChangeRequest } from '../_shared/notifications/notif-contracts.ts'
 import {
   type ServiceLite, type ActiveApptLite, type BookingTurn,
   BOOKING_DONE_RE, apptLocal, humanDate, listFreeTimes, matchAppointments, listActiveAppointments,

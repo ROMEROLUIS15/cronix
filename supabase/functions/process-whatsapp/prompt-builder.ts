@@ -17,14 +17,9 @@ import type { ClassifyResult }     from "../_shared/router/contracts.ts"
  * Converts internal HH:mm (24-hour) format to a human-readable AM/PM string.
  * Used in both system prompt and success templates.
  */
-export function formatLocalTime(time: string): string {
-  const [h, m] = time.split(':') as [string, string]
-  let hour     = parseInt(h, 10)
-  const ampm   = hour >= 12 ? 'pm' : 'am'
-  hour         = hour % 12
-  hour         = hour ? hour : 12
-  return `${hour}:${m} ${ampm}`
-}
+// Defined with the appointment-event contract it formats for; re-exported for this function's modules.
+import { formatLocalTime } from '../_shared/notifications/notif-contracts.ts'
+export { formatLocalTime }
 
 // ── System Prompt Builder ─────────────────────────────────────────────────────
 

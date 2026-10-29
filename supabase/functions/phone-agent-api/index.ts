@@ -4,7 +4,7 @@
  *
  * Every request is signed by the agent (signature.ts); the business of a call comes from
  * the call record its start created, never from a request. v1 serves the phone line:
- * start of call, availability and end of call; booking follows.
+ * start of call, availability, booking and end of call.
  *
  * HTTP: a business outcome answers 200 with `{ success: false, error }`; a bad signature
  * 401 with no body; a database failure 503, which the agent retries once (contract §6).
@@ -15,7 +15,19 @@ import { captureException, initSentry } from '../_shared/sentry.ts'
 import { isSignedByTheAgent } from './signature.ts'
 import { endCall, startCall } from './calls.ts'
 import { availability } from './availability-route.ts'
+import { book } from './booking.ts'
 import type { ApiResult } from './results.ts'
+import { emitBookingEvent } from '../_shared/notifications/emit-booking-event.ts'
+import type { AppointmentEvent } from '../_shared/notifications/notif-contracts.ts'
+
+type Notify = (event: AppointmentEvent) => Promise<void>
+
+/** After the response when the runtime allows it: the agent's write budget is short. */
+function inBackground(work: Promise<void>): void {
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  if (runtime) runtime.waitUntil(work)
+  else void work
+}
 
 initSentry('phone-agent-api')
 
@@ -38,7 +50,9 @@ export function routeOf(url: URL): string {
   return pathOf(url) + url.search
 }
 
-export async function handle(req: Request, secret: string, supabase = getAdminClient()): Promise<Response> {
+export async function handle(
+  req: Request, secret: string, supabase = getAdminClient(), notify: Notify = emitBookingEvent,
+): Promise<Response> {
   const url = new URL(req.url)
   const route = routeOf(url)
   const body = req.method === 'GET' ? '' : await req.text()
@@ -57,6 +71,11 @@ export async function handle(req: Request, secret: string, supabase = getAdminCl
   try {
     if (req.method === 'POST' && path === '/v1/calls/start') return json(200, await startCall(supabase, parsed))
     if (req.method === 'GET' && path === '/v1/availability') return json(200, await availability(supabase, url.searchParams))
+    if (req.method === 'POST' && path === '/v1/appointments') {
+      const outcome = await book(supabase, body, parsed, req.headers.get('idempotency-key'))
+      if (outcome.notification) inBackground(notify(outcome.notification))
+      return json(outcome.status, outcome.result, outcome.status === 503 ? { 'Retry-After': '1' } : {})
+    }
     const end = path.match(/^\/v1\/calls\/([^/]{1,64})\/end$/)
     if (req.method === 'POST' && end) return json(200, await endCall(supabase, decodeURIComponent(end[1]!), parsed))
     return json(404, { success: false, error: 'NOT_FOUND' })

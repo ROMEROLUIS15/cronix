@@ -10,6 +10,7 @@ import { isSignedByTheAgent, MAX_CLOCK_SKEW_S } from '../signature.ts'
 // Sentry's Deno SDK is not loadable in vitest; the other function tests stub it the same way.
 vi.mock('../../_shared/sentry.ts', () => ({ initSentry: () => {}, captureException: () => {} }))
 vi.mock('../../_shared/supabase.ts', () => ({ getAdminClient: () => ({}) }))
+vi.mock('../../_shared/notifications/emit-booking-event.ts', () => ({ emitBookingEvent: async () => {} }))
 
 const SECRET = 'test-signing-secret'
 const BIZ = 'b0000000-0000-0000-0000-000000000001'
