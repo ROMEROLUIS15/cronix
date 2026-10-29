@@ -38,6 +38,15 @@ export function todayInTimezone(timezone: string): string {
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 /**
+ * The hours that apply: the owner's when set; 09:00–18:00 every day when never configured
+ * (absent or empty), so a business that never set its hours is not closed every day.
+ */
+export function effectiveWorkingHours(workingHours: WorkingHours): Record<string, [string, string] | null> {
+  if (workingHours && Object.keys(workingHours).length > 0) return workingHours
+  return Object.fromEntries(DAY_KEYS.map((day) => [day, ['09:00', '18:00']]))
+}
+
+/**
  * ISO dates of the next `count` OPEN days strictly after `fromISO` (≤30-day horizon).
  * Pure: used to suggest concrete alternative dates when a requested day is closed.
  * A day is open when its working_hours entry is a valid [open,close] tuple (or when
@@ -45,20 +54,19 @@ const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
  */
 export function nextOpenDates(workingHours: WorkingHours, fromISO: string, count: number): string[] {
   const out: string[] = []
-  const configured = !!workingHours && Object.keys(workingHours).length > 0
+  const hours = effectiveWorkingHours(workingHours)
   const [y, m, d] = fromISO.split('-').map(Number) as [number, number, number]
   const cur = new Date(Date.UTC(y, m - 1, d))
   for (let i = 0; i < 30 && out.length < count; i++) {
     cur.setUTCDate(cur.getUTCDate() + 1)
-    if (!configured) { out.push(cur.toISOString().slice(0, 10)); continue }
-    const wh = workingHours![DAY_KEYS[cur.getUTCDay()]!]
+    const wh = hours[DAY_KEYS[cur.getUTCDay()]!]
     if (wh && Array.isArray(wh) && wh.length >= 2) out.push(cur.toISOString().slice(0, 10))
   }
   return out
 }
 
 /** Local date+time (HH:mm) → UTC ISO. Same Intl algorithm as booking-adapter. */
-function localToUTC(date: string, time: string, timezone: string): string {
+export function localToUTC(date: string, time: string, timezone: string): string {
   const naiveAsUTC = new Date(`${date}T${time}:00Z`)
   const tzStr = new Intl.DateTimeFormat('sv-SE', {
     timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -100,16 +108,10 @@ export function computeAvailableSlots(p: {
   const dayKey = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
     .format(new Date(`${date}T12:00:00Z`)).toLowerCase().slice(0, 3)
 
-  const configured = !!workingHours && Object.keys(workingHours).length > 0
-  let open  = '09:00'
-  let close = '18:00'
-  if (configured) {
-    const wh = workingHours![dayKey]
-    // Closed day: key absent or explicitly null.
-    if (!wh || !Array.isArray(wh) || wh.length < 2) return { open: false, slots: [] }
-    open  = wh[0]
-    close = wh[1]
-  }
+  const wh = effectiveWorkingHours(workingHours)[dayKey]
+  // Closed day: key absent or explicitly null.
+  if (!wh || !Array.isArray(wh) || wh.length < 2) return { open: false, slots: [] }
+  const [open, close] = wh
   const [oh, om] = open.split(':').map(Number)
   const [ch, cm] = close.split(':').map(Number)
   if ([oh, om, ch, cm].some((n) => n === undefined || Number.isNaN(n))) return { open: true, slots: [] }

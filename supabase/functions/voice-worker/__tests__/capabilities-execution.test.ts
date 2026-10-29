@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ToolContext } from '../core/tool-context.ts'
 import { localToUTC } from '../core/time-format.ts'
-import { createMockSupabase, type MockHandle } from './_mock-supabase.ts'
+import { createMockSupabase, type MockHandle } from '../../_shared/__tests__/_mock-supabase.ts'
 
 import { executeSchedule }         from '../capabilities/schedule/tool.ts'
 import { executeReschedule }       from '../capabilities/reschedule/tool.ts'

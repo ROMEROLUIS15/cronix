@@ -16,6 +16,7 @@ import {
   flushSentry,
 } from "../_shared/sentry.ts"
 import { logToDLQ } from "../_shared/supabase.ts"
+import { constantTimeEqual, hmacSha256Hex } from "../_shared/hmac.ts"
 
 initSentry('whatsapp-webhook')
 
@@ -45,20 +46,9 @@ async function verifyMetaSignature(signature: string | null, rawBody: string): P
   }
 
   const expectedHash = signature.slice(7)
-  const encoder      = new TextEncoder()
-  const key          = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(appSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const mac          = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody))
-  const computedHash = Array.from(new Uint8Array(mac))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+  const computedHash = await hmacSha256Hex(appSecret, rawBody)
 
-  if (computedHash !== expectedHash) {
+  if (!constantTimeEqual(computedHash, expectedHash)) {
     console.error(`[verifyMetaSignature] Error: Hash mismatch. Validating against signature failed. Check if WHATSAPP_APP_SECRET corresponds to the Meta App sending the webhook.`)
     return false
   }
