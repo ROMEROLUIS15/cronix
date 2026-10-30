@@ -182,14 +182,26 @@ jobs:
   # because it depends on real Supabase test-env state that CI doesn't provision —
   # running it on every push burned ~50 min and was always red.
   # continue-on-error keeps it non-blocking; timeout-minutes caps any hang.
+  #
+  # Against the EPHEMERAL Supabase, never production: Playwright's global setup
+  # lists Auth users and updates `users` with the service key on every run, and the
+  # build reads the database. Production is a Nano instance whose disk IO budget
+  # ran out on 2026-10-29.
   e2e:
     name: E2E Smoke Tests (Playwright)
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.59 cannot install Chromium.
     runs-on: ubuntu-24.04
     continue-on-error: true
-    timeout-minutes: 15
+    timeout-minutes: 20
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
     needs: [unit, build]
+
+    # Override the workflow-level prod secrets: this job talks ONLY to the
+    # local ephemeral Supabase.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ''
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ''
+      SUPABASE_SERVICE_ROLE_KEY: ''
 
     steps:
       - uses: actions/checkout@v5
@@ -206,7 +218,32 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Build production bundle
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start ephemeral Supabase (applies migrations + seed.sql)
+        run: supabase start
+
+      - name: Export local Supabase URL + keys (overrides prod)
+        run: |
+          STATUS=$(supabase status -o json)
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(echo "$STATUS" | jq -r '.API_URL')"              >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(echo "$STATUS" | jq -r '.ANON_KEY')"        >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(echo "$STATUS" | jq -r '.SERVICE_ROLE_KEY')"    >> "$GITHUB_ENV"
+
+      - name: Refuse anything but the local Supabase
+        run: |
+          case "$NEXT_PUBLIC_SUPABASE_URL" in
+            http://127.0.0.1:*|http://localhost:*) echo "Local Supabase: $NEXT_PUBLIC_SUPABASE_URL" ;;
+            *) echo "::error::Smoke tests must run against the ephemeral Supabase"; exit 1 ;;
+          esac
+
+      - name: Seed E2E fixture data
+        run: npm run e2e:setup
+
+      - name: Build production bundle (against local Supabase)
         run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
@@ -223,6 +260,10 @@ jobs:
           CI: 'true'
           PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
 
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop || true
+
       - name: Upload Playwright report
         uses: actions/upload-artifact@v5
         if: failure()
@@ -236,6 +277,9 @@ jobs:
   # the deployed voice-worker transcribes and answers it (tests/e2e/voice-roundtrip.spec.ts).
   # Runs against production Supabase with the E2E fixture user, so it only writes
   # ai_traces rows for that business. NOT continue-on-error: a red run must notify.
+  # Only on main: it needs the deployed voice-worker, and production is a Nano
+  # instance whose disk IO budget ran out on 2026-10-29 (a develop push and its
+  # main merge used to run it twice for the same change).
   # DEEPGRAM_AURA_API_KEY feeds /api/assistant/tts, which speaks the answer.
   e2e-voice:
     name: E2E Voice (real audio, Playwright)
@@ -249,7 +293,7 @@ jobs:
     concurrency:
       group: e2e-voice-fixture-user
       cancel-in-progress: false
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [unit, build]
 
     steps:
