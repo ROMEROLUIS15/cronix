@@ -15,6 +15,7 @@ import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case';
 import { completeAppointment } from '@/lib/actions/complete-appointment';
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types';
 import { format } from 'date-fns';
+import { APPOINTMENT_CHANGED } from '@/lib/realtime/announce-appointment-change';
 
 export type ViewMode = 'day' | 'week';
 
@@ -66,8 +67,8 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     }
   }, [fetchAppointments, contextLoading]);
 
-  // Auto-refresh when any appointment is created or rescheduled.
-  // postgres_changes covers web form submissions; broadcast covers the WhatsApp AI agent.
+  // Auto-refresh when any appointment changes: the agents and the web announce their writes
+  // by Broadcast (no postgres_changes, which used up the database's disk IO budget).
   useEffect(() => {
     if (!businessId) return
     const supabase = createClient()
@@ -75,11 +76,8 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
       .channel(`notifications:${businessId}`)
       .on('broadcast', { event: 'appointment.created' }, () => void fetchAppointments())
       .on('broadcast', { event: 'appointment.rescheduled' }, () => void fetchAppointments())
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'appointments', filter: `business_id=eq.${businessId}` },
-        () => void fetchAppointments(),
-      )
+      .on('broadcast', { event: 'appointment.cancelled' }, () => void fetchAppointments())
+      .on('broadcast', { event: APPOINTMENT_CHANGED }, () => void fetchAppointments())
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [businessId, fetchAppointments]);

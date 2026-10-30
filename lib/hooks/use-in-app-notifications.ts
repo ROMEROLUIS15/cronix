@@ -63,31 +63,18 @@ export function useInAppNotifications(businessId: string | null) {
       ? ric.requestIdleCallback(fire, { timeout: 2000 })
       : (window.setTimeout(fire, 0) as unknown as number)
 
-    // Real-time subscription (postgres_changes)
-    const channel = supabase
-      .channel(`business-notifications-${businessId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `business_id=eq.${businessId}`,
-        },
-        () => {
-          fetchNotifications()
-        }
-      )
-      .subscribe()
+    // No postgres_changes subscription: it made Realtime read the WAL all the time and used up
+    // the database's disk IO budget (2026-10-29). Broadcasts reach the bell through the window
+    // event below, and the poll covers what no broadcast announces.
 
     // Broadcast bridge: the dashboard realtime hook dispatches this window event when
     // a broadcast arrives from the WhatsApp/voice edge functions (RLS-independent path),
-    // so the bell refreshes live even if postgres_changes is dropped for cross-channel writes.
+    // or from the web (announceAppointmentChange), so the bell refreshes live.
     const onRealtimeRefresh = () => { void fetchNotifications() }
     window.addEventListener('cronix:realtime-refresh', onRealtimeRefresh)
 
     // Safety net so the bell never needs a manual reload: poll every 20s while the tab
-    // is visible, even if realtime delivery is dropped. Broadcast/postgres_changes make
+    // is visible, even if realtime delivery is dropped. Broadcast makes
     // it instant when they work.
     const poll = window.setInterval(() => {
       if (document.visibilityState === 'visible') void fetchNotifications()
@@ -96,7 +83,6 @@ export function useInAppNotifications(businessId: string | null) {
     return () => {
       if (ric.cancelIdleCallback && ric.requestIdleCallback) ric.cancelIdleCallback(handle)
       else window.clearTimeout(handle)
-      supabase.removeChannel(channel)
       window.removeEventListener('cronix:realtime-refresh', onRealtimeRefresh)
       window.clearInterval(poll)
     }
