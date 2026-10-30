@@ -47,16 +47,13 @@ export function DeadLetterFeed() {
   useEffect(() => {
     fetchDLQ()
 
-    const channel = supabase
-      .channel('dlq-admin-feed')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'wa_dead_letter_queue' },
-        () => fetchDLQ()
-      )
-      .subscribe()
+    // Every 30 s while visible, not postgres_changes: that made Realtime read the WAL all the
+    // time and used up the database's disk IO budget (2026-10-29).
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchDLQ()
+    }, 30_000)
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { window.clearInterval(poll) }
   }, [supabase, fetchDLQ])
 
   if (loading) {

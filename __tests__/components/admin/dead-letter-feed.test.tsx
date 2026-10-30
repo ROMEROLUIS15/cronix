@@ -165,97 +165,20 @@ describe('DeadLetterFeed Component', () => {
     })
   })
 
-  it('subscribes to Realtime channel on mount', async () => {
-    const onMock = vi.fn().mockReturnThis()
-    const subscribeMock = vi.fn()
-    const channelMock = {
-      on: onMock,
-      subscribe: subscribeMock,
-    }
-
+  it('refreshes every 30 s instead of subscribing to Realtime, and stops on unmount', async () => {
+    // postgres_changes made Realtime read the WAL all the time and used up the database's
+    // disk IO budget (2026-10-29): the feed polls while visible instead.
+    const setIntervalSpy = vi.spyOn(window, 'setInterval')
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
     const mockSupabase = {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: mockDLQEntries,
-              error: null,
-            }),
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
         }),
       }),
-      channel: vi.fn().mockReturnValue(channelMock),
-      removeChannel: vi.fn(),
-    }
-
-    vi.mocked(createClient).mockReturnValue(mockSupabase as any)
-
-    render(<DeadLetterFeed />)
-
-    await waitFor(() => {
-      expect(mockSupabase.channel).toHaveBeenCalledWith('dlq-admin-feed')
-    })
-  })
-
-  it('listens for postgres_changes on wa_dead_letter_queue', async () => {
-    const onMock = vi.fn().mockReturnThis()
-    const subscribeMock = vi.fn()
-
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: mockDLQEntries,
-              error: null,
-            }),
-          }),
-        }),
-      }),
-      channel: vi.fn().mockReturnValue({
-        on: onMock,
-        subscribe: subscribeMock,
-      }),
-      removeChannel: vi.fn(),
-    }
-
-    vi.mocked(createClient).mockReturnValue(mockSupabase as any)
-
-    render(<DeadLetterFeed />)
-
-    await waitFor(() => {
-      expect(onMock).toHaveBeenCalledWith(
-        'postgres_changes',
-        expect.objectContaining({
-          event: '*',
-          schema: 'public',
-          table: 'wa_dead_letter_queue',
-        }),
-        expect.any(Function)
-      )
-    })
-  })
-
-  it('unsubscribes from channel on unmount', async () => {
-    // subscribe() returns the channel (chain), which the component passes to
-    // removeChannel — so the double must return `this`, not undefined.
-    const mockChannel = {
-      on: vi.fn().mockReturnThis(),
-      subscribe: vi.fn().mockReturnThis(),
-    }
-
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
-          }),
-        }),
-      }),
-      channel: vi.fn().mockReturnValue(mockChannel),
+      channel: vi.fn(),
       removeChannel: vi.fn(),
     }
 
@@ -264,12 +187,16 @@ describe('DeadLetterFeed Component', () => {
     const { unmount } = render(<DeadLetterFeed />)
 
     await waitFor(() => {
-      expect(mockSupabase.channel).toHaveBeenCalled()
+      expect(mockSupabase.from).toHaveBeenCalledWith('wa_dead_letter_queue')
     })
+    expect(mockSupabase.channel).not.toHaveBeenCalled()
+    expect(setIntervalSpy.mock.calls.some(([, ms]) => ms === 30_000)).toBe(true)
 
     unmount()
 
-    expect(mockSupabase.removeChannel).toHaveBeenCalledWith(mockChannel)
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    setIntervalSpy.mockRestore()
+    clearIntervalSpy.mockRestore()
   })
 
   it('handles query error gracefully', async () => {

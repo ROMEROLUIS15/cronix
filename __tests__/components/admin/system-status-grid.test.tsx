@@ -1,7 +1,7 @@
 /**
  * components/admin/system-status-grid.tsx — System Status Grid Tests
  *
- * Tests real-time health monitoring with Supabase Realtime
+ * Tests health monitoring, refreshed every 30 s while visible (no Supabase Realtime)
  */
 
 import React from 'react'
@@ -94,12 +94,18 @@ describe('SystemStatusGrid Component', () => {
     })
   })
 
-  it('subscribes to Realtime updates', async () => {
+  it('refreshes every 30 s instead of subscribing to Realtime', async () => {
+    // postgres_changes made Realtime read the WAL all the time and used up the database's
+    // disk IO budget (2026-10-29).
+    const setIntervalSpy = vi.spyOn(window, 'setInterval')
     render(<SystemStatusGrid />)
 
     await waitFor(() => {
-      expect(mockSupabaseClient.channel).toHaveBeenCalledWith('service-health-admin')
+      expect(mockSupabaseClient.from).toHaveBeenCalledWith('service_health')
     })
+    expect(mockSupabaseClient.channel).not.toHaveBeenCalled()
+    expect(setIntervalSpy.mock.calls.some(([, ms]) => ms === 30_000)).toBe(true)
+    setIntervalSpy.mockRestore()
   })
 
   it('displays service status badges', async () => {
@@ -110,51 +116,17 @@ describe('SystemStatusGrid Component', () => {
     })
   })
 
-  it('removes channel on unmount', async () => {
-    const mockChannel = {
-      on: vi.fn().mockReturnThis(),
-      subscribe: vi.fn().mockReturnValue({ data: null }),
-    }
-
-    mockSupabaseClient.channel.mockReturnValue(mockChannel)
-
+  it('stops refreshing on unmount', async () => {
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
     const { unmount } = render(<SystemStatusGrid />)
 
     await waitFor(() => {
-      expect(mockSupabaseClient.channel).toHaveBeenCalled()
+      expect(mockSupabaseClient.from).toHaveBeenCalled()
     })
 
     unmount()
 
-    expect(mockSupabaseClient.removeChannel).toHaveBeenCalled()
-  })
-
-  it('updates on Realtime changes', async () => {
-    let realtimeCallback: (() => void) | null = null
-
-    const mockChannel = {
-      on: vi.fn((event, config, callback) => {
-        realtimeCallback = callback
-        return mockChannel
-      }),
-      subscribe: vi.fn().mockReturnValue({ data: null }),
-    }
-
-    mockSupabaseClient.channel.mockReturnValue(mockChannel)
-
-    render(<SystemStatusGrid />)
-
-    await waitFor(() => {
-      expect(mockSupabaseClient.channel).toHaveBeenCalled()
-    })
-
-    // Simulate Realtime event
-    if (realtimeCallback) {
-      (realtimeCallback as () => void)()
-
-      await waitFor(() => {
-        expect(mockSupabaseClient.from).toHaveBeenCalledTimes(2) // Initial + update
-      })
-    }
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    clearIntervalSpy.mockRestore()
   })
 })

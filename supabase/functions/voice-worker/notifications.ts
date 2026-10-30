@@ -1,9 +1,9 @@
 /**
  * Bell notification dispatch.
  *
- * Inserts a row into `public.notifications`. The frontend FAB subscribes to
- * postgres_changes on this table via Supabase Realtime, so the bell badge
- * updates automatically — no explicit broadcast needed here.
+ * Inserts a row into `public.notifications`. The bell picks it up from the
+ * appointment broadcast the worker sends and from its own 20 s poll (no
+ * postgres_changes: it used up the database's disk IO budget, 2026-10-29).
  *
  * Idempotency: the `event_id` column has a UNIQUE constraint (or we check
  * existence first). Same eventId → same notification → no duplicate.

@@ -33,16 +33,13 @@ export function SystemStatusGrid() {
   useEffect(() => {
     fetchHealth()
 
-    const channel = supabase
-      .channel('service-health-admin')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_health' },
-        () => fetchHealth()
-      )
-      .subscribe()
+    // Every 30 s while visible, not postgres_changes: that made Realtime read the WAL all the
+    // time and used up the database's disk IO budget (2026-10-29).
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchHealth()
+    }, 30_000)
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { window.clearInterval(poll) }
   }, [supabase, fetchHealth])
 
   if (loading) {
