@@ -18,6 +18,7 @@ import {
 import type { AppointmentWithRelations, SlotCheckAppointment } from '@/types'
 import cache, { TTL_SEC } from '@/lib/cache'
 import { logger } from '@/lib/logger'
+import { announceAppointmentChange } from '@/lib/realtime/announce-appointment-change'
 
 type Client = SupabaseClient<Database>
 
@@ -181,6 +182,7 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
       // Invalidate cache for this business's appointments and dashboard stats
       await cache.invalidate(row.business_id, 'appointments')
       await cache.invalidateKey(row.business_id, 'dashboard', 'stats')
+      await announceAppointmentChange(this.supabase, row.business_id)
 
       return ok({
         ...row,
@@ -210,6 +212,7 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
 
     await cache.invalidate(businessId, 'appointments')
     await cache.invalidateKey(businessId, 'dashboard', 'stats')
+    await announceAppointmentChange(this.supabase, businessId)
 
     return ok(undefined)
   }
@@ -235,6 +238,7 @@ export class SupabaseAppointmentRepository implements IAppointmentRepository {
 
     await cache.invalidate(businessId, 'appointments')
     await cache.invalidateKey(businessId, 'dashboard', 'stats')
+    await announceAppointmentChange(this.supabase, businessId)
 
     return ok(undefined)
   }

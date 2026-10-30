@@ -24,22 +24,19 @@ export function PlanManager({
   const supabase = createClient();
 
 
+  // While the modal is open (a payment may be approved meanwhile), read the plan every 10 s and
+  // reload when it changes. Not postgres_changes: it made Realtime read the WAL all the time and
+  // used up the database's disk IO budget (2026-10-29).
   useEffect(() => {
     if (!isOpen || !businessId) return;
 
-    const channel = supabase.channel('business-plan-updates')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'businesses', filter: `id=eq.${businessId}` },
-        (payload) => {
-          if (payload.new.plan !== currentPlan && payload.new.plan !== 'free') {
-            window.location.reload();
-          }
-        },
-      )
-      .subscribe();
+    const checkPlan = async () => {
+      const { data } = await supabase.from('businesses').select('plan').eq('id', businessId).single();
+      if (data && data.plan !== currentPlan && data.plan !== 'free') window.location.reload();
+    };
+    const poll = window.setInterval(() => { void checkPlan(); }, 10_000);
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { window.clearInterval(poll); };
   }, [isOpen, currentPlan, businessId, supabase]);
 
   const openPayment = (plan: 'pro' | 'enterprise') => {

@@ -14,6 +14,7 @@ import {
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { useTranslations } from 'next-intl'
 import { logger } from '@/lib/logger'
+import { announceAppointmentChange } from '@/lib/realtime/announce-appointment-change'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -370,6 +371,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
 
       // Handle reminders and notifications via container
       if (!error) {
+        void announceAppointmentChange(supabase, businessId)
         const container = getBrowserContainer()
         await container.reminders.cancelByAppointment(appointmentId).catch(() => null)
         if (bizNotif.whatsapp) {
