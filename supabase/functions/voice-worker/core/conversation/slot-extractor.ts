@@ -62,6 +62,18 @@ export function timeMentionedInCorpus(corpus: string): boolean {
   return userMentionedTime(corpus)
 }
 
+/**
+ * Date and time the user gave for this order: this turn first, then the earlier turns of the same
+ * order. An earlier question's date is not in `slotCorpus` (frame.ts).
+ */
+export function slotsForOrder(
+  ctx: { userTurn?: string; slotCorpus?: string; userTextCorpus?: string }, todayLocal: string,
+): { date: string | null; time: string | null } {
+  const turn = extractSlotsFromCorpus(ctx.userTurn ?? '', todayLocal)
+  const order = extractSlotsFromCorpus(ctx.slotCorpus ?? ctx.userTextCorpus ?? '', todayLocal)
+  return { date: turn.date ?? order.date, time: turn.time ?? order.time }
+}
+
 const CHANGE_VERB = /\b(?:cambi|muev|mover|reagend|reprogram|adelant|atras)\w*|\bre\s+agend\w*/
 const BOOKING_VERB = /\b(?:agend|reserv|program|apart|anot|crea)\w*/
 const NEW_APPOINTMENT = /\b(?:una|otra|nueva)\s+cita\b|\bcita\s+nueva\b/

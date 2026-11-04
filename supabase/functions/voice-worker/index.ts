@@ -426,7 +426,7 @@ async function handleRequest(req: Request): Promise<Response> {
   }
   // Build the user-side text corpus for anti-hallucination guards.
   // Frame-boundary semantics live in core/conversation/frame.ts.
-  const { corpus: userTextCorpus, cutoff, relevantTurns } = buildUserCorpus(inputText, history)
+  const { corpus: userTextCorpus, slotCorpus, cutoff, relevantTurns } = buildUserCorpus(inputText, history)
   console.log(`[VOICE-WORKER] corpus cutoff=${cutoff} relevantTurns=${relevantTurns} corpus="${userTextCorpus.slice(0, 120)}"`)
 
   const toolCtx: ToolContext = {
@@ -437,6 +437,7 @@ async function handleRequest(req: Request): Promise<Response> {
     workingHours: context.workingHours ?? undefined,
     userTextCorpus,
     userTurn:    inputText,
+    slotCorpus,
   }
 
   let agentResult

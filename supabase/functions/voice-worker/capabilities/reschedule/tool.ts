@@ -1,7 +1,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData }  from '../../types.ts'
 import { localToUTC, buildEndISO, utcToLocalParts } from '../../core/time-format.ts'
-import { extractSlotsFromCorpus, nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
+import { slotsForOrder, nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
 import {
@@ -33,7 +33,7 @@ export async function executeReschedule(
   // stays robust under the same Llama drift.
   if (ctx.userTextCorpus) {
     const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
-    const fromCorpus = extractSlotsFromCorpus(ctx.userTextCorpus, todayLocal)
+    const fromCorpus = slotsForOrder(ctx, todayLocal)
     // A date the user never said is the model's invention: "mueve la cita a las 3" keeps the day.
     if (args.new_date && !fromCorpus.date) {
       console.log(`[VOICE-WORKER-RESCHEDULE] dropping invented new_date="${args.new_date}"`)

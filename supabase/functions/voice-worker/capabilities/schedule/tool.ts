@@ -17,11 +17,10 @@ import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData } from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
 import {
-  extractSlotsFromCorpus,
+  slotsForOrder,
   refersToExistingAppointment,
   nameMentionedInCorpus,
   timeMentionedInCorpus,
-  dateMentionedInCorpus,
 } from '../../core/conversation/slot-extractor.ts'
 import {
   type ClientRow, resolveClient, needsConfirmation, formatConfirmationPrompt, normalisePhone,
@@ -87,7 +86,7 @@ export async function executeSchedule(
 
   // Step 1 — recover slots the LLM dropped across turns.
   if (corpus) {
-    const fromCorpus = extractSlotsFromCorpus(corpus, todayLocal)
+    const fromCorpus = slotsForOrder(ctx, todayLocal)
     if (fromCorpus.date && fromCorpus.date !== date) {
       console.log(`[VOICE-WORKER-SCHEDULE] date override: arg="${date}" → user="${fromCorpus.date}"`)
       date = fromCorpus.date
@@ -122,7 +121,7 @@ export async function executeSchedule(
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated time="${time}"`)
       return { success: false, result: 'Para agendar necesito la hora. ¿A qué hora?', error: 'GUARD_REJECTED' }
     }
-    if (!dateMentionedInCorpus(corpus, todayLocal)) {
+    if (!slotsForOrder(ctx, todayLocal).date) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated date="${date}"`)
       return { success: false, result: 'Para agendar necesito la fecha. ¿Para qué día?', error: 'GUARD_REJECTED' }
     }

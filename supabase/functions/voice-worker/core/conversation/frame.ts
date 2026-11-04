@@ -82,13 +82,22 @@ export function findLastFrameBoundary(history: readonly ChatTurn[]): number {
 export function buildUserCorpus(
   inputText: string,
   history:   readonly ChatTurn[],
-): { corpus: string; cutoff: number; relevantTurns: number } {
+): { corpus: string; slotCorpus: string; cutoff: number; relevantTurns: number } {
   const cutoff = findLastFrameBoundary(history)
   const relevantHistory = history.slice(cutoff + 1)
-  const parts: string[] = [inputText]
-  for (const m of relevantHistory) {
-    if (m.role === 'user') parts.push(m.content)
-  }
-  const corpus = parts.join(' ').slice(0, CORPUS_MAX_CHARS)
-  return { corpus, cutoff, relevantTurns: relevantHistory.length }
+  const priorTurns = relevantHistory.filter(m => m.role === 'user').map(m => m.content)
+  const corpus = [inputText, ...priorTurns].join(' ').slice(0, CORPUS_MAX_CHARS)
+  const slotCorpus = [inputText, ...priorTurns.filter(t => !isQuestionTurn(t))].join(' ').slice(0, CORPUS_MAX_CHARS)
+  return { corpus, slotCorpus, cutoff, relevantTurns: relevantHistory.length }
+}
+
+const QUESTION_OPENING = /^[\s¿]*(?:que|cual|cuales|cuanta|cuantas|cuanto|cuantos|cuando|donde|quien|tengo|hay|muestrame|ensename|dime|lee|ver)\b/
+
+/**
+ * A turn that asked about the agenda. Its name still counts as said, so the mention guards can
+ * accept "agéndala" after it, but its date is not the date of the next order: after "qué citas
+ * tengo hoy", "mueve la cita a las 3" must not move it to today.
+ */
+function isQuestionTurn(turn: string): boolean {
+  return QUESTION_OPENING.test(turn.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
 }

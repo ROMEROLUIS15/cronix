@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { toBookingEvent } from '../../supabase/functions/voice-worker/booking-event'
 import { refersToExistingAppointment } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
 import { executeSchedule } from '../../supabase/functions/voice-worker/capabilities/schedule/tool'
+import { buildUserCorpus } from '../../supabase/functions/voice-worker/core/conversation/frame'
 import { detectListAppointments } from '../../supabase/functions/voice-worker/capabilities/list-appointments/fast-path'
 import { executeReschedule } from '../../supabase/functions/voice-worker/capabilities/reschedule/tool'
 import { createMockSupabase } from '../../supabase/functions/_shared/__tests__/_mock-supabase'
@@ -208,5 +209,74 @@ describe('voice never lands on a date the user did not ask for', () => {
     expect(res.success).toBe(false)
     expect(res.result).toContain('ya pasó')
     expect(m.opsFor('appointments').some((o) => o.type === 'insert')).toBe(false)
+  })
+})
+
+describe('a date from an earlier question does not reach the next order', () => {
+  const READ = [
+    { role: 'user' as const, content: '¿Qué citas tengo hoy?' },
+    { role: 'assistant' as const, content: 'Tienes 6 citas el 4 de noviembre.' },
+  ]
+  const FUTURE = '2099-01-10'
+  const APT = { id: 'apt-1', start_at: `${FUTURE}T15:00:00.000Z`, end_at: `${FUTURE}T15:30:00.000Z`, client_id: 'cli-1', service_id: 'svc-1', appointment_services: [] }
+  const mock = () => createMockSupabase((op) => {
+    if (op.table === 'clients' && op.type === 'select') return { data: [{ id: 'cli-1', name: 'Ana Torres', phone: '04141234567' }] }
+    if (op.table === 'services' && op.type === 'select') return { data: [{ id: 'svc-1', name: 'Corte', duration_min: 30, price: 10 }] }
+    if (op.table === 'appointments' && op.type === 'select') return op.selectArg === 'id' ? { data: [] } : { data: [APT] }
+    if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+    if (op.table === 'appointments' && op.type === 'update') return { error: null }
+    return { data: null }
+  })
+  const ctxAfter = (m: ReturnType<typeof mock>, text: string, history: typeof READ = READ) => {
+    const { corpus, slotCorpus } = buildUserCorpus(text, history)
+    return { supabase: m.supabase, businessId: 'biz-1', userId: 'user-1', timezone: 'America/Caracas', userTurn: text, userTextCorpus: corpus, slotCorpus } as unknown as ToolContext
+  }
+
+  it('moving after "qué citas tengo hoy" keeps the day of the appointment', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, 'mueve la cita de Ana Torres a las 3 de la tarde'), { client_name: 'Ana Torres', new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    const update = m.opsFor('appointments').find((o) => o.type === 'update')!
+    expect(update.updatePayload).toMatchObject({ start_at: `${FUTURE}T19:00:00.000Z` })
+  })
+
+  it('booking after "qué citas tengo hoy" uses the date of this turn', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctxAfter(m, 'agenda a Ana Torres el 10 de enero de 2099 a las 3 de la tarde para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2026-11-04', time: '15:00',
+    })
+
+    expect(res.success).toBe(true)
+    const insert = m.opsFor('appointments').find((o) => o.type === 'insert')!
+    expect(JSON.stringify(insert.insertPayload ?? insert)).toContain('2099-01-10T19:00')
+  })
+
+  it('booking with no date after that question asks for one instead of using today', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctxAfter(m, 'agenda a Ana Torres a las 3 de la tarde para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2026-11-04', time: '15:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('la fecha')
+    expect(m.opsFor('appointments').some((o) => o.type === 'insert')).toBe(false)
+  })
+
+  it('keeps slots collected over several turns', () => {
+    const { slotCorpus } = buildUserCorpus('corte', [
+      { role: 'user', content: 'agéndame a Luis para el 21 de mayo a las 3pm' },
+      { role: 'assistant', content: '¿Para qué servicio?' },
+    ])
+    expect(slotCorpus).toContain('21 de mayo')
+  })
+
+  it('still keeps the name from a question for the mention guards', () => {
+    const { corpus, slotCorpus } = buildUserCorpus('agéndala mañana a las 3', [
+      { role: 'user', content: '¿Qué citas tiene Ana Torres hoy?' },
+      { role: 'assistant', content: 'Ana Torres tiene 1 cita.' },
+    ])
+    expect(corpus).toContain('Ana Torres')
+    expect(slotCorpus).not.toContain('hoy')
   })
 })

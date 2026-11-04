@@ -17,6 +17,8 @@ export interface ToolContext {
   userTextCorpus?: string
   /** What the user said in this turn alone, without the earlier turns of the corpus. */
   userTurn?: string
+  /** The corpus without earlier questions about the agenda: where dates and times may come from. */
+  slotCorpus?: string
   /**
    * Constitutional guard. Capabilities call this BEFORE any SQL write.
    * Returns null when allowed; returns a denial ToolResult when the
