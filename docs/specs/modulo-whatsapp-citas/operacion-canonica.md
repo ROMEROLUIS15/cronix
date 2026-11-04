@@ -280,6 +280,7 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 | D10 | El dashboard avisaba "Cita actualizada" al reagendar y al cancelar, sin `event_id` | O1, O2 | Cada formulario armaba su propio aviso | 🟢 corregido 2026-11-04: los formularios usan `booking-event` |
 | D11 | Por voz, "Cambia la cita" transcrito como "E2E la cita" creó una cita nueva y respondió "Listo" | O1 | `smart_schedule` no miraba si el turno apuntaba a una cita existente | 🟢 corregido 2026-11-04: `refersToExistingAppointment` pregunta antes de crear |
 | D12 | Por voz, "agenda una cita para Ana…" respondía la lista de citas del día | O1 | "agenda" se leía siempre como sustantivo | 🟢 corregido 2026-11-04: al inicio de la frase, sin fecha ni "de/del/para", es una orden |
+| D13 | Por voz, tras "qué citas tengo hoy", "mueve la cita a las 3" la movía a hoy (a veces a una hora pasada, que el dashboard autocompletaba y cobraba), y "agenda… el 6" agendaba hoy | O1 | El "hoy" de la consulta quedaba en el contexto y se tomaba como fecha de la orden | 🟢 corregido 2026-11-04: fecha y hora salen del turno actual y de los turnos de la misma orden (`slotCorpus`), y una hora pasada se rechaza |
 
 ---
 
