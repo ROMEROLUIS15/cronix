@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { announceBookingEvent } from '@/lib/notifications/announce-booking-event'
+import { bookingActionForEdit } from '@/lib/use-cases/appointments.use-case'
 import { useRouter, useParams } from 'next/navigation'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import { getBrowserContainer } from '@/lib/browser-container'
@@ -104,6 +106,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
     notes:            '',
   })
 
+  const savedSchedule = useRef({ start_at: '', status: 'pending' })
   const [clients,     setClients]     = useState<Client[]>([])
   const [services,    setServices]    = useState<Service[]>([])
   const [users,       setUsers]       = useState<User[]>([])
@@ -167,6 +170,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
         ? junctionIds
         : apt.service_id ? [apt.service_id] : []
 
+      savedSchedule.current = { start_at: toDatetimeLocal(apt.start_at), status: apt.status ?? 'pending' }
       setForm({
         client_id:        apt.client_id        ?? '',
         service_ids:      serviceIds,
@@ -393,31 +397,36 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
           }
         }
 
-        // In-app notification for appointment update
-        const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
-        const serviceName = services.filter(s => form.service_ids.includes(s.id)).map(s => s.name).join(', ') || 'servicio'
-        const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        const bookingAction = bookingActionForEdit(savedSchedule.current, form)
+        if (bookingAction) {
+          void announceBookingEvent(bookingAction, appointmentId)
+        } else {
+          // In-app notification for appointment update
+          const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
+          const serviceName = services.filter(s => form.service_ids.includes(s.id)).map(s => s.name).join(', ') || 'servicio'
+          const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 
-        const notifPayload = {
-          business_id: businessId,
-          title: '📝 Cita actualizada',
-          content: `${clientName} • ${serviceName} a las ${timeStr}`,
-          type: 'info' as const,
-          metadata: {
-            event: 'appointment.updated',
-            appointmentId: appointmentId,
-          },
+          const notifPayload = {
+            business_id: businessId,
+            title: '📝 Cita actualizada',
+            content: `${clientName} • ${serviceName} a las ${timeStr}`,
+            type: 'info' as const,
+            metadata: {
+              event: 'appointment.updated',
+              appointmentId: appointmentId,
+            },
+          }
+          container.notifications.create(notifPayload).catch(() => null)
+
+          // Web push notification
+          const { notifyOwner } = await import('@/lib/services/push-notify.service')
+          notifyOwner({
+            title: notifPayload.title,
+            body:  notifPayload.content,
+            url:   `/dashboard/appointments/${appointmentId}`,
+            tag:   `updated-${appointmentId}`,
+          }).catch(() => null)
         }
-        container.notifications.create(notifPayload).catch(() => null)
-
-        // Web push notification
-        const { notifyOwner } = await import('@/lib/services/push-notify.service')
-        notifyOwner({
-          title: notifPayload.title,
-          body:  notifPayload.content,
-          url:   `/dashboard/appointments/${appointmentId}`,
-          tag:   `updated-${appointmentId}`,
-        }).catch(() => null)
       }
 
       if (error) {

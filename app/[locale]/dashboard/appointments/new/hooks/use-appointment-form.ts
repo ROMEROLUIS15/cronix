@@ -5,9 +5,8 @@ import { useSearchParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
 import { getBrowserContainer } from '@/lib/browser-container'
-import { notifyOwner } from '@/lib/services/push-notify.service'
 import { parseVoiceCommand } from '@/lib/actions/voice-assistant'
-import { notificationForAppointmentCreated } from '@/lib/use-cases/notifications.use-case'
+import { announceBookingEvent } from '@/lib/notifications/announce-booking-event'
 import {
   evaluateDoubleBooking,
   checkEmployeeConflict,
@@ -365,20 +364,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
           }
         }
 
-        const clientName  = clients.find(c => c.id === form.client_id)?.name ?? 'cliente'
-        const serviceName = selectedServices.map(s => s.name).join(', ') || 'servicio'
-        const timeStr     = startObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
-        const notifPayload = notificationForAppointmentCreated(businessId, clientName, serviceName, timeStr)
-        container.notifications.create(notifPayload)
-
-        notifyOwner({
-          title: '📅 Nueva cita agendada',
-          body:  `${clientName} · ${serviceName} · ${timeStr}`,
-          url:   `/dashboard/appointments/${newApt.id}`,
-          tag:   `created-${newApt.id}`,
-        }).catch(err => {
-          logger.error('Failed to send push notification to owner', err)
-        })
+        void announceBookingEvent('created', newApt.id)
       }
 
       if (!newApt) {

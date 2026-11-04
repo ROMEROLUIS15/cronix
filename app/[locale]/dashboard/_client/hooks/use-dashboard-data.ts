@@ -11,9 +11,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths } from 'date-fns'
 import { getBrowserContainer } from '@/lib/browser-container'
+import { announceBookingEvent } from '@/lib/notifications/announce-booking-event'
 import {
   notificationForAppointmentConfirmed,
-  notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
 import { notifyOwner } from '@/lib/services/push-notify.service'
 import { completeAppointment } from '@/lib/actions/complete-appointment'
@@ -279,22 +279,7 @@ export function useDashboardData({
           tag: `confirmed-${selectedApt.id}`,
         })
       } else if (status === 'cancelled' && selectedApt.status !== 'cancelled') {
-        const payload = notificationForAppointmentCancelled(
-          businessId,
-          selectedApt.client?.name ?? 'cliente',
-          selectedApt.service?.name ?? 'servicio',
-        )
-        const container = getBrowserContainer()
-        void container.notifications.create(payload)
-          .catch((err: Error) => logger.error('dashboard', `Failed to create cancellation notification: ${err.message}`))
-
-        // Web push notification
-        notifyOwner({
-          title: payload.title,
-          body: payload.content,
-          url: '/dashboard',
-          tag: `cancelled-${selectedApt.id}`,
-        })
+        void announceBookingEvent('cancelled', selectedApt.id)
       }
       onSuccess?.()
     } catch (err: unknown) {
@@ -314,25 +299,7 @@ export function useDashboardData({
       if (!businessId) throw new Error('No business ID')
       await updateStatusMutation.mutateAsync({ appointmentId: id, status: 'cancelled' })
 
-      // Create notification for cancellation
-      if (selectedApt) {
-        const payload = notificationForAppointmentCancelled(
-          businessId,
-          selectedApt.client?.name ?? 'cliente',
-          selectedApt.service?.name ?? 'servicio',
-        )
-        const container = getBrowserContainer()
-        void container.notifications.create(payload)
-          .catch((err: Error) => logger.error('dashboard', `Failed to create cancellation notification: ${err.message}`))
-
-        // Web push notification
-        notifyOwner({
-          title: payload.title,
-          body: payload.content,
-          url: '/dashboard',
-          tag: `deleted-${id}`,
-        })
-      }
+      void announceBookingEvent('cancelled', id)
 
       setConfirmDelete(null)
       if (selectedApt?.id === id) onDone?.()

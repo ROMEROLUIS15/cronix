@@ -25,25 +25,6 @@ export type NotificationEventType =
 
 // ── Appointment Notifications ──────────────────────────────────────────────
 
-export function notificationForAppointmentCreated(
-  businessId: string,
-  clientName: string,
-  serviceName: string,
-  appointmentTime: string
-): CreateNotificationInput {
-  return {
-    business_id: businessId,
-    title: '✓ Nueva cita agendada',
-    content: `${clientName} • ${serviceName} a las ${appointmentTime}`,
-    type: 'success',
-    metadata: {
-      event: 'appointment.created',
-      clientName,
-      serviceName,
-    },
-  }
-}
-
 export function notificationForAppointmentConfirmed(
   businessId: string,
   clientName: string,
@@ -58,26 +39,6 @@ export function notificationForAppointmentConfirmed(
     metadata: {
       event: 'appointment.confirmed',
       clientName,
-    },
-  }
-}
-
-export function notificationForAppointmentCancelled(
-  businessId: string,
-  clientName: string,
-  serviceName: string,
-  reason?: string
-): CreateNotificationInput {
-  const reasonText = reason ? ` — ${reason}` : ''
-  return {
-    business_id: businessId,
-    title: '⚠ Cita cancelada',
-    content: `${clientName} • ${serviceName}${reasonText}`,
-    type: 'warning',
-    metadata: {
-      event: 'appointment.cancelled',
-      clientName,
-      reason,
     },
   }
 }

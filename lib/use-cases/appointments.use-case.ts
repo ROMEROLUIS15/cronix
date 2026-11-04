@@ -75,6 +75,18 @@ export function evaluateDoubleBooking(
 // ── Slot Overlap ──────────────────────────────────────────────────────────
 
 /**
+ * What an edit of an appointment means for the booking pipeline. Other edits (notes, staff,
+ * confirming it) are not booking events.
+ */
+export function bookingActionForEdit(
+  before: { start_at: string; status: string },
+  after:  { start_at: string; status: string },
+): 'rescheduled' | 'cancelled' | null {
+  if (after.status === 'cancelled') return before.status === 'cancelled' ? null : 'cancelled'
+  return before.start_at === after.start_at ? null : 'rescheduled'
+}
+
+/**
  * Checks if a proposed time slot overlaps with any existing appointment.
  *
  * Overlap condition:

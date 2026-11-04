@@ -7,9 +7,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
-  notificationForAppointmentCreated,
   notificationForAppointmentConfirmed,
-  notificationForAppointmentCancelled,
 } from '@/lib/use-cases/notifications.use-case'
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -19,28 +17,6 @@ describe('Notifications Use-Case', () => {
   const CLIENT = 'María García'
   const SERVICE = 'Corte de cabello'
   const TIME = '3:00 PM'
-
-  describe('notificationForAppointmentCreated', () => {
-    it('returns a complete, well-formed notification object', () => {
-      // ── Arrange ─────────────────────────────────────────────────────────
-      // (constants defined at describe scope: BIZ, CLIENT, SERVICE, TIME)
-
-      // ── Act ──────────────────────────────────────────────────────────────
-      const result = notificationForAppointmentCreated(BIZ, CLIENT, SERVICE, TIME)
-
-      // ── Assert ───────────────────────────────────────────────────────────
-      expect(result.business_id).toBe(BIZ)
-      expect(result.type).toBe('success')
-      expect(result.content).toContain(CLIENT)
-      expect(result.content).toContain(SERVICE)
-      expect(result.content).toContain(TIME)
-      expect(result.metadata).toEqual({
-        event: 'appointment.created',
-        clientName: CLIENT,
-        serviceName: SERVICE,
-      })
-    })
-  })
 
   describe('notificationForAppointmentConfirmed', () => {
     it('includes confirmation message', () => {
@@ -64,25 +40,4 @@ describe('Notifications Use-Case', () => {
     })
   })
 
-  describe('notificationForAppointmentCancelled', () => {
-    it('includes cancellation message', () => {
-      const result = notificationForAppointmentCancelled(BIZ, CLIENT, SERVICE)
-
-      expect(result.title).toContain('cancelada')
-      expect(result.content).toContain(CLIENT)
-      expect(result.content).toContain(SERVICE)
-    })
-
-    it('includes reason when provided', () => {
-      const result = notificationForAppointmentCancelled(BIZ, CLIENT, SERVICE, 'Cliente enfermó')
-
-      expect(result.content).toContain('Cliente enfermó')
-    })
-
-    it('omits reason when not provided', () => {
-      const result = notificationForAppointmentCancelled(BIZ, CLIENT, SERVICE)
-
-      expect(result.content).not.toContain('—')
-    })
-  })
 })
