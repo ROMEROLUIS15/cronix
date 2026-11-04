@@ -21,7 +21,7 @@ Engram mirror: pending — `mem_save` is rejected by a local hook in this sessio
 | T2 | S4 | inline | done, RED then GREEN | test(edge-functions) |
 | T3 | S1, S5, S7 | inline | done, RED then GREEN, plus browser probe | fix(appointments) |
 | T4 | S2, S6 | explorer for voice and dashboard, parent writes | matrix done; WhatsApp measured in production (L12); open gaps in L10 | docs commit |
-| T6 | S9 | inline | pgTAP and Deno done; both functions deployed from c40bb9f; owner delivery not measured | fix(supabase), fix(ci) |
+| T6 | S9 | inline | pgTAP and Deno done; deployed; owner delivery measured with the user's number (L18) | fix(supabase), fix(ci), feat(notifications) |
 | T5 | S1-S7 | docs close (constitution §7) | done | docs commit |
 
 ## Log
@@ -53,4 +53,6 @@ Engram mirror: pending — `mem_save` is rejected by a local hook in this sessio
 - L15 (2026-11-04, user's number on the E2E business): `daily_owner_summary` and `appointment_reminder` arrived; the user reported no free text, as expected outside the 24h window. Real bodies: "El resumen diario está listo: {{1}}. Detalles adicionales: {{2}}. Gracias." and a client reminder.
 - L16 (2026-11-04, correction): per Meta, 132001 means missing in that language or not approved, so the event template may exist as rejected or pending. The June attempt (ce4b63b) used `scripts/whatsapp-mcp.js`, which sends no variable examples and targets the test account; reason and body were not recorded.
 - L17 (2026-11-04, user, verbatim, asked whether to add the summary template as the intermediate step): "si". The chain is event template, then `daily_owner_summary`, then free text.
-- Next: deploy and measure the new chain with the user's number; the user creates the event template in WhatsApp Manager.
+- L18 (2026-11-04, measured): after deploying e95ee97, book, reschedule and cancel through the real path, with the user's number as temporary E2E owner, produced 5 owner alerts. Asked whether those 5 arrived in the summary format, the user answered, verbatim: "si". Number removed from the E2E business afterwards.
+- L19 (2026-11-04, CI): `E2E Voice` failed on 8e2634c in turn 3 waiting 30 s for idle while reading a 79-word answer (6 fixture appointments today). Since the last green run the voice path only changed a constant name. Likely a data-dependent test, not confirmed by rerunning with fewer appointments; not fixed.
+- Next: the user creates the event template in WhatsApp Manager; the chain then uses it with no code change. Open gaps in L10.
