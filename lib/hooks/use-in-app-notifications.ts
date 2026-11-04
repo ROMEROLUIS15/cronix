@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { REALTIME_REFRESH_EVENT } from '@/lib/realtime/announce-appointment-change'
 import type { InAppNotification } from '@/components/layout/notification-panel'
 
 export function useInAppNotifications(businessId: string | null) {
@@ -71,7 +72,7 @@ export function useInAppNotifications(businessId: string | null) {
     // a broadcast arrives from the WhatsApp/voice edge functions (RLS-independent path),
     // or from the web (announceAppointmentChange), so the bell refreshes live.
     const onRealtimeRefresh = () => { void fetchNotifications() }
-    window.addEventListener('cronix:realtime-refresh', onRealtimeRefresh)
+    window.addEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
 
     // Safety net so the bell never needs a manual reload: poll every 20s while the tab
     // is visible, even if realtime delivery is dropped. Broadcast makes
@@ -83,7 +84,7 @@ export function useInAppNotifications(businessId: string | null) {
     return () => {
       if (ric.cancelIdleCallback && ric.requestIdleCallback) ric.cancelIdleCallback(handle)
       else window.clearTimeout(handle)
-      window.removeEventListener('cronix:realtime-refresh', onRealtimeRefresh)
+      window.removeEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
       window.clearInterval(poll)
     }
   }, [businessId, fetchNotifications, supabase])

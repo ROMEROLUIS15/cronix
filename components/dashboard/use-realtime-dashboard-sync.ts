@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QueryClient } from '@tanstack/react-query'
-import { APPOINTMENT_CHANGED } from '@/lib/realtime/announce-appointment-change'
+import { APPOINTMENT_CHANGED, REALTIME_REFRESH_EVENT } from '@/lib/realtime/announce-appointment-change'
 
 /**
  * useRealtimeDashboardSync — invalidates React Query caches when the DB changes.
@@ -29,8 +29,8 @@ export function useRealtimeDashboardSync(
       void queryClient.invalidateQueries({ queryKey: ['appointments'] })
       void queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
       void queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      // The bell keeps its own state (not React Query) → nudge it via a window event.
-      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cronix:realtime-refresh'))
+      // The bell and the day list keep their own state (not React Query) → nudge them via a window event.
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(REALTIME_REFRESH_EVENT))
     }
 
     // The edge functions and the web (announceAppointmentChange) send these events on this exact channel.

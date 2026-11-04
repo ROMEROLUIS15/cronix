@@ -4,6 +4,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export const APPOINTMENT_CHANGED = 'appointment.changed'
 
 /**
+ * Window event the layout listener (useRealtimeDashboardSync) fires on every broadcast. Screens
+ * with their own state listen to this instead of opening `notifications:<business>`: the browser
+ * client hands out one shared channel per topic, so a screen removing it would close the
+ * layout listener too.
+ */
+export const REALTIME_REFRESH_EVENT = 'cronix:realtime-refresh'
+
+/**
  * announceAppointmentChange — tells every open dashboard of the business that its appointments
  * changed, over Realtime Broadcast sent by REST (no WebSocket needed).
  *
