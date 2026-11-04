@@ -85,7 +85,8 @@ emitBookingEvent(event)
 - Tipos del evento en `lib/notifications/appointment-event.ts`
 
 ### Runtime Deno (Edge Functions WhatsApp)
-- Usa `emitBookingEvent()` de `supabase/functions/process-whatsapp/notifications.ts`
+- Usa `emitBookingEvent()` de `supabase/functions/_shared/notifications/emit-booking-event.ts` (WhatsApp y línea telefónica; `process-whatsapp/notifications.ts` solo construye los eventos)
+- Cubierto por `__tests__/edge-functions/emit-booking-event-deno.test.ts`, que ejecuta el archivo Deno real; `__tests__/notifications/emit-booking-event.test.ts` cubre solo la copia Node
 - No puede importar módulos Next.js — implementación espejo del mismo contrato
 - Acceso a Supabase vía `createClient(url, serviceRoleKey)`
 
