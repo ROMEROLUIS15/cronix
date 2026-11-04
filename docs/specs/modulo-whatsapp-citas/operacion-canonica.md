@@ -213,7 +213,7 @@ El mensaje debe:
 
 > **Defectos observados:**
 > - **(D2) La cita no aparece en el calendario/campana del dashboard de inmediato.** Causa raíz: la escritura vía `WhatsAppBookingAdapter` (RPC directa) **no invalida la caché del dashboard** (Upstash), a diferencia del path de voz/repo que sí lo hace. El registro existe en DB pero el dashboard sirve datos cacheados. Corrección normativa: **toda escritura WA exitosa DEBE invalidar la caché del dashboard** (`clients`/`appointments`/`dashboard`) en el mismo seam compartido.
-> - **(D3) El dueño no recibe la notificación de reagendamiento.** Viola O2. Pendiente de corrección/verificación: confirmar que `reschedule_booking` emite el evento y que el canal WA del dueño no está fallando.
+> - **(D3) El dueño no recibe la notificación de reagendamiento.** Viola O2. Causa vigente hasta 2026-11-04: ver D8.
 > - **(D4) Las notificaciones llegan "con error" / sin el nombre del cliente.** Ver §7.
 
 ---
@@ -225,15 +225,15 @@ Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal*
 | Superficie de escritura | Campana (tabla `notifications`) | WhatsApp al dueño | Cómo |
 |---|---|---|---|
 | **WhatsApp** (cliente agenda/reagenda/cancela) | ✅ | ✅ | `process-whatsapp` → `emitBookingEvent` (DB + realtime + WA dueño + push) |
-| **Voz / botón flotante** (`voice-worker`) | ✅ | n/a (lo opera el dueño) | inserta en `notifications` |
+| **Línea telefónica** (`phone-agent-api`, solo crear) | ✅ | ✅ | `emitBookingEvent` (DB + realtime + WA dueño + push) |
+| **Voz / botón flotante** (`voice-worker`) | ✅ | n/a (lo opera el dueño) | inserta en `notifications`; **no emite Broadcast** (D9) |
 | **Dashboard** — crear | ✅ | n/a | `use-appointment-form` → `container.notifications.create` + push |
 | **Dashboard** — reagendar/editar | ✅ | n/a | `use-edit-appointment-form` → `container.notifications.create` + push |
 | **Dashboard** — cancelar/confirmar | ✅ | n/a | `use-dashboard-data` → `notificationForAppointment*` → `container.notifications.create` + push |
 
-**Realtime de campana y calendario (NORMATIVO — debe ser en vivo, sin recargar).** La entrega en vivo usa **tres mecanismos en capas** para que ningún fallo de una capa deje el dashboard obsoleto:
-1. **`postgres_changes`** sobre `notifications`/`appointments` filtrado por `business_id` — cubre escrituras del dashboard/web (cliente autenticado).
-2. **Broadcast** en el canal `notifications:${businessId}` — lo emite `pushToRealtime` de las edge functions de WhatsApp/voz (`appointment.created|rescheduled|cancelled`). Es **independiente de RLS**, así que entrega aunque `postgres_changes` se caiga por la autorización de realtime en escrituras cross-channel (caso real observado: la cita/notif se escribían en DB pero solo aparecían al recargar). El dashboard se suscribe al mismo canal; la campana (estado propio, no React Query) se refresca vía un evento de ventana `cronix:realtime-refresh`.
-3. **Red de seguridad — refetch periódico** (20s, solo pestaña visible) en calendario, stats y campana. Como la escritura WA ya invalida la caché Upstash, el poll trae datos frescos en ≤20s aunque ambas capas de realtime fallen → **nunca** se requiere recargar a mano.
+**Realtime de campana, calendario y lista del día (NORMATIVO — debe ser en vivo, sin recargar).** La entrega en vivo usa **dos mecanismos en capas** (sin `postgres_changes` desde 2026-10-29: agotaba el Disk IO de la instancia Nano):
+1. **Broadcast** en el canal `notifications:${businessId}`: lo emiten `pushToRealtime` (WhatsApp, teléfono) y `announceAppointmentChange` (web). **Un solo listener** por pestaña, `useRealtimeDashboardSync`, montado en el layout. Las pantallas con estado propio (campana, lista del día) escuchan su evento de ventana `cronix:realtime-refresh` y **no abren ese canal**: el cliente del navegador reutiliza un canal por tema, así que quitarlo desde una pantalla cierra también el del layout.
+2. **Red de seguridad — refetch periódico** (20s, solo pestaña visible) en calendario, stats, campana y lista del día; la lista también refresca al volver a la pestaña. Un refetch de fondo no muestra spinner ni vacía la lista si falla.
 
 Invariante: ninguna superficie de escritura puede omitir la inserción en `notifications`, y el reflejo en campana/calendario debe ocurrir **sin recarga manual**.
 
@@ -276,6 +276,8 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 | D5 | Notificaciones/recordatorio sin nombre real ("Cliente 6589") | N1, R3 | `tool-executor.ts` no pasa `customerName`; `booking-adapter.ts` llama RPC con `p_client_name=null` | 🟢 **corregido** — se propaga el nombre real del perfil WA hasta la RPC |
 | D6 | Las respuestas al recordatorio ("no podré asistir") no llegaban al agente; nada se cancelaba y el dueño no se enteraba | R2 (y O1 por consecuencia) | `cron-reminders` no anclaba `wa_sessions` → la respuesta sin `#slug` caía al landing genérico con HTTP 200 y **sin traza** (prod 2026-10-05: 0 de 14 clientes recordados tenían sesión; última traza WA del 2026-07-29). Además `CANCEL_RE` no reconocía "no podré asistir" | 🟢 **corregido (código, pendiente de deploy)** — anclaje de sesión al enviar el recordatorio + nivel 3 de ruteo por teléfono del cliente + `isCantAttendIntent` en la rama de cancelación + señal Sentry `wa_unrouted_message` |
 | D7 | "cancela mi cita.. y reagendame para el día martes en la mañana" (respuesta real al recordatorio, prod 2026-10-24): el bot ofreció horarios del día siguiente, no se ejecutó nada, la cita siguió `pending` y el dueño no se enteró | §3.3-bis (gramática), O3 (nueva) | El parser leía "la mañana" (franja) como "mañana" (día siguiente) antes que el día de la semana (`date-parser.ts`, igual en el espejo de voz); y sin confirmación del cliente no había ningún aviso al dueño | 🟢 **corregido (código, pendiente de deploy)** — "en/por/de/a la mañana" se quita antes de buscar "mañana"; la franja filtra los horarios ofrecidos; aviso O3 al dueño desde el primer turno |
+| D8 | El dueño no recibe WhatsApp al agendar, reagendar ni cancelar | O1, O2 | `notif-channels.ts` usaba una variable `supabase` inexistente desde `70b038a`; el `catch` se tragaba el `ReferenceError` (RS STUDIO, 2026-11-03) | 🟡 corregido y desplegado 2026-11-04 (`c40bb9f`), **entrega al dueño sin medir**. La plantilla `owner_event_notification` no existe en la cuenta del número de producción (Meta `132001`, medido 2026-11-04): hasta crearla, el aviso depende del texto libre y de la ventana de 24 h |
+| D9 | Las escrituras por voz no emiten Broadcast: campana, lista y otras pestañas esperan el polling de 20 s | O1 | `voice-worker` solo inserta en `notifications` y no llama a `pushToRealtime` | 🟡 abierto |
 
 ---
 

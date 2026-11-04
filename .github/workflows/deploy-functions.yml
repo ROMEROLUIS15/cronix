@@ -23,6 +23,6 @@ jobs:
 
       - name: Deploy Edge Function
         run: |
-          supabase functions deploy ${{ github.event.inputs.function_name }} --use-api --project-ref psuthbtdvprojdbsimvq
+          supabase functions deploy ${{ github.event.inputs.function_name }} --use-api --project-ref psuthbtdvprojdbsimvq --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

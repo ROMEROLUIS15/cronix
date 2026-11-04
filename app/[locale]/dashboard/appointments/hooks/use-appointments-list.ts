@@ -7,17 +7,19 @@
 
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { getBrowserContainer } from '@/lib/browser-container';
-import { createClient } from '@/lib/supabase/client';
 import { useBusinessContext } from '@/lib/hooks/use-business-context';
 import { isExpiredAppointment } from '@/lib/use-cases/appointments.use-case';
 import { completeAppointment } from '@/lib/actions/complete-appointment';
 import type { AppointmentWithRelations, AppointmentStatus } from '@/types';
 import { format } from 'date-fns';
-import { APPOINTMENT_CHANGED } from '@/lib/realtime/announce-appointment-change';
+import { REALTIME_REFRESH_EVENT } from '@/lib/realtime/announce-appointment-change';
 
 export type ViewMode = 'day' | 'week';
+
+/** Same safety net as the home calendar: a missed broadcast shows up within this time. */
+const REFRESH_INTERVAL_MS = 20_000;
 
 export interface UseAppointmentsListReturn {
   appointments: AppointmentWithRelations[];
@@ -45,19 +47,25 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
   const [date, setDate] = useState(new Date());
   const [query, setQuery] = useState('');
 
-  const fetchAppointments = useCallback(async () => {
+  const latestRequest = useRef(0);
+
+  // A background refresh keeps the current list on screen: no spinner, and a failure leaves it as is.
+  const fetchAppointments = useCallback(async ({ background = false } = {}) => {
     if (!businessId) return;
-    setLoading(true);
+    const request = ++latestRequest.current;
+    if (!background) setLoading(true);
     const dateStr = format(date, 'yyyy-MM-dd');
 
     try {
       const container = getBrowserContainer();
       const result = await container.appointments.getDayAppointments(businessId, dateStr);
-      setAppointments(result.error ? [] : result.data ?? []);
+      if (request !== latestRequest.current) return;
+      if (!result.error) setAppointments(result.data ?? []);
+      else if (!background) setAppointments([]);
     } catch {
-      setAppointments([]);
+      if (request === latestRequest.current && !background) setAppointments([]);
     } finally {
-      setLoading(false);
+      if (request === latestRequest.current) setLoading(false);
     }
   }, [businessId, date]);
 
@@ -67,19 +75,22 @@ export function useAppointmentsList(): UseAppointmentsListReturn {
     }
   }, [fetchAppointments, contextLoading]);
 
-  // Auto-refresh when any appointment changes: the agents and the web announce their writes
-  // by Broadcast (no postgres_changes, which used up the database's disk IO budget).
+  // Auto-refresh when any appointment changes: at once on the layout listener's event, and by
+  // polling and on returning to the tab for what a sleeping device or a lost broadcast misses.
   useEffect(() => {
-    if (!businessId) return
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`notifications:${businessId}`)
-      .on('broadcast', { event: 'appointment.created' }, () => void fetchAppointments())
-      .on('broadcast', { event: 'appointment.rescheduled' }, () => void fetchAppointments())
-      .on('broadcast', { event: 'appointment.cancelled' }, () => void fetchAppointments())
-      .on('broadcast', { event: APPOINTMENT_CHANGED }, () => void fetchAppointments())
-      .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    if (!businessId) return;
+    const refresh = () => void fetchAppointments({ background: true });
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const poll = window.setInterval(refreshIfVisible, REFRESH_INTERVAL_MS);
+    window.addEventListener(REALTIME_REFRESH_EVENT, refresh);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener(REALTIME_REFRESH_EVENT, refresh);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
   }, [businessId, fetchAppointments]);
 
   const filteredApts = useMemo(
