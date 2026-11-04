@@ -1,6 +1,7 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult, BookingEventData }  from '../../types.ts'
 import { localToUTC, buildEndISO, utcToLocalParts } from '../../core/time-format.ts'
+import { hoursRefusal } from '../_shared/working-hours.ts'
 import { slotsForOrder, nameMentionedInCorpus } from '../../core/conversation/slot-extractor.ts'
 import { resolveClient, needsConfirmation, formatConfirmationPrompt } from '../../core/repos/clients.ts'
 import { resolveService } from '../../core/repos/services.ts'
@@ -124,6 +125,8 @@ export async function executeReschedule(
   if (ctx.userTextCorpus && Date.parse(newStartISO) <= Date.now()) {
     return { success: false, result: `Esa hora ya pasó (${finalDate} a las ${finalTime}). ¿Para cuándo la paso?` }
   }
+  const outsideHours = ctx.userTextCorpus ? hoursRefusal(ctx, finalDate, finalTime, durationMin) : null
+  if (outsideHours) return { success: false, result: outsideHours }
 
   // Conflict scope follows the appointment's assigned staff member: a move
   // only collides within that member's agenda. Unassigned rows keep the

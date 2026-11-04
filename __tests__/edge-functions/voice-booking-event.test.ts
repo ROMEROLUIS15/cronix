@@ -280,3 +280,95 @@ describe('a date from an earlier question does not reach the next order', () => 
     expect(slotCorpus).not.toContain('hoy')
   })
 })
+
+describe('voz del dashboard only books inside the business hours', () => {
+  // 2099-01-12 is a Monday, 2099-01-11 a Sunday.
+  const HOURS = { monday: { open: '09:00', close: '18:00' }, sunday: null }
+  const APT = { id: 'apt-1', start_at: '2099-01-12T15:00:00.000Z', end_at: '2099-01-12T15:30:00.000Z', client_id: 'cli-1', service_id: 'svc-1', appointment_services: [] }
+  const mock = () => createMockSupabase((op) => {
+    if (op.table === 'clients' && op.type === 'select') return { data: [{ id: 'cli-1', name: 'Ana Torres', phone: '04141234567' }] }
+    if (op.table === 'services' && op.type === 'select') return { data: [{ id: 'svc-1', name: 'Corte', duration_min: 30, price: 10 }] }
+    if (op.table === 'appointments' && op.type === 'select') return op.selectArg === 'id' ? { data: [] } : { data: [APT] }
+    if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+    if (op.table === 'appointments' && op.type === 'update') return { error: null }
+    return { data: null }
+  })
+  const ctx = (m: ReturnType<typeof mock>, text: string) => ({
+    supabase: m.supabase, businessId: 'biz-1', userId: 'user-1', timezone: 'America/Caracas', workingHours: HOURS,
+    userTurn: text, userTextCorpus: text, slotCorpus: text,
+  }) as unknown as ToolContext
+  const wrote = (m: ReturnType<typeof mock>) => m.opsFor('appointments').some((o) => o.type === 'insert' || o.type === 'update')
+
+  it.each([
+    ['after closing', 'mueve la cita de Ana Torres a las 8 de la noche', '20:00'],
+    ['before opening', 'mueve la cita de Ana Torres a las 7 de la mañana', '07:00'],
+    ['ending after closing', 'mueve la cita de Ana Torres a las 5 y 45 de la tarde', '17:45'],
+  ])('does not move an appointment %s', async (_label, text, time) => {
+    const m = mock()
+    const res = await executeReschedule(ctx(m, text), { client_name: 'Ana Torres', new_date: '2099-01-12', new_time: time })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('horario')
+    expect(wrote(m)).toBe(false)
+  })
+
+  it('does not move an appointment to a closed day', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctx(m, 'reagenda la cita de Ana Torres para el 11 de enero de 2099 a las 10 de la mañana'), { client_name: 'Ana Torres', new_date: '2099-01-11', new_time: '10:00' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('cerrado')
+    expect(wrote(m)).toBe(false)
+  })
+
+  it.each([
+    ['at closing minus its duration', '17:30'],
+    ['at opening', '09:00'],
+  ])('moves an appointment %s', async (_label, time) => {
+    const m = mock()
+    const res = await executeReschedule(ctx(m, `mueve la cita de Ana Torres a las ${time}`), { client_name: 'Ana Torres', new_time: time })
+
+    expect(res.success).toBe(true)
+    expect(wrote(m)).toBe(true)
+  })
+
+  it('does not book after closing', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctx(m, 'agenda a Ana Torres el 12 de enero de 2099 a las 8 de la noche para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2099-01-12', time: '20:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('horario')
+    expect(wrote(m)).toBe(false)
+  })
+
+  it('does not book on a closed day', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctx(m, 'agenda a Ana Torres el 11 de enero de 2099 a las 10 de la mañana para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2099-01-11', time: '10:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('cerrado')
+    expect(wrote(m)).toBe(false)
+  })
+
+  it('books inside the hours', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctx(m, 'agenda a Ana Torres el 12 de enero de 2099 a las 10 de la mañana para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2099-01-12', time: '10:00',
+    })
+
+    expect(res.success).toBe(true)
+  })
+
+  it('uses 09:00 to 18:00 when the business never set its hours', async () => {
+    const m = mock()
+    const text = 'mueve la cita de Ana Torres a las 8 de la noche'
+    const res = await executeReschedule({ ...ctx(m, text), workingHours: undefined }, { client_name: 'Ana Torres', new_date: '2099-01-12', new_time: '20:00' })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('horario')
+  })
+})

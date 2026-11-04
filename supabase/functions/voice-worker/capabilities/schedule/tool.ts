@@ -14,6 +14,7 @@
  */
 
 import type { ToolContext } from '../../core/tool-context.ts'
+import { hoursRefusal } from '../_shared/working-hours.ts'
 import type { ToolResult, BookingEventData } from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
 import {
@@ -185,6 +186,8 @@ client = created as ClientRow
   if (corpus && Date.parse(startISO) <= Date.now()) {
     return { success: false, result: `Esa hora ya pasó (${date} a las ${time}). ¿Para cuándo la agendo?` }
   }
+  const outsideHours = corpus ? hoursRefusal(ctx, date, time, service.duration_min) : null
+  if (outsideHours) return { success: false, result: outsideHours }
   if (await findConflicts(ctx, startISO, endISO, undefined, staff?.id)) {
     const who = staff ? ` para ${staff.name}` : ''
     return { success: false, result: `El horario ${time} del ${date} ya está ocupado${who}. Elige otra hora.` }

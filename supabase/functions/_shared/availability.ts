@@ -65,6 +65,37 @@ export function nextOpenDates(workingHours: WorkingHours, fromISO: string, count
   return out
 }
 
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return (h ?? 0) * 60 + (m ?? 0)
+}
+
+// Dashboard day keys are 3-letter lowercase (mon/tue/.../sun). Intl 'long' weekday sliced to
+// 3 chars yields exactly those (monday→mon, wednesday→wed…).
+function dayKeyOf(date: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
+    .format(new Date(`${date}T12:00:00Z`)).toLowerCase().slice(0, 3)
+}
+
+/**
+ * Why an appointment does not fit the business hours; null when it fits. It must start at or
+ * after opening and END by closing, for every channel that writes appointments.
+ */
+export function outsideWorkingHours(p: {
+  workingHours: WorkingHours
+  date:         string
+  time:         string
+  durationMin:  number
+  timezone:     string
+}): { closed: true } | { closed: false; open: string; close: string } | null {
+  const hours = effectiveWorkingHours(p.workingHours)[dayKeyOf(p.date, p.timezone)]
+  if (!hours || !Array.isArray(hours) || hours.length < 2) return { closed: true }
+  const [open, close] = hours
+  const start = toMinutes(p.time)
+  if (start >= toMinutes(open) && start + p.durationMin <= toMinutes(close)) return null
+  return { closed: false, open, close }
+}
+
 /** Local date+time (HH:mm) → UTC ISO. Same Intl algorithm as booking-adapter. */
 export function localToUTC(date: string, time: string, timezone: string): string {
   const naiveAsUTC = new Date(`${date}T${time}:00Z`)
@@ -103,10 +134,7 @@ export function computeAvailableSlots(p: {
     return { open: false, slots: [] }
   }
 
-  // Dashboard day keys are 3-letter lowercase (mon/tue/.../sun). Intl 'long'
-  // weekday sliced to 3 chars yields exactly those (monday→mon, wednesday→wed…).
-  const dayKey = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
-    .format(new Date(`${date}T12:00:00Z`)).toLowerCase().slice(0, 3)
+  const dayKey = dayKeyOf(date, timezone)
 
   const wh = effectiveWorkingHours(workingHours)[dayKey]
   // Closed day: key absent or explicitly null.

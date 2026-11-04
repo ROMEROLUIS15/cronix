@@ -9,7 +9,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { computeAvailableSlots, effectiveWorkingHours, localToUTC, type WorkingHours } from '../_shared/availability.ts'
+import { computeAvailableSlots, localToUTC, outsideWorkingHours, type WorkingHours } from '../_shared/availability.ts'
 import { bookedSlotsOnDay } from '../_shared/booked-slots.ts'
 import { hmacSha256Hex } from '../_shared/hmac.ts'
 import { buildAppointmentEventId } from '../_shared/notifications/event-id.ts'
@@ -33,11 +33,6 @@ export interface BookingOutcome {
 
 const ok = (result: ApiResult, notification: AppointmentEvent | null = null): BookingOutcome =>
   ({ status: 200, result, notification })
-
-function minutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h! * 60 + m!
-}
 
 function validRequest(body: Partial<BookingRequest>): body is BookingRequest {
   return typeof body.call_sid === 'string' && !!body.call_sid
@@ -104,11 +99,8 @@ async function bookOnce(supabase: SupabaseClient, call: CallBusiness, req: Booki
     workingHours: hours, date: req.date, timezone: call.timezone, durationMin: duration, bookedSlots: booked.slots,
   })
   if (!slots.includes(req.time)) {
-    const day = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: call.timezone })
-      .format(new Date(`${req.date}T12:00:00Z`)).toLowerCase().slice(0, 3)
-    const open = effectiveWorkingHours(hours)[day]
-    const inside = !!open && minutes(req.time) >= minutes(open[0]) && minutes(req.time) + duration <= minutes(open[1])
-    return ok(fail(inside ? 'SLOT_CONFLICT' : 'OUTSIDE_HOURS'))
+    const outside = outsideWorkingHours({ workingHours: hours, date: req.date, time: req.time, durationMin: duration, timezone: call.timezone })
+    return ok(fail(outside ? 'OUTSIDE_HOURS' : 'SLOT_CONFLICT'))
   }
 
   const clientName = req.client_name.trim()

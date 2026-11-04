@@ -1,26 +1,13 @@
 import type { ToolContext } from '../../core/tool-context.ts'
 import type { ToolResult }  from '../../types.ts'
 import { localToUTC, humanizeDate, formatTimeFromISO } from '../../core/time-format.ts'
-import { computeAvailableSlots, type WorkingHours } from '../../../_shared/availability.ts'
+import { computeAvailableSlots } from '../../../_shared/availability.ts'
+import { storedWorkingHours } from '../_shared/working-hours.ts'
 import { bookedSlotsOnDay } from '../../../_shared/booked-slots.ts'
 
 export interface AvailableSlotsArgs extends Record<string, unknown> {
   date:         string
   duration_min: number
-}
-
-// The voice agent's context names days in full ({ monday: { open, close } }); the
-// shared resolver reads the dashboard's stored shape ({ mon: [open, close] }).
-const STORED_DAY_KEY: Record<string, string> = {
-  monday: 'mon', tuesday: 'tue', wednesday: 'wed', thursday: 'thu',
-  friday: 'fri', saturday: 'sat', sunday: 'sun',
-}
-
-function storedWorkingHours(hours: ToolContext['workingHours']): WorkingHours {
-  if (!hours) return undefined
-  return Object.fromEntries(
-    Object.entries(hours).map(([day, h]) => [STORED_DAY_KEY[day] ?? day, h ? [h.open, h.close] : null]),
-  ) as WorkingHours
 }
 
 export async function executeAvailableSlots(
