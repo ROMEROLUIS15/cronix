@@ -29,12 +29,14 @@ const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|den
 
 // A sentence that opens with "agenda" and is not followed by a date or "de/del/para" is an order:
 // "agenda una cita para Ana", "agenda a Ana mañana". "agenda de hoy" stays a question.
-const AGENDA_COMMAND = /^\s*agenda\s+(?!(?:de|del|para|en|hoy|ma[ñn]ana|pasado)\b)/
+const AGENDA_COMMAND = /(?:^|[,;.]\s*|\b(?:por favor|oye|dale|bueno)\s+)agenda\s+(?!(?:de|del|para|en|hoy|ma[ñn]ana|pasado)\b)/
+// "mueve las citas de Ana al viernes" mentions citas, but it asks to change them.
+const CHANGE_ORDER = /\b(?:muev|mover|cambi)\w*|\bpas(?:a|ar|ale|e)\b/
 
 /** True when the sentence asks to see the agenda, and is not an order. */
 export function isAgendaQuestion(text: string): boolean {
   const t = text.toLowerCase()
-  if (AGENDA_COMMAND.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return false
+  if (AGENDA_COMMAND.test(t) || CHANGE_ORDER.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return false
   if (SERVICE_INTENT.test(t)) return false
   return QUERY.test(t)
 }

@@ -11,7 +11,7 @@ import { toBookingEvent } from '../../supabase/functions/voice-worker/booking-ev
 import { refersToExistingAppointment } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
 import { executeSchedule } from '../../supabase/functions/voice-worker/capabilities/schedule/tool'
 import { buildUserCorpus } from '../../supabase/functions/voice-worker/core/conversation/frame'
-import { detectListAppointments } from '../../supabase/functions/voice-worker/capabilities/list-appointments/fast-path'
+import { detectListAppointments, isAgendaQuestion } from '../../supabase/functions/voice-worker/capabilities/list-appointments/fast-path'
 import { executeReschedule } from '../../supabase/functions/voice-worker/capabilities/reschedule/tool'
 import { createMockSupabase } from '../../supabase/functions/_shared/__tests__/_mock-supabase'
 import type { ToolContext } from '../../supabase/functions/voice-worker/core/tool-context'
@@ -444,5 +444,30 @@ describe('a voice order keeps the date the user gave', () => {
 
     expect(res.success).toBe(true)
     expect(startOf(m)).toBe('2099-01-20T19:00:00.000Z')
+  })
+})
+
+describe('an order is not an agenda question, wherever it starts', () => {
+  it.each([
+    'cuando puedas, agenda a Ana el viernes',
+    'oye, agenda a Ana el viernes',
+    'dale, agenda a Ana el viernes',
+    'por favor agenda a Ana el viernes',
+    'bueno agenda a Ana el viernes',
+    'mueve las citas de Ana al viernes',
+    'pasa las citas de Ana para el viernes',
+    'cambia las citas de Ana al viernes',
+  ])('"%s" is an order', (text) => {
+    expect(isAgendaQuestion(text)).toBe(false)
+  })
+
+  it.each([
+    'oye, agenda de hoy',
+    'por favor agenda de mañana',
+    'qué citas tengo pasado mañana',
+    'muéstrame las citas de hoy',
+    'mi agenda del viernes',
+  ])('"%s" still asks about the agenda', (text) => {
+    expect(isAgendaQuestion(text)).toBe(true)
   })
 })
