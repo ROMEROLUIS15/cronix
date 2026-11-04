@@ -38,7 +38,19 @@ export interface AppointmentEvent {
   requestedDate?: string | null
   userId:       string
   /** Where the appointment was made: the owner's message says it. */
-  channel:      'whatsapp' | 'phone'
+  channel:      'whatsapp' | 'phone' | 'voice' | 'dashboard'
+  /** The owner made this change: they get no WhatsApp about their own action. */
+  ownerActed?:  boolean
+}
+
+/** Only an employee acting on the dashboard or the voice button alerts the owner by WhatsApp. */
+export function isOwnerActor(role: string): boolean {
+  return role !== 'employee'
+}
+
+/** A change someone on the business's own team made, not the client. */
+function madeByTeam(event: AppointmentEvent): boolean {
+  return event.channel === 'voice' || event.channel === 'dashboard'
 }
 
 /** A client's request to cancel/reschedule ONE appointment, before they confirm it. */
@@ -117,19 +129,19 @@ export function buildOwnerWhatsAppMessage(event: AppointmentEvent): string {
         `¡Hola! 👋🤖\n\n` +
         `Ha sido agendada una cita para *${event.clientName}* el día *${event.date}* a las *${prettyTime}*\n` +
         `Servicio: *${event.serviceName}*\n\n` +
-        `¡Reserva confirmada ${event.channel === 'phone' ? 'por teléfono' : 'vía WhatsApp'}! 💪🚀`
+        `¡Reserva confirmada ${event.channel === 'phone' ? 'por teléfono' : madeByTeam(event) ? 'por tu equipo' : 'vía WhatsApp'}! 💪🚀`
       )
     case 'appointment.rescheduled':
       return (
         `¡Reagenda! 🔄🤖\n\n` +
-        `*${event.clientName}* movió su cita de *${event.serviceName}*.\n` +
+        (madeByTeam(event) ? `Tu equipo movió la cita de *${event.clientName}* (*${event.serviceName}*).\n` : `*${event.clientName}* movió su cita de *${event.serviceName}*.\n`) +
         `Nueva fecha: *${event.date}* a las *${prettyTime}*\n\n` +
         `¡Tu agenda ha sido actualizada! 💪🚀`
       )
     case 'appointment.cancelled':
       return (
         `¡Cita cancelada! ❌🤖\n\n` +
-        `*${event.clientName}* canceló su cita de *${event.serviceName}*` +
+        (madeByTeam(event) ? `Tu equipo canceló la cita de *${event.clientName}* (*${event.serviceName}*)` : `*${event.clientName}* canceló su cita de *${event.serviceName}*`) +
         (event.date ? ` del *${event.date}* a las *${prettyTime}*` : '') +
         `.\n\n¡Tienes un nuevo espacio libre! 💪🚀`
       )

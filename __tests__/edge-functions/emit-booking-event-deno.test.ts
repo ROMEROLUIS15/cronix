@@ -171,6 +171,18 @@ describe('emitBookingEvent (Deno) reaches the owner', () => {
     expect(whatsappCalls().map((m) => m['template'])).toEqual(['owner_event_notification'])
   })
 
+  it('sends no WhatsApp when the owner made the change: bell, Realtime and push stay', async () => {
+    await emitBookingEvent({ ...eventOf('appointment.rescheduled'), ownerActed: true })
+
+    expect(steps()).toEqual(['bell', 'realtime', 'push'])
+  })
+
+  it('alerts the owner by WhatsApp when an employee made the change', async () => {
+    await emitBookingEvent({ ...eventOf('appointment.cancelled'), channel: 'dashboard', ownerActed: false })
+
+    expect(steps()).toEqual(['bell', 'realtime', 'whatsapp', 'push'])
+  })
+
   it('sends nothing for an event that already has a notification', async () => {
     network.existingEvent = true
 

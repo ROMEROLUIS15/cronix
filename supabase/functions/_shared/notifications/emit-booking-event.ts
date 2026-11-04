@@ -1,10 +1,10 @@
 /**
  * emit-booking-event.ts — Emits an AppointmentEvent through the owner-notification pipeline,
- * for every channel that books (WhatsApp, the phone line):
+ * for every channel that books (WhatsApp, the phone line, the voice button, the dashboard):
  *   1. Idempotency check (event_id in DB)
  *   2. Persist to notifications table (source of truth)
  *   3. Realtime broadcast (dashboard bell)
- *   4. WhatsApp to owner (template-first, free-text fallback)
+ *   4. WhatsApp to owner (template-first, free-text fallback), unless the owner made the change
  *   5. Web push to the owner's PWA
  *
  * Order: DB → Realtime → WhatsApp → push (WA/push only if DB succeeded). Never throws to
@@ -26,7 +26,7 @@ export async function emitBookingEvent(event: AppointmentEvent): Promise<void> {
     // DB is the source of truth — must succeed before the other channels.
     if (!(await saveNotificationToDB(event))) return
     await pushToRealtime(event)
-    await sendOwnerWhatsApp(event)
+    if (!event.ownerActed) await sendOwnerWhatsApp(event)
     await sendOwnerWebPush(event)
   } catch (err) {
     captureException(err, { stage: 'emit_booking_event', eventId: event.eventId })
