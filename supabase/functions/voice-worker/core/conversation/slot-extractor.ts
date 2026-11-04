@@ -69,7 +69,9 @@ export function timeMentionedInCorpus(corpus: string): boolean {
 export function slotsForOrder(
   ctx: { userTurn?: string; slotCorpus?: string; userTextCorpus?: string }, todayLocal: string,
 ): { date: string | null; time: string | null } {
-  const turn = extractSlotsFromCorpus(ctx.userTurn ?? '', todayLocal)
+  // A bare number answers "¿a qué hora?": it is not a day of the month.
+  const answer = (ctx.userTurn ?? '').trim()
+  const turn = /^\d{1,2}$/.test(answer) ? { date: null, time: null } : extractSlotsFromCorpus(answer, todayLocal)
   const order = extractSlotsFromCorpus(ctx.slotCorpus ?? ctx.userTextCorpus ?? '', todayLocal)
   return { date: turn.date ?? order.date, time: turn.time ?? order.time }
 }
@@ -91,6 +93,3 @@ export function refersToExistingAppointment(turn: string): boolean {
   return EXISTING_APPOINTMENT.test(text)
 }
 
-export function dateMentionedInCorpus(corpus: string, todayLocal: string): boolean {
-  return parseDateExpression(corpus, todayLocal) !== null
-}

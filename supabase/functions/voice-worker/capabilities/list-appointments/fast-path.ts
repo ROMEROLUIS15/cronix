@@ -31,11 +31,16 @@ const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|den
 // "agenda una cita para Ana", "agenda a Ana mañana". "agenda de hoy" stays a question.
 const AGENDA_COMMAND = /^\s*agenda\s+(?!(?:de|del|para|en|hoy|ma[ñn]ana|pasado)\b)/
 
-export function detectListAppointments(text: string, today: string): ListAppointmentsArgs | null {
+/** True when the sentence asks to see the agenda, and is not an order. */
+export function isAgendaQuestion(text: string): boolean {
   const t = text.toLowerCase()
-  if (AGENDA_COMMAND.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
-  if (SERVICE_INTENT.test(t)) return null
-  if (!QUERY.test(t)) return null
+  if (AGENDA_COMMAND.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return false
+  if (SERVICE_INTENT.test(t)) return false
+  return QUERY.test(t)
+}
+
+export function detectListAppointments(text: string, today: string): ListAppointmentsArgs | null {
+  if (!isAgendaQuestion(text)) return null
 
   // Agenda queries can be past OR future ("qué citas tuve el 9 de junio" vs
   // "qué citas tengo el 20"). Use 'nearest' so a bare day+month resolves to the

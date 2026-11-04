@@ -20,6 +20,8 @@
  * else.
  */
 
+import { isAgendaQuestion } from '../../capabilities/list-appointments/fast-path.ts'
+
 export type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
 const CORPUS_MAX_CHARS = 4000
@@ -86,18 +88,9 @@ export function buildUserCorpus(
   const cutoff = findLastFrameBoundary(history)
   const relevantHistory = history.slice(cutoff + 1)
   const priorTurns = relevantHistory.filter(m => m.role === 'user').map(m => m.content)
+  // A question about the agenda keeps its name for the mention guards ("agéndala" after it), but its
+  // date is not the next order's: after "qué citas tengo hoy", "mueve la cita a las 3" is not today.
   const corpus = [inputText, ...priorTurns].join(' ').slice(0, CORPUS_MAX_CHARS)
-  const slotCorpus = [inputText, ...priorTurns.filter(t => !isQuestionTurn(t))].join(' ').slice(0, CORPUS_MAX_CHARS)
+  const slotCorpus = [inputText, ...priorTurns.filter(t => !isAgendaQuestion(t))].join(' ').slice(0, CORPUS_MAX_CHARS)
   return { corpus, slotCorpus, cutoff, relevantTurns: relevantHistory.length }
-}
-
-const QUESTION_OPENING = /^[\s¿]*(?:que|cual|cuales|cuanta|cuantas|cuanto|cuantos|cuando|donde|quien|tengo|hay|muestrame|ensename|dime|lee|ver)\b/
-
-/**
- * A turn that asked about the agenda. Its name still counts as said, so the mention guards can
- * accept "agéndala" after it, but its date is not the date of the next order: after "qué citas
- * tengo hoy", "mueve la cita a las 3" must not move it to today.
- */
-function isQuestionTurn(turn: string): boolean {
-  return QUESTION_OPENING.test(turn.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
 }

@@ -167,17 +167,6 @@ describe('voice never lands on a date the user did not ask for', () => {
   }) as unknown as ToolContext
   const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' })
 
-  it('"mueve la cita a las 3" keeps the day of the appointment, whatever date the model made up', async () => {
-    const m = mock()
-    const res = await executeReschedule(ctxFor(m, 'mueve la cita de Ana Torres a las 3 de la tarde'), {
-      client_name: 'Ana Torres', new_date: today(), new_time: '15:00',
-    })
-
-    expect(res.success).toBe(true)
-    const update = m.opsFor('appointments').find((o) => o.type === 'update')!
-    expect(update.updatePayload).toMatchObject({ start_at: `${TOMORROWISH}T19:00:00.000Z` })
-  })
-
   it('still uses the new date when the user says one', async () => {
     const m = mock()
     const res = await executeReschedule(ctxFor(m, 'reagenda la cita de Ana Torres para el 15 de enero de 2099 a las 3 de la tarde'), {
@@ -370,5 +359,90 @@ describe('voz del dashboard only books inside the business hours', () => {
 
     expect(res.success).toBe(false)
     expect(res.result).toContain('horario')
+  })
+})
+
+describe('a voice order keeps the date the user gave', () => {
+  const NOW_APT = '2099-01-12'
+  const APT = { id: 'apt-1', start_at: `${NOW_APT}T15:00:00.000Z`, end_at: `${NOW_APT}T15:30:00.000Z`, client_id: 'cli-1', service_id: 'svc-1', appointment_services: [] }
+  const mock = () => createMockSupabase((op) => {
+    if (op.table === 'clients' && op.type === 'select') return { data: [{ id: 'cli-1', name: 'Ana Torres', phone: '04141234567' }] }
+    if (op.table === 'services' && op.type === 'select') return { data: [{ id: 'svc-1', name: 'Corte', duration_min: 30, price: 10 }] }
+    if (op.table === 'appointments' && op.type === 'select') return op.selectArg === 'id' ? { data: [] } : { data: [APT] }
+    if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+    if (op.table === 'appointments' && op.type === 'update') return { error: null }
+    return { data: null }
+  })
+  type Turn = { role: 'user' | 'assistant'; content: string }
+  const ctxAfter = (m: ReturnType<typeof mock>, text: string, history: Turn[]) => {
+    const { corpus, slotCorpus } = buildUserCorpus(text, history)
+    return { supabase: m.supabase, businessId: 'biz-1', userId: 'user-1', timezone: 'America/Caracas', userTurn: text, userTextCorpus: corpus, slotCorpus } as unknown as ToolContext
+  }
+  const startOf = (m: ReturnType<typeof mock>) => (m.opsFor('appointments').find((o) => o.type === 'update')?.updatePayload as { start_at?: string } | undefined)?.start_at
+
+  it.each([
+    'tengo que mover a Ana Torres para el 20 de enero de 2099',
+    'hay que mover a Ana Torres al 20 de enero de 2099',
+    'que sea el 20 de enero de 2099',
+    'cuando puedas, mueve a Ana Torres al 20 de enero de 2099',
+  ])('"%s" then "a las 3" uses that date', async (first) => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, 'a las 3 de la tarde', [{ role: 'user', content: 'reagenda a Ana Torres' }, { role: 'assistant', content: '¿Para cuándo?' }, { role: 'user', content: first }, { role: 'assistant', content: '¿A qué hora?' }]), { client_name: 'Ana Torres', new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    expect(startOf(m)).toBe('2099-01-20T19:00:00.000Z')
+  })
+
+  it('books the date given in an order that opens like a question', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctxAfter(m, 'tengo que agendar a Ana Torres el 20 de enero de 2099 a las 3 de la tarde para Corte', []), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2099-01-20', time: '15:00',
+    })
+
+    expect(res.success).toBe(true)
+  })
+
+  it.each([
+    'qué horarios libres hay el 20 de enero de 2099',
+    'tengo libre el 20 de enero de 2099',
+  ])('an availability question names the date meant: "%s"', async (first) => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, 'mueve la cita de Ana Torres a las 3 de la tarde', [{ role: 'user', content: first }, { role: 'assistant', content: 'A las 3 está libre.' }]), { client_name: 'Ana Torres', new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    expect(startOf(m)).toBe('2099-01-20T19:00:00.000Z')
+  })
+
+  it.each([
+    ['the parser cannot read it', 'pasa a Ana Torres para el primero de febrero de 2099 a las 3', '2099-02-01', [] as Turn[]],
+    ['the assistant proposed it', 'sí', '2099-01-20', [{ role: 'user', content: 'reagenda a Ana Torres' }, { role: 'assistant', content: '¿La paso para el 20 de enero a las 3?' }]],
+  ])('keeps the date from the model when %s', async (_label, text, date, history) => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, text, history as Turn[]), { client_name: 'Ana Torres', new_date: date, new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    expect(startOf(m)).toBe(`${date}T19:00:00.000Z`)
+  })
+
+  it.each([
+    'oye, qué citas tengo hoy',
+    'y qué citas tengo hoy',
+    'a ver, qué citas tengo hoy',
+    'agenda de hoy',
+    'mis citas de hoy',
+  ])('the agenda question "%s" still does not move it to today', async (first) => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, 'mueve la cita de Ana Torres a las 3 de la tarde', [{ role: 'user', content: first }, { role: 'assistant', content: 'Tienes 6 citas.' }]), { client_name: 'Ana Torres', new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    expect(startOf(m)).toBe(`${NOW_APT}T19:00:00.000Z`)
+  })
+
+  it('a bare number answering the hour is not a day of the month', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctxAfter(m, '3', [{ role: 'user', content: 'reagenda a Ana Torres para el 20 de enero de 2099' }, { role: 'assistant', content: '¿A qué hora?' }]), { client_name: 'Ana Torres', new_time: '15:00' })
+
+    expect(res.success).toBe(true)
+    expect(startOf(m)).toBe('2099-01-20T19:00:00.000Z')
   })
 })
