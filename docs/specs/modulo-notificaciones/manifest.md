@@ -23,7 +23,8 @@ interface AppointmentEvent {
   time:         string   // HH:mm 24h en zona horaria LOCAL del negocio
   requestedDate?: string | null // solo *_requested: la nueva fecha pedida, si el cliente la dijo
   userId:       string   // 'whatsapp-agent' | UUID del usuario del dashboard
-  channel:      'whatsapp' | 'dashboard' | 'system'
+  channel:      'whatsapp' | 'phone' | 'voice' | 'dashboard'
+  ownerActed?:  boolean  // el dueño hizo el cambio: no recibe WhatsApp de su propia acción
 }
 ```
 
@@ -79,16 +80,12 @@ emitBookingEvent(event)
 
 ## 5. Implementaciones por Runtime
 
-### Runtime Next.js (`lib/notifications/` + server actions)
-- Usa `emitBookingEvent()` de `lib/notifications/emit-booking-event.ts`
-- Retorna `Result<void>` como contrato de error
-- Acceso a Supabase Admin vía cliente del servidor (inyectado como parámetro)
-- Tipos del evento en `lib/notifications/appointment-event.ts`
+### Runtime Next.js (`lib/notifications/`)
+- No tiene pipeline propio: `announceBookingEvent(action, appointmentId)` llama a la edge function `booking-event`, que lee la cita dentro del negocio de quien llama y ejecuta el `emitBookingEvent` de Deno. El navegador no aporta datos del aviso
 
 ### Runtime Deno (Edge Functions WhatsApp)
-- Usa `emitBookingEvent()` de `supabase/functions/_shared/notifications/emit-booking-event.ts` (WhatsApp y línea telefónica; `process-whatsapp/notifications.ts` solo construye los eventos)
-- Cubierto por `__tests__/edge-functions/emit-booking-event-deno.test.ts`, que ejecuta el archivo Deno real; `__tests__/notifications/emit-booking-event.test.ts` cubre solo la copia Node
-- No puede importar módulos Next.js — implementación espejo del mismo contrato
+- `emitBookingEvent()` de `supabase/functions/_shared/notifications/emit-booking-event.ts` es el único pipeline: WhatsApp, línea telefónica, botón de voz y dashboard
+- Cubierto por `__tests__/edge-functions/emit-booking-event-deno.test.ts`, que ejecuta el archivo Deno real
 - Acceso a Supabase vía `createClient(url, serviceRoleKey)`
 
 ## 6. Tipos de Notificación en Base de Datos

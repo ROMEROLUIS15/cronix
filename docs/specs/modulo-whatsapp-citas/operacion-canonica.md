@@ -220,16 +220,15 @@ El mensaje debe:
 
 ### 6.1 Matriz de notificaciones por superficie (NORMATIVO — verificado en código)
 
-Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal**, debe registrar la notificación en la campana del dueño. El **WhatsApp al dueño** aplica a las operaciones hechas por el **cliente vía WhatsApp**.
+Toda operación de cita (crear / reagendar / cancelar), **sin importar el canal**, pasa por **un solo pipeline, `emitBookingEvent`** (`_shared/notifications/emit-booking-event.ts`): campana, Realtime y push para todas. El **WhatsApp al dueño** sale por las acciones de **clientes y empleados**, nunca por las del propio dueño (decisión del usuario, 2026-11-04; `ownerActed`).
 
 | Superficie de escritura | Campana (tabla `notifications`) | WhatsApp al dueño | Cómo |
 |---|---|---|---|
 | **WhatsApp** (cliente agenda/reagenda/cancela) | ✅ | ✅ | `process-whatsapp` → `emitBookingEvent` (DB + realtime + WA dueño + push) |
 | **Línea telefónica** (`phone-agent-api`, solo crear) | ✅ | ✅ | `emitBookingEvent` (DB + realtime + WA dueño + push) |
-| **Voz / botón flotante** (`voice-worker`) | ✅ | n/a (lo opera el dueño) | inserta en `notifications`; **no emite Broadcast** (D9) |
-| **Dashboard** — crear | ✅ | n/a | `use-appointment-form` → `container.notifications.create` + push |
-| **Dashboard** — reagendar/editar | ✅ | n/a | `use-edit-appointment-form` → `container.notifications.create` + push |
-| **Dashboard** — cancelar/confirmar | ✅ | n/a | `use-dashboard-data` → `notificationForAppointment*` → `container.notifications.create` + push |
+| **Botón de voz** (`voice-worker`) | ✅ | solo si actúa un empleado | `emitBookingEvent` (`voice-worker/booking-event.ts`) |
+| **Dashboard** — crear, reagendar, cancelar | ✅ | solo si actúa un empleado | `announceBookingEvent` → edge function `booking-event` → `emitBookingEvent`; el servidor lee la cita dentro del negocio de quien llama |
+| **Dashboard** — confirmar, editar sin mover ni cancelar | ✅ | no | no son eventos de reserva: `container.notifications.create` + push |
 
 **Realtime de campana, calendario y lista del día (NORMATIVO — debe ser en vivo, sin recargar).** La entrega en vivo usa **dos mecanismos en capas** (sin `postgres_changes` desde 2026-10-29: agotaba el Disk IO de la instancia Nano):
 1. **Broadcast** en el canal `notifications:${businessId}`: lo emiten `pushToRealtime` (WhatsApp, teléfono) y `announceAppointmentChange` (web). **Un solo listener** por pestaña, `useRealtimeDashboardSync`, montado en el layout. Las pantallas con estado propio (campana, lista del día) escuchan su evento de ventana `cronix:realtime-refresh` y **no abren ese canal**: el cliente del navegador reutiliza un canal por tema, así que quitarlo desde una pantalla cierra también el del layout.
@@ -277,7 +276,9 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 | D6 | Las respuestas al recordatorio ("no podré asistir") no llegaban al agente; nada se cancelaba y el dueño no se enteraba | R2 (y O1 por consecuencia) | `cron-reminders` no anclaba `wa_sessions` → la respuesta sin `#slug` caía al landing genérico con HTTP 200 y **sin traza** (prod 2026-10-05: 0 de 14 clientes recordados tenían sesión; última traza WA del 2026-07-29). Además `CANCEL_RE` no reconocía "no podré asistir" | 🟢 **corregido (código, pendiente de deploy)** — anclaje de sesión al enviar el recordatorio + nivel 3 de ruteo por teléfono del cliente + `isCantAttendIntent` en la rama de cancelación + señal Sentry `wa_unrouted_message` |
 | D7 | "cancela mi cita.. y reagendame para el día martes en la mañana" (respuesta real al recordatorio, prod 2026-10-24): el bot ofreció horarios del día siguiente, no se ejecutó nada, la cita siguió `pending` y el dueño no se enteró | §3.3-bis (gramática), O3 (nueva) | El parser leía "la mañana" (franja) como "mañana" (día siguiente) antes que el día de la semana (`date-parser.ts`, igual en el espejo de voz); y sin confirmación del cliente no había ningún aviso al dueño | 🟢 **corregido (código, pendiente de deploy)** — "en/por/de/a la mañana" se quita antes de buscar "mañana"; la franja filtra los horarios ofrecidos; aviso O3 al dueño desde el primer turno |
 | D8 | El dueño no recibe WhatsApp al agendar, reagendar ni cancelar | O1, O2 | `notif-channels.ts` usaba una variable `supabase` inexistente desde `70b038a`; el `catch` se tragaba el `ReferenceError` (RS STUDIO, 2026-11-03) | 🟢 corregido y desplegado 2026-11-04 (`e95ee97`); entrega medida con un número real por el flujo completo, fuera de la ventana de 24 h. `owner_event_notification` no se puede enviar desde el número de producción (Meta `132001`: no existe en ese idioma o no está aprobada, medido 2026-11-04); hasta que se apruebe, el aviso sale con la plantilla aprobada `daily_owner_summary` |
-| D9 | Las escrituras por voz no emiten Broadcast: campana, lista y otras pestañas esperan el polling de 20 s | O1 | `voice-worker` solo inserta en `notifications` y no llama a `pushToRealtime` | 🟡 abierto |
+| D9 | Las escrituras por voz no emitían Broadcast: campana, lista y otras pestañas esperaban el polling de 20 s | O1 | `voice-worker` solo insertaba en `notifications` | 🟢 corregido 2026-11-04: voz usa `emitBookingEvent` |
+| D10 | El dashboard avisaba "Cita actualizada" al reagendar y al cancelar, sin `event_id` | O1, O2 | Cada formulario armaba su propio aviso | 🟢 corregido 2026-11-04: los formularios usan `booking-event` |
+| D11 | Por voz, "Cambia la cita" transcrito como "E2E la cita" creó una cita nueva y respondió "Listo" | O1 | `smart_schedule` no exigía que la frase pidiera una cita | 🟢 corregido 2026-11-04: `hasBookingIntent` pregunta antes de crear |
 
 ---
 
