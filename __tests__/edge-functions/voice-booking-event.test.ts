@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { toBookingEvent } from '../../supabase/functions/voice-worker/booking-event'
 import { refersToExistingAppointment } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
 import { executeSchedule } from '../../supabase/functions/voice-worker/capabilities/schedule/tool'
+import { detectListAppointments } from '../../supabase/functions/voice-worker/capabilities/list-appointments/fast-path'
 import type { ToolContext } from '../../supabase/functions/voice-worker/core/tool-context'
 
 const NOTIFICATION = {
@@ -114,5 +115,30 @@ describe('smart_schedule', () => {
 
     // Past the guard the tool reads the catalog, which is what this database refuses.
     await expect(executeSchedule(ctx, { service_name: 'E2E Service', client_name: 'Sim Tester', date: '2026-11-06', time: '16:00' })).rejects.toThrow('touched the database')
+  })
+})
+
+describe('"agenda": a command or the calendar', () => {
+  const today = '2026-11-04'
+
+  it.each([
+    'agenda una cita para Sim Tester de E2E Service el 6 de noviembre a las 11 de la mañana',
+    'Agenda Sim tester el 7 de noviembre a las 2 de la tarde para E 12 Service',
+    'agenda a Ana mañana a las 3',
+    'agenda al señor Pérez hoy a las 5',
+  ])('"%s" is a command: it does not answer with the day\'s list', (text) => {
+    expect(detectListAppointments(text, today)).toBeNull()
+  })
+
+  it.each([
+    ['agenda de hoy', '2026-11-04'],
+    ['agenda de mañana', '2026-11-05'],
+    ['agenda para mañana', '2026-11-05'],
+    ['mi agenda del 6 de noviembre', '2026-11-06'],
+    ['muéstrame la agenda de hoy', '2026-11-04'],
+    ['agenda hoy', '2026-11-04'],
+    ['qué citas tengo hoy', '2026-11-04'],
+  ])('"%s" still reads the calendar', (text, date) => {
+    expect(detectListAppointments(text, today)).toEqual({ date })
   })
 })

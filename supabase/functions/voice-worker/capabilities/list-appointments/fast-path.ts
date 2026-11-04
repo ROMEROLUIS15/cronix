@@ -27,9 +27,13 @@ const SERVICE_INTENT = /\bservicios?\b/
 // the agenda ("qué clientes tengo mañana" = "what bookings tomorrow").
 const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|dentro)\b|\bagenda\b|\bmis?\s+citas\b|\bqu[eé]\s+tengo\b|\bcu[aá]les\s+son\s+mis?\s+citas\b|\bmu[eé]strame\b|\blist[aoeé]\s+(?:mis\s+)?citas\b|\b(?:qu[eé]|cu[aá]ntos?)\s+clientes?\s+(?:tengo|hay|atiendo|atender[eé]|atender[ée]mos)\b|\bclientes?\s+(?:tengo|hay|para|del|de\s+hoy|de\s+ma[ñn]ana)\b)/
 
+// A sentence that opens with "agenda" and is not followed by a date or "de/del/para" is an order:
+// "agenda una cita para Ana", "agenda a Ana mañana". "agenda de hoy" stays a question.
+const AGENDA_COMMAND = /^\s*agenda\s+(?!(?:de|del|para|en|hoy|ma[ñn]ana|pasado)\b)/
+
 export function detectListAppointments(text: string, today: string): ListAppointmentsArgs | null {
   const t = text.toLowerCase()
-  if (WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
+  if (AGENDA_COMMAND.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return null
   if (SERVICE_INTENT.test(t)) return null
   if (!QUERY.test(t)) return null
 
