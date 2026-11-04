@@ -18,6 +18,7 @@ import type { ToolResult, BookingEventData } from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
 import {
   extractSlotsFromCorpus,
+  hasBookingIntent,
   nameMentionedInCorpus,
   timeMentionedInCorpus,
   dateMentionedInCorpus,
@@ -105,6 +106,10 @@ export async function executeSchedule(
 
   // Step 3 — anti-hallucination: every slot must trace back to the user.
   if (corpus) {
+    if (!hasBookingIntent(corpus)) {
+      console.log('[VOICE-WORKER-SCHEDULE] REJECTED — the user did not ask for a new appointment')
+      return { success: false, result: '¿Quieres agendar una cita nueva o mover una que ya existe?', error: 'GUARD_REJECTED' }
+    }
     if (!nameMentionedInCorpus(corpus, service_name)) {
       console.log(`[VOICE-WORKER-SCHEDULE] REJECTED — hallucinated service="${service_name}"`)
       return { success: false, result: 'Para agendar necesito el servicio. ¿Para qué servicio?', error: 'GUARD_REJECTED' }

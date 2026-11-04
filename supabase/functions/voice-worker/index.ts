@@ -24,7 +24,8 @@ import { createClient } from '@supabase/supabase-js'
 import { transcribe }            from './stt.ts'
 import { getClientFirstNamesForBoost } from './core/repos/clients.ts'
 import { runAgent }              from './agent.ts'
-import { dispatchBellNotification } from './notifications.ts'
+import { emitBookingEvent } from '../_shared/notifications/emit-booking-event.ts'
+import { toBookingEvent } from './booking-event.ts'
 import { checkRateLimit, redisGet, redisSet } from './redis.ts'
 import { loadSession, saveSession } from './core/session.ts'
 import { buildUserCorpus }       from './core/conversation/frame.ts'
@@ -463,7 +464,7 @@ async function handleRequest(req: Request): Promise<Response> {
       messages: agentResult.history,
       lastRef:  nextLastRef,
     }),
-    ...agentResult.pendingNotifications.map(n => dispatchBellNotification(supabase, n)),
+    ...agentResult.pendingNotifications.map(n => emitBookingEvent(toBookingEvent(n, context.businessName, userCtx.userRole))),
   ])
 
   // 7. TTS is no longer synthesised here.
