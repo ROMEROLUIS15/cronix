@@ -67,6 +67,7 @@ emitBookingEvent(event)
     │   └─ Requiere `businesses.phone` vinculado via VINCULAR-slug
     │   └─ Se omite si el número no está configurado
     │   └─ Plantilla primero (`OWNER_EVENT_TEMPLATE`), fallback a texto libre (solo entrega en ventana 24h)
+    │   └─ ⚠️ Medido 2026-11-04: la plantilla por defecto `owner_event_notification` NO existe en la cuenta del número de producción (Meta `132001`)
     │   └─ Nunca rompe el pipeline; la degradación va a Sentry: plantilla falló → `owner_wa_template_failed`, texto también → `owner_wa_undelivered`
     │
     └─ Canal 4: Web Push al PWA del dueño
