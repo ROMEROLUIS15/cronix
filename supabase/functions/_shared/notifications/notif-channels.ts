@@ -24,7 +24,7 @@ function db(): SupabaseClient {
 /** Idempotency: true when this eventId already has a notification row. */
 export async function checkEventExists(eventId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db()
       .from('notifications').select('id').eq('event_id', eventId).maybeSingle()
     if (error) return false  // falla segura: tratar como no procesado
     return data !== null
@@ -144,7 +144,7 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
     const cronSecret  = Deno.env.get('CRON_SECRET')  ?? ''
 
     // Owner's verified WhatsApp is stored in businesses.phone (set via VINCULAR-slug).
-    const { data: bData, error: bError } = await supabase
+    const { data: bData, error: bError } = await db()
       .from('businesses').select('phone').eq('id', event.businessId).maybeSingle()
     if (bError) {
       console.warn('[NOTIFICATION-WA] Owner phone lookup failed — WA notification skipped:', bError.message)
