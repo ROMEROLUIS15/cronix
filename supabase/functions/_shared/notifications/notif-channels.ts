@@ -91,9 +91,13 @@ export async function pushToRealtime(event: AppointmentEvent): Promise<void> {
 // Approved Meta template for per-event owner alerts. Configurable via secret so an
 // already-approved template can be wired without a redeploy; it MUST have exactly 4 body
 // variables in order: {{1}} estado, {{2}} cliente, {{3}} servicio, {{4}} fecha y hora.
-// If the template isn't approved, the free-text fallback takes over.
+// If the template isn't approved, the summary template and then free text take over.
 // @ts-ignore — Deno runtime globals
 const OWNER_EVENT_TEMPLATE = Deno.env.get('OWNER_EVENT_TEMPLATE') ?? 'owner_event_notification'
+// Approved template of the daily summary, used while the event template is not approved: it
+// delivers outside the 24h window too. Body: "El resumen diario está listo: {{1}}. Detalles
+// adicionales: {{2}}. Gracias."
+const OWNER_SUMMARY_TEMPLATE = 'daily_owner_summary'
 
 /** Outcome of one whatsapp-service call — the error string surfaces instead of a bare boolean. */
 interface SendOutcome { ok: boolean; error: string | null }
@@ -116,26 +120,54 @@ async function postWhatsAppService(
 }
 
 /**
- * Pushes an owner-alert degradation to Sentry. Template failure → warning: the alert now
+ * Pushes an owner-alert degradation to Sentry. Event template failure → warning: the alert
+ * goes out with the summary template's wording. Summary failure too → warning: the alert now
  * depends on the owner's 24h window (Meta accepting free text does NOT prove delivery —
  * outside the window it is dropped asynchronously). Text failure too → error: the owner
  * got no WhatsApp at all. Bell + push are unaffected.
  */
-function reportOwnerSendFailure(step: 'template' | 'text', event: AppointmentEvent, error: string | null): void {
+function reportOwnerSendFailure(step: 'template' | 'summary' | 'text', event: AppointmentEvent, error: string | null): void {
   const extra = { event_type: event.type, business_id: event.businessId, error }
   if (step === 'template') {
-    captureMessage('Owner WhatsApp template send failed — falling back to free text', 'warning',
+    captureMessage('Owner WhatsApp event template send failed — falling back to the summary template', 'warning',
       { stage: 'owner_wa_template_failed', template: OWNER_EVENT_TEMPLATE, ...extra })
+  } else if (step === 'summary') {
+    captureMessage('Owner WhatsApp summary template send failed — falling back to free text', 'warning',
+      { stage: 'owner_wa_summary_failed', template: OWNER_SUMMARY_TEMPLATE, ...extra })
   } else {
     captureMessage('Owner WhatsApp notification undelivered', 'error', { stage: 'owner_wa_undelivered', ...extra })
   }
 }
 
 /**
- * Owner WhatsApp via the whatsapp-service edge function (single WA transport point).
- * Template first — it delivers OUTSIDE the 24h window, the whole point of per-event
- * alerts; free-text fallback works while the owner's 24h window is open. Best-effort.
+ * Tries each way to reach the owner, stopping at the first accepted. Templates deliver OUTSIDE
+ * the 24h window, the whole point of per-event alerts; free text only works inside it.
  */
+async function sendOwnerAlert(
+  send: (payload: Record<string, unknown>) => Promise<SendOutcome>, event: AppointmentEvent,
+): Promise<void> {
+  const title = buildTitle(event.type)
+  const when  = ownerWhenText(event)
+
+  const viaEventTemplate = await send({
+    type: 'template', template: OWNER_EVENT_TEMPLATE, languageCode: 'es',
+    parameters: [title, event.clientName, event.serviceName, when],
+  })
+  if (viaEventTemplate.ok) return
+  reportOwnerSendFailure('template', event, viaEventTemplate.error)
+
+  const viaSummaryTemplate = await send({
+    type: 'template', template: OWNER_SUMMARY_TEMPLATE, languageCode: 'es',
+    parameters: [title, `${event.clientName} · ${event.serviceName} · ${when}`],
+  })
+  if (viaSummaryTemplate.ok) return
+  reportOwnerSendFailure('summary', event, viaSummaryTemplate.error)
+
+  const viaText = await send({ type: 'text', message: buildOwnerWhatsAppMessage(event) })
+  if (!viaText.ok) reportOwnerSendFailure('text', event, viaText.error)
+}
+
+/** Owner WhatsApp via the whatsapp-service edge function (single WA transport point). Best-effort. */
 export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> {
   try {
     // @ts-ignore — Deno runtime globals
@@ -162,23 +194,10 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
     }
 
     const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
-    const whenHuman   = ownerWhenText(event)
-    const send =(payload: Record<string, unknown>): Promise<SendOutcome> =>
-      postWhatsAppService(whatsappUrl, cronSecret, { to: rawPhone, ...payload })
-
-    // 1) Template first (delivers outside the 24h window).
-    const viaTemplate = await send({
-      type:         'template',
-      template:     OWNER_EVENT_TEMPLATE,
-      languageCode: 'es',
-      parameters:   [buildTitle(event.type), event.clientName, event.serviceName, whenHuman],
-    })
-    if (viaTemplate.ok) return
-    reportOwnerSendFailure('template', event, viaTemplate.error)
-
-    // 2) Free-text fallback (works while the owner's 24h window is open).
-    const viaText = await send({ type: 'text', message: buildOwnerWhatsAppMessage(event) })
-    if (!viaText.ok) reportOwnerSendFailure('text', event, viaText.error)
+    await sendOwnerAlert(
+      (payload) => postWhatsAppService(whatsappUrl, cronSecret, { to: rawPhone, ...payload }),
+      event,
+    )
   } catch (err) {
     console.warn('[NOTIFICATION-WA] sendOwnerWhatsApp failed (non-critical):', err)
   }

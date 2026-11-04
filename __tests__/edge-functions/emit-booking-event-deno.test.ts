@@ -11,7 +11,7 @@ interface FakeNetwork {
   ownerPhone: string | null
   existingEvent: boolean
   insertFails: boolean
-  templateFails: boolean
+  rejectedTemplates: string[]
 }
 
 interface Call { step: string; body: Record<string, unknown> }
@@ -24,7 +24,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function whatsappResponse(body: Record<string, unknown>): Response {
-  if (body['type'] === 'template' && network.templateFails) {
+  if (body['type'] === 'template' && network.rejectedTemplates.includes(String(body['template']))) {
     return jsonResponse({ success: false, error: 'template not approved' })
   }
   return jsonResponse({ success: true })
@@ -104,7 +104,7 @@ describe('emitBookingEvent (Deno) reaches the owner', () => {
 
   beforeEach(() => {
     calls = []
-    network = { ownerPhone: OWNER_PHONE, existingEvent: false, insertFails: false, templateFails: false }
+    network = { ownerPhone: OWNER_PHONE, existingEvent: false, insertFails: false, rejectedTemplates: [] }
   })
 
   it.each([
@@ -128,14 +128,47 @@ describe('emitBookingEvent (Deno) reaches the owner', () => {
     expect(parameters[3]).toContain('1:00')
   })
 
-  it('falls back to free text when the template is rejected', async () => {
-    network.templateFails = true
+  it('uses the approved summary template with the event data when the event template is rejected', async () => {
+    network.rejectedTemplates = ['owner_event_notification']
 
     await emitBookingEvent(eventOf('appointment.rescheduled'))
 
-    expect(whatsappCalls().map((m) => m['type'])).toEqual(['template', 'text'])
-    expect(whatsappCalls()[1]).toMatchObject({ to: OWNER_PHONE })
+    expect(whatsappCalls().map((m) => m['template'])).toEqual(['owner_event_notification', 'daily_owner_summary'])
+    const summary = whatsappCalls()[1]
+    expect(summary).toMatchObject({ to: OWNER_PHONE, type: 'template', languageCode: 'es' })
+    const [title, details] = summary?.['parameters'] as [string, string]
+    expect(title).toBe('Cita reagendada')
+    expect(details).toContain('Ana · Cejas · ')
+    expect(details).toContain('1:00')
+    expect(summary?.['parameters']).toHaveLength(2)
     expect(steps().at(-1)).toBe('push')
+  })
+
+  it('keeps the date the client asked for in the summary details', async () => {
+    network.rejectedTemplates = ['owner_event_notification']
+
+    await emitBookingEvent({ ...eventOf('appointment.rescheduled'), type: 'appointment.reschedule_requested', requestedDate: '2026-11-10' })
+
+    const [title, details] = whatsappCalls()[1]?.['parameters'] as [string, string]
+    expect(title).toBe('Pidió reagendar (pendiente)')
+    expect(details).toContain('quiere el')
+    expect(details).toContain('10')
+  })
+
+  it('falls back to free text only when both templates are rejected', async () => {
+    network.rejectedTemplates = ['owner_event_notification', 'daily_owner_summary']
+
+    await emitBookingEvent(eventOf('appointment.rescheduled'))
+
+    expect(whatsappCalls().map((m) => m['type'])).toEqual(['template', 'template', 'text'])
+    expect(whatsappCalls()[2]).toMatchObject({ to: OWNER_PHONE })
+    expect(steps().at(-1)).toBe('push')
+  })
+
+  it('does not send the summary template once the event template is accepted', async () => {
+    await emitBookingEvent(eventOf('appointment.created'))
+
+    expect(whatsappCalls().map((m) => m['template'])).toEqual(['owner_event_notification'])
   })
 
   it('sends nothing for an event that already has a notification', async () => {

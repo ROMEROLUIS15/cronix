@@ -66,9 +66,9 @@ emitBookingEvent(event)
     ├─ Canal 3: WhatsApp al dueño
     │   └─ Requiere `businesses.phone` vinculado via VINCULAR-slug
     │   └─ Se omite si el número no está configurado
-    │   └─ Plantilla primero (`OWNER_EVENT_TEMPLATE`), fallback a texto libre (solo entrega en ventana 24h)
-    │   └─ ⚠️ Medido 2026-11-04: la plantilla por defecto `owner_event_notification` NO existe en la cuenta del número de producción (Meta `132001`)
-    │   └─ Nunca rompe el pipeline; la degradación va a Sentry: plantilla falló → `owner_wa_template_failed`, texto también → `owner_wa_undelivered`
+    │   └─ Orden: plantilla de eventos (`OWNER_EVENT_TEMPLATE`) → plantilla aprobada `daily_owner_summary` con los datos del evento → texto libre (solo entrega en ventana 24h)
+    │   └─ Medido 2026-11-04: `owner_event_notification` no se puede enviar desde el número de producción (Meta `132001`: no existe en ese idioma o no está aprobada). Mientras tanto el aviso sale con el texto del resumen diario: "El resumen diario está listo: {{1}}. Detalles adicionales: {{2}}. Gracias." Trade-off propuesto por el agente y aceptado por el usuario: texto inexacto a cambio de entregar sin esperar a Meta
+    │   └─ Nunca rompe el pipeline; la degradación va a Sentry: plantilla de eventos falló → `owner_wa_template_failed`, resumen también → `owner_wa_summary_failed`, texto también → `owner_wa_undelivered`
     │
     └─ Canal 4: Web Push al PWA del dueño
         └─ Llama a la edge function `push-notify` via HTTP interno con `x-internal-secret`
