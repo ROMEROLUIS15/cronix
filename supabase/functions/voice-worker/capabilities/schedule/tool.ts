@@ -18,7 +18,7 @@ import type { ToolResult, BookingEventData } from '../../types.ts'
 import { localToUTC, buildEndISO } from '../../core/time-format.ts'
 import {
   extractSlotsFromCorpus,
-  hasBookingIntent,
+  refersToExistingAppointment,
   nameMentionedInCorpus,
   timeMentionedInCorpus,
   dateMentionedInCorpus,
@@ -106,8 +106,8 @@ export async function executeSchedule(
 
   // Step 3 — anti-hallucination: every slot must trace back to the user.
   if (corpus) {
-    if (!hasBookingIntent(corpus)) {
-      console.log('[VOICE-WORKER-SCHEDULE] REJECTED — the user did not ask for a new appointment')
+    if (refersToExistingAppointment(ctx.userTurn ?? corpus)) {
+      console.log('[VOICE-WORKER-SCHEDULE] REJECTED — the turn points at an existing appointment')
       return { success: false, result: '¿Quieres agendar una cita nueva o mover una que ya existe?', error: 'GUARD_REJECTED' }
     }
     if (!nameMentionedInCorpus(corpus, service_name)) {

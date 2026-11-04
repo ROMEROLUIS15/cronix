@@ -436,6 +436,7 @@ async function handleRequest(req: Request): Promise<Response> {
     timezone,
     workingHours: context.workingHours ?? undefined,
     userTextCorpus,
+    userTurn:    inputText,
   }
 
   let agentResult

@@ -62,16 +62,21 @@ export function timeMentionedInCorpus(corpus: string): boolean {
   return userMentionedTime(corpus)
 }
 
+const CHANGE_VERB = /\b(?:cambi|muev|mover|reagend|reprogram|adelant|atras)\w*|\bre\s+agend\w*/
 const BOOKING_VERB = /\b(?:agend|reserv|program|apart|anot|crea)\w*/
-const NEW_APPOINTMENT = /\b(?:una|otra|nueva)\s+cita\b|(?:^|\n)\s*cita\s+para\b/
+const NEW_APPOINTMENT = /\b(?:una|otra|nueva)\s+cita\b|\bcita\s+nueva\b/
+const EXISTING_APPOINTMENT = /\b(?:la|esa|esta|mi|su)\s+cita\b/
 
 /**
- * True when the user asked for a new appointment. A misheard verb can leave "la cita de Ana para
- * las 4", which must not book: it probably meant to move that appointment.
+ * True when this turn points at an appointment that already exists, so it must not create one.
+ * A misheard verb can leave "la cita de Ana para las 4", which meant to move it. Takes the
+ * current turn only: an earlier "qué tengo agendado" says nothing about this one.
  */
-export function hasBookingIntent(corpus: string): boolean {
-  const text = corpus.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  return BOOKING_VERB.test(text) || NEW_APPOINTMENT.test(text)
+export function refersToExistingAppointment(turn: string): boolean {
+  const text = turn.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (CHANGE_VERB.test(text)) return true
+  if (BOOKING_VERB.test(text) || NEW_APPOINTMENT.test(text)) return false
+  return EXISTING_APPOINTMENT.test(text)
 }
 
 export function dateMentionedInCorpus(corpus: string, todayLocal: string): boolean {

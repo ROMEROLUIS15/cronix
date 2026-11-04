@@ -6,6 +6,7 @@
  * another business or put words in the alert.
  */
 
+import { captureException } from '../_shared/sentry.ts'
 import { utcToLocalParts } from '../process-whatsapp/time-utils.ts'
 import { buildAppointmentEventId } from '../_shared/notifications/event-id.ts'
 import { type AppointmentEvent, isOwnerActor } from '../_shared/notifications/notif-contracts.ts'
@@ -27,11 +28,12 @@ type Action = keyof typeof EVENT_TYPES
 export interface Actor {
   userId:   string
   role:     string
-  business: { id: string; name: string; timezone: string }
+  business: { id: string; name: string; timezone: string | null }
 }
 
 export interface AppointmentRow {
   id:            string
+  status:        string
   start_at:      string
   client_name:   string
   service_names: string[]
@@ -56,7 +58,7 @@ async function parseBody(req: Request): Promise<{ action: Action; appointmentId:
 }
 
 function buildEvent(action: Action, row: AppointmentRow, actor: Actor): AppointmentEvent {
-  const { date, time } = utcToLocalParts(row.start_at, actor.business.timezone)
+  const { date, time } = utcToLocalParts(row.start_at, actor.business.timezone ?? 'UTC')
   return {
     eventId:      buildAppointmentEventId(action, actor.business.id, row.id, date, time),
     type:         EVENT_TYPES[action],
@@ -83,12 +85,14 @@ export async function handleBookingEvent(req: Request, deps: BookingEventDeps): 
 
   const row = await deps.findAppointment(body.appointmentId, actor.business.id)
   if (!row) return json(404, { error: 'Appointment not found' })
+  // The alert must match the appointment: no one can announce a cancellation that did not happen.
+  if (body.action === 'cancelled' && row.status !== 'cancelled') return json(409, { error: 'Appointment is not cancelled' })
 
   try {
     await deps.emit(buildEvent(body.action, row, actor))
   } catch (err) {
     // The appointment is already saved: a failed alert must not read as a failed write.
-    console.error('[BOOKING-EVENT] emit failed:', err)
+    captureException(err, { stage: 'booking_event_emit', action: body.action })
   }
   return json(200, { success: true })
 }

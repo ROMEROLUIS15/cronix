@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { toBookingEvent } from '../../supabase/functions/voice-worker/booking-event'
-import { hasBookingIntent } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
+import { refersToExistingAppointment } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
 import { executeSchedule } from '../../supabase/functions/voice-worker/capabilities/schedule/tool'
 import type { ToolContext } from '../../supabase/functions/voice-worker/core/tool-context'
 
@@ -45,52 +45,74 @@ describe('voice button event', () => {
   })
 })
 
-describe('hasBookingIntent', () => {
+describe('refersToExistingAppointment', () => {
   it.each([
     'agéndale a Sim Tester una cita de E2E Service el 6 de noviembre a las 11',
     'agenda a Luis para mañana a las 3',
-    'Agendaré Sim tester una cita de E2E Service',
     'agendar a Ana el viernes',
+    'agenda la cita de Ana para mañana',
     'reserva una cita para Ana',
     'programa a Pedro el lunes',
-    'aparta el martes para María',
-    'anota a Luis mañana',
     'crea una cita para Ana',
     'una cita para Ana mañana a las 3',
     'Sim Tester quiere una cita de E2E Service el viernes',
-    'necesito otra cita para Luis',
-    'nueva cita para Ana',
+    'quiero cita para Ana mañana a las 3 corte',
+    'necesito cita para Ana',
+    'dame cita para Ana mañana',
+    'ponle cita a Ana mañana',
+    'sácale cita a Ana',
+    'cita nueva para Ana',
     'cita para Ana mañana',
-  ])('accepts "%s"', (text) => {
-    expect(hasBookingIntent(text)).toBe(true)
+    'dame un turno para Ana mañana',
+    'apúntame a Ana mañana',
+    'y a Carlos mañana a las 5 para corte',
+    'entonces a Ana mañana a las 4 para corte',
+    'dale a las 3 para Ana, corte, mañana',
+    'nueva',
+    'una nueva',
+    'sí, nueva',
+    'sí',
+    'mañana a las 3',
+  ])('books: "%s"', (text) => {
+    expect(refersToExistingAppointment(text)).toBe(false)
   })
 
   it.each([
     'E2E la cita de Sim Tester del 6 de noviembre para las 4 de la tarde',
     'cambia la cita de Sim Tester para las 4',
+    'cambia una cita de Ana para las 4',
     'mueve la cita de Ana a las 3',
     'reagenda la cita de Ana para las 5',
+    're agenda la cita de Ana',
     'reprograma la cita de Ana',
+    'adelanta la cita de Ana',
     'la cita de Ana a las 3',
-    'cancela la cita de Ana',
-  ])('rejects "%s": it does not ask for a new appointment', (text) => {
-    expect(hasBookingIntent(text)).toBe(false)
+    'mi cita para las 3',
+    'mover',
+  ])('does not book: "%s"', (text) => {
+    expect(refersToExistingAppointment(text)).toBe(true)
   })
 })
 
 describe('smart_schedule', () => {
-  it('asks instead of booking when the sentence does not request a new appointment', async () => {
-    const ctx = {
-      timezone: 'America/Caracas',
-      userTextCorpus: 'E2E la cita de Sim Tester del 6 de noviembre para las 4 de la tarde',
-      // Any database access would throw: the guard runs before the first read.
-      supabase: new Proxy({}, { get() { throw new Error('touched the database') } }),
-    } as unknown as ToolContext
+  const db = new Proxy({}, { get() { throw new Error('touched the database') } })
+
+  it('asks instead of booking when the turn points at an existing appointment', async () => {
+    const text = 'E2E la cita de Sim Tester del 6 de noviembre para las 4 de la tarde'
+    const ctx = { timezone: 'America/Caracas', userTurn: text, userTextCorpus: text, supabase: db } as unknown as ToolContext
 
     const result = await executeSchedule(ctx, { service_name: 'E2E Service', client_name: 'Sim Tester', date: '2026-11-06', time: '16:00' })
 
     expect(result.success).toBe(false)
     expect(result.error).toBe('GUARD_REJECTED')
     expect(result.result).toContain('una cita nueva')
+  })
+
+  it('looks at this turn only: answering "nueva" to its own question gets past the guard', async () => {
+    const earlier = 'E2E la cita de Sim Tester del 6 de noviembre para las 4 de la tarde para E2E Service'
+    const ctx = { timezone: 'America/Caracas', userTurn: 'nueva', userTextCorpus: `nueva ${earlier}`, supabase: db } as unknown as ToolContext
+
+    // Past the guard the tool reads the catalog, which is what this database refuses.
+    await expect(executeSchedule(ctx, { service_name: 'E2E Service', client_name: 'Sim Tester', date: '2026-11-06', time: '16:00' })).rejects.toThrow('touched the database')
   })
 })

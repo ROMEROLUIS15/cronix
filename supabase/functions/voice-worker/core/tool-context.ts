@@ -15,6 +15,8 @@ export interface ToolContext {
    * didn't invent identifiers the user never said.
    */
   userTextCorpus?: string
+  /** What the user said in this turn alone, without the earlier turns of the corpus. */
+  userTurn?: string
   /**
    * Constitutional guard. Capabilities call this BEFORE any SQL write.
    * Returns null when allowed; returns a denial ToolResult when the

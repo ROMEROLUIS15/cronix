@@ -4,6 +4,10 @@
  * server from the caller's own business: nothing about the appointment is taken from the browser.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// The handler imports the Deno Sentry module, which reads Deno.env when it loads.
+vi.hoisted(() => { (globalThis as { Deno?: unknown }).Deno = { env: { get: () => undefined } } })
+
 import { handleBookingEvent, type BookingEventDeps } from '../../supabase/functions/booking-event/handler'
 
 const APPOINTMENT = 'a1111111-1111-4111-8111-111111111111'
@@ -11,6 +15,7 @@ const BUSINESS = { id: 'biz-1', name: 'Studio', timezone: 'America/Caracas' }
 
 const ROW = {
   id: APPOINTMENT,
+  status: 'confirmed',
   start_at: '2026-11-06T19:00:00.000Z', // 15:00 in Caracas
   client_name: 'Ana Pérez',
   service_names: ['Cejas', 'Pestañas'],
@@ -40,6 +45,8 @@ describe('booking-event', () => {
     ['rescheduled', 'appointment.rescheduled'],
     ['cancelled', 'appointment.cancelled'],
   ] as const)('%s reaches the shared pipeline with the data read on the server', async (action, type) => {
+    deps.findAppointment.mockResolvedValue({ ...ROW, status: action === 'cancelled' ? 'cancelled' : 'confirmed' })
+
     const res = await handleBookingEvent(request({ action, appointmentId: APPOINTMENT }), deps)
 
     expect(res.status).toBe(200)
@@ -70,8 +77,23 @@ describe('booking-event', () => {
     expect(deps.emit).toHaveBeenCalledWith(expect.objectContaining({ ownerActed }))
   })
 
+  it('refuses to announce a cancellation of an appointment that is still active', async () => {
+    const res = await handleBookingEvent(request({ action: 'cancelled', appointmentId: APPOINTMENT }), deps)
+
+    expect(res.status).toBe(409)
+    expect(deps.emit).not.toHaveBeenCalled()
+  })
+
+  it('still alerts when the business has no timezone', async () => {
+    deps.findActor = vi.fn(async () => ({ userId: 'user-1', role: 'owner', business: { ...BUSINESS, timezone: null } }))
+
+    await handleBookingEvent(request({ action: 'created', appointmentId: APPOINTMENT }), deps)
+
+    expect(deps.emit).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-06', time: '19:00' }))
+  })
+
   it('looks the appointment up only inside the business of the caller', async () => {
-    await handleBookingEvent(request({ action: 'cancelled', appointmentId: APPOINTMENT }), deps)
+    await handleBookingEvent(request({ action: 'rescheduled', appointmentId: APPOINTMENT }), deps)
 
     expect(deps.findAppointment).toHaveBeenCalledWith(APPOINTMENT, 'biz-1')
   })
@@ -121,7 +143,6 @@ describe('booking-event', () => {
 
   it('still answers 200 when the pipeline throws: the appointment is already saved', async () => {
     deps.emit.mockRejectedValue(new Error('boom'))
-    vi.spyOn(console, 'error').mockImplementationOnce(() => undefined)
 
     const res = await handleBookingEvent(request({ action: 'created', appointmentId: APPOINTMENT }), deps)
 
