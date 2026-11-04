@@ -278,7 +278,8 @@ Este nombre es el que aparece en: la notificación al dueño, la campana, y el *
 | D8 | El dueño no recibe WhatsApp al agendar, reagendar ni cancelar | O1, O2 | `notif-channels.ts` usaba una variable `supabase` inexistente desde `70b038a`; el `catch` se tragaba el `ReferenceError` (RS STUDIO, 2026-11-03) | 🟢 corregido y desplegado 2026-11-04 (`e95ee97`); entrega medida con un número real por el flujo completo, fuera de la ventana de 24 h. `owner_event_notification` no se puede enviar desde el número de producción (Meta `132001`: no existe en ese idioma o no está aprobada, medido 2026-11-04); hasta que se apruebe, el aviso sale con la plantilla aprobada `daily_owner_summary` |
 | D9 | Las escrituras por voz no emitían Broadcast: campana, lista y otras pestañas esperaban el polling de 20 s | O1 | `voice-worker` solo insertaba en `notifications` | 🟢 corregido 2026-11-04: voz usa `emitBookingEvent` |
 | D10 | El dashboard avisaba "Cita actualizada" al reagendar y al cancelar, sin `event_id` | O1, O2 | Cada formulario armaba su propio aviso | 🟢 corregido 2026-11-04: los formularios usan `booking-event` |
-| D11 | Por voz, "Cambia la cita" transcrito como "E2E la cita" creó una cita nueva y respondió "Listo" | O1 | `smart_schedule` no exigía que la frase pidiera una cita | 🟢 corregido 2026-11-04: `hasBookingIntent` pregunta antes de crear |
+| D11 | Por voz, "Cambia la cita" transcrito como "E2E la cita" creó una cita nueva y respondió "Listo" | O1 | `smart_schedule` no miraba si el turno apuntaba a una cita existente | 🟢 corregido 2026-11-04: `refersToExistingAppointment` pregunta antes de crear |
+| D12 | Por voz, "agenda una cita para Ana…" respondía la lista de citas del día | O1 | "agenda" se leía siempre como sustantivo | 🟢 corregido 2026-11-04: al inicio de la frase, sin fecha ni "de/del/para", es una orden |
 
 ---
 
