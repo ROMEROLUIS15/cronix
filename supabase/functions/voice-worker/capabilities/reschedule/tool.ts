@@ -34,6 +34,11 @@ export async function executeReschedule(
   if (ctx.userTextCorpus) {
     const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
     const fromCorpus = extractSlotsFromCorpus(ctx.userTextCorpus, todayLocal)
+    // A date the user never said is the model's invention: "mueve la cita a las 3" keeps the day.
+    if (args.new_date && !fromCorpus.date) {
+      console.log(`[VOICE-WORKER-RESCHEDULE] dropping invented new_date="${args.new_date}"`)
+      args = { ...args, new_date: undefined }
+    }
     if (!args.new_date && fromCorpus.date) {
       console.log(`[VOICE-WORKER-RESCHEDULE] new_date from corpus → "${fromCorpus.date}"`)
       args = { ...args, new_date: fromCorpus.date }
@@ -116,6 +121,9 @@ export async function executeReschedule(
 
   const newStartISO = localToUTC(finalDate, finalTime, ctx.timezone)
   const newEndISO   = buildEndISO(newStartISO, durationMin)
+  if (ctx.userTextCorpus && Date.parse(newStartISO) <= Date.now()) {
+    return { success: false, result: `Esa hora ya pasó (${finalDate} a las ${finalTime}). ¿Para cuándo la paso?` }
+  }
 
   // Conflict scope follows the appointment's assigned staff member: a move
   // only collides within that member's agenda. Unassigned rows keep the

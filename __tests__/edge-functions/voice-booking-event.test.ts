@@ -11,6 +11,8 @@ import { toBookingEvent } from '../../supabase/functions/voice-worker/booking-ev
 import { refersToExistingAppointment } from '../../supabase/functions/voice-worker/core/conversation/slot-extractor'
 import { executeSchedule } from '../../supabase/functions/voice-worker/capabilities/schedule/tool'
 import { detectListAppointments } from '../../supabase/functions/voice-worker/capabilities/list-appointments/fast-path'
+import { executeReschedule } from '../../supabase/functions/voice-worker/capabilities/reschedule/tool'
+import { createMockSupabase } from '../../supabase/functions/_shared/__tests__/_mock-supabase'
 import type { ToolContext } from '../../supabase/functions/voice-worker/core/tool-context'
 
 const NOTIFICATION = {
@@ -140,5 +142,71 @@ describe('"agenda": a command or the calendar', () => {
     ['qué citas tengo hoy', '2026-11-04'],
   ])('"%s" still reads the calendar', (text, date) => {
     expect(detectListAppointments(text, today)).toEqual({ date })
+  })
+})
+
+describe('voice never lands on a date the user did not ask for', () => {
+  const TOMORROWISH = '2099-01-10'
+  const CLIENT_ROW = { id: 'cli-1', name: 'Ana Torres', phone: '04141234567' }
+  const SERVICE_ROW = { id: 'svc-1', name: 'Corte', duration_min: 30, price: 10 }
+  const APT = {
+    id: 'apt-1', start_at: `${TOMORROWISH}T15:00:00.000Z`, end_at: `${TOMORROWISH}T15:30:00.000Z`,
+    client_id: 'cli-1', service_id: 'svc-1', appointment_services: [],
+  }
+  const mock = () => createMockSupabase((op) => {
+    if (op.table === 'clients' && op.type === 'select') return { data: [CLIENT_ROW] }
+    if (op.table === 'services' && op.type === 'select') return { data: [SERVICE_ROW] }
+    if (op.table === 'appointments' && op.type === 'select') return op.selectArg === 'id' ? { data: [] } : { data: [APT] }
+    if (op.table === 'appointments' && op.type === 'insert') return { data: { id: 'apt-new' } }
+    if (op.table === 'appointments' && op.type === 'update') return { error: null }
+    return { data: null }
+  })
+  const ctxFor = (m: ReturnType<typeof mock>, text: string) => ({
+    supabase: m.supabase, businessId: 'biz-1', userId: 'user-1', timezone: 'America/Caracas', userTurn: text, userTextCorpus: text,
+  }) as unknown as ToolContext
+  const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' })
+
+  it('"mueve la cita a las 3" keeps the day of the appointment, whatever date the model made up', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctxFor(m, 'mueve la cita de Ana Torres a las 3 de la tarde'), {
+      client_name: 'Ana Torres', new_date: today(), new_time: '15:00',
+    })
+
+    expect(res.success).toBe(true)
+    const update = m.opsFor('appointments').find((o) => o.type === 'update')!
+    expect(update.updatePayload).toMatchObject({ start_at: `${TOMORROWISH}T19:00:00.000Z` })
+  })
+
+  it('still uses the new date when the user says one', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctxFor(m, 'reagenda la cita de Ana Torres para el 15 de enero de 2099 a las 3 de la tarde'), {
+      client_name: 'Ana Torres', new_date: '2099-01-15', new_time: '15:00',
+    })
+
+    expect(res.success).toBe(true)
+    const update = m.opsFor('appointments').find((o) => o.type === 'update')!
+    expect(update.updatePayload).toMatchObject({ start_at: '2099-01-15T19:00:00.000Z' })
+  })
+
+  it('does not move an appointment to a time already gone', async () => {
+    const m = mock()
+    const res = await executeReschedule(ctxFor(m, 'reagenda la cita de Ana Torres para ayer a las 3 de la tarde'), {
+      client_name: 'Ana Torres', new_date: '2020-01-01', new_time: '15:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('ya pasó')
+    expect(m.opsFor('appointments').some((o) => o.type === 'update')).toBe(false)
+  })
+
+  it('does not book at a time already gone', async () => {
+    const m = mock()
+    const res = await executeSchedule(ctxFor(m, 'agenda a Ana Torres para ayer a las 3 de la tarde para Corte'), {
+      service_name: 'Corte', client_name: 'Ana Torres', date: '2020-01-01', time: '15:00',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.result).toContain('ya pasó')
+    expect(m.opsFor('appointments').some((o) => o.type === 'insert')).toBe(false)
   })
 })
