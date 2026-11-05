@@ -378,6 +378,10 @@ positivos en `/dashboard/observability`.
 - `smart_schedule` acepta `phone` opcional para el cliente nuevo
   (`register_new_client=true`); sin él, el cliente queda sin teléfono.
 
+### Horario del negocio (NORMATIVO)
+
+Agendar y reagendar por la voz del dashboard rechazan, antes de escribir, una hora fuera del horario guardado en `settings.workingHours`: la cita empieza desde la apertura y termina antes del cierre, y un día sin horario está cerrado. Regla única: `outsideWorkingHours` (`_shared/availability.ts`); frase: `hoursRefusal`. Un negocio sin horario guardado no se valida.
+
 ## 9. Dimensión de Staff (terreno para el sprint multi-empleado)
 
 Decisión de producto tomada (2026-06-12): **una cita por voz se asigna al
