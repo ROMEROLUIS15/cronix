@@ -32,11 +32,14 @@ const QUERY = /(\bqu[eé]\s+citas?\b|\bcitas\s+(de|hay|tengo|para|del|que|en|den
 const AGENDA_COMMAND = /(?:^|[,;.]\s*|\b(?:por favor|oye|dale|bueno)\s+)agenda\s+(?!(?:de|del|para|en|hoy|ma[ñn]ana|pasado)\b)/
 // "mueve las citas de Ana al viernes" mentions citas, but it asks to change them.
 const CHANGE_ORDER = /\b(?:muev|mover|cambi)\w*|\bpas(?:a|ar|ale|e)\b/
+// "qué pasa con mis citas de hoy" and "qué citas cambiaron hoy" mention a change, but they ask.
+const QUESTION_OPENING = /^\s*(?:(?:oye|dale|bueno|por favor)[,\s]+)?¿?\s*(?:qu[eé]\s|cu[aá]l|cu[aá]ndo\b|cu[aá]nt|c[oó]mo\b|d[oó]nde\b|mu[eé]str|dime\b)/
 
 /** True when the sentence asks to see the agenda, and is not an order. */
 export function isAgendaQuestion(text: string): boolean {
   const t = text.toLowerCase()
-  if (AGENDA_COMMAND.test(t) || CHANGE_ORDER.test(t) || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return false
+  const asksForChange = CHANGE_ORDER.test(t) && !QUESTION_OPENING.test(t)
+  if (AGENDA_COMMAND.test(t) || asksForChange || WRITE_AGENDAR.test(t) || WRITE_OTHERS.test(t)) return false
   if (SERVICE_INTENT.test(t)) return false
   return QUERY.test(t)
 }

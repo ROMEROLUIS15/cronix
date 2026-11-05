@@ -471,3 +471,31 @@ describe('an order is not an agenda question, wherever it starts', () => {
     expect(isAgendaQuestion(text)).toBe(true)
   })
 })
+
+describe('a question that mentions a change still asks about the agenda', () => {
+  it.each([
+    'qué tengo que cambiar hoy',
+    'qué tengo que pasar hoy',
+    'qué citas hay que pasar hoy',
+    'qué pasa con mis citas de hoy',
+    'qué citas cambiaron hoy',
+    'qué citas se cambiaron hoy',
+    'qué pasa hoy en mi agenda',
+    'qué pasa con la agenda de mañana',
+    'qué pasa mañana con mis citas',
+    'muéstrame qué citas cambiaron hoy',
+    'qué citas de cambio de color tengo mañana',
+    'qué citas tiene Cambiaso hoy',
+    'oye, qué pasa con mis citas de hoy',
+  ])('"%s" is a question and lists the agenda', (text) => {
+    expect(isAgendaQuestion(text)).toBe(true)
+    expect(detectListAppointments(text, '2026-11-04')).not.toBeNull()
+  })
+
+  it.each([
+    'tengo que mover las citas de Ana para mañana',
+    'oye, mueve las citas de Ana al viernes',
+  ])('"%s" is still an order', (text) => {
+    expect(isAgendaQuestion(text)).toBe(false)
+  })
+})
