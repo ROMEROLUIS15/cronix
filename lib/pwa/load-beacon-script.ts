@@ -17,7 +17,7 @@ export const PWA_LOAD_BEACON_SCRIPT = `(function(){
   try {
     var endpoint = '${PWA_LOAD_ENDPOINT}';
     var id = Math.random().toString(36).slice(2, 12);
-    var loaded = false, hiddenAt = 0, resumes = 0;
+    var loaded = false, leftEarly = false, hiddenAt = 0, resumes = 0;
     var standalone = window.navigator.standalone === true ||
       (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     function sw() {
@@ -62,7 +62,7 @@ export const PWA_LOAD_BEACON_SCRIPT = `(function(){
     document.addEventListener('visibilitychange', function(){
       if (document.visibilityState === 'hidden') {
         hiddenAt = Date.now();
-        if (!loaded) send('hidden');
+        if (!loaded && !leftEarly) { leftEarly = true; send('hidden'); }
       } else if (hiddenAt && resumes < 20) {
         var away = Date.now() - hiddenAt;
         hiddenAt = 0;

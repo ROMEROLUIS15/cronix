@@ -53,6 +53,12 @@ describe('POST /api/pwa/load', () => {
     expect(mocks.redis!.expire).toHaveBeenCalledWith(PWA_LOAD_KEY, 30 * 24 * 60 * 60)
   })
 
+  it('stores a resume of an app that has been open for days', async () => {
+    const resume = { ...REPORT, phase: 'resume', elapsed: 3 * 24 * 60 * 60 * 1000, hiddenMs: 6000 }
+    await POST(request(JSON.stringify(resume)))
+    expect(stored()[0]).toMatchObject({ phase: 'resume', elapsed: resume.elapsed })
+  })
+
   it('stores an open without session, such as one that lands on the login page', async () => {
     mocks.user = null
     await POST(request(JSON.stringify({ ...REPORT, path: '/login' })))

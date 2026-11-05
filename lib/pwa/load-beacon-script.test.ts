@@ -61,6 +61,14 @@ describe('PWA load beacon', () => {
     expect(own().map((s) => s.body.phase)).toEqual(['boot', 'hidden'])
   })
 
+  it('reports a page left before loading only once', () => {
+    run()
+    setVisibility('hidden')
+    setVisibility('visible')
+    setVisibility('hidden')
+    expect(own().map((s) => s.body.phase)).toEqual(['boot', 'hidden'])
+  })
+
   it('reports a return from the background after more than 5 s, and not a short one', () => {
     run()
     window.dispatchEvent(new Event('load'))

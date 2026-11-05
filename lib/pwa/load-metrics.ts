@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+const MAX_DURATION_MS = 30 * 24 * 60 * 60 * 1000
+
 /** One report from the load beacon, as the browser sends it. */
 export const PwaLoadReportSchema = z.object({
   id:         z.string().min(1).max(20),
@@ -8,7 +10,8 @@ export const PwaLoadReportSchema = z.object({
   standalone: z.boolean(),
   sw:         z.enum(['none', 'uncontrolled', 'controlled']),
   online:     z.boolean(),
-  elapsed:    z.number().int().min(0).max(3_600_000),
+  // Time since the page opened: an installed app can stay open for days.
+  elapsed:    z.number().int().min(0).max(MAX_DURATION_MS),
   navType:    z.string().max(20),
   response:   z.number().int().min(0).max(3_600_000),
   dom:        z.number().int().min(0).max(3_600_000),
@@ -16,7 +19,7 @@ export const PwaLoadReportSchema = z.object({
   worker:     z.number().int().min(0).max(3_600_000),
   transfer:   z.number().int().min(0).max(100_000_000),
   fcp:        z.number().int().min(0).max(3_600_000),
-  hiddenMs:   z.number().int().min(0).max(86_400_000 * 30),
+  hiddenMs:   z.number().int().min(0).max(MAX_DURATION_MS),
 }).strict()
 
 export type PwaLoadReport = z.infer<typeof PwaLoadReportSchema>
@@ -30,7 +33,7 @@ export interface PwaLoadEntry extends PwaLoadReport {
 export const PWA_LOAD_KEY = 'pwa:loads:v1'
 export const PWA_LOAD_MAX_ENTRIES = 5000
 export const PWA_LOAD_TTL_SECS = 30 * 24 * 60 * 60
-/** Larger bodies are dropped unread: a real report is well under 1 KB. */
+/** Larger bodies are dropped without parsing: a real report is well under 1 KB. */
 export const PWA_LOAD_MAX_BYTES = 2048
 
 /** Parses a raw beacon body; null when it is too big, not JSON or not a report. */

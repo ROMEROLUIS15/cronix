@@ -31,8 +31,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { data: { user } } = await supabase.auth.getUser()
     let businessId: string | null = null
     if (user) {
-      const { data: profile } = await supabase.from('users').select('business_id').eq('id', user.id).single()
-      businessId = profile?.business_id ?? null
+      const { data: profile, error } = await supabase.from('users').select('business_id').eq('id', user.id).single()
+      if (error) logger.error('PWA-LOAD-BEACON', 'could not read the business of the session', error)
+      businessId = error ? null : profile?.business_id ?? null
     }
     await storePwaLoad(redis, {
       ...report,
