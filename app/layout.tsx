@@ -4,6 +4,7 @@ import Script from 'next/script'
 import { getLocale, getTranslations } from 'next-intl/server'
 import './globals.css'
 import { PWA_LOAD_BEACON_SCRIPT } from '@/lib/pwa/load-beacon-script'
+import { SignedOutCachePurge } from '@/components/signed-out-cache-purge'
 
 // 400 body, 500 emphasised, 600 strong (font-semibold is the most-used heavy
 // weight across the app — 197 uses), 700 headings. The previous request for
@@ -145,6 +146,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body suppressHydrationWarning>
         {children}
+        {/* Deletes saved signed-in pages on the landing and sign-in screens. */}
+        <SignedOutCachePurge />
         <Script
           id="register-sw"
           strategy="afterInteractive"
