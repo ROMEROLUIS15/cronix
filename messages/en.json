@@ -465,7 +465,9 @@
       "voiceAssistantTitle": "AI Voice Assistant",
       "referralPromo": "Earn +10 extra appointments by inviting a friend",
       "loading": "Loading...",
-      "needMoreAppointments": "Need more appointments?"
+      "needMoreAppointments": "Need more appointments?",
+      "outsideBusinessHours": "That time is outside business hours: that day we are open from {open} to {close}, and the appointment must end before closing.",
+      "closedDay": "The business is closed that day. Choose another day."
     }
   },
   "clients": {

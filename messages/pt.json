@@ -429,7 +429,9 @@
       "voiceAssistantTitle": "Assistente de Voz IA",
       "referralPromo": "Ganhe +10 agendamentos extras convidando um amigo",
       "loading": "Carregando...",
-      "needMoreAppointments": "Precisa de mais agendamentos?"
+      "needMoreAppointments": "Precisa de mais agendamentos?",
+      "outsideBusinessHours": "Esse horário está fora do expediente: nesse dia atendemos das {open} às {close}, e o agendamento deve terminar antes do fechamento.",
+      "closedDay": "O negócio está fechado nesse dia. Escolha outro dia."
     }
   },
   "clients": {

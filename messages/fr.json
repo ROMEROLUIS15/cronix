@@ -429,7 +429,9 @@
       "voiceAssistantTitle": "Assistant vocal IA",
       "referralPromo": "Gagnez +10 rendez-vous supplémentaires en invitant un ami",
       "loading": "Chargement...",
-      "needMoreAppointments": "Besoin de plus de rendez-vous ?"
+      "needMoreAppointments": "Besoin de plus de rendez-vous ?",
+      "outsideBusinessHours": "Cette heure est en dehors des horaires : ce jour-là, l'établissement est ouvert de {open} à {close}, et le rendez-vous doit se terminer avant la fermeture.",
+      "closedDay": "L'établissement est fermé ce jour-là. Choisissez un autre jour."
     }
   },
   "clients": {

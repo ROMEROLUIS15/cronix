@@ -17,6 +17,7 @@ import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { useTranslations } from 'next-intl'
 import { logger } from '@/lib/logger'
 import { announceAppointmentChange } from '@/lib/realtime/announce-appointment-change'
+import { businessHoursFrom, hoursError, type BusinessHours } from '../../../hooks/appointment-hours'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
   })
 
   const savedSchedule = useRef({ start_at: '', status: 'pending' })
+  const [bizHours, setBizHours] = useState<BusinessHours | null>(null)
   const [clients,     setClients]     = useState<Client[]>([])
   const [services,    setServices]    = useState<Service[]>([])
   const [users,       setUsers]       = useState<User[]>([])
@@ -179,6 +181,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
         status:           apt.status           ?? 'pending',
         notes:            apt.notes            ?? '',
       })
+      if (!bizSettingsResult.error && bizSettingsResult.data) setBizHours(businessHoursFrom(bizSettingsResult.data))
       const notif = (bizSettingsResult.data?.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
       const hours  = notif?.reminderHours?.[0] ?? 24
       setBizNotif({ whatsapp: notif?.whatsapp ?? false, reminderMinutes: hours * 60 })
@@ -208,6 +211,12 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
+
+    // An appointment already outside the hours can still change its notes, staff or status.
+    const hoursMsg = form.start_at === savedSchedule.current.start_at ? null : hoursError(t, bizHours, startObj, duration)
+    if (hoursMsg) {
+      return { slotBlocked: true, slotMsg: hoursMsg, bookingLevel: 'blocked' as DoubleBookingLevel, bookingMsg: '' }
+    }
 
     const daySlotsResult = await container.appointments.getDaySlots(businessId, start, end)
     const dayApts = daySlotsResult.error ? [] : (daySlotsResult.data ?? [])
@@ -285,7 +294,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
     const result = evaluateDoubleBooking({ existingCount: clientApts.length, existingSlots })
 
     return { slotBlocked: false, bookingLevel: result.level, bookingMsg: result.message }
-  }, [form.client_id, form.start_at, form.service_ids, form.assigned_user_id, businessId, services, clients, users])
+  }, [form.client_id, form.start_at, form.service_ids, form.assigned_user_id, businessId, services, clients, users, bizHours])
 
   // ── Validation: slot overlap + double booking ──────────────────────────
   useEffect(() => {
@@ -310,7 +319,7 @@ export function useEditAppointmentForm(): UseEditAppointmentFormReturn {
 
     return () => { clearTimeout(timer); setValidation(v => ({ ...v, validating: false })) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services])
+  }, [form.client_id, form.start_at, JSON.stringify(form.service_ids), form.assigned_user_id, businessId, services, bizHours])
 
   // ── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {

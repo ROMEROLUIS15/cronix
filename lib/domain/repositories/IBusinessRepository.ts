@@ -27,7 +27,7 @@ export interface IBusinessRepository {
   /**
    * Returns the settings JSON for a business.
    */
-  getSettings(businessId: string): Promise<Result<{ settings: Record<string, unknown> | null }>>
+  getSettings(businessId: string): Promise<Result<{ settings: Record<string, unknown> | null; timezone: string | null }>>
 
   /**
    * Creates a new business and returns the created row.

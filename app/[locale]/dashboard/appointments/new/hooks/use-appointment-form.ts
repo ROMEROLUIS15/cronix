@@ -14,6 +14,7 @@ import {
   getLocalDayBoundaries,
 } from '@/lib/use-cases/appointments.use-case'
 import { checkAppointmentLimit } from '@/lib/actions/check-appointment-limit'
+import { businessHoursFrom, hoursError, type BusinessHours } from '../../hooks/appointment-hours'
 import { useTranslations } from 'next-intl'
 import type { Client, Service, User, DoubleBookingLevel } from '@/types'
 import { logger } from '@/lib/logger'
@@ -106,6 +107,7 @@ interface UseAppointmentFormReturn {
 
 export function useAppointmentForm(): UseAppointmentFormReturn {
   const tPlan           = useTranslations('settings.plan.limitErrors')
+  const tForm           = useTranslations('appointments.form')
   const router          = useRouter()
   const searchParams    = useSearchParams()
   const { businessId, loading: contextLoading } = useBusinessContext()
@@ -133,6 +135,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
   })
 
   const [bizNotif,      setBizNotif]      = useState<BizNotifSettings>({ whatsapp: false, reminderMinutes: 1440 })
+  const [bizHours,      setBizHours]      = useState<BusinessHours | null>(null)
   const [skipReminder,  setSkipReminder]  = useState(false)
   const [saving,        setSaving]        = useState(false)
   const [msg,           setMsg]           = useState<{ type: 'success' | 'error' | 'limit_error'; text: string } | null>(null)
@@ -161,6 +164,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
         if (!servicesRes.error) setServices(servicesRes.data as any ?? [])
         if (!membersRes.error) setUsers(membersRes.data as any ?? [])
 
+        if (!bizRes.error && bizRes.data) setBizHours(businessHoursFrom(bizRes.data))
         if (!bizRes.error && bizRes.data?.settings) {
           const notif = (bizRes.data.settings as { notifications?: { whatsapp?: boolean; reminderHours?: number[] } } | null)?.notifications
           const hours = notif?.reminderHours?.[0] ?? 24
@@ -194,6 +198,11 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     const startObj = new Date(form.start_at)
     const endObj   = new Date(startObj.getTime() + duration * 60_000)
     const { start, end } = getLocalDayBoundaries(form.start_at)
+
+    const hoursMsg = hoursError(tForm, bizHours, startObj, duration)
+    if (hoursMsg) {
+      return { slotBlocked: true, slotMsg: hoursMsg, bookingLevel: 'blocked' as DoubleBookingLevel, bookingMsg: '' }
+    }
 
     const daySlotsResult = await container.appointments.getDaySlots(businessId, start, end)
     const dayApts = daySlotsResult.error ? [] : (daySlotsResult.data ?? [])
@@ -271,7 +280,7 @@ export function useAppointmentForm(): UseAppointmentFormReturn {
     const doubleResult = evaluateDoubleBooking({ existingCount: clientApts.length, existingSlots })
 
     return { slotBlocked: false, bookingLevel: doubleResult.level, bookingMsg: doubleResult.message }
-  }, [form.client_id, form.start_at, form.service_ids, form.assigned_user_id, businessId, services, clients, users])
+  }, [form.client_id, form.start_at, form.service_ids, form.assigned_user_id, businessId, services, clients, users, bizHours])
 
   // Debounced validation effect
   useEffect(() => {

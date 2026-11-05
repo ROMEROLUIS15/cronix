@@ -429,7 +429,9 @@
       "voiceAssistantTitle": "KI-Sprachassistent",
       "referralPromo": "Verdiene +10 zusätzliche Termine, indem du einen Freund einlädst",
       "loading": "Wird geladen...",
-      "needMoreAppointments": "Brauchst du mehr Termine?"
+      "needMoreAppointments": "Brauchst du mehr Termine?",
+      "outsideBusinessHours": "Diese Uhrzeit liegt außerhalb der Öffnungszeiten: An diesem Tag ist von {open} bis {close} geöffnet, und der Termin muss vor Schließung enden.",
+      "closedDay": "An diesem Tag ist geschlossen. Wähle einen anderen Tag."
     }
   },
   "clients": {

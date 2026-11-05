@@ -30,15 +30,15 @@ export function generateBusinessSlug(name: string): string {
 export class SupabaseBusinessRepository implements IBusinessRepository {
   constructor(private supabase: Client) {}
 
-  async getSettings(businessId: string): Promise<Result<{ settings: Record<string, unknown> | null }>> {
+  async getSettings(businessId: string): Promise<Result<{ settings: Record<string, unknown> | null; timezone: string | null }>> {
     const { data, error } = await this.supabase
       .from('businesses')
-      .select('settings')
+      .select('settings, timezone')
       .eq('id', businessId)
       .single()
 
     if (error) return fail(`Error fetching business settings: ${error.message}`)
-    return ok({ settings: data?.settings as Record<string, unknown> | null })
+    return ok({ settings: data?.settings as Record<string, unknown> | null, timezone: data?.timezone ?? null })
   }
 
   async create(data: Pick<BusinessInsert, 'name' | 'category' | 'owner_id' | 'plan'> & { timezone?: string; referred_by_id?: string | null }): Promise<Result<BusinessRow>> {

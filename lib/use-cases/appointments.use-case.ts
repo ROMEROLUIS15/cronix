@@ -6,6 +6,7 @@
  *
  * Exposes:
  *  - evaluateDoubleBooking:     warn/block if client has multiple citas in a day
+ *  - checkBusinessHours:        detect a time outside the hours of the business
  *  - checkSlotOverlap:          detect time slot conflicts
  *  - checkClientConflict:       detect client time conflicts across employees
  *  - getLocalDayBoundaries:     timezone-correct date range for queries
@@ -70,6 +71,43 @@ export function evaluateDoubleBooking(
     existingSlots,
     message:       `Este cliente ya tiene ${existingCount} citas ese día. Límite de doble agenda alcanzado.`,
   }
+}
+
+// ── Business Hours ────────────────────────────────────────────────────────
+
+export type StoredWorkingHours = Record<string, [string, string] | null> | null | undefined
+
+const toMinutes = (hhmm: string): number => {
+  const [hours, minutes] = hhmm.split(':').map(Number)
+  return (hours ?? 0) * 60 + (minutes ?? 0)
+}
+
+/**
+ * Checks a time against the hours of the business, read in its timezone: the appointment must
+ * start after opening and end by closing. A business that never set its hours has 09:00-18:00.
+ * Same rule as outsideWorkingHours in supabase/functions/_shared/availability.ts; the two cannot
+ * import each other, and __tests__/use-cases/business-hours.test.ts fails if they differ.
+ */
+export function checkBusinessHours(params: {
+  workingHours: StoredWorkingHours
+  timezone:     string
+  start:        Date
+  durationMin:  number
+}): { closed: true } | { closed: false; open: string; close: string } | null {
+  const { workingHours, timezone, start, durationMin } = params
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(start)
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+
+  const configured = workingHours && Object.keys(workingHours).length > 0
+  const hours = configured ? workingHours[part('weekday').toLowerCase()] : (['09:00', '18:00'] as [string, string])
+  if (!hours || !Array.isArray(hours) || hours.length < 2) return { closed: true }
+
+  const [open, close] = hours
+  const startMin = Number(part('hour')) * 60 + Number(part('minute'))
+  if (startMin >= toMinutes(open) && startMin + durationMin <= toMinutes(close)) return null
+  return { closed: false, open, close }
 }
 
 // ── Slot Overlap ──────────────────────────────────────────────────────────

@@ -465,7 +465,9 @@
       "voiceAssistantTitle": "Asistente de Voz AI",
       "referralPromo": "Gana +10 citas extra invitando a un amigo",
       "loading": "Cargando...",
-      "needMoreAppointments": "¿Necesitas más citas?"
+      "needMoreAppointments": "¿Necesitas más citas?",
+      "outsideBusinessHours": "Esa hora queda fuera del horario: ese día se atiende de {open} a {close}, y la cita debe terminar antes de cerrar.",
+      "closedDay": "El negocio está cerrado ese día. Elige otro día."
     }
   },
   "clients": {

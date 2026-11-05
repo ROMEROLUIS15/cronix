@@ -380,7 +380,7 @@ positivos en `/dashboard/observability`.
 
 ### Horario del negocio (NORMATIVO)
 
-Agendar y reagendar por la voz del dashboard rechazan, antes de escribir, una hora fuera del horario guardado en `settings.workingHours`: la cita empieza desde la apertura y termina antes del cierre, y un día sin horario está cerrado. Regla única: `outsideWorkingHours` (`_shared/availability.ts`); frase: `hoursRefusal`. Un negocio sin horario guardado no se valida.
+Agendar y reagendar por la voz del dashboard rechazan, antes de escribir, una hora fuera del horario guardado en `settings.workingHours`: la cita empieza desde la apertura y termina antes del cierre, y un día sin horario está cerrado. Regla única: `outsideWorkingHours` (`_shared/availability.ts`); frase: `hoursRefusal`. Un negocio sin horario guardado tiene 09:00–18:00 todos los días (`effectiveWorkingHours`).
 
 ## 9. Dimensión de Staff (terreno para el sprint multi-empleado)
 
