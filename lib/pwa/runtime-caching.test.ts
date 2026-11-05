@@ -5,6 +5,7 @@
  * production and on a local build, 2026-11-05.
  */
 import { describe, expect, it } from 'vitest'
+import { INACTIVITY_LIMIT_MS } from '@/lib/middleware/constants'
 
 interface Entry { urlPattern: unknown; handler: string; options: { cacheName: string; networkTimeoutSeconds?: number; expiration?: object } }
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -49,6 +50,16 @@ describe('page caching of the service worker', () => {
     expect(DEFAULTS.find((e) => e.options.cacheName === 'pages')!.options.networkTimeoutSeconds).toBeUndefined()
     const pages = out.find((e) => e.options.cacheName === 'pages')!
     expect(pages.urlPattern).toBe(DEFAULTS.find((e) => e.options.cacheName === 'pages')!.urlPattern)
-    expect(pages.options.expiration).toEqual({ maxEntries: 32, maxAgeSeconds: 86400 })
+  })
+
+  it('never shows a saved page older than the inactivity that ends the session', () => {
+    // The server ends the session after INACTIVITY_LIMIT_MS without activity, only in the answer to the
+    // next request; a saved copy older than that would show a session the server already closed.
+    const out = withPageNetworkTimeout(DEFAULTS)
+    for (const name of ['pages-rsc-prefetch', 'pages-rsc', 'pages']) {
+      expect(out.find((e) => e.options.cacheName === name)!.options.expiration)
+        .toEqual({ maxEntries: 32, maxAgeSeconds: INACTIVITY_LIMIT_MS / 1000 })
+    }
+    expect(DEFAULTS.find((e) => e.options.cacheName === 'pages')!.options.expiration).toEqual({ maxEntries: 32, maxAgeSeconds: 86400 })
   })
 })
