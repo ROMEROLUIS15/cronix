@@ -218,3 +218,10 @@ Dos ramas del parser están **verificadas por mutación** (romperlas hace fallar
 - **Servidor:** `POST /api/pwa/load` siempre responde 204. Es anónima a propósito, para medir también las aperturas que terminan en `/login`. El negocio sale de la sesión, nunca del cuerpo; el cuerpo se valida estricto (`PwaLoadReportSchema`, máx. 2 KB) y se limita a 30 avisos por minuto e IP. Guarda en Redis `pwa:loads:v1`: las últimas 5.000 entradas, 30 días. Solo guarda con `VERCEL_ENV=production`.
 - **No cuenta como actividad:** no renueva el reloj de inactividad de la sesión (`classifyPath`, `lib/middleware/utils.ts`).
 - **Qué no mide:** una apertura en la que el HTML nunca llegó no deja rastro; se infiere por la ausencia de `boot`.
+
+## 12. Service worker: espera máxima de la red en páginas (NORMATIVO)
+
+- **Las páginas van primero a la red, con 4 s de espera máxima.** Si la red no responde en ese tiempo y hay una copia guardada, se muestra la copia. Sin copia guardada (primera visita) se sigue esperando a la red, igual que antes.
+- **Por qué:** con una conexión colgada (conecta pero no devuelve nada, común en datos móviles), la app instalada quedaba en blanco sin límite aunque tuviera copia guardada. Afecta a todas las plataformas.
+- **Cómo:** `lib/pwa/runtime-caching.cjs` toma la lista por defecto de `@ducanh2912/next-pwa` y solo agrega `networkTimeoutSeconds` a `pages-rsc-prefetch`, `pages-rsc` y `pages`, **sin cambiar el orden**. El service worker usa la primera regla que coincide y `pages` coincide con todo pedido del mismo origen: reemplazarlas con `extendDefaultRuntimeCaching` las movía delante de las reglas de estáticos y mandaba scripts e imágenes a la caché de páginas (32 entradas). Verificado en el `sw.js` generado.
+- **Llega a los dispositivos** cuando se activa el service worker nuevo (`skipWaiting: false`): al tocar "Actualizar" o al cerrar todas las pestañas o la app.

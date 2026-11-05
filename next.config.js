@@ -6,12 +6,16 @@ const withIntl = createNextIntlPlugin('./i18n/request.ts')
 
 // ✅ SECURITY FIX: Migrated from next-pwa (vulnerable serialize-javascript)
 // to @ducanh2912/next-pwa — a maintained fork with updated dependencies
+const { runtimeCaching: defaultRuntimeCaching } = require("@ducanh2912/next-pwa");
+const { withPageNetworkTimeout } = require("./lib/pwa/runtime-caching.cjs");
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: false,
   skipWaiting: false,
   customWorkerDir: "worker",
+  // The default rules, in order, with a network timeout on page requests (lib/pwa/runtime-caching.cjs).
+  workboxOptions: { runtimeCaching: withPageNetworkTimeout(defaultRuntimeCaching) },
 });
 
 /** @type {import('next').NextConfig} */
