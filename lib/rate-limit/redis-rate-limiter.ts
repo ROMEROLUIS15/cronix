@@ -12,7 +12,8 @@ import { Redis } from '@upstash/redis'
 
 let _redis: Redis | null = null
 
-function getRedis(): Redis | null {
+/** The shared Upstash client, or null when Redis is not configured. */
+export function getRedis(): Redis | null {
   if (!_redis) {
     const url = process.env.UPSTASH_REDIS_REST_URL
     const token = process.env.UPSTASH_REDIS_REST_TOKEN

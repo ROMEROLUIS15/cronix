@@ -210,3 +210,11 @@ Dos ramas del parser están **verificadas por mutación** (romperlas hace fallar
 - **Si no se pudo leer el horario, el formulario no bloquea**: no se le impide trabajar al dueño por un fallo de lectura.
 - **La regla es la misma en todos los canales.** `checkBusinessHours` (`lib/use-cases/appointments.use-case.ts`) es la copia Node de `outsideWorkingHours` (`_shared/availability.ts`), y `__tests__/use-cases/business-hours.test.ts` falla si dan respuestas distintas.
 - **Alcance:** la validación corre en el navegador; una escritura directa contra la API con la sesión del dueño no pasa por ella.
+
+## 11. Medición de la apertura de la PWA
+
+- **Para qué:** medir cómo abre la app en cada dispositivo (en particular iPhone) antes de cambiar nada del service worker. Decisión del usuario del 2026-11-05: medir primero.
+- **Cliente:** `lib/pwa/load-beacon-script.ts` corre inline en el `<head>` (`app/layout.tsx`), antes de cualquier bundle, en ES5. Manda `boot` (llegó el HTML), `loaded` (terminó de cargar), `hidden` (el usuario se fue antes de que cargara) y `resume` (volvió del fondo tras más de 5 s). Si no llega ni `boot`, el HTML nunca llegó al dispositivo.
+- **Servidor:** `POST /api/pwa/load` siempre responde 204. Es anónima a propósito, para medir también las aperturas que terminan en `/login`. El negocio sale de la sesión, nunca del cuerpo; el cuerpo se valida estricto (`PwaLoadReportSchema`, máx. 2 KB) y se limita a 30 avisos por minuto e IP. Guarda en Redis `pwa:loads:v1`: las últimas 5.000 entradas, 30 días. Solo guarda con `VERCEL_ENV=production`.
+- **No cuenta como actividad:** no renueva el reloj de inactividad de la sesión (`classifyPath`, `lib/middleware/utils.ts`).
+- **Qué no mide:** una apertura en la que el HTML nunca llegó no deja rastro; se infiere por la ausencia de `boot`.

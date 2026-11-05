@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { getLocale, getTranslations } from 'next-intl/server'
 import './globals.css'
+import { PWA_LOAD_BEACON_SCRIPT } from '@/lib/pwa/load-beacon-script'
 
 // 400 body, 500 emphasised, 600 strong (font-semibold is the most-used heavy
 // weight across the app — 197 uses), 700 headings. The previous request for
@@ -106,6 +107,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       */}
       <head>
         <link rel="icon" href="/icon.png?v=2" />
+        {/* Reports how each open of the app went (lib/pwa/load-beacon-script.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: PWA_LOAD_BEACON_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: `
           console.log('[PWA] Layout script executing');
           (function(){
