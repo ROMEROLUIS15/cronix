@@ -70,6 +70,7 @@ function buildEvent(action: Action, row: AppointmentRow, actor: Actor): Appointm
     userId:       actor.userId,
     channel:      'dashboard',
     ownerActed:   isOwnerActor(actor.role),
+    appointmentId: row.id,
   }
 }
 

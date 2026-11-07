@@ -41,6 +41,8 @@ export interface AppointmentEvent {
   channel:      'whatsapp' | 'phone' | 'voice' | 'dashboard'
   /** The owner made this change: they get no WhatsApp about their own action. */
   ownerActed?:  boolean
+  /** The appointment written: a late booking asks cron-reminders for the client's reminder. */
+  appointmentId?: string
 }
 
 /** Only an employee acting on the dashboard or the voice button alerts the owner by WhatsApp. */

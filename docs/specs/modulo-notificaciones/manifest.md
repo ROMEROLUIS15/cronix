@@ -25,6 +25,7 @@ interface AppointmentEvent {
   userId:       string   // 'whatsapp-agent' | UUID del usuario del dashboard
   channel:      'whatsapp' | 'phone' | 'voice' | 'dashboard'
   ownerActed?:  boolean  // el dueño hizo el cambio: no recibe WhatsApp de su propia acción
+  appointmentId?: string // la cita escrita: con ella, una cita tardía pide el recordatorio del cliente (§4, Canal 5)
 }
 ```
 
@@ -71,9 +72,14 @@ emitBookingEvent(event)
     │   └─ Medido 2026-11-04: `owner_event_notification` no se puede enviar desde el número de producción (Meta `132001`: no existe en ese idioma o no está aprobada). Mientras tanto el aviso sale con el texto del resumen diario: "El resumen diario está listo: {{1}}. Detalles adicionales: {{2}}. Gracias." Trade-off propuesto por el agente y aceptado por el usuario: texto inexacto a cambio de entregar sin esperar a Meta. Medido con un número real: llegan las acciones de clientes y empleados, y ninguna del dueño
     │   └─ Nunca rompe el pipeline; la degradación va a Sentry: plantilla de eventos falló → `owner_wa_template_failed`, resumen también → `owner_wa_summary_failed`, texto también → `owner_wa_undelivered`
     │
-    └─ Canal 4: Web Push al PWA del dueño
-        └─ Llama a la edge function `push-notify` via HTTP interno con `x-internal-secret`
-        └─ Falla silenciosamente
+    ├─ Canal 4: Web Push al PWA del dueño
+    │   └─ Llama a la edge function `push-notify` via HTTP interno con `x-internal-secret`
+    │   └─ Falla silenciosamente
+    │
+    └─ Canal 5: recordatorio al cliente de una cita tardía (`late-reminder.ts`)
+        └─ Solo `appointment.created` / `appointment.rescheduled` con `appointmentId`, desde el dashboard, la voz del dashboard o el agente de voz de llamada. Nunca desde el agente de WhatsApp: el cliente acaba de recibir la confirmación en ese chat (operacion-canonica C1)
+        └─ No depende de la campana: corre aunque el Canal 1 falle. Un evento ya procesado (reintento) no lo pide
+        └─ Pide a `cron-reminders` `{ lateReminder }` en segundo plano (`EdgeRuntime.waitUntil`), así el formulario y la voz no esperan; `cron-reminders` decide y envía (operacion-canonica §8, R4)
 ```
 
 **Patrón de despacho:** Fire-and-forget con `void emitBookingEvent(event)`. El caller nunca espera el resultado. El booking ya fue committed antes de llamar al pipeline.

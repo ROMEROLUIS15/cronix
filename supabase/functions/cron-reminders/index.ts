@@ -7,6 +7,9 @@
  *   2. A consolidated push notification to the business owner summarizing
  *      all appointments scheduled for tomorrow
  *
+ * Also answers `{ lateReminder }` from `_shared/notifications/late-reminder.ts`: the
+ * reminder of one appointment booked or moved after that night's run (modules/late-reminder.ts).
+ *
  * Security: x-internal-secret: <CRON_SECRET> (server-to-server only)
  *
  * Required Supabase Secrets:
@@ -16,7 +19,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected
  *
  * Deploy:
- *   npx supabase functions deploy cron-reminders
+ *   supabase functions deploy cron-reminders
  */
 
 // @deno-types="npm:@supabase/supabase-js@2/dist/module/index.d.ts"
@@ -30,6 +33,8 @@ import { sendWhatsAppReminders, sendOwnerWhatsAppSummary }    from './modules/wh
 import { buildReminderNotification, buildWhatsAppFailureNotification,
          insertNotification, sendPushNotification }     from './modules/notification-builder.ts'
 import { cleanupOldNotifications }                      from './modules/cleanup.ts'
+import { handleLateReminder, parseLateReminder }   from './modules/late-reminder.ts'
+import { supabaseLateReminderDeps }                     from './modules/late-reminder-deps.ts'
 import type { BusinessRow, AppointmentWithClient }      from './types.ts'
 
 initSentry('cron-reminders')
@@ -63,6 +68,25 @@ Deno.serve(async (req: Request) => {
   }
 
   addBreadcrumb('Cron auth verified', 'security')
+
+  // ── One appointment booked after tonight's run ──────────────────────────
+  const late = parseLateReminder(await req.json().catch(() => null))
+  if (late) {
+    try {
+      const { outcome, failedAppointments } = await handleLateReminder(
+        late, supabaseLateReminderDeps(createAdminClient(), cronSecret),
+      )
+      const failureNotif = buildWhatsAppFailureNotification(failedAppointments)
+      if (failureNotif) await insertNotification(late.businessId, failureNotif)
+      addBreadcrumb('Late reminder handled', 'cron', 'info', { business_id: late.businessId, outcome })
+      await flushSentry()
+      return json({ ok: true, late: outcome })
+    } catch (err) {
+      captureException(err, { stage: 'late_reminder', business_id: late.businessId })
+      await flushSentry()
+      return json({ error: err instanceof Error ? err.message : 'Unknown error' }, 500)
+    }
+  }
 
   // ── Get businesses at 8 PM local time ─────────────────────────────────────
   let businesses: BusinessRow[]

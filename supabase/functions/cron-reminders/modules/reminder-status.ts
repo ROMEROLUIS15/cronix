@@ -12,6 +12,8 @@ type ReminderRow = { appointment_id: string; status: string; channel: string; se
 /**
  * Appointments that must not get a reminder tonight: the reminder was cancelled, or a
  * WhatsApp reminder already went out in this run (pg_cron fired twice in the hour).
+ * With `resend`, only a cancelled reminder skips: a late move must tell the client the
+ * new time even when tonight's reminder already went out with the old one.
  * Throws on a database error; the caller decides whether to send anyway.
  */
 export async function getSkippedReminderIds(
@@ -19,6 +21,7 @@ export async function getSkippedReminderIds(
   businessId: string,
   appointmentIds: string[],
   now: Date = new Date(),
+  options: { resend?: boolean } = {},
 ): Promise<Set<string>> {
   if (appointmentIds.length === 0) return new Set()
 
@@ -36,7 +39,7 @@ export async function getSkippedReminderIds(
 
   return new Set(
     ((data ?? []) as ReminderRow[])
-      .filter((r) => r.status === 'cancelled' || sentTonight(r))
+      .filter((r) => r.status === 'cancelled' || (!options.resend && sentTonight(r)))
       .map((r) => r.appointment_id),
   )
 }

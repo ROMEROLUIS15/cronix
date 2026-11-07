@@ -129,5 +129,6 @@ async function bookOnce(supabase: SupabaseClient, call: CallBusiness, req: Booki
     time:         req.time,
     userId:       'phone-agent',
     channel:      'phone',
+    appointmentId,
   })
 }

@@ -58,7 +58,7 @@ describe('booking', () => {
     const [rpc] = m.opsFor('rpc:fn_book_appointment_wa')
     expect(rpc?.insertPayload).toMatchObject({ p_business_id: BIZ, p_client_phone: '+584120000001', p_client_name: 'Ana Ejemplo', p_service_id: 's1' })
     expect(notified).toHaveLength(1)
-    expect(notified[0]).toMatchObject({ type: 'appointment.created', channel: 'phone', userId: 'phone-agent', date: '2030-06-17', time: '10:00' })
+    expect(notified[0]).toMatchObject({ type: 'appointment.created', channel: 'phone', userId: 'phone-agent', date: '2030-06-17', time: '10:00', appointmentId: 'a1' })
     expect(m.opsFor('phone_agent_requests').find((o) => o.type === 'update')?.updatePayload).toEqual({ response: { success: true, appointment_id: 'a1' } })
     expect(m.opsFor('services')[0]?.eq).toContainEqual(['business_id', BIZ])
   })

@@ -164,6 +164,12 @@ describe('getSkippedReminderIds', () => {
     expect(await skipped([ownerPush])).toEqual(new Set())
   })
 
+  it('a moved appointment is reminded again even after tonight\'s reminder, unless it was cancelled', async () => {
+    const resend = (rows: Row[]) => getSkippedReminderIds(fakeDb(rows), BIZ, ['apt-1'], NOW, { resend: true })
+    expect(await resend([scheduledByDashboard({ status: 'sent', sent_at: hoursAgo(1) })])).toEqual(new Set())
+    expect(await resend([scheduledByDashboard({ status: 'cancelled' })])).toEqual(new Set(['apt-1']))
+  })
+
   it('throws on a database error so the caller can report it', async () => {
     await expect(getSkippedReminderIds(fakeDb([], 'timeout'), BIZ, ['apt-1'], NOW)).rejects.toThrow('timeout')
   })

@@ -158,4 +158,5 @@ export interface AppointmentNotification {
   serviceName: string
   date:        string
   time:        string
+  appointmentId?: string
 }

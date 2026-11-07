@@ -160,6 +160,7 @@ describe('AC-3/AC-4 — buildNotificationFromWrite: genera notificación correct
     expect(notification).toBeDefined()
     expect(notification!.type).toBe('appointment.created')
     expect(notification!.eventId).toBe('created:biz-uuid:appt-uuid:2026-06-10:10:00')
+    expect(notification!.appointmentId).toBe('appt-uuid')
     expect(notification!.businessId).toBe('biz-uuid')
     expect(notification!.userId).toBe('user-uuid')
     expect(lastRef).toBeDefined()

@@ -54,6 +54,11 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     calls.push({ step: 'whatsapp', body })
     return whatsappResponse(body)
   }
+  if (url.includes('/functions/v1/cron-reminders')) {
+    const headers = new Headers(init?.headers)
+    calls.push({ step: 'late_reminder', body: { ...body, authorization: headers.get('authorization') } })
+    return jsonResponse({ late: 'sent' })
+  }
   if (url.includes('/functions/v1/push-notify')) {
     calls.push({ step: 'push', body })
     return jsonResponse({ success: true })
@@ -205,5 +210,78 @@ describe('emitBookingEvent (Deno) reaches the owner', () => {
     await emitBookingEvent(eventOf('appointment.created'))
 
     expect(steps()).toEqual(['bell'])
+  })
+})
+
+describe('emitBookingEvent (Deno) asks for the client reminder of a late booking', () => {
+  let emitBookingEvent: typeof import('../../supabase/functions/_shared/notifications/emit-booking-event').emitBookingEvent
+
+  beforeAll(async () => {
+    vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } })
+    vi.stubGlobal('fetch', fakeFetch)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    emitBookingEvent = (await import('../../supabase/functions/_shared/notifications/emit-booking-event')).emitBookingEvent
+  })
+
+  afterAll(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  beforeEach(() => {
+    calls = []
+    network = { ownerPhone: OWNER_PHONE, existingEvent: false, insertFails: false, rejectedTemplates: [] }
+  })
+
+  const lateCalls = () => calls.filter((c) => c.step === 'late_reminder').map((c) => c.body)
+
+  it.each([
+    ['dashboard', 'appointment.created', false],
+    ['voice', 'appointment.rescheduled', true],
+    ['phone', 'appointment.created', false],
+  ] as const)('a %s %s asks cron-reminders, after the owner channels', async (channel, type, rescheduled) => {
+    await emitBookingEvent({ ...eventOf(type), channel, appointmentId: 'appt-1', ownerActed: true })
+
+    expect(steps()).toEqual(['bell', 'realtime', 'push', 'late_reminder'])
+    expect(lateCalls()).toEqual([{
+      lateReminder: { businessId: 'biz', appointmentId: 'appt-1', rescheduled },
+      authorization: 'Bearer cron-secret',
+    }])
+  })
+
+  it('leaves the WhatsApp agent out: the client got the confirmation in that chat (C1)', async () => {
+    await emitBookingEvent({ ...eventOf('appointment.created'), appointmentId: 'appt-1' })
+
+    expect(lateCalls()).toEqual([])
+  })
+
+  it('asks nothing for a cancellation', async () => {
+    await emitBookingEvent({ ...eventOf('appointment.cancelled'), channel: 'dashboard', appointmentId: 'appt-1' })
+
+    expect(lateCalls()).toEqual([])
+  })
+
+  it('asks nothing without the appointment id', async () => {
+    await emitBookingEvent({ ...eventOf('appointment.created'), channel: 'dashboard' })
+
+    expect(lateCalls()).toEqual([])
+  })
+
+  it('asks nothing for an event already processed (a retry of the same write)', async () => {
+    network.existingEvent = true
+
+    await emitBookingEvent({ ...eventOf('appointment.created'), channel: 'dashboard', appointmentId: 'appt-1' })
+
+    expect(steps()).toEqual([])
+  })
+
+  it('still asks when the bell insert fails: the client reminder does not depend on it', async () => {
+    network.insertFails = true
+
+    await emitBookingEvent({ ...eventOf('appointment.created'), channel: 'dashboard', appointmentId: 'appt-1' })
+
+    expect(steps()).toEqual(['bell', 'late_reminder'])
   })
 })

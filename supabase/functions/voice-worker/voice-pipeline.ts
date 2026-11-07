@@ -153,6 +153,7 @@ export function buildNotificationFromWrite(
         serviceName: result.data.serviceName,
         date:        result.data.date,
         time:        result.data.time,
+        appointmentId: result.data.appointmentId,
       }
     : undefined
 

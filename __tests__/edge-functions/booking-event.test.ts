@@ -62,6 +62,7 @@ describe('booking-event', () => {
       time: '15:00',
       userId: 'user-1',
       channel: 'dashboard',
+      appointmentId: APPOINTMENT,
     }))
   })
 
