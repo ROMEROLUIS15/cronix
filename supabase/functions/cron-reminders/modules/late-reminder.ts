@@ -33,12 +33,17 @@ export type LateReminderOutcome = 'sent' | 'failed' | 'skipped' | 'not_late' | '
 
 const NOT_REMINDED = new Set(['cancelled', 'no_show'])
 
-export function parseLateReminder(body: unknown): LateReminderRequest | null {
-  const late = (body as { lateReminder?: Record<string, unknown> } | null)?.lateReminder
-  if (!late) return null
-  const { businessId, appointmentId, rescheduled } = late
-  if (typeof businessId !== 'string' || !businessId) return null
-  if (typeof appointmentId !== 'string' || !appointmentId) return null
+/**
+ * null: not a late request (the hourly pg_cron body). 'invalid': a late request with a
+ * bad shape, answered 400 so it never falls through to the whole nightly run.
+ */
+export function parseLateReminder(body: unknown): LateReminderRequest | 'invalid' | null {
+  if (!body || typeof body !== 'object' || !('lateReminder' in body)) return null
+  const late = (body as { lateReminder: unknown }).lateReminder
+  if (!late || typeof late !== 'object') return 'invalid'
+  const { businessId, appointmentId, rescheduled } = late as Record<string, unknown>
+  if (typeof businessId !== 'string' || !businessId) return 'invalid'
+  if (typeof appointmentId !== 'string' || !appointmentId) return 'invalid'
   return { businessId, appointmentId, rescheduled: rescheduled === true }
 }
 

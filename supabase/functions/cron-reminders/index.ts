@@ -71,6 +71,10 @@ Deno.serve(async (req: Request) => {
 
   // ── One appointment booked after tonight's run ──────────────────────────
   const late = parseLateReminder(await req.json().catch(() => null))
+  if (late === 'invalid') {
+    await flushSentry()
+    return json({ error: 'Invalid lateReminder' }, 400)
+  }
   if (late) {
     try {
       const { outcome, failedAppointments } = await handleLateReminder(

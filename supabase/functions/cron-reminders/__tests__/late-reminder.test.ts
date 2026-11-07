@@ -51,10 +51,17 @@ describe('parseLateReminder', () => {
   it.each([
     ['the hourly pg_cron body', {}],
     ['no body', null],
-    ['an empty id', { lateReminder: { businessId: 'b', appointmentId: '' } }],
-    ['a non-string id', { lateReminder: { businessId: 'b', appointmentId: 7 } }],
   ])('is not a late request: %s', (_label, body) => {
     expect(parseLateReminder(body)).toBeNull()
+  })
+
+  it.each([
+    ['a missing id', { lateReminder: { businessId: 'b' } }],
+    ['an empty id', { lateReminder: { businessId: 'b', appointmentId: '' } }],
+    ['a non-string id', { lateReminder: { businessId: 'b', appointmentId: 7 } }],
+    ['a non-object', { lateReminder: 'apt-1' }],
+  ])('a malformed late request is invalid, never the nightly run: %s', (_label, body) => {
+    expect(parseLateReminder(body)).toBe('invalid')
   })
 })
 
