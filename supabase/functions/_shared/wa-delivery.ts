@@ -43,12 +43,13 @@ export function parseStatusEvents(payload: unknown): WaStatusUpdate[] {
         const status = typeof s?.status === 'string' ? s.status : ''
         if (!wamid || !KNOWN_STATUSES.has(status)) continue
         const seconds = Number(s?.timestamp)
+        const when = new Date(seconds * 1000)
         const error = asRecord(asArray(s?.errors)[0])
         const code = Number(error?.code)
         updates.push({
           wamid,
           status: status as WaDeliveryStatus,
-          at: Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000).toISOString() : new Date().toISOString(),
+          at: seconds > 0 && !Number.isNaN(when.getTime()) ? when.toISOString() : new Date().toISOString(),
           errorCode: Number.isFinite(code) && error ? code : null,
           errorTitle: error ? String(error.title ?? error.message ?? '').slice(0, 300) || null : null,
         })

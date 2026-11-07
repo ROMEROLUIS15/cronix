@@ -68,8 +68,9 @@ as $$
   values (p_wamid, p_status, p_error_code, p_error_title, p_at, now())
   on conflict (wamid) do update set
     status      = excluded.status,
-    error_code  = coalesce(excluded.error_code, m.error_code),
-    error_title = coalesce(excluded.error_title, m.error_title),
+    -- The error belongs to the failure: a later delivery clears it.
+    error_code  = excluded.error_code,
+    error_title = excluded.error_title,
     status_at   = excluded.status_at,
     updated_at  = now()
   where public.fn_wa_status_rank(excluded.status) > public.fn_wa_status_rank(m.status)

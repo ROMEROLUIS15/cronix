@@ -122,3 +122,4 @@ emitBookingEvent(event)
 - **El estado solo avanza** (`accepted` < `sent` < `failed` < `delivered` < `read`), porque Meta no garantiza el orden de sus eventos. Un estado que llega antes que el registro del envío crea la fila, y el envío después solo completa a quién pertenece.
 - **Un recordatorio que Meta rechaza** guarda el código y el texto de Meta en `appointment_reminders.error_message`, y no un texto genérico.
 - **Acceso:** solo `service_role` lee o escribe `wa_message_status` (RLS activo, sin políticas).
+- **Un error de un evento de estado nunca frena un mensaje entrante del cliente**, y una entrega posterior a un fallo borra el código de error.

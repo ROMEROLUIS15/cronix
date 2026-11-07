@@ -100,14 +100,17 @@ serve(async (req: Request) => {
       // Status events (sent, delivered, read, failed) carry no messages: they are the only
       // way to know whether a message Meta accepted reached the phone. Store them; a write
       // failure is reported but never makes Meta retry.
-      const statusUpdates = parseStatusEvents(body)
-      if (statusUpdates.length > 0) {
-        try {
+      let statusCount = 0
+      try {
+        const statusUpdates = parseStatusEvents(body)
+        statusCount = statusUpdates.length
+        if (statusCount > 0) {
           const { failed, lastError } = await recordStatuses(getAdminClient(), statusUpdates)
           if (failed > 0) captureException(new Error(`wa status not recorded: ${lastError}`), { stage: 'record_wa_status', failed })
-        } catch (e) {
-          captureException(e, { stage: 'record_wa_status' })
         }
+      } catch (e) {
+        // Never let a status problem stop a client's message from reaching the agent.
+        captureException(e, { stage: 'record_wa_status' })
       }
 
       const value    = body.entry?.[0]?.changes?.[0]?.value
@@ -125,7 +128,7 @@ serve(async (req: Request) => {
       if (body.object !== 'whatsapp_business_account' || !msg || !isProcessable) {
         await flushSentry()
         const reason = !msg ? 'No messages array' : !isProcessable ? `Unsupported type: ${msgType}` : 'Not a WA business account'
-        return json({ success: true, message: `Event ignored (${reason})`, statuses: statusUpdates.length })
+        return json({ success: true, message: `Event ignored (${reason})`, statuses: statusCount })
       }
 
       // Forwarding to QStash targeting our separate processor function.

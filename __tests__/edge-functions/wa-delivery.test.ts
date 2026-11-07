@@ -41,6 +41,12 @@ describe('parseStatusEvents', () => {
     ])
   })
 
+  it('survives a timestamp no date can hold', () => {
+    const out = parseStatusEvents(statusPayload([{ id: 'w-far', status: 'sent', timestamp: '99999999999999' }]))
+    expect(out).toHaveLength(1)
+    expect(Number.isNaN(new Date(out[0]!.at).getTime())).toBe(false)
+  })
+
   it('ignores messages, unknown statuses and broken shapes', () => {
     expect(parseStatusEvents({ entry: [{ changes: [{ value: { messages: [{ id: 'wamid.M', type: 'text' }] } }] }] })).toEqual([])
     expect(parseStatusEvents(statusPayload([{ id: 'w', status: 'deleted' }, { status: 'sent' }, null, 'x']))).toEqual([])

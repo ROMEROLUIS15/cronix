@@ -8,7 +8,7 @@
 
 BEGIN;
 
-SELECT plan(14);
+SELECT plan(15);
 
 -- 1. Objects and access: only the service role reads or writes.
 SELECT has_table('public', 'wa_message_status', 'wa_message_status exists');
@@ -32,6 +32,8 @@ SELECT public.fn_record_wa_status('w-fail', 'sent', NULL, NULL, now());
 SELECT public.fn_record_wa_status('w-fail', 'failed', 131049, 'healthy ecosystem engagement', now());
 SELECT is((SELECT status FROM public.wa_message_status WHERE wamid = 'w-fail'), 'failed', 'failed replaces sent');
 SELECT is((SELECT error_code FROM public.wa_message_status WHERE wamid = 'w-fail'), 131049, 'the Meta error code is kept');
+SELECT public.fn_record_wa_status('w-fail', 'delivered', NULL, NULL, now());
+SELECT is((SELECT error_code FROM public.wa_message_status WHERE wamid = 'w-fail'), NULL, 'a later delivery clears the error');
 
 -- 4. A failure never replaces a delivery.
 INSERT INTO public.wa_message_status (wamid, accepted_at) VALUES ('w-delivered', now());

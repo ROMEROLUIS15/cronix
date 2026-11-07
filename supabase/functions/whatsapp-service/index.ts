@@ -15,10 +15,18 @@
  */
 
 import { initSentry, captureException, addBreadcrumb, flushSentry } from '../_shared/sentry.ts'
-import { getAdminClient } from '../_shared/supabase.ts'
+// npm: specifier on purpose: this function has no import map (supabase/config.toml), so the bare
+// '@supabase/supabase-js' that _shared/supabase.ts uses would not resolve and the worker would not boot.
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import { acceptedMessageId, metaSendError, parseTrack, recordAcceptedMessage, type WaMessageTrack } from '../_shared/wa-delivery.ts'
 
 initSentry('whatsapp-service')
+
+function adminClient() {
+  return createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -190,7 +198,7 @@ Deno.serve(async (req: Request) => {
     const messageId = acceptedMessageId(resBody)
     if (messageId && track) {
       try {
-        const { error } = await recordAcceptedMessage(getAdminClient(), {
+        const { error } = await recordAcceptedMessage(adminClient(), {
           wamid: messageId, track, template: type === 'template' ? template : null, at: new Date().toISOString(),
         })
         if (error) captureException(new Error(`wa_message_status not recorded: ${error}`), { stage: 'record_accepted_message' })
