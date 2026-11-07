@@ -15,7 +15,8 @@ import {
   addBreadcrumb,
   flushSentry,
 } from "../_shared/sentry.ts"
-import { logToDLQ } from "../_shared/supabase.ts"
+import { getAdminClient, logToDLQ } from "../_shared/supabase.ts"
+import { parseStatusEvents, recordStatuses } from "../_shared/wa-delivery.ts"
 import { constantTimeEqual, hmacSha256Hex } from "../_shared/hmac.ts"
 
 initSentry('whatsapp-webhook')
@@ -95,6 +96,20 @@ serve(async (req: Request) => {
 
     try {
       const body: MetaWebhookPayload = JSON.parse(rawBody)
+
+      // Status events (sent, delivered, read, failed) carry no messages: they are the only
+      // way to know whether a message Meta accepted reached the phone. Store them; a write
+      // failure is reported but never makes Meta retry.
+      const statusUpdates = parseStatusEvents(body)
+      if (statusUpdates.length > 0) {
+        try {
+          const { failed, lastError } = await recordStatuses(getAdminClient(), statusUpdates)
+          if (failed > 0) captureException(new Error(`wa status not recorded: ${lastError}`), { stage: 'record_wa_status', failed })
+        } catch (e) {
+          captureException(e, { stage: 'record_wa_status' })
+        }
+      }
+
       const value    = body.entry?.[0]?.changes?.[0]?.value
       const messages = value?.messages
 
@@ -110,7 +125,7 @@ serve(async (req: Request) => {
       if (body.object !== 'whatsapp_business_account' || !msg || !isProcessable) {
         await flushSentry()
         const reason = !msg ? 'No messages array' : !isProcessable ? `Unsupported type: ${msgType}` : 'Not a WA business account'
-        return json({ success: true, message: `Event ignored (${reason})` })
+        return json({ success: true, message: `Event ignored (${reason})`, statuses: statusUpdates.length })
       }
 
       // Forwarding to QStash targeting our separate processor function.

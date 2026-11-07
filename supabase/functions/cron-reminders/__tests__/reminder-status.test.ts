@@ -168,3 +168,17 @@ describe('getSkippedReminderIds', () => {
     await expect(getSkippedReminderIds(fakeDb([], 'timeout'), BIZ, ['apt-1'], NOW)).rejects.toThrow('timeout')
   })
 })
+
+describe('the reason a reminder failed', () => {
+  it('keeps what Meta said instead of a generic text', async () => {
+    const rows: Row[] = []
+    await recordReminderOutcome(fakeDb(rows), { appointmentId: 'apt-x', businessId: 'biz', delivered: false, now: '2026-11-06T00:00:00.000Z', error: '131026: Message undeliverable' })
+    expect(rows.find((r) => r.appointment_id === 'apt-x')).toMatchObject({ status: 'failed', error_message: '131026: Message undeliverable' })
+  })
+
+  it('falls back to the generic text when there is no reason', async () => {
+    const rows: Row[] = []
+    await recordReminderOutcome(fakeDb(rows), { appointmentId: 'apt-y', businessId: 'biz', delivered: false, now: '2026-11-06T00:00:00.000Z' })
+    expect(rows.find((r) => r.appointment_id === 'apt-y')).toMatchObject({ error_message: 'WhatsApp delivery failed' })
+  })
+})

@@ -61,17 +61,21 @@ export async function sendWhatsAppReminders(
           businessName: business.name,
           date,
           time,
+          track: { businessId: business.id, purpose: "client_reminder", appointmentId: apt.id },
         }),
       });
 
       const data = await res.json().catch(() => ({ success: false })) as {
         success?: boolean;
+        error?: string;
+        errorCode?: number | null;
       };
       const recorded = await recordReminderOutcome(createAdminClient(), {
         appointmentId: apt.id,
         businessId: business.id,
         delivered: data.success === true,
         now: new Date().toISOString(),
+        error: data.success === true ? null : [data.errorCode, data.error].filter(Boolean).join(": ") || null,
       });
       if (!recorded.success) {
         console.warn("[cron-reminders] reminder status not recorded:", recorded.error);
@@ -159,6 +163,7 @@ export async function sendOwnerWhatsAppSummary(
             String(appointments.length),
             listed.join("  ⏳  "),
           ],
+          track: { businessId: business.id, purpose: "owner_summary" },
         }),
       });
       const data = await res.json().catch(() => ({ success: false })) as {
@@ -182,6 +187,7 @@ export async function sendOwnerWhatsAppSummary(
           to: business.phone,
           type: "text",
           message: messageText,
+          track: { businessId: business.id, purpose: "owner_summary" },
         }),
       });
       const data = await res.json().catch(() => ({ success: false })) as {

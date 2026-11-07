@@ -48,13 +48,14 @@ export async function getSkippedReminderIds(
  */
 export async function recordReminderOutcome(
   db: SupabaseClient,
-  outcome: { appointmentId: string; businessId: string; delivered: boolean; now: string },
+  outcome: { appointmentId: string; businessId: string; delivered: boolean; now: string; error?: string | null },
 ): Promise<{ success: boolean; error?: string }> {
   const { appointmentId, businessId, delivered, now } = outcome
+  // 'sent' means Meta accepted the message; whether it reached the phone is in wa_message_status.
   const fields = {
     status: delivered ? 'sent' : 'failed',
     sent_at: delivered ? now : null,
-    error_message: delivered ? null : 'WhatsApp delivery failed',
+    error_message: delivered ? null : (outcome.error?.slice(0, 500) || 'WhatsApp delivery failed'),
   }
 
   const { data: updated, error: updateError } = await db

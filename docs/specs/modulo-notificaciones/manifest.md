@@ -113,3 +113,12 @@ emitBookingEvent(event)
 - DADO un fallo de red o timeout en Realtime, WA o Web Push,
 - CUANDO el canal correspondiente falla,
 - ENTONCES el pipeline continúa al siguiente canal y el error se registra en consola sin propagarse al caller.
+
+## 8. Estado de entrega de cada WhatsApp (NORMATIVO)
+
+- **Que Meta acepte un envío no es que llegue.** `appointment_reminders.status = 'sent'` significa solo que Meta aceptó el pedido. Lo que pasó después lo informa Meta por el webhook (`sent`, `delivered`, `read`, `failed` con código de error), y se guarda en `wa_message_status`.
+- **`whatsapp-service`** devuelve `messageId` cuando Meta acepta y `errorCode` cuando rechaza. Si el pedido trae `track` (`businessId`, `purpose`: `client_reminder`, `owner_alert` u `owner_summary`, y `appointmentId` opcional), guarda a quién pertenece el mensaje.
+- **`whatsapp-webhook`** registra cada evento de estado (`_shared/wa-delivery.ts`, `fn_record_wa_status`) después de verificar la firma de Meta. Un error al guardar se reporta a Sentry y nunca hace que Meta reintente.
+- **El estado solo avanza** (`accepted` < `sent` < `failed` < `delivered` < `read`), porque Meta no garantiza el orden de sus eventos. Un estado que llega antes que el registro del envío crea la fila, y el envío después solo completa a quién pertenece.
+- **Un recordatorio que Meta rechaza** guarda el código y el texto de Meta en `appointment_reminders.error_message`, y no un texto genérico.
+- **Acceso:** solo `service_role` lee o escribe `wa_message_status` (RLS activo, sin políticas).

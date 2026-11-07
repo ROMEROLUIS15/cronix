@@ -11,10 +11,12 @@
  *   CRON_SECRET               — shared secret with Next.js cron route
  *   SENTRY_DSN                — optional, enables error tracking
  *
- * Deploy: npx supabase functions deploy whatsapp-service
+ * Deploy: supabase functions deploy whatsapp-service
  */
 
 import { initSentry, captureException, addBreadcrumb, flushSentry } from '../_shared/sentry.ts'
+import { getAdminClient } from '../_shared/supabase.ts'
+import { acceptedMessageId, metaSendError, parseTrack, recordAcceptedMessage, type WaMessageTrack } from '../_shared/wa-delivery.ts'
 
 initSentry('whatsapp-service')
 
@@ -62,7 +64,8 @@ Deno.serve(async (req: Request) => {
       time: string,
       template: string,
       parameters: string[],
-      languageCode: string
+      languageCode: string,
+      track: WaMessageTrack | null
 
   try {
     const body = await req.json() as Record<string, unknown>
@@ -76,6 +79,8 @@ Deno.serve(async (req: Request) => {
     template     = (body['template']    as string | undefined) ?? 'appointment_reminder'
     parameters   = Array.isArray(body['parameters']) ? (body['parameters'] as string[]) : []
     languageCode = (body['languageCode'] as string | undefined) ?? 'es'
+    // Optional: who the message belongs to, so its delivery can be followed (wa_message_status).
+    track        = parseTrack(body['track'])
 
     if (!to) throw new Error('Missing required field: to')
     if (type === 'text' && !message) throw new Error('Missing required field: message for type text')
@@ -164,23 +169,39 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify(waPayload),
     })
 
+    const resBody = await res.json().catch(() => ({}))
+
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      const msg     = (errBody as { error?: { message?: string } })?.error?.message
+      const { code, message: msg } = metaSendError(resBody)
       captureException(new Error(`Meta API error: ${msg ?? `HTTP ${res.status}`}`), {
         stage:       'meta_api_call',
         http_status: res.status,
         meta_error:  msg,
+        meta_code:   code,
         business:    businessName,
         type,
       })
       await flushSentry()
-      return json({ success: false, error: msg ?? `HTTP ${res.status}` })
+      return json({ success: false, error: msg ?? `HTTP ${res.status}`, errorCode: code })
     }
 
-    addBreadcrumb('WhatsApp message sent successfully', 'whatsapp', 'info', { type })
+    // Meta accepting the request is not delivery: keep the message id so the status events
+    // the webhook receives later (delivered, read, failed) can be matched to this message.
+    const messageId = acceptedMessageId(resBody)
+    if (messageId && track) {
+      try {
+        const { error } = await recordAcceptedMessage(getAdminClient(), {
+          wamid: messageId, track, template: type === 'template' ? template : null, at: new Date().toISOString(),
+        })
+        if (error) captureException(new Error(`wa_message_status not recorded: ${error}`), { stage: 'record_accepted_message' })
+      } catch (e) {
+        captureException(e, { stage: 'record_accepted_message' })
+      }
+    }
+
+    addBreadcrumb('WhatsApp message accepted by Meta', 'whatsapp', 'info', { type, message_id: messageId })
     await flushSentry()
-    return json({ success: true })
+    return json({ success: true, messageId })
   } catch (e) {
     captureException(e, { stage: 'meta_api_call', business: businessName, type })
     await flushSentry()

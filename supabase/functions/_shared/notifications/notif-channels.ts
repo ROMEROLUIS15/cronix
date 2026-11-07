@@ -195,7 +195,10 @@ export async function sendOwnerWhatsApp(event: AppointmentEvent): Promise<void> 
 
     const whatsappUrl = `${supabaseUrl}/functions/v1/whatsapp-service`
     await sendOwnerAlert(
-      (payload) => postWhatsAppService(whatsappUrl, cronSecret, { to: rawPhone, ...payload }),
+      (payload) => postWhatsAppService(whatsappUrl, cronSecret, {
+        to: rawPhone, ...payload,
+        track: { businessId: event.businessId, purpose: 'owner_alert' },
+      }),
       event,
     )
   } catch (err) {
