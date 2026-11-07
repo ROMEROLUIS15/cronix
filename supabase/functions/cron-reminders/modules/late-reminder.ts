@@ -1,3 +1,4 @@
+import { localDate, nextLocalDate } from './tomorrow-range.ts'
 import type { AppointmentWithClient, BusinessRow } from '../types.ts'
 
 /**
@@ -47,24 +48,15 @@ export function parseLateReminder(body: unknown): LateReminderRequest | 'invalid
   return { businessId, appointmentId, rescheduled: rescheduled === true }
 }
 
-function localParts(at: Date, timezone: string): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(at)
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` }
-}
-
-function nextDay(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + 1)
-  return d.toISOString().slice(0, 10)
+function localTime(at: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(at)
 }
 
 export function isLateForTonight(startAt: string, timezone: string, now: Date): boolean {
-  const today = localParts(now, timezone)
-  return today.time >= LATE_WINDOW_START && localParts(new Date(startAt), timezone).date === nextDay(today.date)
+  return localTime(now, timezone) >= LATE_WINDOW_START
+    && localDate(new Date(startAt), timezone) === nextLocalDate(localDate(now, timezone))
 }
 
 export async function handleLateReminder(

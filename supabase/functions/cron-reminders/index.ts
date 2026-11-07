@@ -25,7 +25,8 @@
 // @deno-types="npm:@supabase/supabase-js@2/dist/module/index.d.ts"
 import { initSentry, captureException, addBreadcrumb,
          setSentryTag, flushSentry }                    from '../_shared/sentry.ts'
-import { getBusinessesAt8PM, getTomorrowRange }         from './modules/business-scheduler.ts'
+import { getBusinessesAt8PM }                           from './modules/business-scheduler.ts'
+import { getTomorrowRange }                             from './modules/tomorrow-range.ts'
 import { getTomorrowAppointments }                     from './modules/appointment-fetcher.ts'
 import { getSkippedReminderIds }                       from './modules/reminder-status.ts'
 import { createAdminClient }                           from './modules/db.ts'

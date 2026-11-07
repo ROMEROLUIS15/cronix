@@ -14,16 +14,3 @@ export async function getBusinessesAt8PM(): Promise<BusinessRow[]> {
 
   return businesses as BusinessRow[]
 }
-
-export function getTomorrowRange(timezone: string): { start: string; end: string } {
-  const now = new Date()
-  const localDateStr = now.toLocaleDateString('en-CA', { timeZone: timezone })
-  const localDate = new Date(localDateStr + 'T00:00:00Z')
-  const tomorrow = new Date(localDate.getTime() + 24 * 60 * 60 * 1000)
-  const dayAfter = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000)
-
-  return {
-    start: tomorrow.toISOString(),
-    end:   dayAfter.toISOString(),
-  }
-}
