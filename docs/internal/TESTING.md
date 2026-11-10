@@ -41,7 +41,7 @@ npm run test:ui           # vitest UI (interfaz visual)
 npm run test:coverage     # v8 coverage report
 
 # Integration Tests (Supabase local)
-npm run test:integration  # vitest.integration.config.ts (requiere `npx supabase start`)
+npm run test:integration  # vitest.integration.config.ts (requiere `supabase start`)
 
 # E2E Tests (Playwright)
 npm run test:e2e          # playwright test (16 specs)
@@ -51,11 +51,11 @@ npm run check:voice       # chequeo sintético del voice-worker desplegado (WebM
 npm run e2e:setup         # tsx scripts/setup-e2e-data.ts (seed datos E2E)
 
 # pgTAP Tests (PostgreSQL native, requiere Supabase local)
-npx supabase test db      # Ejecuta todos los pgTAP (138 asserts, ~0.07s)
-npx supabase test db --debug  # Debug mode con salida detallada
+supabase test db      # Ejecuta todos los pgTAP (138 asserts, ~0.07s)
+supabase test db --debug  # Debug mode con salida detallada
 
 # Workflows completos
-npm test && npm run test:integration && npm run test:e2e && npx supabase test db  # Suite completa (~90s)
+npm test && npm run test:integration && npm run test:e2e && supabase test db  # Suite completa (~90s)
 ```
 
 ## 3. Tests críticos (los que defienden la arquitectura)
@@ -223,7 +223,7 @@ Valida lógica de negocio que **debe ser exacta y confiable**:
 
 ```bash
 # Ejecutar todos los pgTAP tests
-npx supabase test db
+supabase test db
 
 # Esperado:
 # /Users/.../rls_policies.test.sql ........ ok
@@ -273,7 +273,7 @@ Los tests de componentes (`__tests__/components/dashboard/use-voice-assistant.te
   - la grabadora que esperaba un `AudioContext.resume()` que nunca termina sin dispositivo de audio;
   - el cambio de imagen del runner.
   - la recarga automática de la PWA en la primera visita: el service worker recién instalado toma el control (`clientsClaim`) y `use-pwa-update.ts` recargaba la página en cada `controllerchange`. Contra `localhost` la instalación tarda segundos, así que la recarga caía después del clic y la grabación moría (el diagnóstico mostraba `MediaRecorder.start` y nunca `stop`). Ahora solo recarga si la página ya tenía un service worker.
-- Un deploy hecho a mano (`npx supabase functions deploy … --use-api`) **no** dispara `voice-check.yml`. Después de desplegar el `voice-worker`, corré `npm run check:voice`.
+- Un deploy hecho a mano (`supabase functions deploy … --use-api`) **no** dispara `voice-check.yml`. Después de desplegar el `voice-worker`, corré `npm run check:voice`.
 
 ### Contra qué corre y qué deja
 - Corre contra **producción** (Supabase y el `voice-worker` desplegado) con el usuario E2E (`E2E_TEST_EMAIL` / `E2E_TEST_PASSWORD`).

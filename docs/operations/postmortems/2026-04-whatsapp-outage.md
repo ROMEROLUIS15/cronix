@@ -49,7 +49,7 @@ export async function sendWhatsAppMessage(to: string, text: string) {
 - Copy the **Phone number ID:** `1035519006312517`
 
 ```bash
-npx supabase secrets set WHATSAPP_PHONE_NUMBER_ID=1035519006312517
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=1035519006312517
 ```
 
 **How to find the Phone Number ID:**
@@ -75,7 +75,7 @@ The function already has its own HMAC-SHA256 authentication (`verifyMetaSignatur
 
 **Can also be disabled via CLI during deployment:**
 ```bash
-npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+supabase functions deploy whatsapp-webhook --no-verify-jwt
 ```
 
 ---
@@ -93,12 +93,12 @@ npx supabase functions deploy whatsapp-webhook --no-verify-jwt
 2. Sync it in Supabase Secrets (using quotes for the `?` character):
 
 ```bash
-npx supabase secrets set "WHATSAPP_VERIFY_TOKEN=claveDesde01.croNix.?"
+supabase secrets set "WHATSAPP_VERIFY_TOKEN=claveDesde01.croNix.?"
 ```
 
 3. Redeploy the function to apply new secrets:
 ```bash
-npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+supabase functions deploy whatsapp-webhook --no-verify-jwt
 ```
 
 4. In Meta > WhatsApp > Configuration → Click **"Verify and save"**
@@ -173,7 +173,7 @@ The Gemini free tier has very low limits (15 RPM, ~1,000 requests/day).
 - Auth: `Authorization: Bearer <GROQ_API_KEY>`
 
 ```bash
-npx supabase secrets set "GROQ_API_KEY=gsk_..."
+supabase secrets set "GROQ_API_KEY=gsk_..."
 ```
 
 **To create Groq account:** https://console.groq.com (free, no card).
@@ -238,7 +238,7 @@ curl -X POST "https://graph.facebook.com/v19.0/<WABA_ID>/subscribed_apps" \
 - [ ] **Verify JWT: OFF** (function uses custom HMAC)
 - [ ] Deployed with `--no-verify-jwt`:
 ```bash
-npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+supabase functions deploy whatsapp-webhook --no-verify-jwt
 ```
 
 ---
@@ -247,7 +247,7 @@ npx supabase functions deploy whatsapp-webhook --no-verify-jwt
 
 ```bash
 # View configured secrets (hashes only)
-npx supabase secrets list
+supabase secrets list
 
 # Manually verify webhook
 curl "https://<PROJECT>.supabase.co/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=TEST"
@@ -266,7 +266,7 @@ curl -X POST "https://graph.facebook.com/v19.0/<WABA_ID>/subscribed_apps" \
   -H "Authorization: Bearer <TOKEN>"
 
 # Deploy function
-npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+supabase functions deploy whatsapp-webhook --no-verify-jwt
 ```
 
 ---
@@ -339,7 +339,7 @@ npx supabase functions deploy whatsapp-webhook --no-verify-jwt
 1.  **Environment Cleanup:** Removed the legacy/commented EU zone credentials from `.env.local` to strictly maintain a single source of truth for the active US East 1 QStash instance.
 2.  **CLI Synchronization:** Re-pushed the correct US East 1 credentials directly using the CLI:
     ```bash
-    npx supabase secrets set QSTASH_URL="https://qstash-us-east-1.upstash.io" QSTASH_TOKEN="..." QSTASH_CURRENT_SIGNING_KEY="..." QSTASH_NEXT_SIGNING_KEY="..."
+    supabase secrets set QSTASH_URL="https://qstash-us-east-1.upstash.io" QSTASH_TOKEN="..." QSTASH_CURRENT_SIGNING_KEY="..." QSTASH_NEXT_SIGNING_KEY="..."
     ```
 
 **Lesson Learned:** When dealing with dual-service webhooks (Meta -> Supabase -> QStash -> Supabase), signature mismatches will silently drop traffic. Always keep `.env.local` absolutely clean from legacy regions, and actively push changes specifically to `supabase secrets` as Supabase Deno Deploy does not auto-sync local files.

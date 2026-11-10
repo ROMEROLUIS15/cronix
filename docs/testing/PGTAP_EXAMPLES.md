@@ -394,7 +394,7 @@ SELECT ok(
 
 ```bash
 # Ejecutar TODOS los tests pgTAP
-npx supabase test db
+supabase test db
 
 # Resultado esperado:
 # /path/to/rls_policies.test.sql ........ ok

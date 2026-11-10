@@ -56,11 +56,11 @@ npx playwright test --project=voice   # Voz con audio real: micrófono falso de 
 npm run check:voice        # Chequeo sintético: sube un WebM real al voice-worker desplegado (también diario en CI)
 npm run test:evals:agent   # Evals E2E del agente WhatsApp (conversaciones golden, BLOQUEANTE en CI)
 npm run test:evals         # Evals Python/DeepEval (necesita evals/.venv)
-npx supabase test db       # pgTAP: RLS + funciones RPC + alertas (corre contra Supabase local)
+supabase test db       # pgTAP: RLS + funciones RPC + alertas (corre contra Supabase local)
 
-# Base de datos / Supabase (requiere Docker)
-npx supabase start                    # Levanta Postgres + Edge + Studio (127.0.0.1:54323)
-npx supabase db reset                 # Reaplica migraciones + seed
+# Base de datos / Supabase (requiere Docker y Supabase CLI global)
+supabase start                    # Levanta Postgres + Edge + Studio (127.0.0.1:54323)
+supabase db reset                 # Reaplica migraciones + seed
 npm run check:spec-drift              # Verifica que specs y código no divergieron (gate de CI)
 
 # Ejercitar los agentes en local (sin esperar tráfico real)

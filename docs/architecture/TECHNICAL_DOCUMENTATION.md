@@ -979,7 +979,7 @@ Detail in `docs/TESTING.md`. Summary:
 - **Pre-push**: `npm run lint && npm run typecheck && npm test && npm audit`. Any failure cancels the push. **Do not use `--no-verify`**.
 - **Vercel preview** on every PR. `PAYPAL_ENV` is not set to `live` there.
 - **Sentry release** auto-created on merge to `main`.
-- **Supabase migrations** applied manually with `npx supabase db push` after review.
+- **Supabase migrations** applied manually with `supabase db push` after review.
 
 Detail: `docs/operations/CI_CD_GATEKEEPER.md`.
 
@@ -988,8 +988,8 @@ Detail: `docs/operations/CI_CD_GATEKEEPER.md`.
 ### Deployment
 
 - **Vercel**: `git push` to `main` → preview build. Manual promotion to production.
-- **Supabase Edge Functions**: `npx supabase functions deploy <name>`.
-- **Migrations**: `npx supabase db push`.
+- **Supabase Edge Functions**: `supabase functions deploy <name>`.
+- **Migrations**: `supabase db push`.
 - **pg_cron**: configured via SQL in migrations.
 
 ### Costs today

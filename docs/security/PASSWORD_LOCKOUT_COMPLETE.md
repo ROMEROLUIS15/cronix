@@ -35,7 +35,7 @@ Sistema completo de protección contra ataques de fuerza bruta con 4 componentes
 
 **Ejecución:**
 ```bash
-npx supabase test db
+supabase test db
 # Tests corren automáticamente tras aplicar migración
 ```
 
@@ -213,8 +213,8 @@ created_at TIMESTAMPTZ
 
 - [x] Migración de password rate limiting creada
 - [x] Migración de security_alerts creada
-- [ ] Aplicar migraciones: `npx supabase db push`
-- [ ] Ejecutar pgTAP tests: `npx supabase test db`
+- [ ] Aplicar migraciones: `supabase db push`
+- [ ] Ejecutar pgTAP tests: `supabase test db`
 - [ ] Ejecutar E2E tests: `npm run test:e2e`
 - [ ] Verificar admin dashboard en `/admin/security/locked-users`
 - [ ] Integrar SendGrid/Resend para emails (en `sendLockoutAlert()`)

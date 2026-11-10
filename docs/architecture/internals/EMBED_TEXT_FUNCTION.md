@@ -104,7 +104,7 @@ Para cada `IntentDefinition.examples[]`, embed → escribe JSON precalculado a:
 ## Despliegue
 
 ```bash
-npx supabase functions deploy embed-text
+supabase functions deploy embed-text
 ```
 
 JWT verification: **disabled** en `supabase/config.toml` para que `service_role` pueda llamarla sin renegociar tokens. Acceso controlado por la `Authorization: Bearer <SERVICE_KEY>` que solo conocen los runtimes internos.

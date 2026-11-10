@@ -9,7 +9,7 @@
  *   initSentry('my-function-name')   // call once at module level (Deno caches it)
  *
  * Required secret (set via Supabase Dashboard or CLI):
- *   npx supabase secrets set SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+ *   supabase secrets set SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
  *
  * If SENTRY_DSN is absent OR @sentry/deno fails to load, all calls are
  * silent no-ops — the Edge Function keeps working without observability.
