@@ -22,7 +22,6 @@
   "ignoreDependencies": [
     "@rushstack/eslint-patch",
     "@typescript-eslint/eslint-plugin",
-    "jimp",
     "@modelcontextprotocol/sdk",
     "@supabase/mcp-server-supabase"
   ],
