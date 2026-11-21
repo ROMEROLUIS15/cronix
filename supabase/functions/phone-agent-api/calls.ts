@@ -22,6 +22,26 @@ export interface CallStart {
   from:     string | null
 }
 
+interface OfferedService {
+  id:           string
+  name:         string
+  /** The name an English call says; null when the business entered none. */
+  name_en:      string | null
+  duration_min: number
+  price:        number
+}
+
+/** A blank or missing English name is no English name: the agent falls back to `name`. */
+function offeredServices(rows: unknown): OfferedService[] {
+  return ((rows ?? []) as Array<Omit<OfferedService, 'name_en'> & { name_en?: string | null }>).map((s) => ({
+    id:           s.id,
+    name:         s.name,
+    name_en:      s.name_en?.trim() || null,
+    duration_min: s.duration_min,
+    price:        s.price,
+  }))
+}
+
 export function digitsOf(phone: string): string {
   return phone.replace(/\D/g, '')
 }
@@ -38,7 +58,7 @@ export async function startCall(supabase: SupabaseClient, body: Partial<CallStar
 
   const [business, services, record] = await Promise.all([
     supabase.from('businesses').select('name, timezone, settings').eq('id', businessId).single(),
-    supabase.from('services').select('id, name, duration_min, price')
+    supabase.from('services').select('id, name, name_en, duration_min, price')
       .eq('business_id', businessId).eq('is_active', true).order('name'),
     supabase.from('phone_agent_calls').upsert(
       { call_sid, business_id: businessId, channel, caller_phone: typeof from === 'string' ? from : null },
@@ -60,7 +80,7 @@ export async function startCall(supabase: SupabaseClient, body: Partial<CallStar
       timezone: biz.timezone ?? 'UTC',
       currency: typeof settings.currency === 'string' ? settings.currency : DEFAULT_PRICE_CURRENCY,
     },
-    services:      services.data ?? [],
+    services:      offeredServices(services.data),
     working_hours: effectiveWorkingHours(settings.workingHours as WorkingHours),
     known_client:  null,
   }
