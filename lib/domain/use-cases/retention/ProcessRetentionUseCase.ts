@@ -15,7 +15,7 @@ import { ok, fail, type Result } from '@/types/result'
 import { canAccessRetention } from '@/lib/plans/plan-limits'
 import { GetEligibleClientsUseCase } from './GetEligibleClientsUseCase'
 import {
-  RETENTION_DEFAULTS,
+  RETENTION_LIMITS,
   type IRetentionMessenger,
   type ProcessRetentionInput,
   type ProcessRetentionResult,
@@ -24,16 +24,16 @@ import {
 /** No work performed (gated off or nothing to do). */
 const NO_OP: ProcessRetentionResult = { sent: 0, failed: 0, capped: false }
 
-function readRetentionConfig(
-  settings: Record<string, unknown> | null,
-): { enabled: boolean; dailyCap: number } {
+/** Whether the owner turned win-back on. Limits are the platform's, never read from here. */
+function isRetentionEnabled(settings: Record<string, unknown> | null): boolean {
   const retention = (settings?.retention ?? {}) as Record<string, unknown>
-  const enabled = retention.enabled === true
-  const dailyCap =
-    typeof retention.dailyCap === 'number' && retention.dailyCap > 0
-      ? retention.dailyCap
-      : RETENTION_DEFAULTS.dailyCap
-  return { enabled, dailyCap }
+  return retention.enabled === true
+}
+
+/** The platform's per-business limit, lowered to what is left of the shared daily budget. */
+function dailyLimit(maxSends: number | undefined): number {
+  const left = maxSends === undefined ? RETENTION_LIMITS.perBusinessDaily : Math.max(0, Math.floor(maxSends))
+  return Math.min(RETENTION_LIMITS.perBusinessDaily, left)
 }
 
 export class ProcessRetentionUseCase {
@@ -56,10 +56,13 @@ export class ProcessRetentionUseCase {
     }
 
     // AC-5: consent toggle. Off ⇒ no-op, zero sends.
-    const { enabled, dailyCap } = readRetentionConfig(
-      business.data.settings as Record<string, unknown> | null,
-    )
-    if (!enabled) {
+    if (!isRetentionEnabled(business.data.settings as Record<string, unknown> | null)) {
+      return ok(NO_OP)
+    }
+
+    // No budget left for today ⇒ nothing to send (the clients wait for tomorrow).
+    const dailyCap = dailyLimit(input.maxSends)
+    if (dailyCap === 0) {
       return ok(NO_OP)
     }
 

@@ -12,6 +12,7 @@ import type { IClientRepository } from '@/lib/domain/repositories'
 import type { IBusinessRepository } from '@/lib/domain/repositories/IBusinessRepository'
 import { GetEligibleClientsUseCase } from '@/lib/domain/use-cases/retention/GetEligibleClientsUseCase'
 import { ProcessRetentionUseCase } from '@/lib/domain/use-cases/retention/ProcessRetentionUseCase'
+import { RETENTION_LIMITS } from '@/lib/domain/use-cases/retention/types'
 import type {
   IRetentionMessenger,
   EligibleClient,
@@ -159,16 +160,47 @@ describe('ProcessRetentionUseCase', () => {
     expect(update).toHaveBeenCalledWith('cli-0', BIZ)
   })
 
-  it('AC-6: caps the batch at dailyCap and reports capped=true', async () => {
+  it('AC-6: every business sends at most the platform per-business limit (3) and reports capped', async () => {
     const send = vi.fn(async () => SENT)
     const update = vi.fn(async () => ok(undefined))
-    const { useCase } = build({ enabled: true, dailyCap: 2 }, clients(5), { send, update })
+    const { useCase } = build({ enabled: true }, clients(5), { send, update })
 
     const result = await useCase.execute({ businessId: BIZ })
 
+    expect(RETENTION_LIMITS.perBusinessDaily).toBe(3)
+    expect(result.data).toEqual({ sent: 3, failed: 0, capped: true })
+    expect(send).toHaveBeenCalledTimes(3)
+    expect(update).toHaveBeenCalledTimes(3)
+  })
+
+  it('AC-6: a per-business cap stored in the settings is ignored (no per-client limits)', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true, dailyCap: 50 }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ })
+
+    expect(result.data).toEqual({ sent: 3, failed: 0, capped: true })
+    expect(send).toHaveBeenCalledTimes(3)
+  })
+
+  it('sends no more than what is left of the platform budget', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ, maxSends: 2 })
+
     expect(result.data).toEqual({ sent: 2, failed: 0, capped: true })
     expect(send).toHaveBeenCalledTimes(2)
-    expect(update).toHaveBeenCalledTimes(2)
+  })
+
+  it('sends nothing when the platform budget is used up', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ, maxSends: 0 })
+
+    expect(result.data).toEqual({ sent: 0, failed: 0, capped: false })
+    expect(send).not.toHaveBeenCalled()
   })
 
   it('does not stamp anti-spam when a recipient-level send fails, and keeps going', async () => {
@@ -199,7 +231,7 @@ describe('ProcessRetentionUseCase', () => {
     expect(result.data).toEqual({
       sent: 0,
       failed: 1,
-      capped: false,
+      capped: true, // 50 candidates, platform limit of 3 per business
       aborted: {
         scope: 'platform',
         code: 132001,
@@ -233,21 +265,11 @@ describe('ProcessRetentionUseCase', () => {
     expect(result.data).not.toHaveProperty('aborted')
   })
 
-  it('exactly dailyCap candidates is not flagged as capped', async () => {
-    const { useCase } = build({ enabled: true, dailyCap: 3 }, clients(3))
+  it('exactly the per-business limit of candidates is not flagged as capped', async () => {
+    const { useCase } = build({ enabled: true }, clients(3))
 
     const result = await useCase.execute({ businessId: BIZ })
 
     expect(result.data).toEqual({ sent: 3, failed: 0, capped: false })
-  })
-
-  it('uses the default dailyCap (50) when unset', async () => {
-    const send = vi.fn(async () => SENT)
-    const { useCase } = build({ enabled: true }, clients(60), { send })
-
-    const result = await useCase.execute({ businessId: BIZ })
-
-    expect(result.data).toEqual({ sent: 50, failed: 0, capped: true })
-    expect(send).toHaveBeenCalledTimes(50)
   })
 })
