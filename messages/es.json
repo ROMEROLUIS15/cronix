@@ -971,7 +971,7 @@
       "modalTitle": "Activar reenganche automático",
       "modalDesc": "¿Cada cuántos días reenganchamos a un cliente que no vuelve?",
       "daysLabel": "Días sin volver",
-      "daysHint": "Por defecto 30 días. Puedes cambiarlo cuando quieras.",
+      "daysHint": "Le escribimos a cada cliente que pase esta cantidad de días sin venir. Si sigue sin volver, se le escribe otra vez después de la misma cantidad de días.",
       "confirm": "Activar",
       "cancel": "Cancelar",
       "activeNote": "Activo · cada {days} días"

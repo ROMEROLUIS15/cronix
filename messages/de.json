@@ -935,7 +935,7 @@
       "modalTitle": "Automatische Rückgewinnung aktivieren",
       "modalDesc": "Nach wie vielen Tagen sprechen wir einen Kunden an, der nicht zurückkehrt?",
       "daysLabel": "Tage ohne Rückkehr",
-      "daysHint": "Standard sind 30 Tage. Jederzeit änderbar.",
+      "daysHint": "Wir schreiben jedem Kunden, der so viele Tage nicht vorbeikommt. Kommt er weiterhin nicht, schreiben wir ihm nach derselben Anzahl Tage erneut.",
       "confirm": "Aktivieren",
       "cancel": "Abbrechen",
       "activeNote": "Aktiv · alle {days} Tage"

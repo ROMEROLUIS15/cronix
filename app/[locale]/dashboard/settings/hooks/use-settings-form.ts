@@ -61,7 +61,8 @@ export interface SettingsFormReturn {
   notifSettings: { whatsapp: boolean };
   setNotifSettings: React.Dispatch<React.SetStateAction<{ whatsapp: boolean }>>;
   retentionEnabled: boolean;
-  retentionFrequency: number;
+  /** Days the owner chose for win-back; null until win-back was ever set up (no default). */
+  retentionFrequency: number | null;
   savingRetention: boolean;
   handleEnableRetention: (freqDays: number) => Promise<void>;
   handleDisableRetention: () => Promise<void>;
@@ -106,7 +107,7 @@ export function useSettingsForm(): SettingsFormReturn {
   const [savingFab, setSavingFab] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
   const [retentionEnabled, setRetentionEnabled] = useState(false);
-  const [retentionFrequency, setRetentionFrequency] = useState(30);
+  const [retentionFrequency, setRetentionFrequency] = useState<number | null>(null);
   const [savingRetention, setSavingRetention] = useState(false);
   const notif = useNotifications(bizId);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -171,7 +172,9 @@ export function useSettingsForm(): SettingsFormReturn {
 
         const retentionData = (business.settings as unknown as BusinessSettingsJson)?.retention;
         setRetentionEnabled(retentionData?.enabled === true);
-        setRetentionFrequency(business.default_attendance_frequency_days ?? 30);
+        // The column has a database default for every business; it only counts as
+        // the owner's choice once win-back was set up.
+        setRetentionFrequency(retentionData ? business.default_attendance_frequency_days : null);
 
       }
       setLoading(false);

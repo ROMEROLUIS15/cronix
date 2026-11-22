@@ -2,7 +2,7 @@
  * GetEligibleClientsUseCase.test.ts
  *
  * Spec: docs/specs/modulo-retencion/manifest.md §4.
- * Covers: frequency read from the business, anti-spam default passthrough,
+ * Covers: the owner's days drive both selection and the wait before writing again,
  * row→EligibleClient mapping, and error paths.
  */
 
@@ -11,7 +11,6 @@ import { ok, fail } from '@/types/result'
 import type { IClientRepository } from '@/lib/domain/repositories'
 import type { IBusinessRepository } from '@/lib/domain/repositories/IBusinessRepository'
 import { GetEligibleClientsUseCase } from '@/lib/domain/use-cases/retention/GetEligibleClientsUseCase'
-import { RETENTION_DEFAULTS } from '@/lib/domain/use-cases/retention/types'
 
 const BIZ = 'biz-1'
 
@@ -23,15 +22,20 @@ function businessRepoWith(frequency: number): IBusinessRepository {
   } as unknown as IBusinessRepository
 }
 
-it('passes the business frequency + default anti-spam to the repo', async () => {
-  const findInactiveByFrequency = vi.fn(async () => ok([]))
-  const clientRepo = { findInactiveByFrequency } as unknown as IClientRepository
-  const useCase = new GetEligibleClientsUseCase(clientRepo, businessRepoWith(45))
+it.each([15, 20, 25, 45])(
+  'uses the owner\'s %i days both to pick the clients and to wait before writing again',
+  async (days) => {
+    const findInactiveByFrequency = vi.fn(async () => ok([]))
+    const clientRepo = { findInactiveByFrequency } as unknown as IClientRepository
+    const useCase = new GetEligibleClientsUseCase(clientRepo, businessRepoWith(days))
 
-  await useCase.execute({ businessId: BIZ })
+    await useCase.execute({ businessId: BIZ })
 
-  expect(findInactiveByFrequency).toHaveBeenCalledWith(BIZ, 45, RETENTION_DEFAULTS.antiSpamDays)
-})
+    // No fixed value: a client who still has not come back is written to again
+    // after the same number of days the owner chose.
+    expect(findInactiveByFrequency).toHaveBeenCalledWith(BIZ, days, days)
+  },
+)
 
 it('maps repo rows to EligibleClient (drops lastVisitAt)', async () => {
   const clientRepo = {

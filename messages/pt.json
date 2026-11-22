@@ -935,7 +935,7 @@
       "modalTitle": "Ativar reengajamento automático",
       "modalDesc": "A cada quantos dias reengajamos um cliente que não volta?",
       "daysLabel": "Dias sem voltar",
-      "daysHint": "Padrão de 30 dias. Você pode alterar quando quiser.",
+      "daysHint": "Escrevemos para cada cliente que passar essa quantidade de dias sem vir. Se continuar sem voltar, escrevemos de novo depois da mesma quantidade de dias.",
       "confirm": "Ativar",
       "cancel": "Cancelar",
       "activeNote": "Ativo · a cada {days} dias"

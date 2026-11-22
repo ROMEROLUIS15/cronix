@@ -935,7 +935,7 @@
       "modalTitle": "Activer la relance automatique",
       "modalDesc": "Au bout de combien de jours relançons-nous un client qui ne revient pas ?",
       "daysLabel": "Jours sans revenir",
-      "daysHint": "30 jours par défaut. Modifiable à tout moment.",
+      "daysHint": "Nous écrivons à chaque client qui passe ce nombre de jours sans venir. S’il ne revient toujours pas, nous lui écrivons à nouveau après le même nombre de jours.",
       "confirm": "Activer",
       "cancel": "Annuler",
       "activeNote": "Actif · tous les {days} jours"

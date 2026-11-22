@@ -935,7 +935,7 @@
       "modalTitle": "Attiva il riaggancio automatico",
       "modalDesc": "Dopo quanti giorni ricontattiamo un cliente che non torna?",
       "daysLabel": "Giorni senza tornare",
-      "daysHint": "Predefinito 30 giorni. Puoi cambiarlo quando vuoi.",
+      "daysHint": "Scriviamo a ogni cliente che passa questo numero di giorni senza venire. Se continua a non tornare, gli scriviamo di nuovo dopo lo stesso numero di giorni.",
       "confirm": "Attiva",
       "cancel": "Annulla",
       "activeNote": "Attivo · ogni {days} giorni"

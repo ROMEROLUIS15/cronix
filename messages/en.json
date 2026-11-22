@@ -971,7 +971,7 @@
       "modalTitle": "Enable automatic win-back",
       "modalDesc": "After how many days should we re-engage a client who hasn’t returned?",
       "daysLabel": "Days without returning",
-      "daysHint": "Defaults to 30 days. You can change it anytime.",
+      "daysHint": "We write to every client who goes this many days without coming in. If they still don’t come back, we write again after the same number of days.",
       "confirm": "Enable",
       "cancel": "Cancel",
       "activeNote": "Active · every {days} days"
