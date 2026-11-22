@@ -317,7 +317,8 @@ export function useSettingsForm(): SettingsFormReturn {
       const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
       const newSettings: BusinessSettingsJson = {
         ...currentSettings,
-        retention: { enabled: true, dailyCap: currentSettings.retention?.dailyCap ?? 50 },
+        // Only the on/off choice belongs to the business; daily limits are the platform's.
+        retention: { enabled: true },
       };
       const container = getBrowserContainer();
 
@@ -353,7 +354,7 @@ export function useSettingsForm(): SettingsFormReturn {
     const currentSettings = (biz.settings as unknown as BusinessSettingsJson) ?? {};
     const newSettings: BusinessSettingsJson = {
       ...currentSettings,
-      retention: { ...currentSettings.retention, enabled: false },
+      retention: { enabled: false },
     };
     const container = getBrowserContainer();
 

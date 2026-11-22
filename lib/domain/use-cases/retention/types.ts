@@ -10,10 +10,16 @@
 //
 // There is no fixed number of days: the owner's own number decides who has gone
 // too long without a visit and how long to wait before writing again.
-// dailyCap IS configurable via settings.retention.dailyCap and this is only the
-// fallback when unset.
-export const RETENTION_DEFAULTS = {
-  dailyCap: 50,
+//
+// The daily limits are the platform's, the same for every business (no
+// per-business setting). Every business shares one WhatsApp number, which Meta
+// allows 250 business-initiated conversations per 24 h while the business
+// portfolio is unverified. Win-back takes at most 15% of that (37) so reminders
+// and owner alerts always have room; each business sends at most 3 a day, which
+// is about what a business with a handful of appointments a day can take in.
+export const RETENTION_LIMITS = {
+  perBusinessDaily: 3,
+  platformDaily: 37,
 } as const
 
 // ── GetEligibleClientsUseCase ─────────────────────────────────────────────────
@@ -34,6 +40,8 @@ export interface EligibleClient {
 
 export interface ProcessRetentionInput {
   businessId: string
+  /** What is left of the platform's daily budget; the business sends at most this many. */
+  maxSends?: number
 }
 
 export interface ProcessRetentionResult {

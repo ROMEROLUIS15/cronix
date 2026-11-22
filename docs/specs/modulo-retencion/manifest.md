@@ -46,10 +46,23 @@ es determinista (SQL), no un juicio de LLM.
 * **Repetición:** a un cliente que recibió el mensaje y sigue sin volver se le
   vuelve a escribir cuando pasan **otra vez N días** (`clients.last_reengaged_at`;
   el use case pasa N como `antispam_days`).
-* **Tope diario por negocio (anti-baneo):** máximo `dailyCap` envíos por negocio
-  por corrida (`settings.retention.dailyCap`, default p.ej. 50). Sin esto, un
-  negocio con cientos de inactivos haría un disparo masivo que Meta marca como
-  spam y degrada/banea el número — y ahí se cae TODO, no solo retención.
+* **Topes diarios de la plataforma (NORMATIVO, 2026-11-22; enfoque A):** iguales
+  para todos los negocios, sin configuración por negocio (`RETENTION_LIMITS`):
+  - **3 mensajes por negocio por día.** Un negocio atiende pocas citas por día
+    (RS STUDIO: ~1,1 por día en 180 días, medido), así que mandar más no se
+    convierte en reservas.
+  - **37 mensajes por día en toda la plataforma** = 15 % de las 250 conversaciones
+    iniciadas por la empresa que Meta permite cada 24 h al **número compartido**
+    mientras la empresa no esté verificada. El 85 % queda para recordatorios y
+    avisos al dueño, que nunca se frenan.
+  - **Reparto:** los negocios se recorren en un orden que rota cada día
+    (`lib/use-cases/retention-order.ts`); al agotarse los 37, los restantes
+    esperan al día siguiente (`skipped` en la respuesta del cron). Ningún
+    cliente se pierde: sigue elegible.
+  - Un `settings.retention.dailyCap` guardado por versiones anteriores se ignora, y
+    Ajustes ya no lo escribe (guarda solo `enabled`).
+  - **Siguiente paso (enfoque B, decidido):** tope por capacidad (turnos libres de
+    los próximos días), calibrado con la conversión real medida con el enfoque A.
 * **Opt-out obligatorio:** si el cliente responde para no recibir más (STOP/"no
   me escriban"/etc.), se marca `clients.retention_opted_out` y queda excluido
   para siempre. Exigencia de Meta para mensajes de categoría marketing.
@@ -96,7 +109,7 @@ es determinista (SQL), no un juicio de LLM.
 
 ### Config en `businesses.settings` (jsonb — sin columna nueva)
 - `settings.retention.enabled` (bool, default false) — el toggle.
-- `settings.retention.dailyCap` (int, default 50) — tope por corrida.
+- No hay tope por negocio en la configuración: los topes son de la plataforma (§2).
 - La frecuencia vive en la columna `default_attendance_frequency_days`.
 
 ### UX de activación (v1 — modal al encender el switch)
@@ -138,7 +151,8 @@ piso por defecto, no se descarta.
 * **Flujo:**
   1. Si `settings.retention.enabled !== true` → no-op.
   2. `GetEligibleClientsUseCase` → candidatos.
-  3. Tomar hasta `dailyCap`.
+  3. Tomar hasta 3 (tope por negocio), o menos si al presupuesto de la plataforma
+     le queda menos (`maxSends`, lo pasa el cron).
   4. Por cada uno: enviar plantilla `client_winback` vía `whatsapp-service`
      (`type:"template"`, params nombre + negocio). Si el envío falla con alcance
      **plataforma**, la corrida se corta ahí (§7.1); con alcance **destinatario**
@@ -269,8 +283,9 @@ deterministas, sin LLM en el camino crítico.
 * **AC-4 — Sin teléfono** → no elegible.
 * **AC-5 — Toggle OFF:** `ProcessRetentionUseCase` con `retention.enabled=false`
   → no-op, 0 envíos.
-* **AC-6 — Tope diario:** candidatos > `dailyCap` → se envían exactamente
-  `dailyCap`, `capped=true`; el resto entra en la siguiente corrida.
+* **AC-6 — Topes diarios:** un negocio con más de 3 candidatos envía exactamente 3
+  (`capped=true`) aunque tenga guardado otro `dailyCap`; la plataforma envía como
+  máximo 37 por día entre todos los negocios y los demás esperan al día siguiente.
 * **AC-7 — Envío marca anti-spam:** envío OK → `last_reengaged_at = now()`.
 * **AC-8 — Opt-out:** cliente que pidió baja → nunca elegible.
 * **AC-9 — Plantilla obligatoria:** envío con `type:"template"`, nunca texto libre.

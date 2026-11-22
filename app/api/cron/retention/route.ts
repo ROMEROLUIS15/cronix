@@ -15,7 +15,9 @@ import { getRepos } from '@/lib/repositories'
 import {
   GetEligibleClientsUseCase,
   ProcessRetentionUseCase,
+  RETENTION_LIMITS,
 } from '@/lib/domain/use-cases/retention'
+import { orderBusinessesForDay } from '@/lib/use-cases/retention-order'
 import { WinbackMessenger } from '@/lib/services/winback-messenger'
 import { logger } from '@/lib/logger'
 
@@ -54,12 +56,20 @@ async function handler(req: Request) {
     messenger,
   )
 
-  const totals = { businesses: 0, sent: 0, failed: 0, capped: 0 }
-  for (const businessId of enabled.data) {
+  // One daily budget for the whole platform (shared WhatsApp number), handed out in
+  // an order that rotates every day; businesses past the budget wait for tomorrow.
+  const totals = { businesses: 0, sent: 0, failed: 0, capped: 0, skipped: 0 }
+  let budgetLeft: number = RETENTION_LIMITS.platformDaily
+  for (const businessId of orderBusinessesForDay(enabled.data, new Date())) {
+    if (budgetLeft <= 0) {
+      totals.skipped++
+      continue
+    }
     totals.businesses++
-    const result = await processRetention.execute({ businessId })
+    const result = await processRetention.execute({ businessId, maxSends: budgetLeft })
     if (!result.data) continue
 
+    budgetLeft -= result.data.sent
     totals.sent += result.data.sent
     totals.failed += result.data.failed
     if (result.data.capped) totals.capped++
