@@ -113,13 +113,16 @@ piso por defecto, no se descarta.
 
 ### `ProcessRetentionUseCase` (orquestación del cron)
 * **Entrada:** `{ businessId }` (el cron itera negocios con `retention.enabled`).
-* **Salida:** `Result<{ sent: number; failed: number; capped: boolean }>`
+* **Salida:** `Result<{ sent: number; failed: number; capped: boolean; aborted?: WinbackFailure }>`
+  (`aborted` solo existe si la corrida se cortó por un fallo de plataforma, §7.1).
 * **Flujo:**
   1. Si `settings.retention.enabled !== true` → no-op.
   2. `GetEligibleClientsUseCase` → candidatos.
   3. Tomar hasta `dailyCap`.
   4. Por cada uno: enviar plantilla `client_winback` vía `whatsapp-service`
-     (`type:"template"`, params nombre + negocio).
+     (`type:"template"`, params nombre + negocio). Si el envío falla con alcance
+     **plataforma**, la corrida se corta ahí (§7.1); con alcance **destinatario**
+     se cuenta en `failed` y sigue.
   5. En cada envío OK: `updateLastReengaged(clientId, businessId)`.
   6. Invalidar caché del dashboard (seam compartido).
   7. Devolver métricas.
@@ -173,8 +176,39 @@ interface IClientRepository {
 * **Body:** `Hola {{1}} 👋, en {{2}} te extrañamos. ¿Te gustaría agendar tu
   próxima cita? Responde a este mensaje y con gusto te ayudamos.`
   - `{{1}}` nombre del cliente · `{{2}}` nombre del negocio.
-* Hasta que Meta apruebe, el cron NO envía (sin fallback a texto libre fuera de
-  24h). El desarrollo procede en paralelo.
+* Sin fallback a texto libre fuera de 24h. Mientras Meta no apruebe la plantilla,
+  el cron **no manda nada**: el primer envío recibe el error de plantilla y la
+  corrida se corta (§7.1). Antes de 2026-11-20 esto no era así: el código
+  intentaba todos los envíos aunque la plantilla no existiera (medido el
+  2026-11-20: 50 llamadas a `whatsapp-service` en 15 s, el tope diario).
+
+### 7.1 Fallos de envío (NORMATIVO)
+
+Un fallo de envío tiene **alcance**: `platform` (se repetirá con todos los clientes:
+plantilla, cuenta o número) o `recipient` (solo ese teléfono).
+
+* **`platform` → la corrida del negocio se corta** en el primer fallo: no se envía a
+  los siguientes, no se sella `last_reengaged_at` de nadie por ese intento, y el
+  resultado trae `aborted` con `scope`, `code`, `template` y `message`. Lo ya
+  enviado antes del corte se conserva.
+* **`recipient` → se cuenta en `failed` y la corrida sigue.**
+* **La ruta `/api/cron/retention`**, ante un `aborted`, **detiene el recorrido de
+  negocios** (todos comparten plantilla y número), reporta **un** evento a Sentry
+  (`logger.error('retention', …)`, mensaje constante, detalle `businessId`, `code`,
+  `template`, `message`; sin datos de clientes) y responde **HTTP 502** con
+  `ok:false`.
+* **Clasificación** (`lib/services/whatsapp-error-codes.ts`, códigos de la
+  referencia de Meta verificada 2026-11-20): `platform` = 132000, 132001, 132005,
+  132007, 132012, 132015, 132016 (plantilla), 131042 (pago), 131048 (restricción del
+  número), 130429 (throughput), 190 (token). Todo lo demás —131049, 131050, 131026,
+  131047, 131056, un código desconocido o la ausencia de código— es `recipient`.
+* **Trade-offs** (agente + usuario, 2026-11-20): (a) el puerto
+  `IRetentionMessenger` devuelve una unión discriminada y no `Result<void>`, porque
+  `Result` solo lleva un string y no puede decir si el fallo corta la corrida;
+  (b) 131048 se trata como `platform` aunque la referencia lo describe también por
+  destinatario: seguir enviando desde un número restringido empeora la restricción;
+  (c) un fallo **sin código** (p. ej. `CRON_SECRET` sin configurar) sigue siendo
+  `recipient`, es decir, sin corte: queda como seguimiento.
 
 ---
 
@@ -234,21 +268,33 @@ deterministas, sin LLM en el camino crítico.
    `WinbackMessenger` (`lib/services/winback-messenger.ts`) envuelve
    `sendReactivationMessage` con `template:'client_winback'`. Migración pg_cron
    `20260614130000_schedule_cron_retention.sql` (1×/día 14:00 UTC ≈ 9 AM Bogota,
-   secret desde Vault) **escrita pero NO aplicada** — el scheduling en vivo es
-   paso ops (requiere Vault `cron_secret`, `CRON_SECRET` en Vercel y confirmar el
-   dominio `cronix-app.vercel.app`). Gating per-negocio por hora local = v2.
+   secret desde Vault). **Medido en producción el 2026-11-20:** el job
+   `cron-retention-daily` existe, está activo y corre todos los días; la entrada del
+   Vault `cron_secret` existe y la ruta responde (50 llamadas a `whatsapp-service`
+   a las 14:00 UTC). Gating per-negocio por hora local = v2.
 5. ✅ **Opt-out:** migración `retention_opted_out` + RPC con
    `and not retention_opted_out` (ambos aplicados en prod). Node:
    `setRetentionOptOut` en el repo. Deno: `process-whatsapp/retention-optout.ts`
    (`isOptOutRequest` determinista — no colisiona con "cancelar cita" — +
    `markRetentionOptOut` por `phone_digits`/business, invalida caché), conectado
    en `message-handler` como intercept antes del agente. Tests Node + Deno.
-   ⚠️ Requiere **deploy de `process-whatsapp`** para activarse en vivo.
+   `process-whatsapp` ya está desplegado (versión activa del 2026-11-07, posterior
+   a este código; medido por la API de funciones).
 6. ✅ **Dashboard:** Card de retención en Settings (`app/[locale]/dashboard/settings`)
    con toggle + modal de frecuencia (default 30, persiste en
    `default_attendance_frequency_days`; el toggle escribe `settings.retention`).
    **Plan-gated:** en `free` el toggle se reemplaza por un botón bloqueado (`Lock`
    + upsell a `/dashboard/plans`) vía `canAccessRetention(plan)`. i18n en los 6
    locales (`settings.retention.*`). Panel de "reenganchados" = opcional, v2.
-7. **Plantilla Meta** `client_winback` (trámite externo, en paralelo desde ya).
+7. **Plantilla Meta** `client_winback` (trámite externo). **Estado 2026-11-20:** se
+   creó a mano en la cuenta Cronix (Marketing, español) y quedó **En revisión**; el
+   2026-11-21 figura aprobada ("Activa: calidad pendiente", sin motivo de rechazo y
+   sin que Meta la recategorizara), con 0 mensajes enviados.
+   Hasta entonces la cuenta solo tenía `daily_owner_summary` y
+   `appointment_reminder`. El negocio no está verificado (límite de 250
+   conversaciones por 24 h); no se midió si eso afecta la aprobación. El toggle del
+   único negocio que lo tenía encendido (plan enterprise) se apagó ese día. Sentry
+   registra un error 132001 por corrida desde el 14/11 a las 14:00 UTC, sin que nada
+   más lo mostrara (el 20/11 se midieron 50 envíos). El corte de §7.1 evita que se
+   repita.
 8. **v2:** frecuencia por-servicio/por-cliente, log de auditoría, métricas.

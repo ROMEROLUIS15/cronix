@@ -32,6 +32,8 @@ export interface ReactivationMessageParams {
 export interface WhatsAppResult {
   success: boolean
   error?:  string
+  /** Meta's numeric error code, when the edge function relays a rejected send. */
+  errorCode?: number
 }
 
 function isWhatsAppResult(value: unknown): value is WhatsAppResult {

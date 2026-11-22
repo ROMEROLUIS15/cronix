@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { sendAppointmentReminder } from '@/lib/services/whatsapp.service'
+import { sendAppointmentReminder, sendReactivationMessage } from '@/lib/services/whatsapp.service'
 import type { ReminderMessageParams } from '@/lib/services/whatsapp.service'
 
 const VALID_PARAMS: ReminderMessageParams = {
@@ -81,6 +81,18 @@ describe('sendAppointmentReminder', () => {
     const result = await sendAppointmentReminder(VALID_PARAMS)
 
     expect(result).toEqual({ success: false, error: 'Invalid phone number' })
+  })
+
+  it('keeps the Meta error code the edge function reports on a failed reactivation send', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: false, error: 'Template missing', errorCode: 132001 }),
+    }))
+
+    const result = await sendReactivationMessage({
+      to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón', template: 'client_winback',
+    })
+
+    expect(result).toEqual({ success: false, error: 'Template missing', errorCode: 132001 })
   })
 
   it('returns error when fetch throws network error', async () => {
