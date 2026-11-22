@@ -593,6 +593,8 @@
     "form": {
       "name": "Dienstname",
       "namePlaceholder": "z.B. Haarschnitt",
+      "nameEn": "Name auf Englisch (optional)",
+      "nameEnPlaceholder": "z.B. Haircut",
       "category": "Kategorie",
       "noCategory": "Keine Kategorie",
       "description": "Beschreibung",

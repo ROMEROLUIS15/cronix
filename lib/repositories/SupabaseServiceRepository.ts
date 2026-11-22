@@ -25,7 +25,7 @@ export class SupabaseServiceRepository implements IServiceRepository {
 
     const { data, error } = await this.supabase
       .from('services')
-      .select('id, business_id, name, description, duration_min, price, color, category, is_active, created_at')
+      .select('id, business_id, name, name_en, description, duration_min, price, color, category, is_active, created_at')
       .eq('business_id', businessId)
       .order('name')
 
