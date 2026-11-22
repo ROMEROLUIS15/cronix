@@ -629,6 +629,8 @@
     "form": {
       "name": "Nombre del servicio",
       "namePlaceholder": "Ej. Corte de cabello",
+      "nameEn": "Nombre en inglés (opcional)",
+      "nameEnPlaceholder": "Ej. Haircut",
       "category": "Categoría",
       "noCategory": "Sin categoría",
       "description": "Descripción",

@@ -89,6 +89,29 @@ describe('calls/start', () => {
     expect(m.opsFor('services')[0]?.eq).toContainEqual(['is_active', true])
   })
 
+  it('returns each service with its English name, and null when the business entered none', async () => {
+    const m = backend((op) => (op.table === 'services'
+      ? { data: [
+          { id: 's1', name: 'Corte', name_en: 'Haircut', duration_min: 30, price: 10 },
+          { id: 's2', name: 'Barba', name_en: null, duration_min: 20, price: 5 },
+          { id: 's3', name: 'Tinte', name_en: '   ', duration_min: 60, price: 25 },
+          { id: 's4', name: 'Uñas', duration_min: 45, price: 15 },
+        ] }
+      : undefined))
+    const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'twilio', to: '+13055550100' }), SECRET, m.supabase)
+    const body = await res.json()
+    expect(body.services).toEqual([
+      { id: 's1', name: 'Corte', name_en: 'Haircut', duration_min: 30, price: 10 },
+      { id: 's2', name: 'Barba', name_en: null, duration_min: 20, price: 5 },
+      { id: 's3', name: 'Tinte', name_en: null, duration_min: 60, price: 25 },
+      { id: 's4', name: 'Uñas', name_en: null, duration_min: 45, price: 15 },
+    ])
+    const read = m.opsFor('services')[0]!
+    expect(read.selectArg).toBe('id, name, name_en, duration_min, price')
+    expect(read.eq).toEqual([['business_id', BIZ], ['is_active', true]])
+    expect(read.order[0]?.[0]).toBe('name')
+  })
+
   it('refuses another channel than the phone line', async () => {
     const m = backend()
     const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'whatsapp', to: '+13055550100' }), SECRET, m.supabase)

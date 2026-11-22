@@ -530,19 +530,27 @@ describe('resolveBookingTurn — state machine owns booking, never trusts the pr
   })
 
   it('understands "el 21" / bare day after asking the day (no loop, advances to time)', () => {
-    const turn = resolveBookingTurn({
-      userText: 'el 21',
-      history: [
-        { role: 'user', text: 'para agendar' },
-        { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
-      ],
-      services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
-    })
-    expect(turn?.kind).toBe('reply')
-    if (turn?.kind === 'reply') {
-      // advanced to time (offers slots), did NOT re-ask the day
-      expect(turn.text).toMatch(/horarios libres|a qué hora/i)
-      expect(turn.text).not.toMatch(/¿Para qué día/i)
+    // Frozen clock: with the real one, "el 21" is today with no free times left whenever the
+    // suite runs late on the 21st, and the test failed by date, not by behaviour.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-12-10T15:00:00Z'))
+    try {
+      const turn = resolveBookingTurn({
+        userText: 'el 21',
+        history: [
+          { role: 'user', text: 'para agendar' },
+          { role: 'assistant', text: 'Con gusto te agendo *Tarjeta*. ¿Para qué día y a qué hora te gustaría?' },
+        ],
+        services: SERVICES, workingHours: OPEN_ALL, timezone: TZ, bookedSlots: [], intent: null,
+      })
+      expect(turn?.kind).toBe('reply')
+      if (turn?.kind === 'reply') {
+        // advanced to time (offers slots), did NOT re-ask the day
+        expect(turn.text).toMatch(/horarios libres|a qué hora/i)
+        expect(turn.text).not.toMatch(/¿Para qué día/i)
+      }
+    } finally {
+      vi.useRealTimers()
     }
   })
 

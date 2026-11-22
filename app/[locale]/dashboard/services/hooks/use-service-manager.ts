@@ -18,6 +18,7 @@ import {
 
 export interface ServiceForm {
   name: string;
+  name_en: string;
   description: string;
   duration_min: number;
   priceStr: string;
@@ -28,6 +29,7 @@ export interface ServiceForm {
 
 const emptyForm = (): ServiceForm => ({
   name: '',
+  name_en: '',
   description: '',
   duration_min: DEFAULT_DURATION,
   priceStr: '',
@@ -105,6 +107,7 @@ export function useServiceManager(): UseServiceManagerReturn {
   const openEdit = useCallback((s: Service) => {
     setForm({
       name: s.name,
+      name_en: s.name_en ?? '',
       description: s.description ?? '',
       duration_min: s.duration_min,
       priceStr: s.price === 0 ? '' : String(s.price),
@@ -125,6 +128,7 @@ export function useServiceManager(): UseServiceManagerReturn {
     const parsedPrice = parseFloat(form.priceStr.replace(',', '.')) || 0;
     const payload = {
       name: form.name.trim(),
+      name_en: form.name_en.trim() || null,
       description: form.description.trim() || null,
       duration_min: form.duration_min,
       price: parsedPrice,

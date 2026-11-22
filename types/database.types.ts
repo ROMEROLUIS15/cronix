@@ -1069,6 +1069,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
+          name_en: string | null
           price: number
           updated_at: string | null
         }
@@ -1082,6 +1083,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
+          name_en?: string | null
           price: number
           updated_at?: string | null
         }
@@ -1095,6 +1097,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          name_en?: string | null
           price?: number
           updated_at?: string | null
         }

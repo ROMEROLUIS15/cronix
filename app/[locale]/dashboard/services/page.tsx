@@ -136,6 +136,23 @@ export default function ServicesPage() {
                   className="block text-sm font-medium mb-1.5"
                   style={{ color: "#F2F2F2" }}
                 >
+                  {t('form.nameEn')}
+                </label>
+                <input
+                  value={form.name_en}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name_en: e.target.value }))
+                  }
+                  className="input-base"
+                  maxLength={100}
+                  placeholder={t('form.nameEnPlaceholder')}
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-sm font-medium mb-1.5"
+                  style={{ color: "#F2F2F2" }}
+                >
                   {t('form.category')}
                 </label>
                 <select

@@ -629,6 +629,8 @@
     "form": {
       "name": "Service name",
       "namePlaceholder": "e.g. Haircut",
+      "nameEn": "Name in English (optional)",
+      "nameEnPlaceholder": "e.g. Haircut",
       "category": "Category",
       "noCategory": "No category",
       "description": "Description",

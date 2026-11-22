@@ -3,6 +3,9 @@ import { z } from 'zod'
 export const CreateServiceSchema = z.object({
   business_id:   z.string().uuid(),
   name:          z.string().min(1, 'El nombre es obligatorio').max(100),
+  // The name an English phone call says (phone-agent-api calls/start). Blank means no
+  // English name: null, so an update can also clear it.
+  name_en:       z.string().trim().max(100).transform((v) => v || null).nullable().optional(),
   description:   z.string().max(500).optional(),
   duration_min:  z.number().int().positive('La duración debe ser mayor a 0'),
   price:         z.number().min(0, 'El precio no puede ser negativo'),

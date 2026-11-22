@@ -44,6 +44,28 @@ describe('CreateServiceSchema', () => {
     const result = CreateServiceSchema.safeParse({ ...validInput, price: 0 })
     expect(result.success).toBe(true)
   })
+
+  it('debe aceptar el nombre en inglés, sin espacios sobrantes', () => {
+    const result = CreateServiceSchema.safeParse({ ...validInput, name_en: '  Haircut  ' })
+    expect(result.success && result.data.name_en).toBe('Haircut')
+  })
+
+  it('el nombre en inglés es opcional: sin él, no aparece en el resultado', () => {
+    const result = CreateServiceSchema.safeParse(validInput)
+    expect(result.success && 'name_en' in result.data).toBe(false)
+  })
+
+  it('debe tratar un nombre en inglés vacío o en blanco como ausente (null)', () => {
+    for (const blank of ['', '   ']) {
+      const result = CreateServiceSchema.safeParse({ ...validInput, name_en: blank })
+      expect(result.success && result.data.name_en).toBeNull()
+    }
+  })
+
+  it('debe rechazar un nombre en inglés de más de 100 caracteres, como el nombre', () => {
+    expect(CreateServiceSchema.safeParse({ ...validInput, name_en: 'a'.repeat(100) }).success).toBe(true)
+    expect(CreateServiceSchema.safeParse({ ...validInput, name_en: 'a'.repeat(101) }).success).toBe(false)
+  })
 })
 
 describe('UpdateServiceSchema', () => {
@@ -55,6 +77,11 @@ describe('UpdateServiceSchema', () => {
   it('no debe reactivar el servicio: el default is_active de creación no aplica al update', () => {
     const result = UpdateServiceSchema.safeParse({ price: 30000 })
     expect(result.success && result.data).toEqual({ price: 30000 })
+  })
+
+  it('debe permitir borrar el nombre en inglés en un update (vacío → null)', () => {
+    const result = UpdateServiceSchema.safeParse({ name_en: '' })
+    expect(result.success && result.data).toEqual({ name_en: null })
   })
 
   it('debe rechazar precio negativo en update parcial', () => {
