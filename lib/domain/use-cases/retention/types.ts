@@ -8,11 +8,11 @@
 
 // ── Defaults (modulo-retencion §2, §3) ───────────────────────────────────────
 //
-// antiSpamDays is NOT configurable in v1 (not part of settings.retention); it is
-// a fixed guard. dailyCap IS configurable via settings.retention.dailyCap and
-// this is only the fallback when unset.
+// There is no fixed number of days: the owner's own number decides who has gone
+// too long without a visit and how long to wait before writing again.
+// dailyCap IS configurable via settings.retention.dailyCap and this is only the
+// fallback when unset.
 export const RETENTION_DEFAULTS = {
-  antiSpamDays: 30,
   dailyCap: 50,
 } as const
 

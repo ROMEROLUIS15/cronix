@@ -39,8 +39,13 @@ es determinista (SQL), no un juicio de LLM.
   inactivo está fuera de la sesión de 24h de WhatsApp ⇒ el mensaje DEBE ir con
   **plantilla Meta aprobada (HSM)**, nunca texto libre. Infra ya existe
   (`whatsapp-service` `type:"template"`; lo usa `cron-reminders`).
-* **Anti-Spam (frecuencia de contacto):** no se reenvía a un cliente con
-  `clients.last_reengaged_at` dentro de los últimos `antiSpamDays` (default 30).
+* **El número del dueño manda (NORMATIVO, decidido por el dueño del producto el
+  2026-11-22):** el dueño elige **N días** (1 a 365, sin valor por defecto). Recibe
+  el mensaje cada cliente cuya última visita fue hace más de N días. **No hay
+  ningún número fijo:** el 30 de antes era de las pruebas.
+* **Repetición:** a un cliente que recibió el mensaje y sigue sin volver se le
+  vuelve a escribir cuando pasan **otra vez N días** (`clients.last_reengaged_at`;
+  el use case pasa N como `antispam_days`).
 * **Tope diario por negocio (anti-baneo):** máximo `dailyCap` envíos por negocio
   por corrida (`settings.retention.dailyCap`, default p.ej. 50). Sin esto, un
   negocio con cientos de inactivos haría un disparo masivo que Meta marca como
@@ -50,8 +55,13 @@ es determinista (SQL), no un juicio de LLM.
   para siempre. Exigencia de Meta para mensajes de categoría marketing.
 * **Excluir citas futuras:** cliente con cita futura activa (`pending`/`confirmed`,
   `start_at > now()`) nunca es candidato — ya va a volver.
-* **Solo visita previa real (v1):** candidato = ≥1 cita `completed` pasada y
-  superó la frecuencia. "Nunca vinieron" (lead nurture) queda fuera de v1.
+* **Qué es una visita (NORMATIVO, 2026-11-22):** toda cita **pasada** que no esté
+  `cancelled` ni `no_show`. Si llegó el día y no se canceló, el cliente fue
+  atendido: los dueños no cierran cada cita a mano. Antes contaba solo
+  `completed`, y como el dashboard pasa a `completed` las citas vencidas recién
+  cuando el dueño lo abre, quién recibía el mensaje dependía de eso (medido en
+  local: el mismo cliente salía o no según si se abrió el dashboard). Un cliente sin
+  ninguna visita ("nunca vinieron") queda fuera.
 * **Canal único:** WhatsApp por el número oficial del negocio.
 * **Invalidación de caché cross-canal:** el cron toca `clients.last_reengaged_at`
   ⇒ DEBE invalidar el caché del dashboard vía el seam compartido
@@ -72,8 +82,13 @@ es determinista (SQL), no un juicio de LLM.
 1. **`businesses.default_attendance_frequency_days`** `int NOT NULL DEFAULT 30`.
 2. **`clients.last_reengaged_at`** `timestamptz NULL` (guard anti-spam).
 3. **RPC `get_reengageable_clients_rpc(biz_id, frequency_days, antispam_days)`** —
-   candidatos deterministas (completada pasada > freq, sin cita futura activa,
-   fuera de anti-spam, con teléfono, no borrado). Validado en prod.
+   candidatos deterministas (última visita hace más de `frequency_days`, sin cita
+   futura activa, sin mensaje en los últimos `antispam_days`, con teléfono, no
+   borrado). La columna de salida `last_completed_at` conserva el nombre y guarda
+   la última visita. Desde la migración `20261122130000`: visita = cita pasada no
+   `cancelled` ni `no_show`, y **solo `service_role` la puede ejecutar** (era
+   `SECURITY DEFINER`, recibía cualquier `biz_id`, devolvía nombres y teléfonos y la
+   podía llamar cualquier usuario con sesión; su único uso es el cron).
 
 ### Aplicado (migración `20260614_retention_optout`)
 4. ✅ **`clients.retention_opted_out`** `boolean NOT NULL DEFAULT false`. El RPC
@@ -86,8 +101,12 @@ es determinista (SQL), no un juicio de LLM.
 
 ### UX de activación (v1 — modal al encender el switch)
 Al poner el toggle en ON, se abre un **modal** que pide **un número de días**
-("¿Cada cuántos días reenganchamos a un cliente que no vuelve?", default 30) →
-escribe en `default_attendance_frequency_days`. Confirmar el modal persiste
+("¿Cada cuántos días reenganchamos a un cliente que no vuelve?"). **El campo arranca
+vacío** y "Activar" queda deshabilitado hasta que haya un número entero de 1 a 365
+(`lib/use-cases/retention-days.ts`); si el negocio ya había configurado el
+reenganche, muestra su número. Escribe en `default_attendance_frequency_days`. El
+`DEFAULT 30` de esa columna no cuenta como elección del dueño: solo vale una vez que
+el reenganche fue configurado (existe `settings.retention`). Confirmar el modal persiste
 `settings.retention.enabled = true` + la frecuencia; cancelar deja el switch OFF.
 Un solo número, a nivel negocio. El **ajuste por servicio** (cada servicio con su
 propio ciclo, que sobrescribe este global) es **v2** — este número queda como el
@@ -107,7 +126,8 @@ piso por defecto, no se descarta.
 ### `GetEligibleClientsUseCase`
 * **Entrada:** `{ businessId }`
 * **Salida:** `Result<EligibleClient[]>` con `{ id, name, phone, lastCompletedAt }`
-* **Flujo:** lee `default_attendance_frequency_days` + `antiSpamDays` y delega a
+* **Flujo:** lee `default_attendance_frequency_days` (N) y lo pasa dos veces, como
+  días sin visita y como espera para repetir, a
   `IClientRepository.findInactiveByFrequency(...)` (RPC determinista). Excluye
   opted-out.
 
@@ -240,10 +260,12 @@ deterministas, sin LLM en el camino crítico.
 
 ## 9. Criterios de Aceptación
 
-* **AC-1 — Detección:** cliente con `completed` pasada > frecuencia y sin cita
-  futura → elegible.
+* **AC-1 — Detección:** cliente con última visita (cita pasada no `cancelled` ni
+  `no_show`) hace más de N días y sin cita futura → elegible. Una cita pasada que
+  sigue `pending` o `confirmed` cuenta como visita; un `no_show` no.
 * **AC-2 — Excluido por cita futura activa** → no elegible.
-* **AC-3 — Anti-spam:** `last_reengaged_at` < `antiSpamDays` → no elegible.
+* **AC-3 — Repetición:** mensaje enviado hace menos de N días → no elegible; hace
+  más de N días y sigue sin volver → elegible otra vez.
 * **AC-4 — Sin teléfono** → no elegible.
 * **AC-5 — Toggle OFF:** `ProcessRetentionUseCase` con `retention.enabled=false`
   → no-op, 0 envíos.
@@ -297,7 +319,7 @@ deterministas, sin LLM en el camino crítico.
    `process-whatsapp` ya está desplegado (versión activa del 2026-11-07, posterior
    a este código; medido por la API de funciones).
 6. ✅ **Dashboard:** Card de retención en Settings (`app/[locale]/dashboard/settings`)
-   con toggle + modal de frecuencia (default 30, persiste en
+   con toggle + modal de frecuencia (sin valor por defecto desde 2026-11-22, persiste en
    `default_attendance_frequency_days`; el toggle escribe `settings.retention`).
    **Plan-gated:** en `free` el toggle se reemplaza por un botón bloqueado (`Lock`
    + upsell a `/dashboard/plans`) vía `canAccessRetention(plan)`. i18n en los 6
