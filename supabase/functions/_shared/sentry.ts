@@ -30,8 +30,12 @@ const DSN = Deno.env.get('SENTRY_DSN') ?? ''
 
 let Sentry: any = null
 
+// Pinned: an unpinned import resolves to the latest release at deploy time, and
+// @sentry/deno 11.16.0 crashes the edge runtime on init ("expected f64" in
+// unrefTimer), taking the whole function down (whatsapp-service, 2026-11-22).
+// 10.53.1 is the version the functions with a deno.lock already run in production.
 try {
-  Sentry = await import('npm:@sentry/deno')
+  Sentry = await import('npm:@sentry/deno@10.53.1')
 } catch {
   // Import failed — Sentry unavailable, all calls will be no-ops
 }
