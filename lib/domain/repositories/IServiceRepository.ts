@@ -18,6 +18,8 @@ export type ServiceForDropdown = {
 
 export type CreateServicePayload = {
   name: string
+  /** The name an English phone call says; null or absent when the business entered none. */
+  name_en?: string | null
   description: string | null
   duration_min: number
   price: number
