@@ -210,6 +210,22 @@ plantilla, cuenta o número) o `recipient` (solo ese teléfono).
   (c) un fallo **sin código** (p. ej. `CRON_SECRET` sin configurar) sigue siendo
   `recipient`, es decir, sin corte: queda como seguimiento.
 
+### 7.2 Entrega de cada mensaje
+
+* Cada envío manda `track` (`businessId`, `purpose: 'client_winback'`, `clientId`) y
+  `whatsapp-service` lo guarda en `wa_message_status`: lo que Meta informe después
+  (`delivered`, `read`, `failed` con código) queda con su negocio y su cliente
+  (modulo-notificaciones §8).
+* **Medido en la primera corrida real (2026-11-22, 14:00 UTC, tope 5), antes de este
+  cambio:** 5 llamadas con HTTP 200, 5 clientes estampados, 0 eventos en Sentry; y 5
+  filas sin dueño en `wa_message_status` (4 `delivered` entre las 14:00:18 y las
+  14:01:33, 1 `read` a las 14:35:41, 0 `failed`). Que esas 5 filas son los win-back se
+  deduce del número y la hora, no se pudo enlazar: el envío no guardaba el `wamid`.
+* **Orden de despliegue:** migración en producción → `whatsapp-service` → app. Si la
+  app sale antes, la función vieja descarta el `track` (igual que hoy). Si la función
+  sale antes que la migración, el registro falla, se reporta a Sentry y el mensaje se
+  envía igual.
+
 ---
 
 ## 8. Opt-out (entrante)

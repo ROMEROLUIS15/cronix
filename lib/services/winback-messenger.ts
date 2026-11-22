@@ -26,6 +26,7 @@ export class WinbackMessenger implements IRetentionMessenger {
       clientName: params.clientName,
       businessName: params.businessName,
       template: WINBACK_TEMPLATE,
+      track: { businessId: params.businessId, purpose: 'client_winback', clientId: params.clientId },
     })
 
     if (res.success) return { ok: true }

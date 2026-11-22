@@ -151,6 +151,8 @@ describe('ProcessRetentionUseCase', () => {
       to: '+573000000000',
       clientName: 'Cliente 0',
       businessName: 'Bella Salón',
+      businessId: BIZ,
+      clientId: 'cli-0',
     })
     // AC-7: one anti-spam stamp per successful send, scoped to the business.
     expect(update).toHaveBeenCalledTimes(3)

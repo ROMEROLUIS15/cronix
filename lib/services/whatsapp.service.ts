@@ -22,11 +22,24 @@ export interface ReminderMessageParams {
   time:         string
 }
 
+/**
+ * Who a sent message belongs to. Mirrors WaMessageTrack in
+ * supabase/functions/_shared/wa-delivery.ts (Deno cannot be imported from Node);
+ * whatsapp-service stores it in wa_message_status so Meta's later delivery
+ * statuses name the business and the recipient.
+ */
+export interface WaMessageTrack {
+  businessId: string
+  purpose:    'client_winback'
+  clientId:   string
+}
+
 export interface ReactivationMessageParams {
   to:           string
   clientName:   string
   businessName: string
   template?:    string // Default to reactivation_promo
+  track?:       WaMessageTrack
 }
 
 export interface WhatsAppResult {
