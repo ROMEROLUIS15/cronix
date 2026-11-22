@@ -167,9 +167,7 @@ run_tests() {
 }
 
 # ── Stage 4: Security audit ──────────────────────────────────────────────────
-# Audits production deps only (--omit=dev). The supabase CLI devDep carries
-# advisory GHSA-x96m-c5fj-q75c with no available fix and is irrelevant to the
-# production bundle shipped to users.
+# Audits production deps only (--omit=dev). Supabase CLI is managed globally.
 run_audit() {
   echo "${BOLD}[4/4] Running npm audit...${NC}"
   local audit_output

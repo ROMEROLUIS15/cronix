@@ -34,23 +34,23 @@ Push a Sentry alert to the operator when a business accumulates real AI-agent fa
 Spec §6 AC-1..AC-4 (rewritten to the real codes) + only the allowlist counts + per-business isolation + traces outside the window are ignored.
 
 ## TDD
-Mode: not configured in project/session (source: none found, same as `wa-reminder-reply-routing.md`) → ordinary functional checks; new behavior ships with tests. Runners: Vitest for edge-function TS (`supabase/functions/**/__tests__`), pgTAP (`npx supabase test db`) for SQL, `deno check` for edge type-checking.
+Mode: not configured in project/session (source: none found, same as `wa-reminder-reply-routing.md`) → ordinary functional checks; new behavior ships with tests. Runners: Vitest for edge-function TS (`supabase/functions/**/__tests__`), pgTAP (`supabase test db`) for SQL, `deno check` for edge type-checking.
 
 ## Checks
 - `npx vitest run supabase/functions/`
 - `deno check` on `voice-worker/index.ts`, `cron-ai-alerts/index.ts` (with `DENO_NO_PACKAGE_JSON=1`)
-- `npx supabase test db` (needs local Supabase; run `npx supabase migration up --local` first if the DB volume already existed)
+- `supabase test db` (needs local Supabase; run `supabase migration up --local` first if the DB volume already existed)
 - `npm test`, `npm run typecheck`, `npm run lint`, `npm run knip`, `npm run check:spec-drift`
 
 ## Progress
 - 2026-10-05: exploration and decisions done; document created. Engram mirror: **pending** (Engram tools unavailable this session).
 
-- 2026-10-05 (writer): T1, T2, T4, T5, T6 done and checked. T3 (migration + pgTAP file) is written but left UNTICKED: pgTAP was not run (no local Supabase) — run `npx supabase test db` (expect 14 asserts in `ai_failure_alerts.test.sql`), then tick T3.
+- 2026-10-05 (writer): T1, T2, T4, T5, T6 done and checked. T3 (migration + pgTAP file) is written but left UNTICKED: pgTAP was not run (no local Supabase) — run `supabase test db` (expect 14 asserts in `ai_failure_alerts.test.sql`), then tick T3.
   Evidence: `npx vitest run supabase/functions/` 46 files/798 tests -> 49 files/814 tests, all green; `deno check` voice-worker 13 errors before and after (no new), cron-ai-alerts clean; `npm test` 143 files/1700 tests green; typecheck clean; lint 0 errors (2 pre-existing warnings); knip exit 0; spec-drift OK.
   Follow-up: voice `result` strings on DB errors leak raw `error.message` to TTS.
 
 - 2026-10-05 (parent review): risk assessment `medium` → writer self-verification + parent spot check (`npx vitest run` cron-ai-alerts + voice core + db-error-code: 11 files / 232 tests green).
-  T3: added `idx_ai_traces_created_at` (the claim is a cross-tenant time-window scan; all prior `ai_traces` indexes lead with `business_id` and the table has no retention). `npx supabase migration up --local` + `npx supabase test db`: 4 files / 161 tests PASS (14 new).
+  T3: added `idx_ai_traces_created_at` (the claim is a cross-tenant time-window scan; all prior `ai_traces` indexes lead with `business_id` and the table has no retention). `supabase migration up --local` + `supabase test db`: 4 files / 161 tests PASS (14 new).
   Mutation check: the original AC-1 fixture had 1 trace per benign kind (below threshold 3), so a mutant counting `GUARD_REJECTED`/`FAST_PATH_FAILURE` still PASSED. Fixture rewritten (each benign kind ×3, + `REVIEWER_BLOCKED`, `BOOKING_RATE_LIMIT`). Now mutant 1 (guards/fast-path count) → 4/14 fail; mutant 2 (ignore `tool_calls`) → 4/14 fail; restored original → PASS.
   Docs: manifest documents the index and the claim-before-send trade-off (agent proposal, **pending user confirmation**); Slack "never configured" restated as the user's statement (prod job state unverified).
 

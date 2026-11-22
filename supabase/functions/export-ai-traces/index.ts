@@ -16,7 +16,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected
  *
  * Deploy:
- *   npx supabase functions deploy export-ai-traces
+ *   supabase functions deploy export-ai-traces
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'

@@ -288,7 +288,7 @@ la pregunta que responden:
 
 ## 6. Criterios de Aceptación (Paso 2)
 
-Verificados por `supabase/tests/ai_failure_alerts.test.sql` (pgTAP, `npx supabase
+Verificados por `supabase/tests/ai_failure_alerts.test.sql` (pgTAP, `supabase
 test db`) y `supabase/functions/cron-ai-alerts/__tests__/handler.test.ts` (Vitest);
 el mapeo de voz por `supabase/functions/voice-worker/__tests__/db-error-code.test.ts`
 y `supabase/functions/voice-worker/core/__tests__/tool-error-code.test.ts`.
