@@ -83,8 +83,13 @@ export class ProcessRetentionUseCase {
         businessName,
       })
 
-      if (result.error) {
+      if (!result.ok) {
         failed++
+        // A template/account/number failure repeats for every remaining client:
+        // stop here and hand the reason to the caller instead of retrying it N times.
+        if (result.failure.scope === 'platform') {
+          return ok({ sent, failed, capped, aborted: result.failure })
+        }
         continue
       }
 

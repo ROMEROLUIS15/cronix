@@ -6,8 +6,6 @@
  * concrete Edge Function.
  */
 
-import type { Result } from '@/types/result'
-
 // ── Defaults (modulo-retencion §2, §3) ───────────────────────────────────────
 //
 // antiSpamDays is NOT configurable in v1 (not part of settings.retention); it is
@@ -45,6 +43,11 @@ export interface ProcessRetentionResult {
   failed: number
   /** True when candidates exceeded dailyCap and the rest were left for the next run. */
   capped: boolean
+  /**
+   * Present only when the run stopped early on a platform-wide failure (template
+   * missing, account restricted…). Absent on a run that completed.
+   */
+  aborted?: WinbackFailure
 }
 
 // ── Outbound WhatsApp port (win-back template) ────────────────────────────────
@@ -57,10 +60,30 @@ export interface SendWinbackParams {
 }
 
 /**
+ * Why a send failed, in terms the use case can act on without knowing Meta.
+ * `platform`: it will fail for every client (template, account, phone number) —
+ * the run must stop. `recipient`: only this client — the run continues.
+ */
+export interface WinbackFailure {
+  scope: 'platform' | 'recipient'
+  /** Provider error code, null when the provider gave none. */
+  code: number | null
+  /** Template that was being sent. */
+  template: string
+  message: string
+}
+
+/**
+ * Outcome of one send. A discriminated union, not Result<void>: Result carries a
+ * plain string and cannot say whether the failure should stop the run.
+ */
+export type SendWinbackResult = { ok: true } | { ok: false; failure: WinbackFailure }
+
+/**
  * Port for sending the approved Meta win-back template (HSM). The concrete
  * adapter wraps the WhatsApp Edge Function with `template: 'client_winback'`.
- * Returns Result<void> — never throws.
+ * Never throws.
  */
 export interface IRetentionMessenger {
-  sendWinback(params: SendWinbackParams): Promise<Result<void>>
+  sendWinback(params: SendWinbackParams): Promise<SendWinbackResult>
 }

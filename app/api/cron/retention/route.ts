@@ -17,6 +17,7 @@ import {
   ProcessRetentionUseCase,
 } from '@/lib/domain/use-cases/retention'
 import { WinbackMessenger } from '@/lib/services/winback-messenger'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,10 +58,27 @@ async function handler(req: Request) {
   for (const businessId of enabled.data) {
     totals.businesses++
     const result = await processRetention.execute({ businessId })
-    if (result.data) {
-      totals.sent += result.data.sent
-      totals.failed += result.data.failed
-      if (result.data.capped) totals.capped++
+    if (!result.data) continue
+
+    totals.sent += result.data.sent
+    totals.failed += result.data.failed
+    if (result.data.capped) totals.capped++
+
+    // A platform-wide failure (template, account, phone number) is shared by every
+    // business: the same template and number go out for all of them. Stop the
+    // fan-out and report it — the message is constant so Sentry groups it.
+    const { aborted } = result.data
+    if (aborted) {
+      logger.error('retention', 'Win-back run aborted by a platform-wide WhatsApp failure', {
+        businessId,
+        code: aborted.code,
+        template: aborted.template,
+        message: aborted.message,
+      })
+      return NextResponse.json(
+        { ok: false, ...totals, aborted: { businessId, code: aborted.code, template: aborted.template } },
+        { status: 502 },
+      )
     }
   }
 
