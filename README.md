@@ -259,6 +259,7 @@ cronix/
 ### Requisitos
 - Node.js 20+ (LTS)
 - Docker Desktop (para Supabase local)
+- Supabase CLI (instalado globalmente: `npm install -g supabase` o `brew install supabase/tap/supabase`)
 - Cuentas: Supabase, Upstash Redis + QStash, Groq, Deepgram, PayPal Developer (Sandbox)
 
 ### Pasos
@@ -269,9 +270,9 @@ cd cronix
 npm install
 cp .env.local.example .env.local         # editar con tus credenciales
 
-npx supabase start                       # levanta Postgres + Edge + Studio
-npx supabase db reset                    # aplica migraciones + seed
-npx supabase gen types typescript --local > types/database.types.ts
+supabase start                       # levanta Postgres + Edge + Studio
+supabase db reset                    # aplica migraciones + seed
+supabase gen types typescript --local > types/database.types.ts
 
 npm run seed:intents                     # genera intent-embeddings.generated.json
 npm run e2e:setup                        # siembra datos para E2E (opcional)
@@ -293,7 +294,7 @@ npm run test:integration   # Integration vs Supabase local (7 archivos)
 npm run test:e2e           # Playwright (16 specs)
 npm run test:e2e:smoke     # Suite reducida
 npm run test:coverage      # Coverage v8
-npx supabase test db       # pgTAP: database tests (138 asserts: RLS + funciones + alertas)
+supabase test db       # pgTAP: database tests (138 asserts: RLS + funciones + alertas)
 npm run seed:intents       # Regenerar embeddings de intents
 ```
 
@@ -309,7 +310,7 @@ Vea [`docs/internal/TESTING.md`](./docs/internal/TESTING.md) para descripción c
 - `supabase/tests/ai_agent_alerts.test.sql` — 9 asserts de alertas del agente
 - `supabase/tests/ai_failure_alerts.test.sql` — 14 asserts de la alerta de fallos por negocio (Sentry)
 
-Ejecutar: `npx supabase test db`
+Ejecutar: `supabase test db`
 
 ### Quality gates automatizados
 

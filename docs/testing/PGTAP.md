@@ -113,7 +113,7 @@ Cubre **4 secciones**:
 
 ### Ejecutar Todos los pgTAP
 ```bash
-npx supabase test db
+supabase test db
 ```
 
 **Salida esperada:**
@@ -127,12 +127,12 @@ Files=2, Tests=73, Result: PASS
 
 ### Ejecutar una Suite Específica
 ```bash
-npx supabase test db --filter rls_policies
+supabase test db --filter rls_policies
 ```
 
 ### Ejecutar con Debug
 ```bash
-npx supabase test db --debug
+supabase test db --debug
 ```
 
 ---
@@ -169,7 +169,7 @@ jobs:
       - uses: actions/checkout@v3
       - run: npm ci
       - run: npm run start:db  # Inicia Supabase local
-      - run: npx supabase test db  # Ejecuta todos los pgTAP
+      - run: supabase test db  # Ejecuta todos los pgTAP
 ```
 
 ---

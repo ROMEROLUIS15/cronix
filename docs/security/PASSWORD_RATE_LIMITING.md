@@ -358,8 +358,8 @@ WHERE email = 'hacker@example.com';
 
 ## Próximos pasos
 
-1. **Aplicar migración:** `npx supabase db push`
-2. **Ejecutar tests:** `npx supabase test db` (cuando pgTAP tests se agreguen)
+1. **Aplicar migración:** `supabase db push`
+2. **Ejecutar tests:** `supabase test db` (cuando pgTAP tests se agreguen)
 3. **E2E testing:** Verificar que UI muestra "Bloqueado, intenta en 15 minutos"
 4. **Alertas:** Notificar a soporte si un usuario es bloqueado 5+ veces/día
 
