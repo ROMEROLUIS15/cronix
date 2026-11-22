@@ -81,6 +81,8 @@ export class ProcessRetentionUseCase {
         to: client.phone,
         clientName: client.name,
         businessName,
+        businessId: input.businessId,
+        clientId: client.id,
       })
 
       if (!result.ok) {

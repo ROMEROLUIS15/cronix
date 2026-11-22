@@ -95,6 +95,20 @@ describe('sendAppointmentReminder', () => {
     expect(result).toEqual({ success: false, error: 'Template missing', errorCode: 132001 })
   })
 
+  it('forwards the track of a reactivation send to the edge function', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendReactivationMessage({
+      to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón', template: 'client_winback',
+      track: { businessId: 'biz-1', purpose: 'client_winback', clientId: 'cli-7' },
+    })
+
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body)
+    expect(body.track).toEqual({ businessId: 'biz-1', purpose: 'client_winback', clientId: 'cli-7' })
+    expect(body.template).toBe('client_winback')
+  })
+
   it('returns error when fetch throws network error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network timeout')))
 

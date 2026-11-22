@@ -57,6 +57,10 @@ export interface SendWinbackParams {
   to: string
   clientName: string
   businessName: string
+  /** Owner of the message, so its delivery status can be traced back. */
+  businessId: string
+  /** The client the message goes to. */
+  clientId: string
 }
 
 /**

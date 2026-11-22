@@ -8,13 +8,15 @@
  */
 
 export type WaDeliveryStatus = 'sent' | 'delivered' | 'read' | 'failed'
-export type WaMessagePurpose = 'client_reminder' | 'owner_alert' | 'owner_summary'
+export type WaMessagePurpose = 'client_reminder' | 'owner_alert' | 'owner_summary' | 'client_winback'
 
 /** Who a sent message belongs to, passed to whatsapp-service by the caller. */
 export interface WaMessageTrack {
   businessId:     string
   purpose:        WaMessagePurpose
   appointmentId?: string | null
+  /** The client a message went to, when there is no appointment to point at (win-back). */
+  clientId?:      string | null
 }
 
 export interface WaStatusUpdate {
@@ -26,7 +28,7 @@ export interface WaStatusUpdate {
 }
 
 const KNOWN_STATUSES: ReadonlySet<string> = new Set(['sent', 'delivered', 'read', 'failed'])
-const PURPOSES: ReadonlySet<string> = new Set(['client_reminder', 'owner_alert', 'owner_summary'])
+const PURPOSES: ReadonlySet<string> = new Set(['client_reminder', 'owner_alert', 'owner_summary', 'client_winback'])
 
 type Json = Record<string, unknown>
 const asRecord = (v: unknown): Json | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Json : null)
@@ -78,7 +80,8 @@ export function parseTrack(value: unknown): WaMessageTrack | null {
   const t = asRecord(value)
   if (!t || typeof t.businessId !== 'string' || !t.businessId || typeof t.purpose !== 'string' || !PURPOSES.has(t.purpose)) return null
   const appointmentId = typeof t.appointmentId === 'string' && t.appointmentId ? t.appointmentId : null
-  return { businessId: t.businessId, purpose: t.purpose as WaMessagePurpose, appointmentId }
+  const clientId = typeof t.clientId === 'string' && t.clientId ? t.clientId : null
+  return { businessId: t.businessId, purpose: t.purpose as WaMessagePurpose, appointmentId, clientId }
 }
 
 interface DeliveryDb {
@@ -114,6 +117,8 @@ export async function recordAcceptedMessage(
     business_id: message.track.businessId,
     purpose: message.track.purpose,
     appointment_id: message.track.appointmentId ?? null,
+    // Only written when known, so a reminder's row is stored exactly as before.
+    ...(message.track.clientId ? { client_id: message.track.clientId } : {}),
     template: message.template,
     accepted_at: message.at,
   }, { onConflict: 'wamid' })

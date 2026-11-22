@@ -17,7 +17,9 @@ import { WinbackMessenger, WINBACK_TEMPLATE } from '@/lib/services/winback-messe
 beforeEach(() => vi.clearAllMocks())
 
 describe('WinbackMessenger', () => {
-  const params = { to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón' }
+  const params = {
+    to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón', businessId: 'biz-1', clientId: 'cli-7',
+  }
 
   it('sends with the approved client_winback template and maps success to ok', async () => {
     sendReactivationMessage.mockResolvedValueOnce({ success: true })
@@ -31,6 +33,8 @@ describe('WinbackMessenger', () => {
       clientName: 'Juan',
       businessName: 'Bella Salón',
       template: 'client_winback',
+      // So the delivery status Meta reports later names the business and the client.
+      track: { businessId: 'biz-1', purpose: 'client_winback', clientId: 'cli-7' },
     })
   })
 
