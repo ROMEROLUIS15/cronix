@@ -17,6 +17,16 @@ const OPEN_ALL: Record<string, [string, string]> = {
   sun: ['09:00', '18:00'],
 }
 
+// The state machine reads the real clock ("el 21", "mañana", "hoy"). Without a pinned
+// "now", a test like "el 21" failed whenever it ran on the 21st after closing time
+// (no slots left today). Every test starts from Wed 2026-12-23 10:00 Bogota; the
+// describes below that pin their own date still override this one.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-12-23T15:00:00Z'))
+})
+afterEach(() => { vi.useRealTimers() })
+
 describe('extractTime', () => {
   it.each([
     ['a las 9 am', '09:00'],
