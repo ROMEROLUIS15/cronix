@@ -147,7 +147,11 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: "latest" makes the action ask the GitHub API for the newest release,
+          # and shared runners hit its rate limit ("Failed to resolve latest Supabase CLI
+          # release: rate limit exceeded"), failing the job before any test runs.
+          # Same version as local development. Bump it on purpose.
+          version: 3.0.0
 
       - name: Start ephemeral Supabase (applies migrations + seed.sql)
         run: supabase start
@@ -221,7 +225,11 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: "latest" makes the action ask the GitHub API for the newest release,
+          # and shared runners hit its rate limit ("Failed to resolve latest Supabase CLI
+          # release: rate limit exceeded"), failing the job before any test runs.
+          # Same version as local development. Bump it on purpose.
+          version: 3.0.0
 
       - name: Start ephemeral Supabase (applies migrations + seed.sql)
         run: supabase start
@@ -449,7 +457,11 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: "latest" makes the action ask the GitHub API for the newest release,
+          # and shared runners hit its rate limit ("Failed to resolve latest Supabase CLI
+          # release: rate limit exceeded"), failing the job before any test runs.
+          # Same version as local development. Bump it on purpose.
+          version: 3.0.0
 
       - name: Start ephemeral Supabase (applies migrations + seed.sql)
         run: supabase start
