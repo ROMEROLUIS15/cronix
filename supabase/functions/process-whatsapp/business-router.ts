@@ -12,12 +12,8 @@
 import type { BusinessRow } from "./types.ts"
 import { supabase }         from "./db-client.ts"
 import { captureException } from "../_shared/sentry.ts"
-import { waSenderCandidates } from "../_shared/wa-phone.ts"
+import { clientPhoneBusinessId, sessionBusinessId } from "../_shared/wa-tenant-routing.ts"
 import { logInteraction }   from "./audit.ts"
-import {
-  type ClientPhoneMatch, type UpcomingAppointment,
-  distinctBusinessIds, pickBusinessForClientPhone,
-} from "./client-phone-routing.ts"
 
 const BUSINESS_COLUMNS = 'id, name, phone, address, timezone, settings, slug'
 
@@ -45,17 +41,17 @@ export async function getBusinessBySlug(slug: string): Promise<BusinessRow | nul
 
 /**
  * Retrieves the last business a sender interacted with from wa_sessions.
- * Fallback when no #slug is present in the message.
+ * Fallback when no #slug is present in the message. The lookup is shared with WhatsApp
+ * calls (_shared/wa-tenant-routing.ts); a failed read routes on, as before.
  */
 export async function getSessionBusiness(senderPhone: string): Promise<BusinessRow | null> {
-  const { data: session, error: sessionErr } = await supabase
-    .from('wa_sessions')
-    .select('business_id')
-    .eq('sender_phone', senderPhone)
-    .single()
-
-  if (sessionErr || !session) return null
-  return getBusinessById((session as { business_id: string }).business_id)
+  let businessId: string | null
+  try {
+    businessId = await sessionBusinessId(supabase, senderPhone)
+  } catch {
+    return null
+  }
+  return businessId ? getBusinessById(businessId) : null
 }
 
 /**
@@ -65,44 +61,14 @@ export async function getSessionBusiness(senderPhone: string): Promise<BusinessR
  * only the routing decision; every downstream query stays scoped by business_id.
  */
 export async function getBusinessByClientPhone(senderPhone: string): Promise<BusinessRow | null> {
-  const candidates = waSenderCandidates(senderPhone)
-  if (candidates.length === 0) return null
-
-  const { data, error } = await supabase
-    .from('clients')
-    .select('id, business_id')
-    .in('phone_digits', candidates)
-    .is('deleted_at', null)
-
-  if (error) {
-    captureException(new Error(error.message), { stage: 'route_by_client_phone' })
+  let businessId: string | null
+  try {
+    businessId = await clientPhoneBusinessId(supabase, senderPhone)
+  } catch (err) {
+    captureException(err, { stage: 'route_by_client_phone' })
     return null
   }
-  const matches  = (data ?? []) as ClientPhoneMatch[]
-  const upcoming = await getUpcomingAppointments(matches)
-  const businessId = pickBusinessForClientPhone(matches, upcoming)
   return businessId ? getBusinessById(businessId) : null
-}
-
-/** Soonest upcoming active appointment among the matched clients (only needed to break a tie). */
-async function getUpcomingAppointments(
-  matches: ReadonlyArray<ClientPhoneMatch>,
-): Promise<UpcomingAppointment[]> {
-  const businessIds = distinctBusinessIds(matches)
-  if (businessIds.length < 2) return []
-
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('business_id, start_at')
-    .in('business_id', businessIds)
-    .in('client_id', matches.map((m) => m.id))
-    .in('status', ['pending', 'confirmed'])
-    .gte('start_at', new Date().toISOString())
-    .order('start_at', { ascending: true })
-    .limit(1)
-
-  if (error || !data) return []
-  return data as UpcomingAppointment[]
 }
 
 /**

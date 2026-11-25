@@ -107,4 +107,13 @@ describe('booking', () => {
     expect((await run(backend(), await request(BODY, null))).body).toEqual({ success: false, error: 'INVALID_ARGS' })
     expect((await run(backend(), await request({ ...BODY, time: '25:00' }))).body).toEqual({ success: false, error: 'INVALID_ARGS' })
   })
+
+  it('refuses a WhatsApp call whose business the caller has not named yet, before claiming the key', async () => {
+    const m = backend((op) => (op.table === 'phone_agent_calls' ? { data: { business_id: null } } : undefined))
+    const { body, notified } = await run(m, await request(BODY))
+    expect(body).toEqual({ success: false, error: 'BUSINESS_NOT_SET' })
+    expect(m.opsFor('phone_agent_requests')).toHaveLength(0)
+    expect(m.opsFor('rpc:fn_book_appointment_wa')).toHaveLength(0)
+    expect(notified).toHaveLength(0)
+  })
 })

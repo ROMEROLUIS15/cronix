@@ -3,8 +3,9 @@
  * (voice-call-agent: docs/specs/cronix-phone-api-contract.md).
  *
  * Every request is signed by the agent (signature.ts); the business of a call comes from
- * the call record its start created, never from a request. v1 serves the phone line:
- * start of call, availability, booking and end of call.
+ * the call record its start created, never from a request. It serves the phone line and
+ * WhatsApp calls: start of call, the business a WhatsApp caller names (§4.1b),
+ * availability, booking and end of call.
  *
  * HTTP: a business outcome answers 200 with `{ success: false, error }`; a bad signature
  * 401 with no body; a database failure 503, which the agent retries once (contract §6).
@@ -17,6 +18,7 @@ import { getAdminClient } from '../_shared/supabase.ts'
 import { captureException, initSentry } from '../_shared/sentry.ts'
 import { isSignedByTheAgent } from './signature.ts'
 import { endCall, startCall } from './calls.ts'
+import { chooseBusiness } from './business-choice.ts'
 import { availability } from './availability-route.ts'
 import { book } from './booking.ts'
 import type { ApiResult } from './results.ts'
@@ -98,6 +100,8 @@ async function respond(
       if (outcome.notification) inBackground(notify(outcome.notification))
       return json(outcome.status, outcome.result, outcome.status === 503 ? { 'Retry-After': '1' } : {})
     }
+    const choice = path.match(/^\/v1\/calls\/([^/]{1,64})\/business$/)
+    if (req.method === 'POST' && choice) return json(200, await chooseBusiness(supabase, decodeURIComponent(choice[1]!), parsed))
     const end = path.match(/^\/v1\/calls\/([^/]{1,64})\/end$/)
     if (req.method === 'POST' && end) return json(200, await endCall(supabase, decodeURIComponent(end[1]!), parsed))
     return json(404, { success: false, error: 'NOT_FOUND' })

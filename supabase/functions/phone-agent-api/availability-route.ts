@@ -14,8 +14,9 @@ export async function availability(supabase: SupabaseClient, query: URLSearchPar
   const date = query.get('date') ?? ''
   if (!callSid || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('INVALID_ARGS')
 
-  const call = await businessOfCall(supabase, callSid)
-  if (!call) return fail('NOT_FOUND')
+  const lookup = await businessOfCall(supabase, callSid)
+  if ('refused' in lookup) return lookup.refused
+  const call = lookup.found
   const service = await supabase.from('services').select('duration_min')
     .eq('id', serviceId).eq('business_id', call.businessId).eq('is_active', true).maybeSingle()
   if (service.error) throw new Error(`services: ${service.error.message}`)

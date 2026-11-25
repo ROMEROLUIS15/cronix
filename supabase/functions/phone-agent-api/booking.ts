@@ -47,8 +47,9 @@ export async function book(
 ): Promise<BookingOutcome> {
   if (!key || key.length > 64) return ok(fail('INVALID_ARGS'))
   if (!validRequest(body)) return ok(fail('INVALID_ARGS'))
-  const call = await businessOfCall(supabase, body.call_sid)
-  if (!call) return ok(fail('NOT_FOUND'))
+  const lookup = await businessOfCall(supabase, body.call_sid)
+  if ('refused' in lookup) return ok(lookup.refused)
+  const call = lookup.found
 
   // A digest of the body, not the body: it carries the caller's name.
   const hash = await hmacSha256Hex('phone-agent-request', rawBody)

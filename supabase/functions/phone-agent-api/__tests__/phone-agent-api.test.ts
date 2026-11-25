@@ -112,10 +112,11 @@ describe('calls/start', () => {
     expect(read.order[0]?.[0]).toBe('name')
   })
 
-  it('refuses another channel than the phone line', async () => {
+  it('refuses a channel other than the phone line and WhatsApp', async () => {
     const m = backend()
-    const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'whatsapp', to: '+13055550100' }), SECRET, m.supabase)
+    const res = await handle(await signed('POST', '/v1/calls/start', { call_sid: 'CA1', channel: 'sms', to: '+13055550100', from: '+584121234567' }), SECRET, m.supabase)
     expect(await res.json()).toEqual({ success: false, error: 'INVALID_ARGS' })
+    expect(m.ops).toHaveLength(0)
   })
 })
 
