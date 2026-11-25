@@ -69,8 +69,10 @@ describe('what whatsapp-service reads from Meta', () => {
   })
 
   it('accepts only a well formed track', () => {
-    expect(parseTrack({ businessId: 'b1', purpose: 'client_reminder', appointmentId: 'a1' })).toEqual({ businessId: 'b1', purpose: 'client_reminder', appointmentId: 'a1' })
-    expect(parseTrack({ businessId: 'b1', purpose: 'owner_alert' })).toEqual({ businessId: 'b1', purpose: 'owner_alert', appointmentId: null })
+    expect(parseTrack({ businessId: 'b1', purpose: 'client_reminder', appointmentId: 'a1' })).toEqual({ businessId: 'b1', purpose: 'client_reminder', appointmentId: 'a1', clientId: null })
+    expect(parseTrack({ businessId: 'b1', purpose: 'owner_alert' })).toEqual({ businessId: 'b1', purpose: 'owner_alert', appointmentId: null, clientId: null })
+    expect(parseTrack({ businessId: 'b1', purpose: 'client_winback', clientId: 'c1' })).toEqual({ businessId: 'b1', purpose: 'client_winback', appointmentId: null, clientId: 'c1' })
+    expect(parseTrack({ businessId: 'b1', purpose: 'client_winback', clientId: 42 })).toEqual({ businessId: 'b1', purpose: 'client_winback', appointmentId: null, clientId: null })
     expect(parseTrack({ businessId: 'b1', purpose: 'marketing' })).toBeNull()
     expect(parseTrack({ purpose: 'client_reminder' })).toBeNull()
     expect(parseTrack(undefined)).toBeNull()
@@ -103,5 +105,15 @@ describe('writes', () => {
     expect(written).toEqual({ table: 'wa_message_status', wamid: 'w', business_id: 'b', purpose: 'client_reminder', appointment_id: 'a', template: 'appointment_reminder', accepted_at: 't' })
     expect(written).not.toHaveProperty('status')
     expect(conflict).toBe('wamid')
+  })
+
+  it('stores the client a win-back message went to', async () => {
+    let written: Record<string, unknown> = {}
+    const db = {
+      rpc: async () => ({ error: null }),
+      from: (table: string) => ({ upsert: async (values: Record<string, unknown>) => { written = { table, ...values }; return { error: null } } }),
+    }
+    await recordAcceptedMessage(db, { wamid: 'w2', track: { businessId: 'b', purpose: 'client_winback', clientId: 'c' }, template: 'client_winback', at: 't' })
+    expect(written).toEqual({ table: 'wa_message_status', wamid: 'w2', business_id: 'b', purpose: 'client_winback', appointment_id: null, client_id: 'c', template: 'client_winback', accepted_at: 't' })
   })
 })

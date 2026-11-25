@@ -7,14 +7,28 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ok, fail } from '@/types/result'
+import { ok } from '@/types/result'
 import type { IClientRepository } from '@/lib/domain/repositories'
 import type { IBusinessRepository } from '@/lib/domain/repositories/IBusinessRepository'
 import { GetEligibleClientsUseCase } from '@/lib/domain/use-cases/retention/GetEligibleClientsUseCase'
 import { ProcessRetentionUseCase } from '@/lib/domain/use-cases/retention/ProcessRetentionUseCase'
-import type { IRetentionMessenger, EligibleClient } from '@/lib/domain/use-cases/retention/types'
+import { RETENTION_LIMITS } from '@/lib/domain/use-cases/retention/types'
+import type {
+  IRetentionMessenger,
+  EligibleClient,
+  SendWinbackResult,
+} from '@/lib/domain/use-cases/retention/types'
 
 const BIZ = 'biz-1'
+
+const SENT: SendWinbackResult = { ok: true }
+
+function rejected(scope: 'platform' | 'recipient', code: number | null): SendWinbackResult {
+  return {
+    ok: false,
+    failure: { scope, code, template: 'client_winback', message: `meta rejected (${code})` },
+  }
+}
 
 type AnyMock = ReturnType<typeof vi.fn>
 
@@ -66,7 +80,7 @@ function makeClientRepo(
   } as unknown as IClientRepository
 }
 
-function makeMessenger(send: AnyMock = vi.fn(async () => ok(undefined))): IRetentionMessenger {
+function makeMessenger(send: AnyMock = vi.fn(async () => SENT)): IRetentionMessenger {
   return { sendWinback: send } as unknown as IRetentionMessenger
 }
 
@@ -95,7 +109,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('ProcessRetentionUseCase', () => {
   it('AC-11: free plan is a no-op (zero sends)', async () => {
-    const send = vi.fn(async () => ok(undefined))
+    const send = vi.fn(async () => SENT)
     const { useCase } = build({ plan: 'free' }, clients(5), { send })
 
     const result = await useCase.execute({ businessId: BIZ })
@@ -106,7 +120,7 @@ describe('ProcessRetentionUseCase', () => {
   })
 
   it('AC-11: null plan is treated as non-Pro+ (no-op)', async () => {
-    const send = vi.fn(async () => ok(undefined))
+    const send = vi.fn(async () => SENT)
     const { useCase } = build({ plan: null }, clients(3), { send })
 
     const result = await useCase.execute({ businessId: BIZ })
@@ -116,7 +130,7 @@ describe('ProcessRetentionUseCase', () => {
   })
 
   it('AC-5: toggle OFF is a no-op even on Pro+', async () => {
-    const send = vi.fn(async () => ok(undefined))
+    const send = vi.fn(async () => SENT)
     const { useCase } = build({ plan: 'pro', enabled: false }, clients(5), { send })
 
     const result = await useCase.execute({ businessId: BIZ })
@@ -126,7 +140,7 @@ describe('ProcessRetentionUseCase', () => {
   })
 
   it('sends the win-back template to every candidate and stamps anti-spam', async () => {
-    const send = vi.fn(async () => ok(undefined))
+    const send = vi.fn(async () => SENT)
     const update = vi.fn(async () => ok(undefined))
     const { useCase } = build({ enabled: true }, clients(3), { send, update })
 
@@ -138,54 +152,124 @@ describe('ProcessRetentionUseCase', () => {
       to: '+573000000000',
       clientName: 'Cliente 0',
       businessName: 'Bella Salón',
+      businessId: BIZ,
+      clientId: 'cli-0',
     })
     // AC-7: one anti-spam stamp per successful send, scoped to the business.
     expect(update).toHaveBeenCalledTimes(3)
     expect(update).toHaveBeenCalledWith('cli-0', BIZ)
   })
 
-  it('AC-6: caps the batch at dailyCap and reports capped=true', async () => {
-    const send = vi.fn(async () => ok(undefined))
+  it('AC-6: every business sends at most the platform per-business limit (3) and reports capped', async () => {
+    const send = vi.fn(async () => SENT)
     const update = vi.fn(async () => ok(undefined))
-    const { useCase } = build({ enabled: true, dailyCap: 2 }, clients(5), { send, update })
+    const { useCase } = build({ enabled: true }, clients(5), { send, update })
 
     const result = await useCase.execute({ businessId: BIZ })
 
-    expect(result.data).toEqual({ sent: 2, failed: 0, capped: true })
-    expect(send).toHaveBeenCalledTimes(2)
-    expect(update).toHaveBeenCalledTimes(2)
+    expect(RETENTION_LIMITS.perBusinessDaily).toBe(3)
+    expect(result.data).toEqual({ sent: 3, failed: 0, capped: true })
+    expect(send).toHaveBeenCalledTimes(3)
+    expect(update).toHaveBeenCalledTimes(3)
   })
 
-  it('does not stamp anti-spam when the send fails', async () => {
+  it('AC-6: a per-business cap stored in the settings is ignored (no per-client limits)', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true, dailyCap: 50 }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ })
+
+    expect(result.data).toEqual({ sent: 3, failed: 0, capped: true })
+    expect(send).toHaveBeenCalledTimes(3)
+  })
+
+  it('sends no more than what is left of the platform budget', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ, maxSends: 2 })
+
+    expect(result.data).toEqual({ sent: 2, failed: 0, capped: true })
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('sends nothing when the platform budget is used up', async () => {
+    const send = vi.fn(async () => SENT)
+    const { useCase } = build({ enabled: true }, clients(10), { send })
+
+    const result = await useCase.execute({ businessId: BIZ, maxSends: 0 })
+
+    expect(result.data).toEqual({ sent: 0, failed: 0, capped: false })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('does not stamp anti-spam when a recipient-level send fails, and keeps going', async () => {
     const send = vi
       .fn()
-      .mockResolvedValueOnce(ok(undefined))
-      .mockResolvedValueOnce(fail('meta down'))
-      .mockResolvedValueOnce(ok(undefined))
+      .mockResolvedValueOnce(SENT)
+      .mockResolvedValueOnce(rejected('recipient', 131049))
+      .mockResolvedValueOnce(SENT)
     const update = vi.fn(async () => ok(undefined))
     const { useCase } = build({ enabled: true }, clients(3), { send, update })
 
     const result = await useCase.execute({ businessId: BIZ })
 
     expect(result.data).toEqual({ sent: 2, failed: 1, capped: false })
+    expect(send).toHaveBeenCalledTimes(3)
     expect(update).toHaveBeenCalledTimes(2)
   })
 
-  it('exactly dailyCap candidates is not flagged as capped', async () => {
-    const { useCase } = build({ enabled: true, dailyCap: 3 }, clients(3))
+  it('aborts the run on the first platform-wide failure: no more sends, no stamp, reason reported', async () => {
+    const send = vi.fn(async () => rejected('platform', 132001))
+    const update = vi.fn(async () => ok(undefined))
+    const { useCase } = build({ enabled: true }, clients(50), { send, update })
+
+    const result = await useCase.execute({ businessId: BIZ })
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(update).not.toHaveBeenCalled()
+    expect(result.data).toEqual({
+      sent: 0,
+      failed: 1,
+      capped: true, // 50 candidates, platform limit of 3 per business
+      aborted: {
+        scope: 'platform',
+        code: 132001,
+        template: 'client_winback',
+        message: 'meta rejected (132001)',
+      },
+    })
+  })
+
+  it('keeps the sends that already succeeded when a platform failure interrupts the run', async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(SENT)
+      .mockResolvedValueOnce(SENT)
+      .mockResolvedValueOnce(rejected('platform', 132015))
+    const update = vi.fn(async () => ok(undefined))
+    const { useCase } = build({ enabled: true }, clients(10), { send, update })
+
+    const result = await useCase.execute({ businessId: BIZ })
+
+    expect(send).toHaveBeenCalledTimes(3)
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(result.data).toMatchObject({ sent: 2, failed: 1, aborted: { code: 132015 } })
+  })
+
+  it('a completed run carries no aborted field', async () => {
+    const { useCase } = build({ enabled: true }, clients(2))
+
+    const result = await useCase.execute({ businessId: BIZ })
+
+    expect(result.data).not.toHaveProperty('aborted')
+  })
+
+  it('exactly the per-business limit of candidates is not flagged as capped', async () => {
+    const { useCase } = build({ enabled: true }, clients(3))
 
     const result = await useCase.execute({ businessId: BIZ })
 
     expect(result.data).toEqual({ sent: 3, failed: 0, capped: false })
-  })
-
-  it('uses the default dailyCap (50) when unset', async () => {
-    const send = vi.fn(async () => ok(undefined))
-    const { useCase } = build({ enabled: true }, clients(60), { send })
-
-    const result = await useCase.execute({ businessId: BIZ })
-
-    expect(result.data).toEqual({ sent: 50, failed: 0, capped: true })
-    expect(send).toHaveBeenCalledTimes(50)
   })
 })

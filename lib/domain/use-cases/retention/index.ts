@@ -6,7 +6,7 @@ export { GetEligibleClientsUseCase } from './GetEligibleClientsUseCase'
 export { ProcessRetentionUseCase } from './ProcessRetentionUseCase'
 
 export {
-  RETENTION_DEFAULTS,
+  RETENTION_LIMITS,
 } from './types'
 
 export type {

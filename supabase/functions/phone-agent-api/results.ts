@@ -19,14 +19,22 @@ export interface CallBusiness {
   settings:   Record<string, unknown>
 }
 
-/** The business of a call, from its record; `null` for an unknown call. */
-export async function businessOfCall(supabase: SupabaseClient, callSid: string): Promise<CallBusiness | null> {
+/** A call's business, or the refusal for a call no endpoint may read yet. */
+export type CallLookup = { found: CallBusiness } | { refused: ApiResult }
+
+/**
+ * The business of a call, from its record. Refuses an unknown call (`NOT_FOUND`) and a
+ * WhatsApp call whose caller has not named the business yet (`BUSINESS_NOT_SET`, §4.1b):
+ * every endpoint that reads a business goes through here.
+ */
+export async function businessOfCall(supabase: SupabaseClient, callSid: string): Promise<CallLookup> {
   const call = await supabase.from('phone_agent_calls').select('business_id').eq('call_sid', callSid).maybeSingle()
   if (call.error) throw new Error(`phone_agent_calls: ${call.error.message}`)
-  if (!call.data) return null
-  const businessId = (call.data as { business_id: string }).business_id
+  if (!call.data) return { refused: fail('NOT_FOUND') }
+  const businessId = (call.data as { business_id: string | null }).business_id
+  if (!businessId) return { refused: fail('BUSINESS_NOT_SET') }
   const biz = await supabase.from('businesses').select('timezone, settings').eq('id', businessId).single()
   if (biz.error) throw new Error(`businesses: ${biz.error.message}`)
   const data = biz.data as { timezone: string | null; settings: Record<string, unknown> | null }
-  return { businessId, timezone: data.timezone ?? 'UTC', settings: data.settings ?? {} }
+  return { found: { businessId, timezone: data.timezone ?? 'UTC', settings: data.settings ?? {} } }
 }

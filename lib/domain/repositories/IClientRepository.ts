@@ -86,9 +86,10 @@ export interface IClientRepository {
   ): Promise<Result<{ name: string }[]>>
 
   /**
-   * Returns clients eligible for re-engagement (retention v1): a past 'completed'
-   * visit beyond `frequencyDays`, no active future appointment, outside the
-   * `antiSpamDays` window, with a phone. Deterministic (SQL RPC), no LLM.
+   * Returns clients eligible for re-engagement: last visit (any past appointment
+   * not cancelled and not a no-show) more than `frequencyDays` ago, no active
+   * future appointment, not written to within `antiSpamDays`, with a phone.
+   * Deterministic (SQL RPC), no LLM.
    */
   findInactiveByFrequency(
     businessId: string,
