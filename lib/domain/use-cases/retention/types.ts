@@ -6,16 +6,20 @@
  * concrete Edge Function.
  */
 
-import type { Result } from '@/types/result'
-
 // ── Defaults (modulo-retencion §2, §3) ───────────────────────────────────────
 //
-// antiSpamDays is NOT configurable in v1 (not part of settings.retention); it is
-// a fixed guard. dailyCap IS configurable via settings.retention.dailyCap and
-// this is only the fallback when unset.
-export const RETENTION_DEFAULTS = {
-  antiSpamDays: 30,
-  dailyCap: 50,
+// There is no fixed number of days: the owner's own number decides who has gone
+// too long without a visit and how long to wait before writing again.
+//
+// The daily limits are the platform's, the same for every business (no
+// per-business setting). Every business shares one WhatsApp number, which Meta
+// allows 250 business-initiated conversations per 24 h while the business
+// portfolio is unverified. Win-back takes at most 15% of that (37) so reminders
+// and owner alerts always have room; each business sends at most 3 a day, which
+// is about what a business with a handful of appointments a day can take in.
+export const RETENTION_LIMITS = {
+  perBusinessDaily: 3,
+  platformDaily: 37,
 } as const
 
 // ── GetEligibleClientsUseCase ─────────────────────────────────────────────────
@@ -36,6 +40,8 @@ export interface EligibleClient {
 
 export interface ProcessRetentionInput {
   businessId: string
+  /** What is left of the platform's daily budget; the business sends at most this many. */
+  maxSends?: number
 }
 
 export interface ProcessRetentionResult {
@@ -45,6 +51,11 @@ export interface ProcessRetentionResult {
   failed: number
   /** True when candidates exceeded dailyCap and the rest were left for the next run. */
   capped: boolean
+  /**
+   * Present only when the run stopped early on a platform-wide failure (template
+   * missing, account restricted…). Absent on a run that completed.
+   */
+  aborted?: WinbackFailure
 }
 
 // ── Outbound WhatsApp port (win-back template) ────────────────────────────────
@@ -54,13 +65,37 @@ export interface SendWinbackParams {
   to: string
   clientName: string
   businessName: string
+  /** Owner of the message, so its delivery status can be traced back. */
+  businessId: string
+  /** The client the message goes to. */
+  clientId: string
 }
+
+/**
+ * Why a send failed, in terms the use case can act on without knowing Meta.
+ * `platform`: it will fail for every client (template, account, phone number) —
+ * the run must stop. `recipient`: only this client — the run continues.
+ */
+export interface WinbackFailure {
+  scope: 'platform' | 'recipient'
+  /** Provider error code, null when the provider gave none. */
+  code: number | null
+  /** Template that was being sent. */
+  template: string
+  message: string
+}
+
+/**
+ * Outcome of one send. A discriminated union, not Result<void>: Result carries a
+ * plain string and cannot say whether the failure should stop the run.
+ */
+export type SendWinbackResult = { ok: true } | { ok: false; failure: WinbackFailure }
 
 /**
  * Port for sending the approved Meta win-back template (HSM). The concrete
  * adapter wraps the WhatsApp Edge Function with `template: 'client_winback'`.
- * Returns Result<void> — never throws.
+ * Never throws.
  */
 export interface IRetentionMessenger {
-  sendWinback(params: SendWinbackParams): Promise<Result<void>>
+  sendWinback(params: SendWinbackParams): Promise<SendWinbackResult>
 }

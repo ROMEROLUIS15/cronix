@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { sendAppointmentReminder } from '@/lib/services/whatsapp.service'
+import { sendAppointmentReminder, sendReactivationMessage } from '@/lib/services/whatsapp.service'
 import type { ReminderMessageParams } from '@/lib/services/whatsapp.service'
 
 const VALID_PARAMS: ReminderMessageParams = {
@@ -81,6 +81,32 @@ describe('sendAppointmentReminder', () => {
     const result = await sendAppointmentReminder(VALID_PARAMS)
 
     expect(result).toEqual({ success: false, error: 'Invalid phone number' })
+  })
+
+  it('keeps the Meta error code the edge function reports on a failed reactivation send', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: false, error: 'Template missing', errorCode: 132001 }),
+    }))
+
+    const result = await sendReactivationMessage({
+      to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón', template: 'client_winback',
+    })
+
+    expect(result).toEqual({ success: false, error: 'Template missing', errorCode: 132001 })
+  })
+
+  it('forwards the track of a reactivation send to the edge function', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendReactivationMessage({
+      to: '+573210000001', clientName: 'Juan', businessName: 'Bella Salón', template: 'client_winback',
+      track: { businessId: 'biz-1', purpose: 'client_winback', clientId: 'cli-7' },
+    })
+
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body)
+    expect(body.track).toEqual({ businessId: 'biz-1', purpose: 'client_winback', clientId: 'cli-7' })
+    expect(body.template).toBe('client_winback')
   })
 
   it('returns error when fetch throws network error', async () => {

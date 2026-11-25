@@ -8,7 +8,7 @@
 
 BEGIN;
 
-SELECT plan(15);
+SELECT plan(20);
 
 -- 1. Objects and access: only the service role reads or writes.
 SELECT has_table('public', 'wa_message_status', 'wa_message_status exists');
@@ -52,6 +52,18 @@ SELECT is((SELECT purpose FROM public.wa_message_status WHERE wamid = 'w-early')
 
 -- 6. Unknown values are refused by the table.
 SELECT throws_ok($$ INSERT INTO public.wa_message_status (wamid, status) VALUES ('w-bad', 'deleted') $$, '23514', NULL, 'an unknown status is refused');
+SELECT throws_ok($$ INSERT INTO public.wa_message_status (wamid, purpose) VALUES ('w-bad-purpose', 'marketing') $$, '23514', NULL, 'an unknown purpose is refused');
+
+-- 7. A win-back message records the client it went to (it has no appointment to point at).
+SELECT lives_ok($$ INSERT INTO public.wa_message_status (wamid, purpose, template, accepted_at) VALUES ('w-winback', 'client_winback', 'client_winback', now()) $$, 'client_winback is an accepted purpose');
+SELECT has_column('public', 'wa_message_status', 'client_id', 'the recipient client is stored');
+SELECT col_type_is('public', 'wa_message_status', 'client_id', 'uuid', 'client_id is a uuid');
+SELECT ok(
+  (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+    WHERE conrelid = 'public.wa_message_status'::regclass AND contype = 'f'
+      AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (client_id)%') LIKE '%REFERENCES clients(id) ON DELETE SET NULL',
+  'deleting a client keeps the delivery history and only clears the link'
+);
 
 SELECT * FROM finish();
 

@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { canAccessRetention } from "@/lib/plans/plan-limits";
+import { parseRetentionDays, RETENTION_DAYS_MAX, RETENTION_DAYS_MIN } from "@/lib/use-cases/retention-days";
 import type { Business, BusinessSettingsJson } from "@/types";
 import { PhoneInputFlags, Country } from "@/components/ui/phone-input-flags";
 import { BUSINESS_CATEGORIES, PRICE_CURRENCIES } from "@/lib/constants/business";
@@ -75,7 +76,8 @@ export default function SettingsPage() {
 
   const [localCopiedLink, setLocalCopiedLink] = useState(false);
   const [showRetentionModal, setShowRetentionModal] = useState(false);
-  const [freqInput, setFreqInput] = useState(30);
+  const [freqInput, setFreqInput] = useState("");
+  const freqDays = parseRetentionDays(freqInput);
 
   const canRetention = canAccessRetention(biz?.plan ?? "free");
 
@@ -718,7 +720,7 @@ export default function SettingsPage() {
               {t("retention.toggleTitle")}
             </p>
             <p className="text-xs mt-1" style={{ color: "#909098" }}>
-              {retentionEnabled && canRetention
+              {retentionEnabled && canRetention && retentionFrequency != null
                 ? t("retention.activeNote", { days: retentionFrequency })
                 : t("retention.toggleSub")}
             </p>
@@ -732,7 +734,7 @@ export default function SettingsPage() {
                 disabled={savingRetention}
                 onChange={(e) => {
                   if (e.target.checked) {
-                    setFreqInput(retentionFrequency || 30);
+                    setFreqInput(retentionFrequency != null ? String(retentionFrequency) : "");
                     setShowRetentionModal(true);
                   } else {
                     handleDisableRetention();
@@ -779,8 +781,10 @@ export default function SettingsPage() {
             <Button
               variant="primary"
               loading={savingRetention}
+              disabled={freqDays === null}
               onClick={async () => {
-                await handleEnableRetention(freqInput);
+                if (freqDays === null) return;
+                await handleEnableRetention(freqDays);
                 setShowRetentionModal(false);
               }}
             >
@@ -794,10 +798,12 @@ export default function SettingsPage() {
         </label>
         <input
           type="number"
-          min={1}
-          max={365}
+          min={RETENTION_DAYS_MIN}
+          max={RETENTION_DAYS_MAX}
+          step={1}
+          inputMode="numeric"
           value={freqInput}
-          onChange={(e) => setFreqInput(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
+          onChange={(e) => setFreqInput(e.target.value)}
           className="input-base"
         />
         <p className="text-xs mt-2" style={{ color: "#909098" }}>
